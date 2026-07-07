@@ -1,0 +1,34 @@
+# 1. 绝对不能让 AI 读的依赖包 (体积巨大，读一次烧几万Token)
+node_modules/
+.pnp
+.pnp.js
+
+# 2. 打包编译后的静态产物 (不需要 AI 检查)
+dist/
+build/
+out/
+
+# 3. 锁定文件 (里面全是长串的依赖树版本号，毫无意义)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# 4. 环境变量与安全密钥 (防盗刷核心！)
+.env
+.env.local
+.env.development
+.env.production
+*.pem
+*.key
+
+# 5. 日志与缓存 (无用的运行时数据)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+.vite/
+.vercel/
+
+# 6. 系统默认隐藏文件 (如 Mac 的缩略图缓存)
+.DS_Store
+Thumbs.db

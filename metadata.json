@@ -1,0 +1,11 @@
+{
+  "name": "御膳智控",
+  "description": "为金莲记打造的旗舰级餐厅管理方案 拥有严密的权限分级（老板、管理员、员工），内置财务审计、智能排班与每日闭店标准化 SOP 模块。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

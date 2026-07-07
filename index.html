@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" class="fixed-layout">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>御膳智控 ERP</title>
+    
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#8B0000" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="御膳智控">
+    
+    <link rel="apple-touch-icon" href="https://i.imgur.com/ex06Jva.png">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ex06Jva.png" />
+    <link rel="shortcut icon" type="image/png" href="https://i.imgur.com/ex06Jva.png" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#8B0000',
+              secondary: '#1A1A1A', 
+              accent: '#FFD700',
+              goldHover: '#E5C100',
+              brandRed: '#C70000',
+              background: '#FFF8F8',
+              surface: '#FFFFFF',
+              error: '#B00020',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+              serif: ['Noto Serif SC', 'serif'],
+            },
+            boxShadow: {
+              'gold': '0 4px 14px 0 rgba(255, 215, 0, 0.3)',
+              'red': '0 4px 14px 0 rgba(139, 0, 0, 0.3)',
+            }
+          }
+        }
+      }
+    </script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "jspdf": "https://esm.sh/jspdf@2.5.1",
+        "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js",
+        "firebase/": "https://esm.sh/firebase@^12.7.0/"
+      }
+    }
+  </script>
+
+  <style>
+    /* 深度锁定 iOS 弹性回弹 (Rubber-banding) */
+    html, body {
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #FFF8F8;
+    }
+
+    #root {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 100%;
+      height: -webkit-fill-available; 
+      
+      overflow-y: auto;
+      overflow-x: hidden;
+      
+      overscroll-behavior: contain; 
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* 全局滚动条美化 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #FFF8F8;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E5E5E5;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #8B0000;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    /* iOS Safe Area & HIG Touch Target Utilities */
+    .safe-area-top {
+      padding-top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+    }
+    .safe-area-bottom {
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    
+    @media (min-width: 768px) {
+      .safe-area-top {
+        padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+      }
+      .safe-area-bottom {
+        padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
+
+    /* Make sure all touch elements have active state without click-delay on iOS */
+    button, a, [role="button"] {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+
+<body class="bg-background text-secondary antialiased selection:bg-primary selection:text-accent">
+    <div id="root"></div>
+
+    <script type="module" src="/index.tsx"></script>
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('SW registered', reg))
+            .catch(err => console.log('SW failed', err));
+        });
+      }
+
+      // 针对 iOS 的补充逻辑：防止触摸移动穿透到 body
+      document.addEventListener('touchmove', function (e) {
+          if (e.target.id === 'root' || document.getElementById('root').contains(e.target)) {
+              // 允许 root 内部滚动
+          } else {
+              e.preventDefault();
+          }
+      }, { passive: false });
+    </script>
+</body>
+</html>
