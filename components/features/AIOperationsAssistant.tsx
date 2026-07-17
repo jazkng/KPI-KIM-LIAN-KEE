@@ -1,9 +1,76 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Bot, Send, X, Sparkles, RefreshCw, User, MessageSquare, Terminal, AlertCircle, Play, 
-    TrendingUp, Shield, BarChart3, HelpCircle, Mic, MicOff, Volume2
+    TrendingUp, Shield, BarChart3, HelpCircle, Mic, MicOff, Volume2, Lock
 } from 'lucide-react';
 import { DataManager } from '../../utils/dataManager';
+import { getMalaysiaDateString } from '../../utils/dateHelper';
+
+function normalizeInventoryForAI(item: any) {
+  const currentQtyBase = Number(
+    item.currentQtyBase ??
+    item.currentQty ??
+    0
+  );
+
+  const minLevelBase = Number(
+    item.minLevelBase ??
+    item.minLevel ??
+    0
+  );
+
+  const maxQtyBase = Number(
+    item.maxQtyBase ??
+    item.maxQty ??
+    0
+  );
+
+  const baseUnit =
+    item.baseUnit ??
+    item.unit ??
+    'unit';
+
+  const displayToBaseRatio = Number(
+    item.displayToBaseRatio ??
+    1
+  );
+
+  const safeDisplayRatio =
+    displayToBaseRatio > 0
+      ? displayToBaseRatio
+      : 1;
+
+  const displayUnit =
+    item.displayUnit ??
+    baseUnit;
+
+  const currentQtyDisplay =
+    currentQtyBase / safeDisplayRatio;
+
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+
+    currentQtyBase,
+    minLevelBase,
+    maxQtyBase,
+    baseUnit,
+
+    currentQtyDisplay,
+    displayUnit,
+    displayToBaseRatio: safeDisplayRatio,
+
+    isLowStock:
+      currentQtyBase <= minLevelBase,
+
+    deficitBase:
+      Math.max(
+        0,
+        minLevelBase - currentQtyBase
+      ),
+  };
+}
 
 interface AIAssistantProps {
     isOpen: boolean;
@@ -39,7 +106,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 {
                     id: 'welcome',
                     role: 'assistant',
-                    text: '您好！我是您的**御膳智控智能脑库**。当前已切换并深层对齐为「金莲记 Kepong 分店（Kim Lian Kee Kepong）」的餐饮财务专职智脑。我已安全接入您的 ERP 后台，可随时为您提供**餐饮账单对账**、**食材成本波动预警**、**免单合规稽查**、以及**前后台满勤及加班计提核算**。您可以直接输入或点击下方的快捷智能决策按钮开始盘查。',
+                    text: '您好！我是您的 **AI 经营助手**。\n\n我可以根据当前已接入的数据，协助检查：\n\n• 今日营业与结算摘要\n• 厨房、吧台及通用库存\n• 低库存与安全库存风险\n• 当日日志及异常记录\n• 最近资金转账记录\n\n尚未接入的分析会明确标记为“待接入”，不会推测或编造金额。',
                     timestamp: new Date()
                 }
             ]);
@@ -111,8 +178,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
         setDataLoading(true);
         setError(null);
         try {
-            const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
+            const dateStr = getMalaysiaDateString();
 
             // Aggregating core data collections concurrently
             const [
@@ -146,15 +212,33 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
             if (barStock.status === 'fulfilled') inventory.push(...barStock.value.map(i => ({ ...i, category: '吧台' })));
             if (generalStock.status === 'fulfilled') inventory.push(...generalStock.value.map(i => ({ ...i, category: '通用' })));
             
+            const normalizedInventory = inventory.map(normalizeInventoryForAI);
+
             aggregatedContext.inventory = {
-                totalLineItems: inventory.length,
-                lowStockItems: inventory.filter(i => i.currentQty <= (i.minLevel || 0)).map(i => ({
+                totalLineItems: normalizedInventory.length,
+                lowStockItems: normalizedInventory.filter(i => i.isLowStock).map(i => ({
                     name: i.name,
                     category: i.category,
-                    qty: i.currentQty,
-                    unit: i.unit || '件',
-                    min: i.minLevel || 0,
-                    deficit: (i.minLevel || 0) - i.currentQty
+                    currentQtyBase: i.currentQtyBase,
+                    minLevelBase: i.minLevelBase,
+                    baseUnit: i.baseUnit,
+                    currentQtyDisplay: i.currentQtyDisplay,
+                    displayUnit: i.displayUnit,
+                    displayToBaseRatio: i.displayToBaseRatio,
+                    isLowStock: i.isLowStock,
+                    deficitBase: i.deficitBase
+                })),
+                allNormalizedItems: normalizedInventory.map(i => ({
+                    name: i.name,
+                    category: i.category,
+                    currentQtyBase: i.currentQtyBase,
+                    minLevelBase: i.minLevelBase,
+                    baseUnit: i.baseUnit,
+                    currentQtyDisplay: i.currentQtyDisplay,
+                    displayUnit: i.displayUnit,
+                    displayToBaseRatio: i.displayToBaseRatio,
+                    isLowStock: i.isLowStock,
+                    deficitBase: i.deficitBase
                 }))
             };
 
@@ -211,7 +295,15 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
 
             // Format Daily Settlements safely for Gemini (查收入数据)
             if (settlements.status === 'fulfilled' && settlements.value) {
-                aggregatedContext.dailySettlements = settlements.value.slice(0, 15).map(s => ({
+                const recentSettlements = [...settlements.value]
+                    .sort((a, b) => {
+                        const dateA = a.date ? String(a.date) : (a.createdAt ? String(a.createdAt) : '');
+                        const dateB = b.date ? String(b.date) : (b.createdAt ? String(b.createdAt) : '');
+                        return dateB.localeCompare(dateA);
+                    })
+                    .slice(0, 30);
+
+                aggregatedContext.dailySettlements = recentSettlements.map(s => ({
                     date: s.date,
                     salesTotal: s.sales?.total || 0,
                     storeHubTotal: s.sales?.storeHubTotal || 0,
@@ -380,6 +472,59 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
 
                 {/* Message Log Canvas */}
                 <div className="flex-grow overflow-y-auto p-5 space-y-5 bg-stone-950/30 relative z-10">
+                    {/* Data Sync Status Card */}
+                    <div className="bg-stone-900/80 border border-stone-800/80 rounded-2xl p-4 shadow-md space-y-3 mb-4 shrink-0">
+                        <div className="flex items-center justify-between border-b border-stone-800/50 pb-2">
+                            <span className="text-xs font-black text-stone-200 tracking-wide flex items-center gap-1.5">
+                                <Sparkles size={14} className="text-[#FFD700]" />
+                                经营脑库数据接入状态
+                            </span>
+                            <span className="text-[10px] text-stone-500 font-mono">Sync Status</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-[11px] leading-relaxed">
+                            <div>
+                                <span className="text-[9px] text-emerald-400 font-bold block mb-1 uppercase tracking-wider">✓ 已接入 (Active)</span>
+                                <ul className="space-y-0.5 text-stone-300 font-medium">
+                                    <li className="flex items-center gap-1 text-emerald-500">
+                                        ✓ <span className="text-stone-300">库存数据</span>
+                                    </li>
+                                    <li className="flex items-center gap-1 text-emerald-500">
+                                        ✓ <span className="text-stone-300">每日结算</span>
+                                    </li>
+                                    <li className="flex items-center gap-1 text-emerald-500">
+                                        ✓ <span className="text-stone-300">运营日志</span>
+                                    </li>
+                                    <li className="flex items-center gap-1 text-emerald-500">
+                                        ✓ <span className="text-stone-300">当日排班</span>
+                                    </li>
+                                    <li className="flex items-center gap-1 text-emerald-500">
+                                        ✓ <span className="text-stone-300">最近资金转账</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div className="border-l border-stone-800/60 pl-3">
+                                <span className="text-[9px] text-stone-500 font-bold block mb-1 uppercase tracking-wider">○ 待接入 (Pending)</span>
+                                <ul className="space-y-0.5 text-stone-500 font-medium">
+                                    <li className="flex items-center gap-1">
+                                        <Lock size={10} /> 采购价格历史
+                                    </li>
+                                    <li className="flex items-center gap-1">
+                                        <Lock size={10} /> 菜谱与菜品毛利
+                                    </li>
+                                    <li className="flex items-center gap-1">
+                                        <Lock size={10} /> 外卖平台净入账
+                                    </li>
+                                    <li className="flex items-center gap-1">
+                                        <Lock size={10} /> 薪资及法定缴纳
+                                    </li>
+                                    <li className="flex items-center gap-1">
+                                        <Lock size={10} /> 应付账款
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     {messages.map((msg) => (
                         <div 
                             key={msg.id} 
@@ -435,32 +580,69 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                         </div>
                         <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-none snap-x">
                             <button
-                                onClick={() => handlePreset('📊 帮我盘点今日营收与差额，对比POS系统原始流水与各银行及外卖平台 GrabFood / Foodpanda 真实的 Net Payout 净进账')}
+                                onClick={() => handlePreset('📊 帮我分析今日的餐饮经营与对账，检查营业额（salesTotal）与各结算方式对账状况。')}
                                 style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
                                 className="snap-start shrink-0 bg-stone-900 hover:bg-[#1E2E24] active:scale-95 text-xs text-emerald-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 font-medium transition-all"
                             >
-                                📊 今日营收与对账摘要
+                                📊 今日经营与对账摘要
                             </button>
                             <button
-                                onClick={() => handlePreset('📉 检查最近30天内后厨核心原材料价格波动状况，并评估招牌菜品（如福建面、月光河）在堂食与外卖单盘的边际贡献率（净利润）')}
+                                onClick={() => handlePreset('📉 请帮我检查当前的库存数据，列出低于安全库存（minLevelBase）的低库存项，并以基础单位（Base Unit）进行计算。')}
                                 style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
-                                className="snap-start shrink-0 bg-stone-900 hover:bg-[#2A2020] active:scale-95 text-xs text-rose-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 font-medium transition-all"
+                                className="snap-start shrink-0 bg-stone-900 hover:bg-[#1E252E] active:scale-95 text-xs text-amber-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 font-medium transition-all"
                             >
-                                📉 食材成本波动预警
+                                📉 低库存精准检查
                             </button>
                             <button
-                                onClick={() => handlePreset('🔍 智能交叉审计：审阅店长今天运营日志里的记录（如砂锅打碎、免单、赔偿等），并与财务流水中的免单退款进行合规对账')}
+                                onClick={() => handlePreset('🔍 检查今天的运营日志，交叉稽查当日是否发生任何异常、投诉或免单记录。')}
                                 style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
                                 className="snap-start shrink-0 bg-stone-900 hover:bg-[#1A2835] active:scale-95 text-xs text-sky-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 font-medium transition-all"
                             >
-                                🔍 免单与日志财务稽查
+                                🔍 当日日志异常检查
                             </button>
                             <button
-                                onClick={() => handlePreset('👥 检查前台、后厨及外籍员工的工时与加班满勤计提状况。同时，算算EPF、SOCSO、EIS，并说明在OPEX日常纯利润中如何独立割除“分红(Dividend)”与“押金(Deposit)”以保持隔离')}
+                                onClick={() => handlePreset('💰 总结分析最近的资金转账流水和账户余额。')}
                                 style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
                                 className="snap-start shrink-0 bg-stone-900 hover:bg-[#1A2534] active:scale-95 text-xs text-indigo-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 font-medium transition-all"
                             >
-                                👥 前后台薪资与计提核算
+                                💰 资金与转账摘要
+                            </button>
+
+                            {/* Disabled/Pending Buttons */}
+                            <button
+                                onClick={() => setError("此分析需要先接入「采购价格历史数据」，目前暂未开放。")}
+                                style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                className="snap-start shrink-0 bg-stone-900/40 text-stone-600 text-xs px-3.5 py-2 rounded-xl border border-stone-900 flex items-center gap-1 cursor-not-allowed transition-all"
+                            >
+                                <Lock size={10} /> 成本波动 · 待接入
+                            </button>
+                            <button
+                                onClick={() => setError("此分析需要先接入「菜谱配比与菜品售价」，目前暂未开放。")}
+                                style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                className="snap-start shrink-0 bg-stone-900/40 text-stone-600 text-xs px-3.5 py-2 rounded-xl border border-stone-900 flex items-center gap-1 cursor-not-allowed transition-all"
+                            >
+                                <Lock size={10} /> 菜品毛利 · 待接入
+                            </button>
+                            <button
+                                onClick={() => setError("此分析需要先接入「GrabFood/Foodpanda 实际结算单」，目前暂未开放。")}
+                                style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                className="snap-start shrink-0 bg-stone-900/40 text-stone-600 text-xs px-3.5 py-2 rounded-xl border border-stone-900 flex items-center gap-1 cursor-not-allowed transition-all"
+                            >
+                                <Lock size={10} /> 外卖对账 · 待接入
+                            </button>
+                            <button
+                                onClick={() => setError("此分析需要先接入「员工考勤、薪资计算与法定EPF/SOCSO比例」，目前暂未开放。")}
+                                style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                className="snap-start shrink-0 bg-stone-900/40 text-stone-600 text-xs px-3.5 py-2 rounded-xl border border-stone-900 flex items-center gap-1 cursor-not-allowed transition-all"
+                            >
+                                <Lock size={10} /> 薪资计提 · 待接入
+                            </button>
+                            <button
+                                onClick={() => setError("此分析需要先接入「应付账款和发票」，目前暂未开放。")}
+                                style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                className="snap-start shrink-0 bg-stone-900/40 text-stone-600 text-xs px-3.5 py-2 rounded-xl border border-stone-900 flex items-center gap-1 cursor-not-allowed transition-all"
+                            >
+                                <Lock size={10} /> 应付账款 · 待接入
                             </button>
                         </div>
                     </div>

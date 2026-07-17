@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #FFD200;
+  --color-secondary: #111111;
+  --color-background: #F6F7FB;
+  --color-surface: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-success: #22C55E;
+  --color-error: #EF4444;
+
+  --color-accent: #FFD200;
+  --color-brand-red: #8B0000;
+  --color-gold-hover: #E5C100;
+
+  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  --shadow-light: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-gold: 0 4px 14px 0 rgba(255, 210, 0, 0.3);
+  --shadow-red: 0 4px 14px 0 rgba(139, 0, 0, 0.3);
+}
+
+/* Custom classes and overrides from index.html */
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #F6F7FB;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  position: fixed;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+#root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  height: -webkit-fill-available;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@supports (height: 100dvh) {
+  #root {
+    height: 100dvh;
+  }
+}
+
+/* Global scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F6F7FB;
+}
+::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FFD200;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* iOS Safe Area & HIG Touch Target Utilities */
+.safe-area-top {
+  padding-top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+}
+.safe-area-bottom {
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Shared mobile foundations. Apply these utilities only to page-level UI so
+   compact status chips and switches are not unexpectedly enlarged. */
+.mobile-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.mobile-fullscreen {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.mobile-safe-header {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+}
+
+.mobile-safe-footer {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.mobile-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (max-width: 767px) {
+  .mobile-fixed-actions-space {
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .safe-area-top {
+    padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .safe-area-bottom {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mobile-safe-header {
+    padding-top: initial !important;
+  }
+
+  .mobile-safe-footer {
+    padding-bottom: initial !important;
+  }
+
+}
+
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none !important;  /* IE and Edge */
+  scrollbar-width: none !important;  /* Firefox */
+}
+
+/* Custom scrollbar utility for smooth mobile inertial scrolling */
+.custom-scrollbar {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5) !important;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: transparent !important;
+}
+

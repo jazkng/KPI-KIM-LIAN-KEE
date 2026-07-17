@@ -1,11 +1,12 @@
 import { 
     Employee, 
-    EmployeeRank, 
+    OrgLevel, 
     QuarterKey, 
     AssessmentRecordV2, 
     MetricScoreV2,
     EmployeeAssessmentSummary 
 } from '../../types';
+import { getOrgLevel } from '../../utils/orgAccess';
 import { 
     JobCategory, 
     JOB_METRICS, 
@@ -135,65 +136,40 @@ export type AssessPermission =
  * 第三等级是员工 (3)
  */
 export const getEmployeeLevel = (emp: Employee): 1 | 2 | 3 => {
-    const rank = emp.rank || 'CREW';
-    if (rank === 'TOP' || (emp.role || '').includes('Owner') || (emp.role || '').includes('老板')) {
-        return 1;
-    }
-    if (['MANAGEMENT', 'HEAD', 'PIC'].includes(rank) || (emp.role || '').includes('经理') || (emp.role || '').includes('主管')) {
-        return 2;
-    }
-    return 3;
+    const orgLevel = getOrgLevel(emp);
+    if (orgLevel === 'OWNER') return 1;
+    if (orgLevel === 'CREW') return 3;
+    return 2;
+};
+
+const ORG_LEVEL_ORDER: Record<OrgLevel, number> = {
+    OWNER: 1,
+    BRANCH_MANAGER: 2,
+    DEPARTMENT_HEAD: 3,
+    TEAM_LEAD: 4,
+    CREW: 5,
 };
 
 /** 判断 rater 对 target 的评分权限 */
 export const getAssessPermission = (rater: Employee, target: Employee): AssessPermission => {
-    // 自己不能评自己
     if (rater.id === target.id) return 'VIEW_OWN';
-    
-    // 目标员工被豁免 (Part-time)
     if (target.assessmentExempt) return 'NONE';
-    
-    const raterLevel = getEmployeeLevel(rater);
-    const targetLevel = getEmployeeLevel(target);
-    
-    // ========================================================================
-    // 第一等级：老板 (Level 1) → 全员覆盖/评分权
-    // ========================================================================
-    if (raterLevel === 1) {
-        // 老板不能评价自己 (前面已拦截)。如果目标也是老板 (Level 1)，但该目标拥有具体的可评职务，则允许进行评分
-        if (targetLevel === 1) {
-            const targetCat = getJobCategoryForEmployee(target);
-            if (targetCat !== 'OWNER' && targetCat !== 'PART_TIME') {
-                return 'OVERRIDE';
-            }
-            return 'NONE';
-        }
-        return 'OVERRIDE';
+
+    const raterOrgLevel = getOrgLevel(rater);
+    const targetOrgLevel = getOrgLevel(target);
+
+    if (raterOrgLevel === 'OWNER') {
+        return targetOrgLevel === 'OWNER' ? 'NONE' : 'OVERRIDE';
     }
-    
-    // ========================================================================
-    // 第二等级：管理层 (Level 2) → 可以评价第三等级
-    // ========================================================================
-    if (raterLevel === 2) {
-        // 如果老板为该管理层员工配置了专属的评测对象名单，则遵循专属名单
-        if (rater.assessmentTargets && rater.assessmentTargets.length > 0) {
-            if (rater.assessmentTargets.includes(target.id)) {
-                return 'INITIAL';
-            }
-            return 'NONE';
-        }
-        
-        // 默认情况下：第二等级（管理层）可以评价所有的第三等级（员工）
-        if (targetLevel === 3) {
-            return 'INITIAL';
-        }
-        return 'NONE';
+
+    if (raterOrgLevel === 'CREW' || targetOrgLevel === 'OWNER') return 'NONE';
+    if (ORG_LEVEL_ORDER[raterOrgLevel] >= ORG_LEVEL_ORDER[targetOrgLevel]) return 'NONE';
+
+    if (rater.assessmentTargets && rater.assessmentTargets.length > 0) {
+        return rater.assessmentTargets.includes(target.id) ? 'INITIAL' : 'NONE';
     }
-    
-    // ========================================================================
-    // 第三等级：员工 (Level 3) → 无评分权
-    // ========================================================================
-    return 'NONE';
+
+    return 'INITIAL';
 };
 
 /** 获取 rater 可评的所有员工 */
@@ -244,7 +220,9 @@ export const calculateMultiRaterTotals = (record: AssessmentRecordV2) => {
     const bossRatingsList = Object.values(record.bossRatings || {});
     const activeBossRatings = bossRatingsList.filter(b => !b.skipped);
     
-    const activeBossScores = activeBossRatings.map(b => b.overallScore);
+    const activeBossScores = activeBossRatings
+        .map(b => b.overallScore)
+        .filter((s): s is number => typeof s === 'number' && s > 0);
     const bossesCount = activeBossScores.length;
     const bossesSum = activeBossScores.reduce((sum, s) => sum + s, 0);
     const bossesAverage = bossesCount > 0 ? Math.round(bossesSum / bossesCount) : 0;
@@ -261,8 +239,8 @@ export const calculateMultiRaterTotals = (record: AssessmentRecordV2) => {
         finalScore = record.ownerOverride.overallScore;
     }
     
-    // 总评分人数
-    const totalRaters = (hasInitial ? 1 : 0) + bossesCount;
+    // 总评分人数 (包含已经评了的老板，哪怕其分数对当前登录用户被掩盖了)
+    const totalRaters = (hasInitial ? 1 : 0) + activeBossRatings.length;
     
     return {
         initialScore,
@@ -436,11 +414,27 @@ export type QuarterlyStatus =
 
 export const getQuarterlyStatus = (
     employee: Employee,
-    quarter: QuarterKey
+    quarter: QuarterKey,
+    currentRaterId?: string
 ): QuarterlyStatus => {
     if (employee.assessmentExempt) return 'EXEMPT';
     const rec = findRecordForQuarter(employee.assessmentRecordsV2, quarter);
     if (!rec) return 'NOT_STARTED';
+    
+    // If finalized, lock the record for everyone
+    if (rec.status === 'FINALIZED') {
+        return 'FINALIZED';
+    }
+
+    // If current rater is a Boss, calculate their personal rating status
+    if (currentRaterId) {
+        const myRating = rec.bossRatings?.[currentRaterId];
+        if (myRating) {
+            return 'OVERRIDDEN'; // Status of 'completed rating' for a boss
+        } else {
+            return 'NOT_STARTED'; // Unrated/not started for this specific boss
+        }
+    }
     
     // 💡 消除强制转型，采用安全验证。
     const validStatuses: QuarterlyStatus[] = ['DRAFT', 'SUBMITTED', 'OVERRIDDEN', 'FINALIZED'];
@@ -453,7 +447,7 @@ export const getQuarterlyStatus = (
 /** 岗位分类 (helper 复用 classifyJob, 考虑豁免) */
 export const getJobCategoryForEmployee = (emp: Employee): JobCategory => {
     if (emp.assessmentExempt) return 'PART_TIME';
-    if (emp.rank === 'TOP') return 'OWNER';
+    if (getOrgLevel(emp) === 'OWNER') return 'OWNER';
     return classifyJob(emp.role);
 };
 

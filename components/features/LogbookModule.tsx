@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     BookOpen, AlertCircle, CheckCircle2, Clock, Trash2, Shield, AlertTriangle,
     FileText, Camera, X, Loader2, ChevronDown, Zap, PenTool, Maximize2,
-    Lightbulb, Edit3, Gavel, Coins, Check, Calendar,
+    Lightbulb, Edit3, Gavel, Coins, Check, Calendar, Languages,
 } from 'lucide-react';
 import { LogEntry, LogCategory, LogPriority, Employee, MisconductRecord } from '../../types';
 import { uploadToCloudinary } from '../utils';
@@ -52,6 +52,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
     const [isLoading,     setIsLoading]     = useState(true);   // Fix #7: 加载状态
     const [activeFilter,  setActiveFilter]  = useState<'ALL' | 'HIGH_PRIORITY' | 'COMPLAINT'>('ALL');
     const [employees,     setEmployees]     = useState<Employee[]>([]);
+    const [translations,  setTranslations]  = useState<Record<string, { issue: string; action: string; loading?: boolean; error?: string }>>({});
 
     // 日期筛选 — 默认近 7 天
     const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
@@ -110,6 +111,61 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                r.includes('MANAGER') || r.includes('经理') ||
                r.includes('SUPERVISOR') || r.includes('主管');
     }, [currentEmployee]);
+
+    const handleTranslateToBurmese = async (log: LogEntry) => {
+        if (translations[log.id]?.loading) return;
+
+        setTranslations(prev => ({
+            ...prev,
+            [log.id]: { issue: '', action: '', loading: true }
+        }));
+
+        try {
+            const textsToTranslate = [log.issue];
+            if (log.action) {
+                textsToTranslate.push(log.action);
+            }
+
+            const res = await fetch('/api/gemini/translate-my', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    texts: textsToTranslate,
+                    context: '餐饮工作日志，需要翻译成适合缅甸员工理解的厨房/店面工作用语'
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+
+            const data = await res.json();
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            const translatedTexts = data.translations || [];
+            setTranslations(prev => ({
+                ...prev,
+                [log.id]: {
+                    issue: translatedTexts[0] || '',
+                    action: translatedTexts[1] || '',
+                    loading: false
+                }
+            }));
+        } catch (err: any) {
+            console.error('Translation failed:', err);
+            setTranslations(prev => ({
+                ...prev,
+                [log.id]: {
+                    issue: '',
+                    action: '',
+                    loading: false,
+                    error: err.message || '翻译失败'
+                }
+            }));
+        }
+    };
 
     // ── Fix #3: isMounted 守卫，防止卸载后 setState ───────────────────────────
     useEffect(() => {
@@ -497,7 +553,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 key={item.value}
                                 onClick={() => applyQuickDate(item.value)}
                                 style={noTapHighlight}
-                                className="px-3 py-2 min-h-[36px] bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 active:bg-blue-100 rounded-lg text-[10px] font-bold whitespace-nowrap text-gray-500 transition-all shrink-0 select-none"
+                                className="px-3 py-2 min-h-[44px] bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 active:bg-blue-100 rounded-lg text-[10px] font-bold whitespace-nowrap text-gray-500 transition-all shrink-0 select-none"
                             >
                                 {item.label}
                             </button>
@@ -505,7 +561,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                         <button
                             onClick={() => setShowDatePicker(p => !p)}
                             style={noTapHighlight}
-                            className={`px-3 py-2 min-h-[36px] rounded-lg text-[10px] font-bold whitespace-nowrap shrink-0 flex items-center gap-1 transition-all select-none ${dateRange.start ? 'bg-blue-600 text-white border border-blue-600' : 'bg-white border border-gray-200 text-gray-500 hover:bg-blue-50'}`}
+                            className={`px-3 py-2 min-h-[44px] rounded-lg text-[10px] font-bold whitespace-nowrap shrink-0 flex items-center gap-1 transition-all select-none ${dateRange.start ? 'bg-blue-600 text-white border border-blue-600' : 'bg-white border border-gray-200 text-gray-500 hover:bg-blue-50'}`}
                         >
                             <Calendar size={10} />
                             {dateRange.start && dateRange.end
@@ -516,7 +572,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                             <button
                                 onClick={() => { setDateRange({ start: '', end: '' }); setShowDatePicker(false); }}
                                 style={noTapHighlight}
-                                className="p-2 min-w-[32px] min-h-[32px] hover:bg-gray-100 active:bg-gray-200 rounded-full text-gray-400 shrink-0 flex items-center justify-center select-none"
+                                className="p-2 min-w-[44px] min-h-[44px] hover:bg-gray-100 active:bg-gray-200 rounded-full text-gray-400 shrink-0 flex items-center justify-center select-none"
                             >
                                 <X size={12} />
                             </button>
@@ -530,19 +586,19 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 type="date"
                                 value={dateRange.start}
                                 onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                className="flex-1 bg-white text-xs font-bold p-2 min-h-[40px] outline-none rounded-lg border border-blue-200 text-center"
+                                className="flex-1 bg-white text-xs font-bold p-2 min-h-[44px] outline-none rounded-lg border border-blue-200 text-center"
                             />
                             <span className="text-gray-400 text-xs font-bold shrink-0">至</span>
                             <input
                                 type="date"
                                 value={dateRange.end}
                                 onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                className="flex-1 bg-white text-xs font-bold p-2 min-h-[40px] outline-none rounded-lg border border-blue-200 text-center"
+                                className="flex-1 bg-white text-xs font-bold p-2 min-h-[44px] outline-none rounded-lg border border-blue-200 text-center"
                             />
                             <button
                                 onClick={() => setShowDatePicker(false)}
                                 style={noTapHighlight}
-                                className="p-2.5 min-w-[40px] min-h-[40px] bg-blue-600 active:bg-blue-700 text-white rounded-lg shrink-0 flex items-center justify-center select-none"
+                                className="p-2.5 min-w-[44px] min-h-[44px] bg-blue-600 active:bg-blue-700 text-white rounded-lg shrink-0 flex items-center justify-center select-none"
                             >
                                 <CheckCircle2 size={14} />
                             </button>
@@ -561,7 +617,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                             key={tab.key}
                             onClick={() => setActiveFilter(tab.key)}
                             style={noTapHighlight}
-                            className={`px-3 md:px-4 py-2 min-h-[36px] rounded-lg text-xs font-bold transition-all select-none active:scale-95 ${activeFilter === tab.key ? `bg-white shadow-sm ${tab.extra || 'text-[#1A1A1A]'}` : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 md:px-4 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all select-none active:scale-95 ${activeFilter === tab.key ? `bg-white shadow-sm ${tab.extra || 'text-[#1A1A1A]'}` : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             {tab.label}
                         </button>
@@ -607,7 +663,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                             <button
                                                 onClick={() => setDeleteCandidateId(log.id)}
                                                 style={noTapHighlight}
-                                                className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-500 active:text-red-600 rounded-full hover:bg-red-50 active:bg-red-100 transition-colors select-none shrink-0"
+                                                className="w-11 h-11 flex items-center justify-center text-gray-300 hover:text-red-500 active:text-red-600 rounded-full hover:bg-red-50 active:bg-red-100 transition-colors select-none shrink-0"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
@@ -664,11 +720,57 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                                 </div>
                                             )}
 
+                                            {/* 缅甸文翻译展示 */}
+                                            {translations[log.id] && (
+                                                <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                                                    {translations[log.id].loading ? (
+                                                        <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/30">
+                                                            <Loader2 size={12} className="animate-spin text-amber-500" />
+                                                            <span>正在翻译成缅甸文 (Translating)...</span>
+                                                        </div>
+                                                    ) : translations[log.id].error ? (
+                                                        <div className="text-[10px] text-red-500 font-bold bg-red-50 p-2 rounded-lg border border-red-100">
+                                                            ⚠️ 翻译失败 (Failed): {translations[log.id].error}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="bg-amber-50/40 border border-amber-200/30 p-3 rounded-xl space-y-2">
+                                                            <div className="flex items-center gap-1.5 text-[10px] text-amber-800 font-black tracking-wider uppercase">
+                                                                <span>🇲🇲 缅甸文翻译 (Burmese Translation)</span>
+                                                            </div>
+                                                            <p className="text-xs text-stone-800 font-semibold leading-relaxed break-words whitespace-pre-wrap">
+                                                                {translations[log.id].issue}
+                                                            </p>
+                                                            {translations[log.id].action && (
+                                                                <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-100/50 flex gap-1.5 items-start mt-1.5">
+                                                                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0 mt-0.5" />
+                                                                    <p className="text-xs text-emerald-800 font-medium leading-relaxed break-words whitespace-pre-wrap">
+                                                                        {translations[log.id].action}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {/* 底部：记录人 + 已阅 */}
                                             <div className="flex flex-wrap items-center gap-2 mt-2">
                                                 <span className="text-[10px] text-gray-400 font-bold bg-gray-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-gray-100">
                                                     <Shield size={10} /> 记录人: {log.creatorName}
                                                 </span>
+
+                                                {/* 缅甸文翻译按钮 */}
+                                                {!translations[log.id]?.issue && !translations[log.id]?.loading && (
+                                                    <button
+                                                        onClick={() => handleTranslateToBurmese(log)}
+                                                        style={noTapHighlight}
+                                                        className="text-[10px] text-amber-700 font-bold bg-amber-50 border border-amber-200/40 px-2 py-1 min-h-[32px] rounded flex items-center gap-1.5 shadow-sm active:scale-95 hover:bg-amber-100/60 transition-all select-none cursor-pointer"
+                                                    >
+                                                        <Languages size={11} />
+                                                        🇲🇲 翻译 (Burmese)
+                                                    </button>
+                                                )}
+
                                                 {isAcknowledged ? (
                                                     <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100">
                                                         <CheckCircle2 size={10} /> {log.acknowledgedBy} 已阅

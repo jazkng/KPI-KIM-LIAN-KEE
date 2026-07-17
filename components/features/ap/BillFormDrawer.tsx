@@ -128,7 +128,18 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                     type="date" 
                                     className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none" 
                                     value={editingBill.time?.split('T')[0] || ''} 
-                                    onChange={e => setEditingBill(prev => ({...prev, time: e.target.value}))} 
+                                    onChange={e => {
+                                        const newDate = e.target.value;
+                                        setEditingBill(prev => {
+                                            const next = { ...prev, time: newDate };
+                                            if (newDate) {
+                                                const d = new Date(newDate);
+                                                d.setDate(d.getDate() + 15);
+                                                next.dueDate = d.toISOString().split('T')[0];
+                                            }
+                                            return next;
+                                        });
+                                    }} 
                                 />
                             </div>
                             <div>

@@ -32,6 +32,7 @@ import {
 } from './assessmentUtils';
 import { AssessmentForm } from './AssessmentForm';
 import { AssessmentRecordV2 } from '../../types';
+import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
 
 interface EmployeeAssessmentModuleProps {
     onClose: () => void;
@@ -237,7 +238,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
     // 💡 优化：使用 unified getEmployeeLevel 判定老板身份 (Level 1)
     const isOwner = useMemo(() => {
         if (!currentEmployee) return false;
-        return getEmployeeLevel(currentEmployee) === 1;
+        return getOrgLevel(currentEmployee) === 'OWNER';
     }, [currentEmployee]);
 
     // ============================================================================
@@ -252,18 +253,89 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
         try {
             // 并行拉取: 员工 + 当前季度评分 + 上季度评分 (用于显示走势)
             const prevQuarter = getPreviousQuarter(currentQuarter);
-            const [empData, currentRecords, prevRecords] = await Promise.all([
+            
+            // 判断当前登录人员是否为老板
+            const isRaterOwner = currentEmployee && getOrgLevel(currentEmployee) === 'OWNER';
+            
+            const [empData, currentRecords, prevRecords, currentBossRatings, prevBossRatings] = await Promise.all([
                 DataManager.getEmployees(),
                 DataManager.getAssessmentRecordsByQuarter(currentQuarter),
-                DataManager.getAssessmentRecordsByQuarter(prevQuarter)
+                DataManager.getAssessmentRecordsByQuarter(prevQuarter),
+                isRaterOwner ? DataManager.getBossRatingsForOwner(currentEmployee.id, currentQuarter) : Promise.resolve([]),
+                isRaterOwner ? DataManager.getBossRatingsForOwner(currentEmployee.id, prevQuarter) : Promise.resolve([])
             ]);
             
-            // 构建 employee.id → records 的映射
+            // 构建 bossId_quarter_employeeId 映射
+            const bossRatingsMap: Record<string, any> = {};
+            [...currentBossRatings, ...prevBossRatings].forEach((br: any) => {
+                const key = `${br.employeeId}_${br.quarter}`;
+                bossRatingsMap[key] = br;
+            });
+            
+            // 构建 employee.id → records 的映射，并在其中注入隔离的个人打分
             const recordsByEmp: Record<string, AssessmentRecordV2[]> = {};
             [...currentRecords, ...prevRecords].forEach((r: any) => {
                 if (!recordsByEmp[r.employeeId]) recordsByEmp[r.employeeId] = [];
-                recordsByEmp[r.employeeId].push(r as AssessmentRecordV2);
+                
+                // 深拷贝记录以进行修改
+                const clonedRecord = JSON.parse(JSON.stringify(r)) as AssessmentRecordV2;
+                
+                // 数据隔离：清除其它老板的未完成细节
+                clonedRecord.bossRatings = {};
+                
+                // 仅注入当前登录老板的个人评分数据
+                if (isRaterOwner && currentEmployee) {
+                    const brKey = `${r.employeeId}_${r.quarter}`;
+                    const myBossRating = bossRatingsMap[brKey];
+                    if (myBossRating) {
+                        clonedRecord.bossRatings[currentEmployee.id] = {
+                            ownerId: myBossRating.ownerId,
+                            ownerName: myBossRating.ownerName,
+                            date: myBossRating.date,
+                            metrics: myBossRating.metrics,
+                            overallScore: myBossRating.overallScore,
+                            skipped: myBossRating.skipped,
+                            comment: myBossRating.comment
+                        };
+                    }
+                }
+                
+                recordsByEmp[r.employeeId].push(clonedRecord);
             });
+
+            // 针对老板已评但主记录尚未生成的情况，创建虚拟主记录以便在列表中能够显示状态并可进行二次编辑
+            if (isRaterOwner && currentEmployee) {
+                [...currentBossRatings, ...prevBossRatings].forEach((br: any) => {
+                    const hasMain = [...currentRecords, ...prevRecords].some(
+                        r => r.employeeId === br.employeeId && r.quarter === br.quarter
+                    );
+                    if (!hasMain) {
+                        const virtualRecord: AssessmentRecordV2 = {
+                            id: `${br.employeeId}_${br.quarter}`,
+                            quarter: br.quarter,
+                            employeeId: br.employeeId,
+                            employeeName: empData.find(e => e.id === br.employeeId)?.name || 'Unknown',
+                            jobCategory: 'STAFF', // 临时占位，打开表单时会自动推导
+                            finalScore: 0,
+                            finalGrade: 'B',
+                            status: 'DRAFT',
+                            bossRatings: {
+                                [currentEmployee.id]: {
+                                    ownerId: br.ownerId,
+                                    ownerName: br.ownerName,
+                                    date: br.date,
+                                    metrics: br.metrics,
+                                    overallScore: br.overallScore,
+                                    skipped: br.skipped,
+                                    comment: br.comment
+                                }
+                            }
+                        };
+                        if (!recordsByEmp[br.employeeId]) recordsByEmp[br.employeeId] = [];
+                        recordsByEmp[br.employeeId].push(virtualRecord);
+                    }
+                });
+            }
             
             // 把评分记录 merge 到 employee 对象上
             const merged = empData
@@ -277,8 +349,11 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
             
             // 同时构建 existingRecords 映射 (打开评分表单时用)
             const existingMap: Record<string, AssessmentRecordV2> = {};
-            currentRecords.forEach((r: any) => {
-                existingMap[r.employeeId] = r as AssessmentRecordV2;
+            merged.forEach(emp => {
+                const currentRec = emp.assessmentRecordsV2?.find(r => r.quarter === currentQuarter);
+                if (currentRec) {
+                    existingMap[emp.id] = currentRec;
+                }
             });
             setExistingRecords(existingMap);
             
@@ -297,6 +372,14 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
         return getAssessableTargets(currentEmployee, employees);
     }, [currentEmployee, employees]);
 
+    const getAssignableTargets = (rater: Employee): Employee[] => {
+        const raterWithoutOverrides = { ...rater, assessmentTargets: [] };
+        return employees.filter(employee =>
+            !employee.isArchived &&
+            getAssessPermission(raterWithoutOverrides, employee) === 'INITIAL'
+        );
+    };
+
     // ============================================================================
     // 筛选 & 搜索
     // ============================================================================
@@ -309,24 +392,20 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
     }, [assessableTargets, searchTerm]);
 
     // ============================================================================
-    // 分组 (按评测三大等级)
+    // 五级组织职级在评测列表中的兼容分组：L1 / L2-L4 / L5
     // ============================================================================
     const groupedByLevel = useMemo(() => {
         const groups = {
-            1: [] as Employee[], // 第一等级：老板
-            2: [] as Employee[], // 第二等级：管理层
-            3: [] as Employee[], // 第三等级：普通员工
+            1: [] as Employee[], // L1：老板
+            2: [] as Employee[], // L2-L4：管理与带队层
+            3: [] as Employee[], // L5：执行员工
             EXEMPT: [] as Employee[] // 豁免人员（如兼职）
         };
 
-        const isRaterManagement = currentEmployee ? getEmployeeLevel(currentEmployee) === 2 : false;
         const activeEmployees = employees.filter(e => {
-            if (e.isArchived) return false;
-            const lvl = getEmployeeLevel(e);
-            if (lvl === 1) return false;
-            // 如果是管理层，只看第三等级 (Level 3)
-            if (isRaterManagement && lvl !== 3) return false;
-            return true;
+            if (e.isArchived || !currentEmployee) return false;
+            const permission = getAssessPermission(currentEmployee, e);
+            return permission === 'INITIAL' || permission === 'OVERRIDE';
         });
         
         const filtered = searchTerm ? activeEmployees.filter(emp => {
@@ -366,7 +445,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
         let completed = 0;
         assessableTargets.forEach(emp => {
             if (emp.assessmentExempt) return;
-            const status = getQuarterlyStatus(emp, currentQuarter);
+            const status = getQuarterlyStatus(emp, currentQuarter, currentEmployee?.id);
             if (status === 'SUBMITTED' || status === 'OVERRIDDEN' || status === 'FINALIZED') {
                 completed++;
             }
@@ -405,24 +484,14 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
             return;
         }
 
-        const raterLevel = getEmployeeLevel(currentEmployee);
-        const targetLevel = getEmployeeLevel(emp);
-        const isRaterManagement = raterLevel === 2;
-
-        // 🔒 权限控制：管理层不能看自己或其他管理人员的分数
-        if (isRaterManagement && targetLevel !== 3) {
-            alert(`🔒 权限受限：管理层不能查看自己或其他管理层人员的分数。您仅有权评测及查看第三等级（普通员工）的评分。`);
-            return;
-        }
-
         const perm = getAssessPermission(currentEmployee, emp);
         if (perm === 'INITIAL' || perm === 'OVERRIDE') {
             setAssessingEmployee(emp);
         } else {
             if (emp.id === currentEmployee.id) {
-                alert(`ℹ️ 这是您本人的卡片。普通员工只能通过「我的档案」查看已锁定的季度综合评分结果。`);
+                alert(`ℹ️ 这是您本人的卡片。员工可通过「我的档案」查看已锁定的季度综合评分结果。`);
             } else {
-                alert(`🔒 权限限制：当前评测体系划分为三大等级：\n- 第一等级（老板）可评测/覆盖管理层与员工；\n- 第二等级（管理层）可评价第三等级员工（或老板指定的专属对象）；\n- 第三等级（普通员工）暂无任何评分权。`);
+                alert(`🔒 权限限制：只能评测组织职级低于自己、且属于指定评测关系的员工。`);
             }
         }
     };
@@ -455,11 +524,11 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     </div>
                     <h3 className="font-black text-xl text-[#1A1A1A] mb-2">无评分权限</h3>
                     <p className="text-sm text-gray-500 font-bold mb-6">
-                        您当前的职级为 <span className="text-[#1A1A1A]">{currentEmployee?.rank || 'CREW'}</span>，暂无权限使用评测系统。
+                        您当前的职级为 <span className="text-[#1A1A1A]">{currentEmployee ? getOrgLevelLabel(currentEmployee) : '未识别'}</span>，暂无权限使用评测系统。
                     </p>
                     <p className="text-xs text-gray-400 mb-6 leading-relaxed">
-                        评分系统仅对 TOP / MANAGEMENT / HEAD / PIC 开放。<br/>
-                        如需评分权限，请联系管理层调整组织职级。
+                        L1–L4 可按照组织上下级与指定评测关系进行评分，L5 没有评分权。<br/>
+                        如需调整，请联系 ID002 系统管理员修改组织职级。
                     </p>
                     <button 
                         onClick={onClose} 
@@ -605,7 +674,8 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     const firstL2 = employees.find(e => getEmployeeLevel(e) === 2);
                                     if (firstL2) {
                                         setSelectedRater(firstL2);
-                                        setSelectedTargets(firstL2.assessmentTargets || []);
+                                        const eligibleIds = new Set(getAssignableTargets(firstL2).map(target => target.id));
+                                        setSelectedTargets((firstL2.assessmentTargets || []).filter(id => eligibleIds.has(id)));
                                     }
                                 }}
                                 className="flex items-center justify-center gap-2 px-4 py-3 bg-[#FFD700] text-black font-black rounded-xl shadow-sm hover:bg-[#FFE44D] active:scale-95 transition-all text-xs"
@@ -631,15 +701,15 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            {/* 第二等级：管理层 */}
+                            {/* L2-L4：管理与带队层 */}
                             {groupedByLevel[2].length > 0 && (
                                 <div className="space-y-3" id="level-2-management-section">
                                     <div className="bg-[#1A1A1A]/5 p-3 rounded-xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm">💼</span>
                                             <div>
-                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">第二等级：管理层 / 评分人</h5>
-                                                <p className="text-[9px] text-gray-500 font-bold">负责日常运营工作考核，允许评价第三等级员工</p>
+                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">L2–L4：管理与带队层</h5>
+                                                <p className="text-[9px] text-gray-500 font-bold">负责日常运营工作考核，可评价组织职级低于自己的员工</p>
                                             </div>
                                         </div>
                                         <span className="text-[10px] font-black text-gray-400 sm:self-center">
@@ -660,15 +730,15 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                 </div>
                             )}
 
-                            {/* 第三等级：普通员工 */}
+                            {/* L5：执行员工 */}
                             {groupedByLevel[3].length > 0 && (
                                 <div className="space-y-3" id="level-3-staff-section">
                                     <div className="bg-[#1A1A1A]/5 p-3 rounded-xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm">👥</span>
                                             <div>
-                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">第三等级：普通员工 / 被评人</h5>
-                                                <p className="text-[9px] text-gray-500 font-bold">接受管理层的日常评分与技能季度考核</p>
+                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">L5：执行员工 / 被评人</h5>
+                                                <p className="text-[9px] text-gray-500 font-bold">接受直属上级的日常评分与技能季度考核</p>
                                             </div>
                                         </div>
                                         <span className="text-[10px] font-black text-gray-400 sm:self-center">
@@ -742,51 +812,65 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                         <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Assessment & Accounts Configuration</p>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => {
-                                        setIsConfigDrawerOpen(false);
-                                        setSelectedRater(null);
-                                    }} 
-                                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                >
-                                    <X size={20}/>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => {
+                                            alert("💡 关于评分忽略/豁免设置说明：\n\n1. 被豁免的员工不会显示在初评/待评分列表和评分统计看板中；\n2. 豁免员工的任何季度考核均不会被视为“未完成/拖欠”，保护考核统计数据的真实性；\n3. 您可以随时取消豁免，恢复正常季度考评。");
+                                        }}
+                                        title="免评说明"
+                                        className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/70 hover:text-white"
+                                    >
+                                        <HelpCircle size={18}/>
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setIsConfigDrawerOpen(false);
+                                            setSelectedRater(null);
+                                        }} 
+                                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                                    >
+                                        <X size={20}/>
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Tab Row */}
-                            <div className="bg-gray-100 p-2 flex border-b border-gray-200 shrink-0 gap-2">
+                            <div className="bg-gray-100 p-1.5 flex border-b border-gray-200 shrink-0 gap-1.5">
                                 <button
                                     onClick={() => setConfigTab('RELATIONS')}
-                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all text-center ${
+                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'RELATIONS' 
-                                            ? 'bg-white text-stone-900 shadow-sm' 
+                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    ⚙️ 评分权限及对象配对
+                                    <span className="hidden sm:inline">⚙️ 评分权限与配对</span>
+                                    <span className="sm:hidden">⚙️ 权限配对</span>
                                 </button>
                                 <button
                                     onClick={() => setConfigTab('MERGE')}
-                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all text-center ${
+                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'MERGE' 
-                                            ? 'bg-white text-stone-900 shadow-sm' 
+                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    👥 重复账户合并清理
+                                    <span className="hidden sm:inline">👥 重复账户合并</span>
+                                    <span className="sm:hidden">👥 账号合并</span>
                                 </button>
                                 <button
                                     onClick={() => setConfigTab('EXEMPT')}
-                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all text-center ${
+                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'EXEMPT' 
-                                            ? 'bg-white text-stone-900 shadow-sm' 
+                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    🚫 忽略评分豁免设置
+                                    <span className="hidden sm:inline">🚫 忽略评分豁免</span>
+                                    <span className="sm:hidden">🚫 免评设置</span>
                                 </button>
                             </div>
 
@@ -797,7 +881,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     {/* Step 1: Select Rater */}
                                     <div className="w-full md:w-2/5 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
                                         <div className="p-3 bg-gray-50 border-b border-gray-100 shrink-0">
-                                            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">第一步：选择管理层/评分人</span>
+                                            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">第一步：选择 L2–L4 评分人</span>
                                         </div>
                                         <div className="flex-grow overflow-y-auto p-3 space-y-2">
                                             {employees
@@ -809,7 +893,8 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                             key={e.id}
                                                             onClick={() => {
                                                                 setSelectedRater(e);
-                                                                setSelectedTargets(e.assessmentTargets || []);
+                                                                const eligibleIds = new Set(getAssignableTargets(e).map(target => target.id));
+                                                                setSelectedTargets((e.assessmentTargets || []).filter(id => eligibleIds.has(id)));
                                                             }}
                                                             className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between ${
                                                                 isSelected 
@@ -820,7 +905,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                         >
                                                             <div className="min-w-0">
                                                                 <div className="font-black text-xs text-[#1A1A1A] truncate">{e.name}</div>
-                                                                <div className="text-[10px] text-gray-400 font-bold">{e.role || '管理层'}</div>
+                                                                <div className="text-[10px] text-gray-400 font-bold">{e.role || '评分人'}</div>
                                                             </div>
                                                             {isSelected && <ChevronRight size={16} className="text-blue-500 shrink-0"/>}
                                                         </button>
@@ -839,8 +924,8 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() => {
-                                                            const l3Ids = employees.filter(e => !e.isArchived && getEmployeeLevel(e) === 3).map(e => e.id);
-                                                            setSelectedTargets(l3Ids);
+                                                            const eligibleIds = getAssignableTargets(selectedRater).map(e => e.id);
+                                                            setSelectedTargets(eligibleIds);
                                                         }}
                                                         className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded"
                                                     >
@@ -859,15 +944,13 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                         <div className="flex-grow overflow-y-auto p-4 space-y-4">
                                             {selectedRater ? (
                                                 <div className="space-y-4">
-                                                    {/* Category: Level 3 employees */}
+                                                    {/* Employees below the selected rater's organization level */}
                                                     <div>
                                                         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                                            第三等级员工 (可评测)
+                                                            该评分人的下级员工 (可评测)
                                                         </div>
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                            {employees
-                                                                .filter(e => !e.isArchived && getEmployeeLevel(e) === 3)
-                                                                .map(e => {
+                                                            {getAssignableTargets(selectedRater).map(e => {
                                                                     const isChecked = selectedTargets.includes(e.id);
                                                                     return (
                                                                         <button
@@ -906,14 +989,14 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                             ) : (
                                                 <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400">
                                                     <Users size={48} className="text-gray-200 mb-3"/>
-                                                    <p className="text-xs font-bold">请从左侧选择一个管理层人员，开始为其配置允许评测的普通员工对象。</p>
+                                                    <p className="text-xs font-bold">请从左侧选择一位 L2–L4 评分人，为其配置职级较低的评测对象。</p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 </div>
                             ) : configTab === 'MERGE' ? (
-                                <div className="flex-grow flex flex-col p-5 overflow-y-auto bg-gray-50/50 space-y-5">
+                                <div className="flex-grow min-h-0 flex flex-col p-5 overflow-y-auto bg-gray-50/50 space-y-5">
                                     <div className="bg-amber-550/10 border border-amber-500/20 rounded-2xl p-4 flex gap-3">
                                         <span className="text-xl shrink-0">💡</span>
                                         <div>
@@ -1001,62 +1084,74 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     )}
                                 </div>
                             ) : (
-                                <div className="flex-grow flex flex-col p-5 overflow-y-auto bg-gray-50/50 space-y-4">
-                                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex gap-3">
-                                        <span className="text-xl shrink-0">💡</span>
-                                        <div>
-                                            <h5 className="text-xs font-black text-blue-800">关于评分忽略/豁免设置</h5>
-                                            <p className="text-[10px] text-blue-700 font-medium leading-relaxed mt-1">
-                                                如果您（老板）认为某些员工（如兼职、特殊顾问、或自愿不想要参与本季度考核的成员）暂不需要参与季度考核，可以在下方将其勾选为<span className="font-bold text-red-600">“忽略/豁免评分”</span>：
-                                            </p>
-                                            <ul className="text-[10px] text-blue-700 font-medium list-disc list-inside mt-1.5 space-y-1">
-                                                <li>被忽略的员工将<span className="font-bold">不显示</span>在管理层的待评分列表和评分统计看板中；</li>
-                                                <li>豁免后，该员工的任何季度考核均不会被视为“未完成/拖欠”，保护考核统计数据的真实性；</li>
-                                                <li>您可以随时再次取消勾选，恢复其正常季度考评。</li>
-                                            </ul>
-                                        </div>
+                                <div className="flex-grow min-h-0 flex flex-col p-4 md:p-5 overflow-y-auto bg-gray-50/50 space-y-4 pb-24">
+                                    {/* Exemption Intro Card */}
+                                    <div className="bg-stone-900 text-white p-4 rounded-2xl border-l-4 border-red-500 space-y-1 shadow-sm">
+                                        <h5 className="text-xs font-black text-[#FFD700] flex items-center gap-1.5">
+                                            <span>🚫 忽略评分及免评说明 (Assessment Exemptions)</span>
+                                        </h5>
+                                        <p className="text-[10px] text-white/80 leading-relaxed font-medium">
+                                            开启后，该员工将被<b>豁免评分</b>，不会出现在季度初评/待评分列表和进度看板中。其考核不被视为“未完成”，适用于兼职、试用期或特殊原因不参与本季度评分的成员。
+                                        </p>
                                     </div>
 
-                                    {/* 员工列表 */}
-                                    <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
-                                        <div className="p-3 bg-gray-50 flex items-center justify-between shrink-0">
-                                            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">在职员工列表 ({employees.filter(e => !e.isArchived && (getEmployeeLevel(e) !== 1 || getJobCategoryForEmployee(e) !== 'OWNER')).length} 人)</span>
-                                            <span className="text-[10px] text-gray-400 font-bold">点击滑块即时保存</span>
-                                        </div>
-                                        <div className="max-h-[320px] overflow-y-auto divide-y divide-gray-50">
-                                            {employees
-                                                .filter(e => !e.isArchived && (getEmployeeLevel(e) !== 1 || getJobCategoryForEmployee(e) !== 'OWNER'))
-                                                .map(e => {
-                                                    const isExempt = !!e.assessmentExempt;
-                                                    const isUpdating = updatingExemptId === e.id;
-                                                    return (
-                                                        <div 
-                                                            key={e.id}
-                                                            className={`p-3 flex items-center justify-between gap-3 transition-colors ${
-                                                                isExempt ? 'bg-red-50/30' : 'hover:bg-gray-50'
-                                                            }`}
-                                                        >
-                                                            <div className="min-w-0">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className="font-black text-xs text-[#1A1A1A]">{e.name}</span>
-                                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
-                                                                        getEmployeeLevel(e) === 1
-                                                                            ? 'bg-amber-100 text-amber-700'
-                                                                            : getEmployeeLevel(e) === 2 
-                                                                                ? 'bg-blue-100 text-blue-700' 
-                                                                                : 'bg-stone-100 text-stone-600'
-                                                                    }`}>
-                                                                        {getEmployeeLevel(e) === 1 ? '老板' : getEmployeeLevel(e) === 2 ? '管理层' : '普通员工'}
-                                                                    </span>
-                                                                    {isExempt && (
-                                                                        <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                                                                            🚫 已忽略/免评
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <p className="text-[10px] text-gray-400 mt-0.5">{e.role || '未设置岗位'} · ID: {e.id}</p>
-                                                            </div>
+                                    {/* Action Header block */}
+                                    <div className="flex items-center justify-between px-1">
+                                        <span className="text-xs font-black text-gray-600 uppercase tracking-widest">
+                                            👥 参评配置名单 ({employees.filter(e => !e.isArchived && (getEmployeeLevel(e) !== 1 || getJobCategoryForEmployee(e) !== 'OWNER')).length} 人)
+                                        </span>
+                                        <span className="text-[9px] text-gray-400 font-bold bg-gray-200/60 px-2.5 py-1 rounded-full shrink-0">
+                                            💡 老板账号已默认免除
+                                        </span>
+                                    </div>
 
+                                    {/* Beautiful List of bordered cards */}
+                                    <div className="space-y-2.5">
+                                        {employees
+                                            .filter(e => !e.isArchived && (getEmployeeLevel(e) !== 1 || getJobCategoryForEmployee(e) !== 'OWNER'))
+                                            .map(e => {
+                                                const isExempt = !!e.assessmentExempt;
+                                                const isUpdating = updatingExemptId === e.id;
+                                                return (
+                                                    <div 
+                                                        key={e.id}
+                                                        className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-4 ${
+                                                            isExempt 
+                                                                ? 'bg-red-50/40 border-red-200 shadow-sm' 
+                                                                : 'bg-white border-gray-200/80 hover:border-gray-300 shadow-xs'
+                                                        }`}
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <span className="font-black text-xs text-stone-900">{e.name}</span>
+                                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                                                    getEmployeeLevel(e) === 1
+                                                                        ? 'bg-amber-100 text-amber-700'
+                                                                        : getEmployeeLevel(e) === 2 
+                                                                            ? 'bg-blue-100 text-blue-700' 
+                                                                            : 'bg-stone-100 text-stone-600'
+                                                                }`}>
+                                                                    {getOrgLevelLabel(e)}
+                                                                </span>
+                                                                {isExempt ? (
+                                                                    <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded flex items-center gap-0.5 animate-pulse">
+                                                                        🚫 已免评
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                                        🟢 正常参评
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                                                                {e.role || '未设置岗位'} · ID: {e.id}
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className={`text-[10px] font-black hidden xs:inline ${isExempt ? 'text-red-500' : 'text-gray-400'}`}>
+                                                                {isExempt ? '免评' : '参评'}
+                                                            </span>
                                                             <button
                                                                 disabled={isUpdating}
                                                                 onClick={() => handleToggleExempt(e)}
@@ -1074,31 +1169,35 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                                 </span>
                                                             </button>
                                                         </div>
-                                                    );
-                                                })}
-                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                     </div>
                                 </div>
                             )}
 
                             {/* Drawer Footer */}
-                            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
-                                <div className="text-xs text-gray-400 font-bold">
+                            <div className="p-3 border-t border-gray-250 bg-gray-100 flex flex-row items-center justify-between shrink-0 gap-2 w-full">
+                                <div className="text-[10px] sm:text-xs text-gray-500 font-black truncate max-w-[40%]">
                                     {configTab === 'RELATIONS' 
-                                        ? (selectedRater && `已选择 ${selectedTargets.length} 个评测对象`)
-                                        : (mergeSourceId && mergeTargetId ? '准备合并清理' : '请选择需要配置的档案')
+                                        ? (selectedRater ? `已选 ${selectedTargets.length} 人` : '未选评分人')
+                                        : (configTab === 'MERGE' ? (mergeSourceId && mergeTargetId ? '准备合并' : '配置合并') : '免评配置')
                                     }
-                                </div>
-                                <div className="flex gap-2">
+                               </div>
+                                <div className="flex flex-row items-center gap-1.5 shrink-0 ml-auto">
                                     <button
                                         onClick={() => {
                                             setIsConfigDrawerOpen(false);
                                             setSelectedRater(null);
                                         }}
-                                        className="px-4 py-2 text-xs font-black text-gray-500 bg-white border border-gray-200 rounded-xl active:scale-95 transition-all"
-                                        style={{ minHeight: '44px' }}
+                                        className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all border ${
+                                            configTab === 'EXEMPT' 
+                                                ? 'bg-stone-900 text-[#FFD700] border-stone-900 hover:bg-stone-800 shadow-sm'
+                                                : 'text-gray-600 bg-white border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                        style={{ minHeight: '38px' }}
                                     >
-                                        取消
+                                        {configTab === 'EXEMPT' ? '关闭配置中心' : '取消'}
                                     </button>
                                     {configTab === 'RELATIONS' ? (
                                         <button
@@ -1123,43 +1222,43 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                     setSavingConfig(false);
                                                 }
                                             }}
-                                            className={`px-6 py-2 text-xs font-black rounded-xl active:scale-95 transition-all flex items-center gap-1.5 ${
+                                            className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
                                                 selectedRater 
-                                                    ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' 
-                                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm' 
+                                                    : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
                                             }`}
-                                            style={{ minHeight: '44px' }}
+                                            style={{ minHeight: '38px' }}
                                         >
                                             {savingConfig ? (
                                                 <>
-                                                    <Loader2 size={14} className="animate-spin" />
-                                                    <span>正在保存...</span>
+                                                    <Loader2 size={12} className="animate-spin" />
+                                                    <span>保存中...</span>
                                                 </>
                                             ) : (
-                                                <span>保存评测关系</span>
+                                                <span>保存评测配对</span>
                                             )}
                                         </button>
-                                    ) : (
+                                    ) : configTab === 'MERGE' ? (
                                         <button
                                             disabled={!mergeSourceId || !mergeTargetId || merging}
                                             onClick={handleMergeAccounts}
-                                            className={`px-6 py-2 text-xs font-black rounded-xl active:scale-95 transition-all flex items-center gap-1.5 ${
+                                            className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
                                                 mergeSourceId && mergeTargetId
-                                                    ? 'bg-red-600 text-white shadow-md hover:bg-red-700' 
-                                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                    ? 'bg-red-600 text-white border-red-600 shadow-sm hover:bg-red-700' 
+                                                    : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
                                             }`}
-                                            style={{ minHeight: '44px' }}
+                                            style={{ minHeight: '38px' }}
                                         >
                                             {merging ? (
                                                 <>
-                                                    <Loader2 size={14} className="animate-spin" />
-                                                    <span>正在合并清理...</span>
+                                                    <Loader2 size={12} className="animate-spin" />
+                                                    <span>合并中...</span>
                                                 </>
                                             ) : (
-                                                <span>🔥 执行一键合并清理</span>
+                                                <span>合并两账号</span>
                                             )}
                                         </button>
-                                    )}
+                                    ) : null}
                                 </div>
                             </div>
                         </div>
@@ -1243,7 +1342,7 @@ interface EmployeeCardProps {
 const EmployeeCard: React.FC<EmployeeCardProps> = ({ emp, rater, quarter, onClick }) => {
     const category = getJobCategoryForEmployee(emp);
     const jobDef = JOB_METRICS[category];
-    const status = getQuarterlyStatus(emp, quarter);
+    const status = getQuarterlyStatus(emp, quarter, rater.id);
     const perm = getAssessPermission(rater, emp);
     const canAssess = perm === 'INITIAL' || perm === 'OVERRIDE';
     
@@ -1252,9 +1351,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ emp, rater, quarter, onClic
         ? [...emp.assessmentRecordsV2].sort((a, b) => b.quarter.localeCompare(a.quarter))[0]
         : null;
 
-    const raterLevel = getEmployeeLevel(rater);
-    const targetLevel = getEmployeeLevel(emp);
-    const hideScore = raterLevel === 2 && targetLevel !== 3;
+    const hideScore = !canAssess;
 
     return (
         <button 
@@ -1284,7 +1381,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ emp, rater, quarter, onClic
             <div className="flex items-center justify-between pt-3 border-t border-gray-50">
                 {hideScore ? (
                     <span className="text-[10px] text-gray-400 font-bold italic flex items-center gap-1">
-                        <Lock size={10} className="text-gray-400 shrink-0"/> 🔒 仅限查看第三等级分数
+                        <Lock size={10} className="text-gray-400 shrink-0"/> 🔒 无评分权限，仅限查看
                     </span>
                 ) : lastRecord ? (
                     <div className="flex items-center gap-1.5 text-[10px]">

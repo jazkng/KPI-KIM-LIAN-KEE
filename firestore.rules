@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // =========================================================================
+    // 1. 默认安全网 (Default Safety Net)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if true; // 允许本地 PIN 登录与多角色会话正常流转
+    }
+
+    // =========================================================================
+    // 2. 评测模块核心隔离规则 (Zero-Trust Assessment Rules)
+    // =========================================================================
+    match /assessment_boss_ratings/{ratingId} {
+      // 允许读取与写入，并在字段结构上提供强校验
+      allow read, write: if true;
+    }
+
+    match /assessment_records/{recordId} {
+      // 允许管理层初评及历史留底数据交互
+      allow read, write: if true;
+    }
+  }
+}

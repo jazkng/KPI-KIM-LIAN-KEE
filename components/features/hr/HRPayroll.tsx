@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import {
   DollarSign,
   Save,
@@ -58,7 +59,9 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../firebaseConfig";
 import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
+import { applyResolvedStylesForPdf } from "../../../utils/pdfStyleResolver";
+
 
 // --- INTERFACES ---
 
@@ -528,7 +531,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       if (e.joinDate && e.joinDate.substring(0, 7) > selectedMonth)
         return false;
       if (payrollData && payrollData[e.id]) return true; // 👑 Ensure they show up if they have data for this month
-      if (e.role.includes("Owner")) return false;
+      
+      const isEligible = e.isPayrollEligible !== undefined ? e.isPayrollEligible : !e.role.includes("Owner");
+      if (!isEligible) return false;
 
       const isTerminated = e.isArchived || e.status === "TERMINATED";
       if (isTerminated) {
@@ -757,7 +762,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         if (existingRecord?.details?.some((d) => d.employeeId === e.id))
           return true; // 👑 Prevent data loss for historical records
 
-        if (e.role.includes("Owner")) return false;
+        const isEligible = e.isPayrollEligible !== undefined ? e.isPayrollEligible : !e.role.includes("Owner");
+        if (!isEligible) return false;
 
         const isTerminated = e.isArchived || e.status === "TERMINATED";
         if (isTerminated && !showResigned) {
@@ -1375,7 +1381,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
           if (isPdf) {
             // Configure the PDF worker
-            pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+            
 
             const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
             const pdf = await loadingTask.promise;
@@ -3016,6 +3022,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         backgroundColor: "#ffffff",
         windowWidth: 2000,
         windowHeight: 2000,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.getElementById('hr-payroll-print-slip');
+          if (printSlipRef.current && clonedEl) {
+            applyResolvedStylesForPdf(printSlipRef.current as HTMLElement, clonedEl as HTMLElement);
+          }
+        }
       });
       const imgData1 = canvas1.toDataURL("image/jpeg", 1.0);
       
@@ -3026,6 +3038,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         backgroundColor: "#ffffff",
         windowWidth: 2000,
         windowHeight: 2000,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.getElementById('hr-payroll-attendance-print');
+          if (attendancePrintRef.current && clonedEl) {
+            applyResolvedStylesForPdf(attendancePrintRef.current as HTMLElement, clonedEl as HTMLElement);
+          }
+        }
       });
       const imgData2 = canvas2.toDataURL("image/jpeg", 1.0);
 
@@ -3074,6 +3092,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         useCORS: true,
         backgroundColor: "#ffffff",
         windowWidth: 2000,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.getElementById('hr-payroll-summary-print');
+          if (printSummaryRef.current && clonedEl) {
+            applyResolvedStylesForPdf(printSummaryRef.current as HTMLElement, clonedEl as HTMLElement);
+          }
+        }
       });
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
       const pdf = new jsPDF("l", "mm", "a4");
@@ -3910,13 +3934,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         <div className="flex bg-white/10 rounded-xl p-1 mt-2.5 max-w-sm border border-white/5 shadow-inner">
           <button
             onClick={() => setCurrentMode("CALC")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[38px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
           >
             🧮 薪酬核算 (Calc)
           </button>
           <button
             onClick={() => setCurrentMode("HISTORY")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[38px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
           >
             📜 支薪历史 (History)
           </button>
@@ -3928,7 +3952,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             <button
               onClick={handlePrintSummary}
               disabled={isGeneratingPdf || selectedEmpIds.size === 0}
-              className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0 active:scale-95 min-h-[36px]"
+              className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0 active:scale-95 min-h-[44px]"
             >
               {isGeneratingPdf ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -3939,14 +3963,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </button>
             <button
               onClick={() => setShowResigned(!showResigned)}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 active:scale-95 min-h-[36px] ${showResigned ? "bg-red-900 text-red-100 border-red-700" : "bg-white/10 text-gray-400 border-white/10 hover:bg-white/20"}`}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 active:scale-95 min-h-[44px] ${showResigned ? "bg-red-900 text-red-100 border-red-700" : "bg-white/10 text-gray-400 border-white/10 hover:bg-white/20"}`}
             >
               <UserX size={14} /> {showResigned ? "隐藏离职" : "离职"}
             </button>
             {!isPosted && (
               <button
                 onClick={() => setIsAdvanceModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95 min-h-[36px]"
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95 min-h-[44px]"
               >
                 <Wallet size={14} /> 预支
               </button>
@@ -3956,13 +3980,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 setEditingEmpId(null);
                 setShowAdvanceHistory(true);
               }}
-              className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95 min-h-[36px]"
+              className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95 min-h-[44px]"
             >
               <History size={14} /> 预支历史
             </button>
 
             {/* ⏰ 考勤自动扣款开关 */}
-            <div className="flex items-center gap-2 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/10 shrink-0 min-h-[36px]">
+            <div className="flex items-center gap-2 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/10 shrink-0 min-h-[44px]">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-black text-gray-200">
                   ⏰ 自动扣薪
@@ -4018,7 +4042,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
               <button
                 onClick={loadAllHistory}
-                className="bg-[#1A1A1A] hover:bg-black text-[#FFD700] px-3.5 py-2 rounded-xl text-xs font-black active:scale-95 transition-transform flex items-center gap-1.5 shadow-sm min-h-[38px] select-none"
+                className="bg-[#1A1A1A] hover:bg-black text-[#FFD700] px-3.5 py-2 rounded-xl text-xs font-black active:scale-95 transition-transform flex items-center gap-1.5 shadow-sm min-h-[44px] select-none"
                 disabled={isHistLoading}
               >
                 <RefreshCw
@@ -4801,21 +4825,21 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('EARNINGS')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[36px] select-none active:scale-[0.98] ${mobileModalTab === 'EARNINGS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'EARNINGS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   💵 收入 (Earn)
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('DEDUCTIONS')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[36px] select-none active:scale-[0.98] ${mobileModalTab === 'DEDUCTIONS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'DEDUCTIONS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   🛑 扣除 (Deduct)
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('STATUTORY')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[36px] select-none active:scale-[0.98] ${mobileModalTab === 'STATUTORY' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'STATUTORY' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   🏛️ 政府/其它 (Govt)
                 </button>
@@ -5785,7 +5809,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                   (adv.paymentMethod as any) || "BANK_TRANSFER",
                               });
                             }}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform flex items-center justify-center min-w-[36px] min-h-[36px]"
+                            className="p-1.5 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform flex items-center justify-center min-w-[44px] min-h-[44px]"
                             title="编辑"
                           >
                             ✏️
@@ -5798,7 +5822,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                 adv.amount,
                               )
                             }
-                            className="p-1.5 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform flex items-center justify-center min-w-[36px] min-h-[36px]"
+                            className="p-1.5 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform flex items-center justify-center min-w-[44px] min-h-[44px]"
                             title="删除"
                           >
                             🗑️
@@ -5827,9 +5851,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       )}
 
       {/* 🟢 HIDDEN PRINT SLIP (A4 Layout - Large + Perfect spacing) */}
-      <div style={{ position: "fixed", left: "-10000px", top: 0, zIndex: -50 }}>
-        <div
-          ref={printSlipRef}
+      {createPortal(
+        <div style={{ position: "absolute", left: "0px", top: 0, zIndex: -9999, pointerEvents: "none" }}>
+          <div
+            ref={printSlipRef}
+          id="hr-payroll-print-slip"
           className="w-[210mm] min-h-[297mm] bg-white p-12 text-black font-sans relative flex flex-col text-[12px]"
         >
           {editingEntry && editingEmp && (
@@ -6364,6 +6390,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         {editingEntry && editingEmp && (
           <div
             ref={attendancePrintRef}
+            id="hr-payroll-attendance-print"
             className="w-[210mm] min-h-[297mm] bg-white p-12 text-black font-sans relative flex flex-col text-[12px]"
             style={{ marginTop: "20px" }}
           >
@@ -6516,12 +6543,16 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             })()}
           </div>
         )}
-      </div>
+      </div>,
+      document.body
+    )}
 
       {/* 🟢 HIDDEN PRINT SUMMARY TABLE (Landscape A4) */}
-      <div style={{ position: "fixed", left: "-10000px", top: 0, zIndex: -50 }}>
-        <div
-          ref={printSummaryRef}
+      {createPortal(
+        <div style={{ position: "absolute", left: "0px", top: 0, zIndex: -9999, pointerEvents: "none" }}>
+          <div
+            ref={printSummaryRef}
+          id="hr-payroll-summary-print"
           className="w-[297mm] min-h-[210mm] bg-white p-10 font-sans text-black relative"
         >
           <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-6">
@@ -6657,7 +6688,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
+    )}
     </div>
   );
 };

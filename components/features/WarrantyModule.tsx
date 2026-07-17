@@ -27,7 +27,10 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
     };
 
     const handleSave = async () => {
-        if (!form.productName || !form.expiryDate) return alert("Product Name and Expiry Date are required");
+        if (!form.productName || !form.expiryDate) {
+            await (window as any).systemDialog.alert("Product Name and Expiry Date are required", "设备保修");
+            return;
+        }
         
         const newRecord: WarrantyRecord = {
             id: form.id || `war_${Date.now()}`,
@@ -42,11 +45,11 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
         setForm({});
         setIsFormOpen(false);
         loadData();
-        alert("✅ 保修记录已保存 (Warranty Saved)");
+        await (window as any).systemDialog.alert("✅ 保修记录已保存 (Warranty Saved)", "设备保修");
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("确定删除此记录吗？")) return;
+        if (!await (window as any).systemDialog.confirm("确定删除此记录吗？", "设备保修")) return;
         await DataManager.deleteWarranty(id);
         loadData();
     };

@@ -3,7 +3,7 @@ import {
     Wallet, CalendarOff, BookOpen, ClipboardCheck, Utensils, Coffee, Package,
     Users, FileText, Truck, Armchair, Eye, CheckSquare, CreditCard, Banknote,
     Landmark, ShieldCheck, Clock, AlertTriangle, ChefHat, ShoppingCart, Flame, Award,
-    Sparkles
+    Sparkles, BellRing
 } from 'lucide-react';
 
 export * from '../constants/suppliers';
@@ -127,6 +127,10 @@ export const MODULE_DEFINITIONS = {
     'QUEUE': {
         label: '排队大屏 (TV)', desc: '顾客端展示界面', icon: Armchair, tab: 'QUEUE',
         guide: '显示排队号码和语音播报。',
+    },
+    'KITCHEN_ALERT': {
+        label: '通知厨房 (Kitchen Alert)', desc: '催菜、漏单、做错与重做通知', icon: BellRing, tab: 'KITCHEN_ALERT',
+        guide: '1. 输入桌号和菜单单号。\n2. 选择菜品、大小、数量和通知原因。\n3. 提交后在“我的通知”查看厨房是否已接收或解决。',
     },
     // ── 考勤 ──
     'ATTENDANCE_CONSOLE': {

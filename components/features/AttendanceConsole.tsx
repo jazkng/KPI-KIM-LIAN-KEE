@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import { Employee, AttendanceRecord, RosterStatus } from '../../types';
 import { 
     DataManager, 
@@ -18,7 +18,9 @@ import {
 } from '../../utils/dataManager';
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
 import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+
 
 interface AttendanceConsoleProps {
     onClose: () => void;
@@ -309,7 +311,18 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
         setIsGeneratingPdf(true);
         try {
             await new Promise(r => setTimeout(r, 500)); 
-            const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const canvas = await html2canvas(printRef.current, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('attendance-print-root');
+                    const originalEl = document.getElementById('attendance-print-root');
+                    if (originalEl && clonedEl) {
+                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
+            });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
             const pdf = new jsPDF('p', 'mm', 'a4'); 
@@ -409,8 +422,8 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
             </div>
 
             {/* HIDDEN PRINT TEMPLATE */}
-            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                <div ref={printRef} className="w-[210mm] min-h-[297mm] bg-white p-12 font-sans text-black relative">
+            <div style={{ position: 'fixed', top: '0px', left: '0px', zIndex: -9999, pointerEvents: 'none' }}>
+                <div ref={printRef} id="attendance-print-root" className="w-[210mm] min-h-[297mm] bg-white p-12 font-sans text-black relative">
                     <div className="flex justify-between items-start border-b-4 border-black pb-4 mb-8">
                         <div>
                             <h1 className="text-3xl font-black uppercase tracking-widest mb-1">Attendance Report</h1>
@@ -721,6 +734,13 @@ const EmployeeMonthlySheetModal: React.FC<{
                 useCORS: true,
                 backgroundColor: "#ffffff",
                 windowWidth: 1000,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('monthly-attendance-print-block');
+                    const originalEl = document.getElementById('monthly-attendance-print-block');
+                    if (originalEl && clonedEl) {
+                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
             });
             const imgData = canvas.toDataURL("image/jpeg", 1.0);
             const pdf = new jsPDF("p", "mm", "a4");
@@ -1049,6 +1069,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     // Batch Menu State
     const [showBatchMenu, setShowBatchMenu] = useState(false);
     const batchMenuRef = useRef<HTMLDivElement>(null);
+    const mobileBatchMenuRef = useRef<HTMLDivElement>(null);
 
     const staffCacheRef = useRef<{ data: Employee[]; ts: number } | null>(null);
     const STAFF_CACHE_TTL = 5 * 60 * 1000;
@@ -1060,7 +1081,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (batchMenuRef.current && !batchMenuRef.current.contains(event.target as Node)) {
+            const insideBatch = batchMenuRef.current && batchMenuRef.current.contains(event.target as Node);
+            const insideMobileBatch = mobileBatchMenuRef.current && mobileBatchMenuRef.current.contains(event.target as Node);
+            if (!insideBatch && !insideMobileBatch) {
                 setShowBatchMenu(false);
             }
         };
@@ -1177,7 +1200,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                     const arrayBuffer = evt.target?.result as ArrayBuffer;
 
                     if (isPdf) {
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+                        
 
                         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
                         const pdf = await loadingTask.promise;
@@ -1657,6 +1680,174 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                         });
 
                         setImportPreviews(finalMatches);
+                    } else {
+                        // FACE3000-U USB Excel (.xls/.xlsx) monthly attendance report
+                        const workbook = XLSX.read(arrayBuffer, {
+                            type: "array",
+                            cellDates: true,
+                            raw: true,
+                        });
+
+                        const normalizeCellText = (value: unknown): string =>
+                            value === null || value === undefined ? "" : String(value).trim();
+
+                        const parseExcelTime = (value: unknown): string | null => {
+                            if (value === null || value === undefined || value === "") return null;
+
+                            if (value instanceof Date && !Number.isNaN(value.getTime())) {
+                                return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+                            }
+
+                            if (typeof value === "number" && Number.isFinite(value)) {
+                                // Excel stores a time-only cell as a fraction of one day.
+                                const dayFraction = ((value % 1) + 1) % 1;
+                                const totalMinutes = Math.round(dayFraction * 24 * 60) % (24 * 60);
+                                return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+                            }
+
+                            const text = normalizeCellText(value);
+                            const match = text.match(/\b([0-2]?\d):([0-5]\d)(?::[0-5]\d)?\s*(AM|PM)?\b/i);
+                            if (!match) return null;
+
+                            let hour = Number(match[1]);
+                            const minute = Number(match[2]);
+                            const ampm = match[3]?.toUpperCase();
+                            if (ampm === "PM" && hour < 12) hour += 12;
+                            if (ampm === "AM" && hour === 12) hour = 0;
+                            if (hour > 23) return null;
+                            return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+                        };
+
+                        const parseMonthFromSheet = (rows: unknown[][]): string | null => {
+                            for (const row of rows.slice(0, 8)) {
+                                for (const value of row || []) {
+                                    const text = normalizeCellText(value);
+                                    const match = text.match(/(20\d{2})[\/-](0?[1-9]|1[0-2])[\/-](?:0?[1-9]|[12]\d|3[01])/);
+                                    if (match) {
+                                        return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}`;
+                                    }
+                                }
+                            }
+                            return null;
+                        };
+
+                        const parsedEmployees = new Map<string, {
+                            scannerId: string;
+                            scannerName: string;
+                            sourceMonth: string | null;
+                            daysMap: Map<number, string[]>;
+                        }>();
+
+                        workbook.SheetNames
+                            .filter((sheetName) => !/^(summary|logs?)$/i.test(sheetName.trim()))
+                            .forEach((sheetName) => {
+                                const sheet = workbook.Sheets[sheetName];
+                                if (!sheet) return;
+
+                                const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+                                    header: 1,
+                                    raw: true,
+                                    defval: "",
+                                    blankrows: false,
+                                });
+                                if (rows.length === 0) return;
+
+                                const sourceMonth = parseMonthFromSheet(rows);
+                                const maxColumns = Math.max(...rows.map((row) => row.length), 0);
+
+                                // FACE3000-U places up to three employees side by side, 15 columns per block.
+                                for (let baseColumn = 0; baseColumn < maxColumns; baseColumn += 15) {
+                                    const nameLabel = normalizeCellText(rows[2]?.[baseColumn + 8]);
+                                    const idLabel = normalizeCellText(rows[3]?.[baseColumn + 8]);
+                                    const scannerName = normalizeCellText(rows[2]?.[baseColumn + 9]);
+                                    const scannerId = normalizeCellText(rows[3]?.[baseColumn + 9]).replace(/\.0$/, "");
+
+                                    if (!scannerName && !scannerId) continue;
+                                    if (nameLabel && !/^name$/i.test(nameLabel)) continue;
+                                    if (idLabel && !/^(no|id|no\.)$/i.test(idLabel)) continue;
+
+                                    const key = scannerId
+                                        ? `id_${scannerId}`
+                                        : `name_${scannerName.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+
+                                    if (!parsedEmployees.has(key)) {
+                                        parsedEmployees.set(key, {
+                                            scannerId,
+                                            scannerName: scannerName || `员工 ${scannerId}`,
+                                            sourceMonth,
+                                            daysMap: new Map(),
+                                        });
+                                    }
+
+                                    const employeeData = parsedEmployees.get(key)!;
+                                    if (!employeeData.sourceMonth && sourceMonth) employeeData.sourceMonth = sourceMonth;
+
+                                    // Daily rows begin at Excel row 12 (zero-based index 11).
+                                    for (let rowIndex = 11; rowIndex < rows.length; rowIndex++) {
+                                        const row = rows[rowIndex] || [];
+                                        const dayCell = normalizeCellText(row[baseColumn]);
+                                        const dayMatch = dayCell.match(/^0?([1-9]|[12]\d|3[01])(?:\s|$)/);
+                                        if (!dayMatch) continue;
+
+                                        const day = Number(dayMatch[1]);
+                                        const timeOffsets = [1, 3, 6, 8, 10, 12];
+                                        const times: string[] = [];
+
+                                        timeOffsets.forEach((offset) => {
+                                            const time = parseExcelTime(row[baseColumn + offset]);
+                                            if (time && !times.includes(time)) times.push(time);
+                                        });
+
+                                        if (times.length === 0) continue;
+
+                                        const existing = employeeData.daysMap.get(day) || [];
+                                        times.forEach((time) => {
+                                            if (!existing.includes(time)) existing.push(time);
+                                        });
+                                        employeeData.daysMap.set(day, existing);
+                                    }
+                                }
+                            });
+
+                        const parsedResult = Array.from(parsedEmployees.values())
+                            .map((employeeData) => ({
+                                scannerName: employeeData.scannerName,
+                                scannerId: employeeData.scannerId,
+                                sourceMonth: employeeData.sourceMonth,
+                                rows: Array.from(employeeData.daysMap.entries())
+                                    .map(([day, times]) => ({ day, times }))
+                                    .sort((a, b) => a.day - b.day),
+                            }))
+                            .filter((item) => item.rows.length > 0);
+
+                        if (parsedResult.length === 0) {
+                            throw new Error("未在 Excel 中找到 FACE3000-U 考勤记录");
+                        }
+
+                        const finalMatches = parsedResult.map((item) => {
+                            let matchedSystemEmp: Employee | null = null;
+                            if (item.scannerId) {
+                                const cleanScannerId = String(item.scannerId).trim();
+                                matchedSystemEmp = staffList.find(
+                                    (employee) => String(employee.id).trim() === cleanScannerId,
+                                ) || null;
+                            }
+
+                            if (!matchedSystemEmp && item.scannerName) {
+                                matchedSystemEmp = findMatchedEmployeeLocal(item.scannerName, staffList);
+                            }
+
+                            return {
+                                scannerName: item.scannerName,
+                                scannerId: item.scannerId,
+                                sourceMonth: item.sourceMonth,
+                                systemEmployee: matchedSystemEmp,
+                                rawRows: item.rows,
+                                selected: !!matchedSystemEmp,
+                            };
+                        });
+
+                        setImportPreviews(finalMatches);
                     }
                 } catch (err) {
                     console.error(err);
@@ -1684,9 +1875,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         setIsSavingImport(true);
         try {
             let totalSaved = 0;
-            const targetMonth = selectedDate.slice(0, 7);
             for (const preview of selectedPreviews) {
                 const emp = preview.systemEmployee;
+                const targetMonth = preview.sourceMonth || selectedDate.slice(0, 7);
                 for (const row of preview.rawRows) {
                     const dateStr = `${targetMonth}-${String(row.day).padStart(2, "0")}`;
                     const times = row.times;
@@ -2082,70 +2273,153 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         );
     };
 
+    const handleResetMonthlyAttendance = async () => {
+        const targetMonth = selectedDate.slice(0, 7); // yyyy-mm
+        if (!await (window as any).systemDialog.confirm(`⚠️ 确定要清空 ${targetMonth} 的所有考勤记录吗？\n此操作不可撤销，且会删除该月所有员工的打卡数据，建议仅在数据完全错误需要重新导入时使用。`, '考勤指挥台')) {
+            return;
+        }
+        
+        setIsLoading(true);
+        try {
+            const records = await DataManager.getAttendanceByMonth(targetMonth);
+            if (records.length === 0) {
+                await (window as any).systemDialog.alert(`✅ ${targetMonth} 目前没有打卡记录。`, '考勤指挥台');
+                return;
+            }
+            
+            let deleted = 0;
+            for (const record of records) {
+                await DataManager.deleteAttendance(record.id);
+                deleted++;
+            }
+            
+            await loadData(selectedDate);
+            await (window as any).systemDialog.alert(`✅ 已成功清除 ${targetMonth} 的 ${deleted} 条考勤记录。`, '考勤指挥台');
+        } catch (e: any) {
+            console.error("Failed to reset monthly attendance", e);
+            await (window as any).systemDialog.alert(`❌ 清除失败：${e.message}`, '考勤指挥台');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
-        <div className="fixed inset-0 bg-[#F5F7FA] z-[100] flex flex-col animate-in fade-in duration-200 font-sans">
-            <div className="bg-[#1A1A1A] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] md:px-5 md:pb-5 md:pt-[max(env(safe-area-inset-top),1.25rem)] flex flex-col md:flex-row justify-between items-center text-white shrink-0 shadow-xl z-20 border-b-4 border-[#FFD700]">
-                <div className="flex items-center gap-3 md:gap-5 w-full md:w-auto mb-3 md:mb-0">
-                    <div className="bg-[#FFD700] text-black p-2 md:p-3 rounded-xl md:rounded-2xl shadow-gold"><Briefcase size={20} className="md:w-7 md:h-7" /></div>
-                    <div>
-                        <h2 className="text-lg md:text-2xl font-black tracking-wide text-white">考勤指挥台</h2>
-                        <p className="text-[9px] md:text-xs text-gray-400 font-mono tracking-[0.2em] uppercase mt-0.5">Central Attendance Control</p>
+        <div className="fixed inset-0 bg-[#F6F7FB] z-[100] flex flex-col animate-in fade-in duration-200 font-sans">
+            <div className="bg-[#111111] text-white shrink-0 border-b-4 border-[#FFD200] px-4 md:px-5 h-[56px] md:h-16 flex justify-between items-center z-20 sticky top-0 shadow-md">
+                <div className="flex items-center gap-3 min-w-0">
+                    {onClose && (
+                        <button 
+                            onClick={onClose} 
+                            className="md:hidden w-11 h-11 bg-white/10 hover:bg-red-500 hover:text-white rounded-xl flex items-center justify-center transition-colors text-gray-300 shrink-0"
+                            id="mobile-close-btn"
+                        >
+                            <X size={18}/>
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl shrink-0">⏱️</span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm md:text-xl font-black text-white truncate">考勤指挥台</h2>
+                            <p className="text-[8px] text-gray-400 font-mono tracking-widest uppercase mt-0.5 truncate">Central Attendance Control</p>
+                        </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto justify-between md:justify-end overflow-x-auto scrollbar-hide">
-                    
+                {/* Desktop Buttons */}
+                <div className="hidden md:flex items-center gap-3">
                     <div className="relative shrink-0" ref={batchMenuRef}>
                         <button 
                             onClick={() => setShowBatchMenu(!showBatchMenu)} 
                             disabled={isLoading} 
-                            className="bg-[#FFD700] text-black hover:bg-white px-3 py-2 md:px-5 md:py-3 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold transition-all border border-[#FFD700] flex items-center gap-1 md:gap-2 active:scale-95 shadow-lg whitespace-nowrap"
+                            className="bg-[#FFD200] text-black hover:bg-white px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-[#FFD200] flex items-center gap-2 active:scale-95 shadow-lg whitespace-nowrap"
                         >
-                            <Zap size={14} className="md:w-[18px] md:h-[18px]" fill="currentColor"/> <span className="hidden sm:inline">一键开工</span><span className="sm:hidden">批量</span> <ChevronDown size={14} className={`transition-transform ${showBatchMenu ? 'rotate-180' : ''}`}/>
+                            <Zap size={14} fill="currentColor"/> <span>一键开工</span> <ChevronDown size={14} className={`transition-transform ${showBatchMenu ? 'rotate-180' : ''}`}/>
                         </button>
                         {showBatchMenu && (
                             <div className="absolute top-full mt-2 right-0 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 min-w-[200px] overflow-hidden animate-in fade-in slide-in-from-top-2">
                                 <button onClick={() => handleBatchClockIn('FLOOR')} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
-                                    <Briefcase size={18} className="text-yellow-600"/><div><span className="text-xs md:text-sm text-[#1A1A1A] font-bold">楼面开工</span><p className="text-[8px] md:text-[10px] text-gray-400">FOH + Bar + Dish</p></div>
+                                    <Briefcase size={18} className="text-yellow-600"/><div><span className="text-sm text-[#111111] font-bold">楼面开工</span><p className="text-[10px] text-gray-400">FOH + Bar + Dish</p></div>
                                 </button>
                                 <button onClick={() => handleBatchClockIn('KITCHEN')} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
-                                    <ChefHat size={18} className="text-orange-600"/><div><span className="text-xs md:text-sm text-[#1A1A1A] font-bold">厨房开工</span><p className="text-[8px] md:text-[10px] text-gray-400">Kitchen Core</p></div>
+                                    <ChefHat size={18} className="text-orange-600"/><div><span className="text-sm text-[#111111] font-bold">厨房开工</span><p className="text-[10px] text-gray-400">Kitchen Core</p></div>
                                 </button>
                                 <button onClick={() => handleBatchClockIn('ALL')} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 transition-colors">
-                                    <Users size={18} className="text-blue-600"/><div><span className="text-xs md:text-sm text-[#1A1A1A]">全员开工</span><p className="text-[8px] md:text-[10px] text-gray-400">All Staff</p></div>
+                                    <Users size={18} className="text-blue-600"/><div><span className="text-sm text-[#111111]">全员开工</span><p className="text-[10px] text-gray-400">All Staff</p></div>
                                 </button>
                             </div>
                         )}
                     </div>
-
                     <div className="flex gap-2 shrink-0">
-                        <button onClick={() => setShowRollCall(true)} className="bg-white/10 hover:bg-white/20 px-3 py-2 md:px-5 md:py-3 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold transition-all border border-white/10 flex items-center gap-1 md:gap-2 active:scale-95 whitespace-nowrap"><ListChecks size={14} className="md:w-[18px] md:h-[18px]"/> 点名</button>
-                        <button onClick={() => setShowReport(true)} className="bg-white/10 hover:bg-white/20 px-3 py-2 md:px-5 md:py-3 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold transition-all border border-white/10 flex items-center gap-1 md:gap-2 active:scale-95 whitespace-nowrap"><FileBarChart size={14} className="md:w-[18px] md:h-[18px]"/> 达标</button>
-                        <button onClick={() => setIsSettingsOpen(true)} className="bg-white/10 hover:bg-white/20 px-3 py-2 md:px-5 md:py-3 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold transition-all border border-white/10 flex items-center gap-1 md:gap-2 active:scale-95 whitespace-nowrap"><Clock size={14} className="md:w-[18px] md:h-[18px]"/> 排班设置</button>
-                        <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 md:px-5 md:py-3 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold transition-all shadow-md flex items-center gap-1 md:gap-2 active:scale-95 whitespace-nowrap text-white"><Calendar size={14} className="md:w-[18px] md:h-[18px]"/> 导入打卡</button>
+                        <button onClick={() => setShowRollCall(true)} className="bg-white/10 hover:bg-white/20 px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-white/10 flex items-center gap-2 active:scale-95 whitespace-nowrap"><ListChecks size={14}/> 点名</button>
+                        <button onClick={() => setShowReport(true)} className="bg-white/10 hover:bg-white/20 px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-white/10 flex items-center gap-2 active:scale-95 whitespace-nowrap"><FileBarChart size={14}/> 达标</button>
+                        <button onClick={() => setIsSettingsOpen(true)} className="bg-white/10 hover:bg-white/20 px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-white/10 flex items-center gap-2 active:scale-95 whitespace-nowrap"><Clock size={14}/> 排班设置</button>
+                        <button onClick={handleResetMonthlyAttendance} className="bg-rose-600 hover:bg-rose-500 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-md flex items-center gap-2 active:scale-95 whitespace-nowrap text-white"><Trash2 size={14}/> 重置本月</button>
+                        <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-md flex items-center gap-2 active:scale-95 whitespace-nowrap text-white"><Calendar size={14}/> 导入打卡</button>
                     </div>
-                    <div className="h-8 md:h-10 w-px bg-white/10 mx-1 md:mx-2 hidden sm:block"></div>
-                    <button onClick={onClose} className="p-2 md:p-3 hover:bg-white/10 rounded-full transition-colors shrink-0"><X size={20} className="md:w-6 md:h-6"/></button>
+                    <div className="h-10 w-px bg-white/10 mx-2"></div>
+                    {onClose && <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-full transition-colors shrink-0"><X size={20}/></button>}
+                </div>
+                {/* Mobile Right Close Button */}
+                <div className="md:hidden flex items-center shrink-0">
+                    {onClose && (
+                        <button onClick={onClose} className="w-11 h-11 flex items-center justify-center bg-white/10 hover:bg-red-500 rounded-xl transition-colors text-gray-300 shrink-0 active:scale-95"><X size={18}/></button>
+                    )}
                 </div>
             </div>
 
-            {/* Toolbar */}
-            <div className="bg-white px-3 md:px-6 py-2 md:py-4 border-b border-gray-200 flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4 shrink-0 z-10 shadow-sm">
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                    <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-200 shrink-0">
-                        <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="p-2 hover:bg-white rounded-lg text-gray-500"><TrendingUp size={16} className="rotate-180"/></button>
-                        <input type="date" value={selectedDate} onChange={handleDateChange} className="bg-transparent font-black text-sm md:text-lg outline-none text-center w-32 md:w-40 text-[#1A1A1A]" />
-                        <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="p-2 hover:bg-white rounded-lg text-gray-500"><TrendingUp size={16}/></button>
+            {/* 手机端 Action Chips 横向滚动条 */}
+            <div className="md:hidden bg-[#F6F7FB] px-4 pt-3 pb-1 shrink-0 z-10 overflow-hidden">
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 flex-nowrap" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <div className="relative shrink-0" ref={mobileBatchMenuRef}>
+                        <button 
+                            onClick={() => setShowBatchMenu(!showBatchMenu)} 
+                            disabled={isLoading} 
+                            className="bg-[#FFD200] text-black active:bg-yellow-400 px-4 py-2.5 rounded-xl text-xs font-black border border-[#FFD200]/30 flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"
+                        >
+                            <Zap size={12} fill="currentColor"/> <span>一键开工</span> <ChevronDown size={12} className={`transition-transform ${showBatchMenu ? 'rotate-180' : ''}`}/>
+                        </button>
+                        {showBatchMenu && (
+                            <div className="absolute top-full mt-2 left-0 bg-white rounded-2xl shadow-2xl border border-gray-100 z-[60] min-w-[200px] overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                <button onClick={() => { handleBatchClockIn('FLOOR'); setShowBatchMenu(false); }} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
+                                    <Briefcase size={18} className="text-yellow-600"/><div><span className="text-xs text-[#111111] font-bold">楼面开工</span><p className="text-[10px] text-gray-400">FOH + Bar + Dish</p></div>
+                                </button>
+                                <button onClick={() => { handleBatchClockIn('KITCHEN'); setShowBatchMenu(false); }} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
+                                    <ChefHat size={18} className="text-orange-600"/><div><span className="text-xs text-[#111111] font-bold">厨房开工</span><p className="text-[10px] text-gray-400">Kitchen Core</p></div>
+                                </button>
+                                <button onClick={() => { handleBatchClockIn('ALL'); setShowBatchMenu(false); }} className="w-full px-5 py-4 text-left hover:bg-gray-50 flex items-center gap-3 transition-colors">
+                                    <Users size={18} className="text-blue-600"/><div><span className="text-xs text-[#111111]">全员开工</span><p className="text-[10px] text-gray-400">All Staff</p></div>
+                                </button>
+                            </div>
+                        )}
                     </div>
                     
-                    <div className="flex gap-1.5 text-[10px] md:text-sm font-bold ml-auto md:ml-0">
-                        <span className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-lg"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{todayRecords.filter(r => r.clockOut && new Date(r.clockOut).getTime() > new Date().getTime()).length}</span>
-                        <span className="flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-lg"><div className="w-2 h-2 rounded-full bg-gray-400"></div>{todayRecords.length}</span>
-                    </div>
+                    <button onClick={() => setShowRollCall(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><ListChecks size={12}/> 点名</button>
+                    <button onClick={() => setShowReport(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><FileBarChart size={12}/> 达标</button>
+                    <button onClick={() => setIsSettingsOpen(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Clock size={12}/> 排班设置</button>
+                    <button onClick={handleResetMonthlyAttendance} className="bg-rose-50 hover:bg-rose-100 border border-rose-250 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Trash2 size={12}/> 重置本月</button>
+                    <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Calendar size={12}/> 导入打卡</button>
                 </div>
+            </div>
 
-                <div className="relative w-full md:w-80">
-                    <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
-                    <input type="text" placeholder="搜索员工..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 md:py-3 bg-gray-100 border-none rounded-xl text-xs md:text-sm font-bold focus:bg-white focus:ring-2 focus:ring-[#1A1A1A] transition-all"/>
+            {/* Toolbar / Control Card */}
+            <div className="bg-[#F6F7FB] md:bg-white px-4 md:px-6 py-2 md:py-4 shrink-0 z-10">
+                <div className="bg-white md:bg-transparent p-3 md:p-0 rounded-2xl border border-[#E5E7EB] md:border-none shadow-sm md:shadow-none flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4">
+                    <div className="flex items-center justify-between w-full md:w-auto gap-2">
+                        <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-255 shrink-0">
+                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16} className="rotate-180"/></button>
+                            <input type="date" value={selectedDate} onChange={handleDateChange} className="bg-transparent font-black text-xs md:text-lg outline-none text-center w-28 md:w-40 text-[#111111] font-mono" />
+                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16}/></button>
+                        </div>
+                        
+                        <div className="flex gap-1.5 text-[10px] md:text-sm font-bold shrink-0">
+                            <span className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1.5 rounded-xl border border-green-150"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{todayRecords.filter(r => r.clockOut && new Date(r.clockOut).getTime() > new Date().getTime()).length} 在岗</span>
+                            <span className="flex items-center gap-1 bg-gray-50 text-gray-600 px-2 py-1.5 rounded-xl border border-gray-150"><div className="w-2 h-2 rounded-full bg-gray-400"></div>{todayRecords.length} 记录</span>
+                        </div>
+                    </div>
+
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3.5 top-3 text-gray-400" size={16}/>
+                        <input type="text" placeholder="搜索员工名称..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2.5 md:py-3 bg-gray-50 border border-gray-255 md:border-none md:bg-gray-100 rounded-xl text-xs md:text-sm font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px]"/>
+                    </div>
                 </div>
             </div>
 

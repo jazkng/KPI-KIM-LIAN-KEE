@@ -144,7 +144,7 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
         <>
             <button 
                 onClick={() => setIsOpen(true)} 
-                className={`p-2 rounded-full transition-all flex items-center justify-center shrink-0 active:scale-90 ${
+                className={`mobile-touch-target p-2 rounded-full transition-all flex items-center justify-center shrink-0 active:scale-90 ${
                     dark ? 'text-gray-500 hover:text-black hover:bg-gray-100' : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`} 
                 title="操作说明 (Help)"
@@ -154,15 +154,15 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
 
             {isOpen && (
                 <div 
-                    className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center px-0 sm:px-6 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-0 sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] animate-in fade-in duration-200"
                     onClick={() => setIsOpen(false)}
                 >
                     <div 
-                        className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+                        className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="bg-[#1A1A1A] p-5 flex justify-between items-center text-white border-b-4 border-[#FFD700]">
+                        <div className="bg-[#1A1A1A] px-5 py-4 flex justify-between items-center text-white border-b-4 border-[#FFD700] shrink-0">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-[#FFD700] rounded-lg">
                                     <BookOpen size={18} className="text-black"/>
@@ -171,14 +171,14 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
                             </div>
                             <button 
                                 onClick={() => setIsOpen(false)} 
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                                className="mobile-touch-target p-2 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center"
                             >
                                 <X size={20}/>
                             </button>
                         </div>
 
                         {/* Content Area */}
-                        <div className="p-5 sm:p-6 space-y-4 bg-[#F9FAFB] max-h-[65vh] overflow-y-auto custom-scrollbar">
+                        <div className="p-5 sm:p-6 space-y-4 bg-[#F9FAFB] flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                             {content.steps.map((step, idx) => {
                                 const isWarning = step.includes('⚠️') || step.includes('🚫') || step.includes('❌');
                                 return (
@@ -202,7 +202,7 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 bg-white border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
+                        <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-4 bg-white border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] shrink-0">
                             <button 
                                 onClick={() => setIsOpen(false)} 
                                 className="w-full py-4 bg-[#1A1A1A] hover:bg-black text-[#FFD700] rounded-xl font-black text-sm transition-all active:scale-[0.98]"

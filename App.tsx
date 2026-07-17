@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { isFirebaseInitialized } from './firebaseConfig';
-import { UserRole, Employee } from './types';
+import { PortalRole, Employee, DeviceScreen } from './types';
 import { Login } from './components/Login';
 import { BossDashboard } from './components/BossDashboard';
+import { BossPriorityDashboard } from './components/BossPriorityDashboard';
 import { ManagerDashboard } from './components/AdminDashboard';
 import { StaffDashboard } from './components/StaffDashboard';
-import { QueueDisplay } from './components/QueueDisplay';
-import { LogOut, Settings, Calculator, Home, User, Sparkles } from 'lucide-react';
+import { ManagementPortal } from './components/management/ManagementPortal';
+import { DeviceScreenPortal } from './components/features/device/DeviceScreenPortal';
+import { LogOut, Settings, Calculator, Home, User, Sparkles, Target, Layout } from 'lucide-react';
 import { StoreConfigModal } from './components/features/StoreConfigModal';
 import { AIOperationsAssistant } from './components/features/AIOperationsAssistant';
 import { WhatsNewModal } from './components/ui/WhatsNewModal';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
+import { getPortalRole } from './utils/orgAccess';
+import { SystemDialogProvider } from './components/ui/SystemDialog';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
 // 与 ManagerDashboard 的 initialTab prop 类型保持一致
@@ -21,7 +25,7 @@ type BossTab = Parameters<typeof ManagerDashboard>[0]['initialTab'] | null;
 // Firebase 未初始化提示（Fix #1 前置：抽成独立组件，不再污染主组件的 Hook 顺序）
 // ─────────────────────────────────────────────────────────────────────────────
 const FirebaseConfigError: React.FC = () => (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF8F8] p-4 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-[#F6F7FB] p-4 text-center">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border-2 border-[#8B0000]/10">
             <div className="w-20 h-20 bg-[#8B0000]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Settings className="text-[#8B0000] w-10 h-10 animate-spin-slow" />
@@ -69,16 +73,51 @@ const safeStorage = {
 // 主组件
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-    const [currentUser,     setCurrentUser]     = useState<UserRole | null>(null);
-    const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
+    const [portalMode,      setPortalMode]      = useState<'STAFF' | 'BOSS'>(() => {
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        return params.get('portal') === 'boss' ? 'BOSS' : 'STAFF';
+    });
+
+    const [isTVMode,        setIsTVMode]        = useState(() => {
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        return params.get('mode') === 'tv';
+    });
+
+    const [isKitchenMode] = useState(() => {
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        return params.get('mode') === 'kitchen';
+    });
+
+    const [isDeviceMode] = useState(() => {
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        return params.get('mode') === 'device';
+    });
+
+    const [currentUser,     setCurrentUser]     = useState<PortalRole | null>(() => {
+        const savedRole = safeStorage.get('kepong_erp_session_role');
+        return savedRole ? (savedRole as PortalRole) : null;
+    });
+
+    const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(() => {
+        const savedEmployee = safeStorage.get('kepong_erp_session_employee');
+        if (savedEmployee) {
+            try {
+                return JSON.parse(savedEmployee) as Employee;
+            } catch (e) {
+                console.error('Failed to restore employee session', e);
+            }
+        }
+        return null;
+    });
+
     const [bossTab,         setBossTab]         = useState<BossTab>(null);
-    const [isTVMode,        setIsTVMode]        = useState(false);
+    const [bossHomeView,    setBossHomeView]    = useState<'PRIORITY' | 'FUNCTIONS'>('PRIORITY');
     const [isConfigOpen,    setIsConfigOpen]    = useState(false);
     const [isAiOpen,        setIsAiOpen]        = useState(false);
-    const [portalMode,      setPortalMode]      = useState<'STAFF' | 'BOSS'>('STAFF');
     const [showWhatsNew,    setShowWhatsNew]    = useState(false);
-    // Fix #6: 会话恢复期间显示 loading，防止用旧数据渲染
-    const [sessionLoading,  setSessionLoading]  = useState(true);
+    
+    // App 启动时只有两个稳定状态: BOOTING 和 READY
+    const [bootStatus,      setBootStatus]      = useState<'BOOTING' | 'READY'>('BOOTING');
     const [bossActiveModal, setBossActiveModal] = useState<string>('NONE');
 
     // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
@@ -89,60 +128,78 @@ export default function App() {
         }
     }, []);
 
-    // Fix #1: useEffect 无条件放在所有 Hook 之后，不再出现在条件 return 之前
-    // Fix #2: isMounted 守卫，防止异步回调在卸载后 setState
-    // Fix #3: checkVersion 加入依赖数组
+    // Stable logout callback
+    const handleLogout = useCallback(() => {
+        console.log('🔄 User logged out. Clearing sessions.');
+        setCurrentUser(null);
+        setCurrentEmployee(null);
+        setBossTab(null);
+        safeStorage.remove('kepong_erp_session_role');
+        safeStorage.remove('kepong_erp_session_employee');
+    }, []);
+
+    // Cloud session synchronization and status checking callback
+    const syncEmployeePermissions = useCallback((employeeId: string, currentEmpLocal: Employee) => {
+        if (!employeeId) return;
+        DataManager.getEmployees()
+            .then(employees => {
+                const fresh = employees.find(e => e.id === employeeId);
+                if (!fresh) {
+                    console.log('⚠️ Employee account not found. Logging out...');
+                    handleLogout();
+                    return;
+                }
+
+                // If account is terminated or archived, force immediate logout
+                const isStatusInvalid = fresh.status === 'TERMINATED' || fresh.isArchived === true;
+                if (isStatusInvalid) {
+                    console.log('⚠️ Employee status is terminated or archived. Forcing logout...');
+                    handleLogout();
+                    return;
+                }
+
+                const modulesChanged = JSON.stringify(fresh.allowedModules) !== JSON.stringify(currentEmpLocal.allowedModules);
+                const roleChanged    = fresh.role !== currentEmpLocal.role || fresh.orgLevel !== currentEmpLocal.orgLevel || fresh.portalRoleOverride !== currentEmpLocal.portalRoleOverride;
+                const nameChanged    = fresh.name !== currentEmpLocal.name || fresh.avatar !== currentEmpLocal.avatar;
+                
+                const profileChanged =
+                    fresh.preferredLanguage !== currentEmpLocal.preferredLanguage ||
+                    fresh.department !== currentEmpLocal.department ||
+                    fresh.status !== currentEmpLocal.status;
+
+                if (modulesChanged || roleChanged || nameChanged || profileChanged) {
+                    console.log('🔄 Profile or permissions updated from cloud. Syncing...');
+                    setCurrentEmployee(fresh);
+                    safeStorage.set('kepong_erp_session_employee', JSON.stringify(fresh));
+
+                    const newPortalRole = getPortalRole(fresh);
+                    setCurrentUser(newPortalRole);
+                    safeStorage.set('kepong_erp_session_role', newPortalRole);
+                }
+            })
+            .catch(err => console.error('Cloud permissions sync failed', err));
+    }, [handleLogout]);
+
+    // Mount synchronization and READY check
     useEffect(() => {
-        let isMounted = true;
-
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('portal') === 'boss') setPortalMode('BOSS');
-        if (params.get('mode')   === 'tv')   setIsTVMode(true);
-
-        const savedRole     = safeStorage.get('kepong_erp_session_role');
-        const savedEmployee = safeStorage.get('kepong_erp_session_employee');
-
-        if (!savedRole) {
-            setSessionLoading(false);
-            return;
+        if (currentUser && currentEmployee) {
+            syncEmployeePermissions(currentEmployee.id, currentEmployee);
         }
-
-        setCurrentUser(savedRole as UserRole);
-
-        if (savedEmployee) {
-            try {
-                const parsedEmp: Employee = JSON.parse(savedEmployee);
-                if (isMounted) setCurrentEmployee(parsedEmp);
-
-                // 后台静默同步最新权限
-                DataManager.getEmployees()
-                    .then(employees => {
-                        if (!isMounted) return; // Fix #2
-                        const fresh = employees.find(e => e.id === parsedEmp.id);
-                        if (fresh) {
-                            const modulesChanged = JSON.stringify(fresh.allowedModules) !== JSON.stringify(parsedEmp.allowedModules);
-                            const roleChanged    = fresh.role !== parsedEmp.role;
-                            if (modulesChanged || roleChanged) {
-                                console.log('🔄 Permissions updated from cloud. Syncing...');
-                                setCurrentEmployee(fresh);
-                                safeStorage.set('kepong_erp_session_employee', JSON.stringify(fresh));
-                            }
-                        }
-                    })
-                    .catch(err => console.error('Background sync failed', err))
-                    .finally(() => { if (isMounted) setSessionLoading(false); });
-
-            } catch (e) {
-                console.error('Failed to restore employee session', e);
-                if (isMounted) setSessionLoading(false);
-            }
-        } else {
-            setSessionLoading(false);
-        }
-
         checkVersion();
-        return () => { isMounted = false; };
-    }, [checkVersion]);
+        setBootStatus('READY');
+    }, [checkVersion, syncEmployeePermissions, currentUser, currentEmployee]);
+
+    // Active Window/Tab Focus sync trigger
+    useEffect(() => {
+        if (currentEmployee) {
+            const handleFocus = () => {
+                console.log('📱 App window focused. Initiating background permission and status sync...');
+                syncEmployeePermissions(currentEmployee.id, currentEmployee);
+            };
+            window.addEventListener('focus', handleFocus);
+            return () => window.removeEventListener('focus', handleFocus);
+        }
+    }, [currentEmployee, syncEmployeePermissions]);
 
     // Fix #4: 监听浏览器后退键，同步 portalMode 与 URL
     useEffect(() => {
@@ -191,15 +248,31 @@ export default function App() {
     // ── Fix #1: Firebase 检查移到所有 Hook 之后 ──────────────────────────────
     if (!isFirebaseInitialized) return <FirebaseConfigError />;
 
-    if (isTVMode) return <QueueDisplay />;
+    if (isKitchenMode || isTVMode || isDeviceMode) {
+        const requestedScreen: DeviceScreen | undefined = isKitchenMode
+            ? 'KITCHEN_ALERT'
+            : isTVMode
+                ? 'QUEUE_DISPLAY'
+                : undefined;
+        return <DeviceScreenPortal requestedScreen={requestedScreen} />;
+    }
 
-    // Fix #6: 会话恢复中，渲染最小占位，防止闪烁旧界面
-    if (sessionLoading) {
+    // 固定全屏品牌启动画面 (BOOTING)
+    if (bootStatus === 'BOOTING') {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#FFF8F8]">
-                <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-full border-4 border-[#8B0000]/20 border-t-[#8B0000] animate-spin" />
-                    <p className="text-sm text-gray-400 font-bold tracking-widest uppercase">Loading...</p>
+            <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#F6F7FB] z-[99999]">
+                <div className="flex flex-col items-center gap-5">
+                    {/* 黄色品牌 Logo 容器 */}
+                    <div className="w-20 h-20 bg-[#FFD200] rounded-full p-1 shadow-[0_4px_14px_0_rgba(255,210,0,0.3)] flex items-center justify-center overflow-hidden shrink-0 animate-pulse">
+                        <img
+                            src="https://i.imgur.com/ex06Jva.png"
+                            alt="Logo"
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
+                    {/* 黑色 Spinner */}
+                    <div className="w-8 h-8 rounded-full border-4 border-[#111111]/10 border-t-[#111111] animate-spin" />
+                    <p className="text-xs text-[#111111] font-extrabold tracking-[0.2em] uppercase font-sans">Loading</p>
                 </div>
             </div>
         );
@@ -207,26 +280,21 @@ export default function App() {
 
     // ── Handlers ─────────────────────────────────────────────────────────────
 
-    const handleLogin = (role: UserRole, employee?: Employee) => {
+    const handleLogin = (role: PortalRole, employee?: Employee) => {
         setCurrentUser(role);
         safeStorage.set('kepong_erp_session_role', role); // Fix #5
         if (employee) {
             setCurrentEmployee(employee);
             safeStorage.set('kepong_erp_session_employee', JSON.stringify(employee));
+            // Trigger background permission and status sync immediately
+            syncEmployeePermissions(employee.id, employee);
         } else {
             setCurrentEmployee(null);
             safeStorage.remove('kepong_erp_session_employee');
         }
         setBossTab(null);
+        setBossHomeView('PRIORITY');
         checkVersion();
-    };
-
-    const handleLogout = () => {
-        setCurrentUser(null);
-        setCurrentEmployee(null);
-        setBossTab(null);
-        safeStorage.remove('kepong_erp_session_role');
-        safeStorage.remove('kepong_erp_session_employee');
     };
 
     const handleSwitchPortal = (mode: 'STAFF' | 'BOSS') => {
@@ -247,13 +315,13 @@ export default function App() {
     };
 
     // Fix #9: 完整处理所有角色，default 给出明确的 fallback 而非空字符串
-    const getRoleName = (role: UserRole): string => {
+    const getRoleName = (role: PortalRole): string => {
         switch (role) {
-            case UserRole.BOSS:
+            case PortalRole.BOSS:
                 return currentEmployee ? `${currentEmployee.name} (Owner)` : '老板 (Owner)';
-            case UserRole.MANAGEMENT:
+            case PortalRole.MANAGEMENT:
                 return currentEmployee ? `${currentEmployee.name} (Management)` : '管理层 (Management)';
-            case UserRole.STAFF:
+            case PortalRole.STAFF:
                 return currentEmployee
                     ? `${currentEmployee.name} (ID: ${currentEmployee.id})`
                     : '员工 (Staff)';
@@ -263,16 +331,12 @@ export default function App() {
         }
     };
 
-    // Fix #7: MANAGEMENT 与 STAFF 合并为一个分支
-    const isStaffOrManagement =
-        (currentUser === UserRole.MANAGEMENT || currentUser === UserRole.STAFF) && !!currentEmployee;
-
     // ─────────────────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen flex flex-col relative font-sans bg-[#FFF8F8] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0">
+        <div className="min-h-screen flex flex-col relative font-sans bg-[#F6F7FB] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0">
 
-            {/* Header（仅登录后显示） */}
-            {currentUser && (
+            {/* Header（仅登录后且在老板首页时显示，避免电脑端重复顶部栏） */}
+            {currentUser === PortalRole.BOSS && !bossTab && (
                 <header className="bg-gradient-to-r from-[#8B0000] via-[#A00000] to-[#8B0000] text-[#FFD700]
                                    px-4 pb-2.5 pt-[max(env(safe-area-inset-top),0.5rem)]
                                    md:px-6 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)]
@@ -318,9 +382,35 @@ export default function App() {
                         </div>
                     </div>
 
+                    {/* 桌面端切换选项：仅老板且未进入具体子页时显示 */}
+                    {currentUser === PortalRole.BOSS && !bossTab && (
+                        <div className="hidden md:flex items-center gap-1 bg-black/40 p-1 rounded-full border border-[#FFD700]/25 relative z-20 mx-4 shrink-0">
+                            <button
+                                onClick={() => setBossHomeView('PRIORITY')}
+                                className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
+                                    bossHomeView === 'PRIORITY'
+                                        ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
+                                        : 'text-stone-300 hover:text-[#FFD700]'
+                                }`}
+                            >
+                                经营重点
+                            </button>
+                            <button
+                                onClick={() => setBossHomeView('FUNCTIONS')}
+                                className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
+                                    bossHomeView === 'FUNCTIONS'
+                                        ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
+                                        : 'text-stone-300 hover:text-[#FFD700]'
+                                }`}
+                            >
+                                全部功能
+                            </button>
+                        </div>
+                    )}
+
                     {/* 右：操作按钮 — 仅在桌面端显示，手机端移至下方触控区 */}
                     <div className="relative z-10 hidden md:flex items-center gap-1.5 md:gap-2">
-                        {currentUser === UserRole.BOSS && (
+                        {currentUser === PortalRole.BOSS && (
                             <>
                                 <button
                                     onClick={() => setIsConfigOpen(true)}
@@ -359,14 +449,23 @@ export default function App() {
                 )}
 
                 {/* Boss */}
-                {currentUser === UserRole.BOSS && (
+                {currentUser === PortalRole.BOSS && (
                     <>
                         {!bossTab ? (
-                            <BossDashboard
-                                onNavigate={tab => setBossTab(tab as BossTab)}
-                                currentEmployee={currentEmployee}
-                                onOpenConfig={() => setIsConfigOpen(true)}
-                            />
+                            bossHomeView === 'PRIORITY' ? (
+                                <BossPriorityDashboard
+                                    onNavigate={tab => setBossTab(tab as BossTab)}
+                                    currentEmployee={currentEmployee!}
+                                    onOpenConfig={() => setIsConfigOpen(true)}
+                                    onLogout={handleLogout}
+                                />
+                            ) : (
+                                <BossDashboard
+                                    onNavigate={tab => setBossTab(tab as BossTab)}
+                                    currentEmployee={currentEmployee}
+                                    onOpenConfig={() => setIsConfigOpen(true)}
+                                />
+                            )
                         ) : (
                             <ManagerDashboard
                                 initialTab={bossTab}
@@ -374,6 +473,8 @@ export default function App() {
                                 isSingleMode={true}
                                 onOpenTV={() => setIsTVMode(true)}
                                 currentEmployee={currentEmployee}
+                                isManagementStaff={true}
+                                allowedModules={currentEmployee?.allowedModules}
                             />
                         )}
                         <StoreConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} currentEmployee={currentEmployee} />
@@ -381,9 +482,14 @@ export default function App() {
                     </>
                 )}
 
-                {/* Staff / Management */}
-                {isStaffOrManagement && (
-                    <StaffDashboard employee={currentEmployee!} />
+                {/* Management Portal */}
+                {currentUser === PortalRole.MANAGEMENT && currentEmployee && (
+                    <ManagementPortal employee={currentEmployee} onLogout={handleLogout} />
+                )}
+
+                {/* Staff Portal */}
+                {currentUser === PortalRole.STAFF && currentEmployee && (
+                    <StaffDashboard employee={currentEmployee} />
                 )}
 
                 {/* WhatsNewModal */}
@@ -393,7 +499,7 @@ export default function App() {
             </main>
 
             {/* Mobile Bottom Navigation Bar (仅手机端 md:hidden 且登录后且在主页时显示) */}
-            {currentUser && (currentUser !== UserRole.BOSS || (!bossTab && bossActiveModal === 'NONE')) && !isAiOpen && !isConfigOpen && (
+            {currentUser && currentUser !== PortalRole.MANAGEMENT && currentUser !== PortalRole.STAFF && (currentUser !== PortalRole.BOSS || (!bossTab && bossActiveModal === 'NONE')) && !isAiOpen && !isConfigOpen && (
                 <div className="md:hidden fixed bottom-[max(12px,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[390px]
                                 bg-white/70 backdrop-blur-3xl border border-white/50 
                                 shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-[110]
@@ -408,66 +514,76 @@ export default function App() {
                                 </div>
                                 <div className="flex flex-col items-start leading-[1.1]">
                                     <span className="text-[9px] text-stone-800 font-extrabold truncate max-w-[40px]">
-                                        {currentUser === UserRole.BOSS ? 'JAKE' : (currentEmployee?.name || '员工')}
+                                        {currentUser === PortalRole.BOSS ? 'JAKE' : (currentEmployee?.name || '员工')}
                                     </span>
                                     <span className="text-[7.5px] text-stone-400 font-bold">
-                                        {currentUser === UserRole.BOSS ? '老板' : getRoleName(currentUser)}
+                                        {currentUser === PortalRole.BOSS ? '老板' : getRoleName(currentUser)}
                                     </span>
                                 </div>
                             </div>
 
-                            {currentUser === UserRole.BOSS ? (
+                            {currentUser === PortalRole.BOSS ? (
                                 <>
-                                    {/* 首页/全功能看板 */}
+                                    {/* 重点 */}
                                     <button
-                                        onClick={() => setBossTab(null)}
+                                        onClick={() => {
+                                            setBossTab(null);
+                                            setBossHomeView('PRIORITY');
+                                        }}
                                         className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
-                                            !bossTab 
-                                                ? 'text-[#8B0000]' 
+                                            !bossTab && bossHomeView === 'PRIORITY'
+                                                ? 'text-amber-600'
                                                 : 'text-stone-400 active:text-stone-750'
                                         }`}
                                     >
-                                        <div className={`p-1 rounded-lg transition-all ${!bossTab ? 'bg-[#8B0000]/10 text-[#8B0000]' : 'active:bg-stone-100'}`}>
-                                            <Home size={16} />
+                                        <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'PRIORITY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
+                                            <Target size={16} className={!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600' : ''} />
                                         </div>
-                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${!bossTab ? 'text-[#8B0000] font-black' : ''}`}>控制台</span>
+                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600 font-black' : ''}`}>重点</span>
                                     </button>
 
-                                    {/* AI 智脑 */}
+                                    {/* 全部功能 */}
+                                    <button
+                                        onClick={() => {
+                                            setBossTab(null);
+                                            setBossHomeView('FUNCTIONS');
+                                        }}
+                                        className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
+                                            !bossTab && bossHomeView === 'FUNCTIONS'
+                                                ? 'text-amber-600'
+                                                : 'text-stone-400 active:text-stone-750'
+                                        }`}
+                                    >
+                                        <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
+                                            <Layout size={16} className={!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600' : ''} />
+                                        </div>
+                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600 font-black' : ''}`}>全部功能</span>
+                                    </button>
+
+                                    {/* AI智脑 */}
                                     <button
                                         onClick={() => setIsAiOpen(true)}
                                         className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
-                                            isAiOpen 
-                                                ? 'text-[#8B0000]' 
+                                            isAiOpen
+                                                ? 'text-amber-600'
                                                 : 'text-stone-400 active:text-stone-750'
                                         }`}
                                     >
-                                        <div className={`p-1 rounded-lg transition-all ${isAiOpen ? 'bg-[#8B0000]/10 text-[#8B0000]' : 'active:bg-stone-100'}`}>
+                                        <div className={`p-1.5 rounded-lg transition-all ${isAiOpen ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
                                             <Sparkles size={16} className="text-amber-500 animate-pulse" />
                                         </div>
-                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${isAiOpen ? 'text-[#8B0000] font-black' : ''}`}>AI 智脑</span>
+                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${isAiOpen ? 'text-amber-600 font-black' : ''}`}>AI智脑</span>
                                     </button>
 
-                                    {/* 账户/个人设置 */}
+                                    {/* 我的 */}
                                     <button
                                         onClick={() => setIsConfigOpen(true)}
-                                        className="flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl text-stone-400 active:text-[#8B0000] active:scale-95 transition-all shrink-0"
+                                        className="flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl text-stone-400 active:text-amber-600 active:scale-95 transition-all shrink-0"
                                     >
-                                        <div className="p-1 rounded-lg active:bg-[#8B0000]/10">
+                                        <div className="p-1.5 rounded-lg active:bg-stone-100">
                                             <User size={16} />
                                         </div>
-                                        <span className="text-[8.5px] tracking-wider font-extrabold">账户</span>
-                                    </button>
-
-                                    {/* 退出系统 */}
-                                    <button
-                                        onClick={handleLogout}
-                                        className="flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl text-rose-500 active:text-rose-600 active:scale-95 transition-all shrink-0"
-                                    >
-                                        <div className="p-1 rounded-lg active:bg-rose-500/10">
-                                            <LogOut size={16} />
-                                        </div>
-                                        <span className="text-[8.5px] tracking-wider font-extrabold text-rose-550">安全退出</span>
+                                        <span className="text-[8.5px] tracking-wider font-extrabold">我的</span>
                                     </button>
                                 </>
                             ) : (

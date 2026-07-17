@@ -8,6 +8,15 @@ import {
 } from 'lucide-react';
 import { MenuItem, MenuCategory, MenuVariant, StockItem, MenuIngredient } from '../../types';
 import { DataManager } from '../../utils/dataManager';
+import {
+    getBaseUnit,
+    getCostPerBaseUnit,
+    getCurrentQtyBase,
+    getDisplayToBaseRatio,
+    normalizeUnitName,
+    roundQuantity,
+    toPositiveNumber
+} from '../../utils/unitConversion';
 import { MENU_CATEGORIES, INITIAL_MENU_ITEMS } from '../../constants/menu';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { uploadToCloudinary } from '../utils';
@@ -22,6 +31,36 @@ const STOCK_CATEGORIES: Record<string, string> = {
     'VEG': '蔬果 (Veg)', 'NOODLE': '面类 (Noodles)', 'DRY': '干货 (Dry)',
     'SAUCE': '酱料 (Sauce)', 'HQ': '总店 (HQ)', 'TEA': '茶叶 (Tea)',
     'FRUIT': '水果 (Fruit)', 'RTD': '罐装 (Drinks)', 'OTHER': '其他 (Other)'
+};
+
+const convertStockQuantityToBase = (item: StockItem, quantity: number, unit?: string): number => {
+    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+    const requestedUnit = normalizeUnitName(unit);
+    const baseUnit = normalizeUnitName(getBaseUnit(item));
+
+    if (!requestedUnit || requestedUnit === baseUnit) return roundQuantity(safeQuantity);
+
+    if (item.displayUnit && requestedUnit === normalizeUnitName(item.displayUnit)) {
+        return roundQuantity(safeQuantity * getDisplayToBaseRatio(item));
+    }
+
+    const purchaseUnit = item.purchaseUnits?.find(rule =>
+        [rule.unitName, (rule as any).name, (rule as any).unit]
+            .some(name => normalizeUnitName(name) === requestedUnit)
+    );
+    if (purchaseUnit) {
+        return roundQuantity(safeQuantity * toPositiveNumber(purchaseUnit.toBaseRatio, 1));
+    }
+
+    const legacyUnit = item.uomOptions?.find(option =>
+        [option.value, option.label].some(name => normalizeUnitName(name) === requestedUnit)
+    );
+    if (legacyUnit) {
+        return roundQuantity(safeQuantity * toPositiveNumber(legacyUnit.ratio, 1));
+    }
+
+    // 历史模板的 bulkUnit 通常就是旧版 item.unit；无法匹配时按基础单位处理，避免重复换算。
+    return roundQuantity(safeQuantity);
 };
 
 // 👑 提取 YouTube ID，用于缩略图预览 (兼容 youtu.be / youtube.com/watch / shorts / embed 等格式)
@@ -46,11 +85,98 @@ const sortRecipeByOrder = (recipe?: MenuIngredient[]): MenuIngredient[] => {
 };
 
 // 👑 重新计算规格成本 (recipe 任何变更后必须调用)
-const recalcVariantCost = (recipe?: MenuIngredient[], overheadMarginPercent?: number): number => {
+const getIngredientCostDetail = (
+    ingredient: MenuIngredient,
+    stockItems: StockItem[]
+): {
+    unitCost: number;
+    unit: string;
+    baseQty: number;
+    baseCost: number;
+    yieldPercent: number;
+    effectiveCost: number;
+    conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'fallback';
+} => {
+    const stockItem = stockItems.find(s => s.id === ingredient.stockId);
+    
+    // Read priority:
+    // unitCost = stockItem.costPerBaseUnit ?? stockItem.cost ?? ingredient.costPerUnit ?? 0
+    // unit = stockItem.baseUnit ?? stockItem.unit ?? ingredient.unit
+    const unitCost = stockItem ? getCostPerBaseUnit(stockItem) : (ingredient.costPerUnit ?? 0);
+    const baseUnit = stockItem ? getBaseUnit(stockItem) : (ingredient.unit ?? 'pcs');
+    
+    const recipeUnit = ingredient.unit || '';
+    const recipeQty = ingredient.qty ?? 0;
+    
+    const normRecipeUnit = recipeUnit.trim().toLowerCase();
+    const normBaseUnit = baseUnit.trim().toLowerCase();
+    const normDisplayUnit = (stockItem?.displayUnit || '').trim().toLowerCase();
+    
+    let baseQty = recipeQty;
+    let conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'fallback' = 'direct';
+    
+    if (normRecipeUnit === normBaseUnit) {
+        baseQty = recipeQty;
+        conversionPath = 'base';
+    } else if (normDisplayUnit && normRecipeUnit === normDisplayUnit) {
+        const displayRatio = stockItem?.displayToBaseRatio ?? 1;
+        baseQty = recipeQty * displayRatio;
+        conversionPath = 'display';
+    } else {
+        // Search purchase units
+        const matchingPU = stockItem?.purchaseUnits?.find(
+            pu => (pu.unitName || '').trim().toLowerCase() === normRecipeUnit
+        );
+        if (matchingPU) {
+            const puRatio = matchingPU.toBaseRatio ?? 1;
+            baseQty = recipeQty * puRatio;
+            conversionPath = 'purchase';
+        } else {
+            // fallback
+            baseQty = recipeQty;
+            conversionPath = 'fallback';
+        }
+    }
+    
+    // Safety check on baseQty
+    if (isNaN(baseQty) || !isFinite(baseQty) || baseQty < 0) {
+        baseQty = 0;
+    }
+    
+    // baseCost = baseQty * unitCost
+    let baseCost = baseQty * unitCost;
+    if (isNaN(baseCost) || !isFinite(baseCost) || baseCost < 0) {
+        baseCost = 0;
+    }
+    
+    // yieldPercent
+    let yieldPercent = ingredient.yieldPercent ?? stockItem?.yieldPercent ?? 100;
+    if (yieldPercent <= 0 || isNaN(yieldPercent) || !isFinite(yieldPercent)) {
+        yieldPercent = 100;
+    }
+    
+    // effectiveCost = baseCost / (yieldPercent / 100)
+    let effectiveCost = baseCost / (yieldPercent / 100);
+    if (isNaN(effectiveCost) || !isFinite(effectiveCost) || effectiveCost < 0) {
+        effectiveCost = 0;
+    }
+    
+    return {
+        unitCost,
+        unit: baseUnit,
+        baseQty,
+        baseCost,
+        yieldPercent,
+        effectiveCost,
+        conversionPath
+    };
+};
+
+const recalcVariantCost = (recipe?: MenuIngredient[], overheadMarginPercent?: number, stockItems: StockItem[] = []): number => {
     if (!recipe || recipe.length === 0) return 0;
     const baseCost = recipe.reduce((sum, item) => {
-        const yieldFactor = (item.yieldPercent && item.yieldPercent > 0) ? (item.yieldPercent / 100) : 1;
-        return sum + (((item.qty || 0) * (item.costPerUnit || 0)) / yieldFactor);
+        const detail = getIngredientCostDetail(item, stockItems);
+        return sum + detail.effectiveCost;
     }, 0);
     return baseCost * (1 + (overheadMarginPercent || 0) / 100);
 };
@@ -287,8 +413,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         const stockInfo = stockItems.find(s => s.id === linkedStockItemId);
         if (stockInfo) {
             setProfileName(`[配方同步] ${selectedMenu.name.split(' (')[0].trim()} - ${stockInfo.name.split(' (')[0].trim()}`);
-            setBulkCost(stockInfo.cost);
-            setBulkUnit(stockInfo.unit || 'kg');
+            setBulkCost(getCostPerBaseUnit(stockInfo));
+            setBulkUnit(getBaseUnit(stockInfo));
         }
     }, [useFormulaSync, linkedMenuItemId, linkedStockItemId, syncValueType, menuItems, stockItems]);
 
@@ -373,13 +499,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 setAuditLogs(JSON.parse(savedLogs));
             }
 
-            DataManager.getStock('KITCHEN').then(k =>
-                DataManager.getStock('BAR').then(b =>
-                    DataManager.getStock('GENERAL').then(g =>
-                        setStockItems([...k, ...b, ...g])
-                    )
-                )
-            ).catch(err => console.error("Stock load error", err));
+            Promise.all([
+                DataManager.getStock('KITCHEN'),
+                DataManager.getStock('BAR'),
+                DataManager.getStock('GENERAL'),
+                DataManager.getStock('FUEL')
+            ]).then(results => setStockItems(results.flat()))
+                .catch(err => console.error("Stock load error", err));
 
             const items = await DataManager.getMenu();
             if (items && items.length > 0) {
@@ -474,31 +600,46 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         if (shouldDeductStock && stockId && stockId !== 'manual' && actualConsumed && actualConsumed > 0) {
             try {
                 const types: ('KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL')[] = ['KITCHEN', 'BAR', 'GENERAL', 'FUEL'];
-                let deductedItem = null;
+                let deductedItem: StockItem | null = null;
+                let deductedQtyBase = 0;
                 for (const t of types) {
                     const list = await DataManager.getStock(t);
                     const item = list.find(s => s.id === stockId);
                     if (item) {
-                        const updatedItem = {
+                        deductedQtyBase = convertStockQuantityToBase(item, actualConsumed, logData.bulkUnit);
+                        const currentQtyBase = getCurrentQtyBase(item);
+                        const updatedItem: StockItem & { diff: number } = {
                             ...item,
-                            currentQty: Math.max(0, (item.currentQty || 0) - actualConsumed)
+                            currentQtyBase,
+                            currentQty: currentQtyBase,
+                            diff: -deductedQtyBase
                         };
-                        await DataManager.saveStockItem(t, updatedItem);
-                        deductedItem = updatedItem;
+                        await DataManager.batchUpdateStock(t, [updatedItem]);
+                        const refreshedList = await DataManager.getStock(t);
+                        deductedItem = refreshedList.find(s => s.id === stockId) || {
+                            ...item,
+                            currentQtyBase: Math.max(0, currentQtyBase - deductedQtyBase),
+                            currentQty: Math.max(0, currentQtyBase - deductedQtyBase)
+                        };
                         break;
                     }
                 }
                 if (deductedItem) {
-                    deductMsg = `，并已自动在【库存总览】中扣减了 ${actualConsumed} ${logData.bulkUnit} 库存（当前剩余: ${deductedItem.currentQty.toFixed(2)}）`;
+                    const baseUnit = getBaseUnit(deductedItem);
+                    const remainingQtyBase = getCurrentQtyBase(deductedItem);
+                    const conversionText = normalizeUnitName(logData.bulkUnit) === normalizeUnitName(baseUnit)
+                        ? ''
+                        : `（折合 ${deductedQtyBase.toFixed(2)} ${baseUnit}）`;
+                    deductMsg = `，并已自动在【库存总览】中扣减 ${actualConsumed} ${logData.bulkUnit}${conversionText}（当前剩余: ${remainingQtyBase.toFixed(2)} ${baseUnit}）`;
                     
                     // Background reload
-                    DataManager.getStock('KITCHEN').then(k =>
-                        DataManager.getStock('BAR').then(b =>
-                            DataManager.getStock('GENERAL').then(g =>
-                                setStockItems([...k, ...b, ...g])
-                            )
-                        )
-                    ).catch(err => console.error("Stock reload error", err));
+                    Promise.all([
+                        DataManager.getStock('KITCHEN'),
+                        DataManager.getStock('BAR'),
+                        DataManager.getStock('GENERAL'),
+                        DataManager.getStock('FUEL')
+                    ]).then(results => setStockItems(results.flat()))
+                        .catch(err => console.error("Stock reload error", err));
                 }
             } catch (err) {
                 console.error("Failed to deduct stock automatically", err);
@@ -636,7 +777,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         const finalVariants = newVariants.map(v => ({
             ...v,
             recipe: renumberRecipe(v.recipe),
-            cost: recalcVariantCost(v.recipe, v.overheadMarginPercent)
+            cost: recalcVariantCost(v.recipe, v.overheadMarginPercent, stockItems)
         }));
 
         const newItem: MenuItem = {
@@ -787,8 +928,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             stockId: stockItem.id,
             stockName: stockItem.name,
             qty: 0,
-            unit: stockItem.unit,
-            costPerUnit: stockItem.cost,
+            unit: stockItem.baseUnit ?? stockItem.unit,
+            costPerUnit: stockItem.costPerBaseUnit ?? stockItem.cost ?? 0,
             order: newOrder,
             spec: '',
             time: 0,
@@ -799,7 +940,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             pieceQty: 0,
             pieceUnit: ''
         });
-        currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent);
+        currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
         setNewVariants(updatedVariants);
         setShowStockSelector(false);
         // 自动展开刚加入的食材
@@ -811,7 +952,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         const currentVariant = updatedVariants[activeVariantTab];
         if (currentVariant.recipe && currentVariant.recipe[idx]) {
             currentVariant.recipe[idx].qty = isNaN(qty) ? 0 : qty;
-            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent);
+            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
         }
         setNewVariants(updatedVariants);
     };
@@ -823,7 +964,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         if (currentVariant.recipe && currentVariant.recipe[idx]) {
             (currentVariant.recipe[idx] as any)[field] = value;
             if (field === 'qty' || field === 'costPerUnit' || field === 'yieldPercent') {
-                currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent);
+                currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
             }
         }
         setNewVariants(updatedVariants);
@@ -853,7 +994,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                     ing.pieceQty = parseFloat((ing.qty * ing.piecesPerKg).toFixed(2));
                 }
             }
-            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent);
+            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
         }
         setNewVariants(updatedVariants);
     };
@@ -865,7 +1006,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             currentVariant.recipe.splice(idx, 1);
             // 👑 重新编号 (保持 order 字段连续)
             currentVariant.recipe = renumberRecipe(currentVariant.recipe);
-            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent);
+            currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
         }
         setNewVariants(updatedVariants);
         if (expandedIngIdx === idx) setExpandedIngIdx(null);
@@ -919,7 +1060,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         const updated = [...newVariants];
         updated[idx] = { ...updated[idx], [field]: val };
         if (field === 'overheadMarginPercent') {
-            updated[idx].cost = recalcVariantCost(updated[idx].recipe, val);
+            updated[idx].cost = recalcVariantCost(updated[idx].recipe, val, stockItems);
         }
         setNewVariants(updated);
     };
@@ -957,7 +1098,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                     return {
                         ...v,
                         recipe: renumberRecipe(clonedRecipe),
-                        cost: recalcVariantCost(clonedRecipe, v.overheadMarginPercent)
+                        cost: recalcVariantCost(clonedRecipe, v.overheadMarginPercent, stockItems)
                     };
                 });
                 setNewVariants(updatedVariants);
@@ -981,7 +1122,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 const updatedVariants = [...newVariants];
                 const cloned = JSON.parse(JSON.stringify(sourceVariant.recipe));
                 updatedVariants[activeVariantTab].recipe = sortRecipeByOrder(cloned);
-                updatedVariants[activeVariantTab].cost = recalcVariantCost(updatedVariants[activeVariantTab].recipe, updatedVariants[activeVariantTab].overheadMarginPercent);
+                updatedVariants[activeVariantTab].cost = recalcVariantCost(updatedVariants[activeVariantTab].recipe, updatedVariants[activeVariantTab].overheadMarginPercent, stockItems);
                 setNewVariants(updatedVariants);
                 setShowCopyModal(false);
                 setCopySearch('');
@@ -1091,9 +1232,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     // 渲染食材卡片 V2.1 (紧凑纵向卡 / 2 列网格 / 份数双轨)
     // ============================================================
     const renderIngredientCard = (ing: MenuIngredient, i: number) => {
-        const yieldPercentVal = ing.yieldPercent ?? 100;
-        const baseCostOnly = (ing.qty || 0) * (ing.costPerUnit || 0);
-        const totalCost = baseCostOnly / (yieldPercentVal / 100);
+        const detail = getIngredientCostDetail(ing, stockItems);
+        const yieldPercentVal = detail.yieldPercent;
+        const totalCost = detail.effectiveCost;
         const ytId = extractYouTubeId(ing.youtubeUrl);
         const isExpanded = expandedIngIdx === i;
         const recipeLen = newVariants[activeVariantTab]?.recipe?.length || 0;
@@ -1182,6 +1323,28 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         >
                             {ing.unit} {['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) && '🔄'}
                         </button>
+                    </div>
+                </div>
+
+                {/* ---------- Recipe Costing Display Panel (最小增强) ---------- */}
+                <div className="px-2.5 mt-2 bg-gray-50 rounded-xl p-2.5 border border-gray-200 space-y-1 mx-2.5">
+                    <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
+                        <span>使用数量 (Qty):</span>
+                        <span className="font-bold text-[#1A1A1A]">{ing.qty} {ing.unit}</span>
+                    </div>
+                    {detail.conversionPath !== 'base' && detail.conversionPath !== 'direct' && (
+                        <div className="flex items-center justify-between text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg font-bold">
+                            <span>换算基础用量 (Base Qty):</span>
+                            <span>= {detail.baseQty.toFixed(2)} {detail.unit}</span>
+                        </div>
+                    )}
+                    <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
+                        <span>基础单价 (Cost/{detail.unit}):</span>
+                        <span className="font-mono font-bold text-gray-700">RM {detail.unitCost.toFixed(2)} / {detail.unit}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-1.5 text-[11px] font-bold">
+                        <span className="text-gray-600">食材成本 (Cost):</span>
+                        <span className="text-emerald-700 font-mono">RM {detail.effectiveCost.toFixed(2)}</span>
                     </div>
                 </div>
 
@@ -1342,7 +1505,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             </div>
                             <p className="text-[9px] text-emerald-700 mt-2 flex items-center gap-1">
                                 <span className="font-black">小计: RM {totalCost.toFixed(2)}</span>
-                                <span className="text-gray-400">({(ing.qty || 0)} × RM {(ing.costPerUnit || 0).toFixed(2)}/{ing.unit})</span>
+                                <span className="text-gray-400">
+                                    ({detail.conversionPath !== 'base' && detail.conversionPath !== 'direct' ? `${detail.baseQty.toFixed(2)} ${detail.unit}` : `${ing.qty || 0} ${ing.unit}`} × RM {detail.unitCost.toFixed(2)}/{detail.unit})
+                                </span>
                             </p>
                         </div>
 
@@ -1468,14 +1633,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             </div>
                         </div>
 
-                        {ing.yieldPercent && ing.yieldPercent < 100 && (
+                        {yieldPercentVal < 100 && (
                             <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-150 rounded-xl p-3 leading-normal">
                                 💡 <strong>净料与出成损耗分析</strong>：
                                 <ul className="list-disc pl-4 mt-1 space-y-0.5">
-                                    <li>配方中所需净料重量：<strong>{ing.qty} {ing.unit}</strong></li>
-                                    <li>按 <strong>{ing.yieldPercent}%</strong> 出成率，需采购/准备毛料：<strong>{((ing.qty || 0) / (ing.yieldPercent / 100)).toFixed(2)} {ing.unit}</strong> (损耗约 {(((ing.qty || 0) / (ing.yieldPercent / 100)) - (ing.qty || 0)).toFixed(2)} {ing.unit})</li>
-                                    <li>毛料采购单价：RM {ing.costPerUnit?.toFixed(2)} / {ing.unit}</li>
-                                    <li>考虑损耗后的实际净料真实单价：<strong>RM {((ing.costPerUnit || 0) / (ing.yieldPercent / 100)).toFixed(2)} / {ing.unit}</strong> (增加约 RM {(((ing.costPerUnit || 0) / (ing.yieldPercent / 100)) - (ing.costPerUnit || 0)).toFixed(2)})</li>
+                                    <li>配方中所需基础净料：<strong>{detail.baseQty.toFixed(2)} {detail.unit}</strong> (来源于 {ing.qty} {ing.unit})</li>
+                                    <li>按 <strong>{yieldPercentVal}%</strong> 出成率，需准备基础毛料：<strong>{(detail.baseQty / (yieldPercentVal / 100)).toFixed(2)} {detail.unit}</strong> (损耗约 {((detail.baseQty / (yieldPercentVal / 100)) - detail.baseQty).toFixed(2)} {detail.unit})</li>
+                                    <li>基础采购单价：RM {detail.unitCost.toFixed(2)} / {detail.unit}</li>
+                                    <li>考虑损耗后的基础净料真实单价：<strong>RM {(detail.unitCost / (yieldPercentVal / 100)).toFixed(2)} / {detail.unit}</strong> (增加约 RM {((detail.unitCost / (yieldPercentVal / 100)) - detail.unitCost).toFixed(2)})</li>
                                 </ul>
                             </div>
                         )}
@@ -1565,8 +1730,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     // ============================================================
     const currentVariant = newVariants[activeVariantTab];
     const baseRecipeCost = currentVariant?.recipe?.reduce((sum, item) => {
-        const yieldFactor = (item.yieldPercent && item.yieldPercent > 0) ? (item.yieldPercent / 100) : 1;
-        return sum + (((item.qty || 0) * (item.costPerUnit || 0)) / yieldFactor);
+        const detail = getIngredientCostDetail(item, stockItems);
+        return sum + detail.effectiveCost;
     }, 0) || 0;
     const overheadCostAmount = baseRecipeCost * ((currentVariant?.overheadMarginPercent || 0) / 100);
     const variantPrice = currentVariant?.price || 0;
@@ -1882,8 +2047,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 if (item) {
                                                     setSelectedStockItem(item);
                                                     setProfileName(`${item.name} 规格换算`);
-                                                    setBulkCost(item.cost);
-                                                    setBulkUnit(item.unit || 'kg');
+                                                    setBulkCost(getCostPerBaseUnit(item));
+                                                    setBulkUnit(getBaseUnit(item));
                                                 } else {
                                                     setSelectedStockItem(null);
                                                 }
@@ -1892,7 +2057,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             <option value="">-- 手动输入，或选择系统既有库存物料 --</option>
                                             {stockItems.map(s => (
                                                 <option key={s.id} value={s.id}>
-                                                    📦 {s.name} ({s.unit}) — 进货价 RM {s.cost.toFixed(2)}
+                                                    📦 {s.name} ({getBaseUnit(s)}) — 基础成本 RM {getCostPerBaseUnit(s).toFixed(2)}
                                                 </option>
                                             ))}
                                         </select>
@@ -3020,7 +3185,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             <button key={s.id} onClick={() => addIngredientToVariant(s)} className="w-full text-left p-3.5 min-h-[56px] hover:bg-gray-50 rounded-xl flex justify-between items-center group border-b border-gray-50 last:border-0 active:scale-[0.99] active:bg-yellow-50 transition-all">
                                                 <div>
                                                     <div className="font-bold text-sm text-[#1A1A1A]">{s.name}</div>
-                                                    <div className="text-[10px] text-gray-400">Unit: {s.unit} • Cost: RM {s.cost.toFixed(2)}</div>
+                                                    <div className="text-[10px] text-gray-400">Unit: {getBaseUnit(s)} • Cost: RM {getCostPerBaseUnit(s).toFixed(2)}</div>
                                                 </div>
                                                 <Plus size={18} className="text-gray-300 group-hover:text-[#FFD700]" />
                                             </button>

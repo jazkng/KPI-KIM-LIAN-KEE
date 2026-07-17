@@ -1,13 +1,51 @@
-export enum UserRole {
+// Determines which dashboard experience opens after login. This is not an organization level.
+export enum PortalRole {
   BOSS = 'BOSS',
   MANAGEMENT = 'MANAGEMENT',
   STAFF = 'STAFF'
 }
 
+// Compatibility alias while App.tsx and Login.tsx are migrated one file at a time.
+export { PortalRole as UserRole };
+
 export type StaffRole = string;
 
-// NEW: Org Rank Definition
+// Legacy organization rank retained for existing Firestore records and current modules.
 export type EmployeeRank = 'TOP' | 'MANAGEMENT' | 'HEAD' | 'PIC' | 'CREW';
+
+// New single source of truth for the five-level organization model.
+export type OrgLevel =
+  | 'OWNER'
+  | 'BRANCH_MANAGER'
+  | 'DEPARTMENT_HEAD'
+  | 'TEAM_LEAD'
+  | 'CREW';
+
+// System access is independent from organization level.
+export type SystemRole = 'STANDARD_USER' | 'SYSTEM_ADMIN';
+
+// Inventory access is intentionally separate from PortalRole and allowedModules.
+// PortalRole chooses the dashboard, allowedModules chooses the module, and this
+// structure controls what a person may do inside inventory.
+export type InventoryScope = 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
+
+export type InventoryPermission =
+  | 'VIEW_STOCK'
+  | 'EXECUTE_STOCKTAKE'
+  | 'ADD_ITEM'
+  | 'EDIT_BASIC_INFO'
+  | 'EDIT_MIN_LEVEL'
+  | 'EDIT_COUNT_UNIT_CONVERSION'
+  | 'EDIT_PURCHASE_UNIT_CONVERSION'
+  | 'EDIT_BASE_UNIT'
+  | 'EDIT_COST'
+  | 'DEACTIVATE_ITEM';
+
+export interface InventoryAccessConfig {
+    version?: 1;
+    scopes: InventoryScope[];
+    permissions: Partial<Record<InventoryPermission, boolean>>;
+}
 
 export interface PayrollRecordDetail {
     employeeId: string;
@@ -420,9 +458,15 @@ export interface Employee {
     id: string;
     name: string;
     role: string;
+    department?: 'KITCHEN' | 'FLOOR' | 'BAR' | 'DISHWASH' | 'BACK_OFFICE' | 'OTHER' | 'OWNER';
     secondaryRoles?: string[]; // <--- 新增：用于存储多项副职
     pin?: string;
     status: 'CONFIRMED' | 'PROBATION' | 'TERMINATED';
+    orgLevel?: OrgLevel;
+    systemRole?: SystemRole;
+    /** Optional exception set by SYSTEM_ADMIN; otherwise portal follows orgLevel automatically. */
+    portalRoleOverride?: PortalRole;
+    /** Legacy compatibility only. New code should read orgLevel. */
     rank?: EmployeeRank; 
     level: string; 
     basicSalary: number;
@@ -438,6 +482,8 @@ export interface Employee {
     address?: string;
     avatar?: string;
     allowedModules?: AppModule[];
+    /** Direct inventory switches configured by the owner/system administrator. */
+    inventoryAccess?: InventoryAccessConfig;
     moduleProficiency?: Record<string, number>;
     salaryHistory?: SalaryRecord[];
     warningHistory?: WarningRecord[];
@@ -467,6 +513,7 @@ export interface Employee {
     assessmentHistory?: AssessmentRecord[]; 
     assessmentYearlyLimit?: number; 
     assessmentTargets?: string[]; 
+    preferredLanguage?: 'zh_en' | 'my'; // 🟢 Myanmar language support
     
     // ✨ V2 新增 (季度评分系统)
     assessmentRecordsV2?: AssessmentRecordV2[];
@@ -483,11 +530,13 @@ export interface Employee {
     customSop?: { start: { title: string, tasks: SOPItem[] }, end: { title: string, tasks: SOPItem[] } };
     misconductStats?: MisconductStats;
     isAttendanceExempt?: boolean; // 新增：免打卡标记
+    isPayrollEligible?: boolean; // 新增：是否参与薪资结算 (接收薪资)
     shiftGroup?: number; // 新增：班次人群 (1 = 班次1, 2 = 班次2)
     loanRecords?: LoanRecord[];
     terminationType?: 'RESIGNED' | 'FIRED' | 'CONTRACT_END' | 'ABSCONDED';
     noticeDate?: string;
     settlementStatus?: 'PENDING' | 'SETTLED';
+    hasKitchenAlertPermission?: boolean; // 🟢 是否有通知厨房功能权限
 }
 
 export interface StoreConfig {
@@ -678,20 +727,58 @@ export interface UomOption {
     price?: number;
 }
 
+export interface UnitConversionRule {
+    id: string;
+    unitName: string;
+    unitType: 'PURCHASE' | 'STORAGE' | 'RECIPE';
+    toBaseRatio: number;
+    pricePerUnit?: number;
+    isDefaultPurchase?: boolean;
+    toDisplayRatio?: number;
+    conversionMode?: 'FIXED' | 'ACTUAL_WEIGHT';
+}
+
 export interface StockItem {
     id: string;
     name: string;
     category: string;
-    unit: string;
-    maxQty: number;
-    minLevel: number;
-    currentQty: number;
-    cost: number;
+    unit: string; // Legacy field
+    maxQty: number; // Legacy field
+    minLevel: number; // Legacy field
+    currentQty: number; // Legacy field
+    cost: number; // Legacy field
     isKeyItem: boolean;
     image?: string;
-    uomOptions?: UomOption[];
-    weightPerUnit?: number;
-    conversionUnit?: string;
+    uomOptions?: UomOption[]; // Legacy support
+    weightPerUnit?: number; // Legacy support
+    conversionUnit?: string; // Legacy support
+    
+    // New unified ERP inventory fields
+    baseUnit?: string;
+    currentQtyBase?: number;
+    minLevelBase?: number;
+    maxQtyBase?: number;
+    costPerBaseUnit?: number;
+    purchaseUnits?: UnitConversionRule[];
+    defaultPurchaseUnitId?: string;
+    yieldPercent?: number;
+    overheadPercent?: number;
+    sstPercent?: number;
+    
+    // Display/ordering unit fields for 3-layer system
+    displayUnit?: string;
+    displayToBaseRatio?: number;
+    preferredStockViewUnit?: 'BASE' | 'DISPLAY';
+
+    // Conversion Modes (FIXED vs ACTUAL_WEIGHT)
+    conversionMode?: 'FIXED' | 'ACTUAL_WEIGHT';
+    inventoryUnit?: string;
+    purchaseUnit?: string;
+    pricingUnit?: string;
+    pricePerPricingUnit?: number;
+    requiresActualWeightOnReceive?: boolean;
+    currentWeightQty?: number;
+    weightUnit?: string;
 }
 
 export interface InventoryLogItem {
@@ -745,6 +832,27 @@ export interface CatalogItem {
     uomOptions: UomOption[];
     linkedStockId?: string;
     supplierCode?: string;
+
+    // Prompt 3 additions
+    linkedPurchaseUnitId?: string;
+    purchaseUnitName?: string;
+    toBaseRatio?: number;
+    baseUnit?: string;
+    displayUnit?: string;
+    displayToBaseRatio?: number;
+    pricePerPurchaseUnit?: number;
+    costPerBaseUnit?: number;
+
+    pricingMode?: 'FIXED_UNIT' | 'WEIGHT_BASED';
+    orderUnit?: string;
+    billingUnit?: string;
+    pricePerBillingUnit?: number;
+    estimatedWeightPerUnit?: number;
+
+    conversionMode?: 'FIXED' | 'ACTUAL_WEIGHT';
+    purchaseUnit?: string;
+    pricingUnit?: string;
+    pricePerPricingUnit?: number;
 }
 
 export interface SupplierBank {
@@ -785,6 +893,39 @@ export interface PurchaseOrderItem {
     ratio: number;
     cost: number;
     supplierCode?: string;
+    purchaseUnitId?: string;
+    purchaseUnitName?: string;
+    toBaseRatio?: number;
+    receivedBaseQty?: number;
+    costPerBaseUnitAtReceive?: number;
+
+    pricingMode?: 'FIXED_UNIT' | 'WEIGHT_BASED';
+    orderUnit?: string;
+    billingUnit?: string;
+    billingUnitPrice?: number;
+    estimatedWeightPerUnit?: number;
+    estimatedBaseQty?: number;
+    receivedQty?: number;
+    receivedWeight?: number;
+    finalUnitPrice?: number;
+    finalLineTotal?: number;
+
+    purchaseUnitQty?: number;
+    purchaseUnitCost?: number;
+    purchaseUnitToBaseRatio?: number;
+    baseUnit?: string;
+    baseQty?: number;
+    costPerBaseUnitAtOrder?: number;
+    totalCost?: number;
+
+    conversionMode?: 'FIXED' | 'ACTUAL_WEIGHT';
+    pricingUnit?: string;
+    pricePerPricingUnit?: number;
+    estimatedWeight?: number | null;
+    estimatedTotal?: number | null;
+    actualWeight?: number | null;
+    finalCost?: number | null;
+    status?: string;
 }
 
 export interface PurchaseOrder {
@@ -796,6 +937,12 @@ export interface PurchaseOrder {
     items: PurchaseOrderItem[];
     totalEstimated: number;
     createdBy?: string;
+    /** Final figures captured when management confirms the delivery. */
+    totalReceived?: number;
+    receivedTax?: number;
+    receivedDelivery?: number;
+    receivedAt?: string;
+    receivedBy?: string;
 }
 
 export interface MenuIngredient {
@@ -860,11 +1007,202 @@ export interface QueueTicket {
     phone?: string;
 }
 
+// ==========================================
+// 厨房急单协同台 (Kitchen Alert)
+// ==========================================
+
+/** 楼面通知厨房的事项类型。 */
+export type KitchenAlertType =
+    | 'RUSH'       // 催菜 / 加急
+    | 'MISSING'    // 漏单
+    | 'WRONG'      // 做错
+    | 'REMAKE'     // 重做
+    | 'NOTICE';    // 特别注意
+
+/** NOTICE 为一般注意，URGENT 为需要厨房优先处理。 */
+export type KitchenAlertPriority = 'NOTICE' | 'URGENT';
+
+/**
+ * NEW          楼面刚提交，厨房尚未接收
+ * ACKNOWLEDGED 厨房已经看到并开始处理
+ * RESOLVED     厨房已完成处理
+ * CANCELLED    楼面或授权人员取消
+ */
+export type KitchenAlertStatus =
+    | 'NEW'
+    | 'ACKNOWLEDGED'
+    | 'RESOLVED'
+    | 'CANCELLED';
+
+/** 执行厨房通知动作的员工资料快照，避免员工日后改名影响历史记录。 */
+export interface KitchenAlertActor {
+    id: string;
+    name: string;
+}
+
+/**
+ * Firestore 路径: kitchen_alerts/{id}
+ * 一道菜对应一条记录，厨房可逐道接收和解决。
+ */
+export interface KitchenAlert {
+    id: string;
+    schemaVersion: 1;
+    storeId: string;
+    businessDate: string; // Malaysia 营业日 YYYY-MM-DD；凌晨 4 点前归前一天
+
+    tableNo: string;
+    orderNo: string;
+    dishId?: string;
+    dishName: string;
+    size?: string;
+    quantity: number;
+    note?: string;
+
+    alertType: KitchenAlertType;
+    priority: KitchenAlertPriority;
+    status: KitchenAlertStatus;
+    /** 供厨房大屏只监听未完成记录，避免历史越来越多时增加读取量。 */
+    isActive: boolean;
+
+    createdById: string;
+    createdByName: string;
+    createdAt: string;
+    updatedAt: string;
+
+    acknowledgedById?: string;
+    acknowledgedByName?: string;
+    acknowledgedAt?: string;
+
+    resolvedById?: string;
+    resolvedByName?: string;
+    resolvedAt?: string;
+    resolutionNote?: string;
+
+    cancelledById?: string;
+    cancelledByName?: string;
+    cancelledAt?: string;
+    cancelReason?: string;
+}
+
+/** 楼面提交新厨房通知时需要的字段。 */
+export interface CreateKitchenAlertInput {
+    storeId: string;
+    tableNo: string;
+    orderNo?: string;
+    dishId?: string;
+    dishName: string;
+    size?: string;
+    quantity: number;
+    note?: string;
+    alertType: KitchenAlertType;
+    priority: KitchenAlertPriority;
+    createdBy: KitchenAlertActor;
+    businessDate?: string;
+}
+
+/** 厨房历史记录查询条件。 */
+export interface KitchenAlertHistoryFilter {
+    storeId: string;
+    businessDate: string;
+    status?: KitchenAlertStatus;
+    createdById?: string;
+    tableNo?: string;
+    orderNo?: string;
+    maxRecords?: number;
+}
+
+// ==========================================
+// 现场设备户口 (Device Account)
+// ==========================================
+
+/** 设备可进入的专用画面。设备户口不会继承员工权限。 */
+export type DeviceScreen =
+    | 'KITCHEN_ALERT'
+    | 'QUEUE_DISPLAY';
+
+export type DeviceAccountStatus = 'ACTIVE' | 'DISABLED';
+
+/** 创建或修改设备的管理人员快照。 */
+export interface DeviceAccountActor {
+    id: string;
+    name: string;
+}
+
+/**
+ * Firestore 路径: device_accounts/{deviceId}
+ * 此资料与 Employee 完全分开，不参与考勤、排班、工资、KPI 或人数统计。
+ * PIN 摘要属于服务内部字段，不会出现在此公开类型中。
+ */
+export interface DeviceAccount {
+    id: string;
+    schemaVersion: 1;
+    deviceCode: string;
+    deviceName: string;
+    storeId: string;
+    status: DeviceAccountStatus;
+
+    allowedScreens: DeviceScreen[];
+    defaultScreen: DeviceScreen;
+    location?: string;
+    notes?: string;
+
+    /** 每次停用、换 PIN 或撤销会话都会增加，用于让旧设备会话失效。 */
+    sessionVersion: number;
+    lastLoginAt?: string;
+    lastSeenAt?: string;
+    currentScreen?: DeviceScreen;
+
+    createdById: string;
+    createdByName: string;
+    createdAt: string;
+    updatedById: string;
+    updatedByName: string;
+    updatedAt: string;
+}
+
+export interface CreateDeviceAccountInput {
+    deviceCode: string;
+    deviceName: string;
+    storeId: string;
+    pin: string;
+    allowedScreens: DeviceScreen[];
+    defaultScreen: DeviceScreen;
+    location?: string;
+    notes?: string;
+    createdBy: DeviceAccountActor;
+}
+
+export interface UpdateDeviceAccountInput {
+    deviceName?: string;
+    storeId?: string;
+    allowedScreens?: DeviceScreen[];
+    defaultScreen?: DeviceScreen;
+    location?: string;
+    notes?: string;
+    status?: DeviceAccountStatus;
+}
+
+/** 设备 PIN 验证成功后保存在该设备浏览器的最小会话资料。 */
+export interface DeviceSession {
+    schemaVersion: 1;
+    deviceId: string;
+    deviceCode: string;
+    deviceName: string;
+    storeId: string;
+    allowedScreens: DeviceScreen[];
+    defaultScreen: DeviceScreen;
+    sessionVersion: number;
+    sessionToken: string;
+    loginAt: string;
+}
+
 export interface RoleDefinition {
     id: string;
     title: string;
     department: 'MANAGEMENT' | 'FOH' | 'BOH';
-    rankCategory: 'MANAGEMENT' | 'MID_LEVEL' | 'ENTRY_LEVEL';
+    orgLevel?: OrgLevel;
+    /** Legacy role grouping retained until constants/staff.ts is migrated. */
+    rankCategory?: 'MANAGEMENT' | 'MID_LEVEL' | 'ENTRY_LEVEL';
     duties: string[];
     allowedModules: AppModule[];
 }

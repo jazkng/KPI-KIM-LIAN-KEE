@@ -50,7 +50,7 @@ export const SOPInspection: React.FC = () => {
     }, [staffList, searchTerm]);
 
     const handleResetAll = async () => {
-        if (!confirm("确定要重置今日所有员工的 SOP 进度吗？\n(Reset All Staff Progress)")) return;
+        if (!await (window as any).systemDialog.confirm("确定要重置今日所有员工的 SOP 进度吗？\n(Reset All Staff Progress)", "SOP 点检")) return;
         
         const now = new Date();
         if (now.getHours() < 4) now.setDate(now.getDate() - 1);

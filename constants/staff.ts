@@ -471,39 +471,39 @@ export const DEFAULT_ROLE_GUIDES: Record<string, RoleGuide> = {
 };
 
 export const DEFAULT_ROLES: RoleDefinition[] = [
-    { id: 'k1', title: 'Executive Chef (行政总厨)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', duties: ['厨房总控'], allowedModules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'SUPPLIER_CONTACTS', 'SOP_INSPECT', 'ROSTER_KITCHEN', 'LOGBOOK', 'ASSESSMENT'] },
-    { id: 'k2', title: 'Head Chef (头手)', department: 'BOH', rankCategory: 'MID_LEVEL', duties: ['烹饪'], allowedModules: ['INVENTORY_KITCHEN', 'ROSTER_KITCHEN'] },
-    { id: 'k2_2', title: 'Assistant Chef (帮锅)', department: 'BOH', rankCategory: 'MID_LEVEL', duties: ['烹饪辅助'], allowedModules: ['INVENTORY_KITCHEN'] },
-    { id: 'k_cook', title: 'Kitchen Cook (厨师)', department: 'BOH', rankCategory: 'MID_LEVEL', duties: ['烹饪'], allowedModules: ['INVENTORY_KITCHEN'] },
-    { id: 'k_fryer', title: 'Fryer (打荷)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['炸炉/摆盘'], allowedModules: [] },
-    { id: 'k3', title: 'Kitchen Cutter (占板)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['切配'], allowedModules: [] },
-    { id: 'k6', title: 'Commis/Runner (马王)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['传递'], allowedModules: [] },
-    { id: 'k13', title: 'Kitchen Helper (厨房帮手)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['杂务'], allowedModules: [] },
-    { id: 'k_dish', title: 'Dishwasher (洗碗)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['清洗'], allowedModules: [] },
-    { id: 'k12', title: 'Kitchen Apprentice (厨房学徒)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', duties: ['学习'], allowedModules: [] },
-    { id: 'b1', title: 'Water Bar (水吧)', department: 'BOH', rankCategory: 'MID_LEVEL', duties: ['饮品'], allowedModules: ['INVENTORY_BAR'] },
+    { id: 'k1', title: 'Executive Chef (行政总厨)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['厨房总控'], allowedModules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'SUPPLIER_CONTACTS', 'SOP_INSPECT', 'ROSTER_KITCHEN', 'LOGBOOK', 'ASSESSMENT'] },
+    { id: 'k2', title: 'Head Chef (头手)', department: 'BOH', rankCategory: 'MID_LEVEL', orgLevel: 'DEPARTMENT_HEAD', duties: ['烹饪'], allowedModules: ['INVENTORY_KITCHEN', 'ROSTER_KITCHEN'] },
+    { id: 'k2_2', title: 'Assistant Chef (帮锅)', department: 'BOH', rankCategory: 'MID_LEVEL', orgLevel: 'CREW', duties: ['烹饪辅助'], allowedModules: ['INVENTORY_KITCHEN'] },
+    { id: 'k_cook', title: 'Kitchen Cook (厨师)', department: 'BOH', rankCategory: 'MID_LEVEL', orgLevel: 'CREW', duties: ['烹饪'], allowedModules: ['INVENTORY_KITCHEN'] },
+    { id: 'k_fryer', title: 'Fryer (打荷)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['炸炉/摆盘'], allowedModules: [] },
+    { id: 'k3', title: 'Kitchen Cutter (占板)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['切配'], allowedModules: [] },
+    { id: 'k6', title: 'Commis/Runner (马王)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['传递'], allowedModules: [] },
+    { id: 'k13', title: 'Kitchen Helper (厨房帮手)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['杂务'], allowedModules: [] },
+    { id: 'k_dish', title: 'Dishwasher (洗碗)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['清洗'], allowedModules: [] },
+    { id: 'k12', title: 'Kitchen Apprentice (厨房学徒)', department: 'BOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['学习'], allowedModules: [] },
+    { id: 'b1', title: 'Water Bar (水吧)', department: 'BOH', rankCategory: 'MID_LEVEL', orgLevel: 'CREW', duties: ['饮品'], allowedModules: ['INVENTORY_BAR'] },
     
-    { id: 'f1', title: 'Store Manager (门店经理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', duties: ['全盘管理'], allowedModules: ['SETTLEMENT', 'ROSTER', 'LOGBOOK', 'INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'SUPPLIER_CONTACTS', 'QUEUE_MANAGER', 'SOP_INSPECT', 'REPORTS', 'HR_FILES', 'ASSESSMENT'] },
-    { id: 'f2', title: 'Operations Supervisor (运营主管)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', duties: ['楼面管理'], allowedModules: ['ROSTER_FLOOR', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'ASSESSMENT'] },
-    { id: 'f3', title: 'Counter (柜台)', department: 'FOH', rankCategory: 'MID_LEVEL', duties: ['收银'], allowedModules: ['SETTLEMENT', 'QUEUE_MANAGER'] },
-    { id: 'f4', title: 'Captain (写单员)', department: 'FOH', rankCategory: 'MID_LEVEL', duties: ['点单'], allowedModules: ['QUEUE_MANAGER'] },
-    { id: 'f5', title: 'Waiter (服务员)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', duties: ['服务'], allowedModules: [] },
-    { id: 'f6', title: 'Cleaner (清洁员)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', duties: ['清洁'], allowedModules: [] },
-    { id: 'f7', title: 'Part-Time (兼职)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', duties: ['机动'], allowedModules: [] },
+    { id: 'f1', title: 'Store Manager (门店经理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'BRANCH_MANAGER', duties: ['全盘管理'], allowedModules: ['SETTLEMENT', 'ROSTER', 'LOGBOOK', 'INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'SUPPLIER_CONTACTS', 'QUEUE_MANAGER', 'SOP_INSPECT', 'REPORTS', 'HR_FILES', 'ASSESSMENT'] },
+    { id: 'f2', title: 'Operations Supervisor (运营主管)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['楼面管理'], allowedModules: ['ROSTER_FLOOR', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'ASSESSMENT'] },
+    { id: 'f3', title: 'Counter (柜台)', department: 'FOH', rankCategory: 'MID_LEVEL', orgLevel: 'CREW', duties: ['收银'], allowedModules: ['SETTLEMENT', 'QUEUE_MANAGER'] },
+    { id: 'f4', title: 'Captain (写单员)', department: 'FOH', rankCategory: 'MID_LEVEL', orgLevel: 'TEAM_LEAD', duties: ['点单'], allowedModules: ['QUEUE_MANAGER'] },
+    { id: 'f5', title: 'Waiter (服务员)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['服务'], allowedModules: [] },
+    { id: 'f6', title: 'Cleaner (清洁员)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['清洁'], allowedModules: [] },
+    { id: 'f7', title: 'Part-Time (兼职)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['机动'], allowedModules: [] },
 
     // ✅ NEW ROLES
-    { id: 'm_hr',    title: 'HR Management (人事管理)',    department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', duties: ['招聘', '档案管理', '薪资处理', '劳资关系'], allowedModules: ['HR_FILES', 'REPORTS', 'ROSTER', 'ASSESSMENT'] },
-    { id: 'm_store', title: 'Store Management (店面管理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', duties: ['库存管理', '采购协调', '设备维护', '营业跟进'], allowedModules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'SUPPLIER_CONTACTS', 'LOGBOOK', 'SOP_INSPECT', 'REPORTS'] },
-    { id: 'x_delivery', title: 'Delivery (外卖)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', duties: ['外卖配送'], allowedModules: [] },
-    { id: 'x_order_checker', title: 'Order Checker (看单)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', duties: ['核单'], allowedModules: [] },
+    { id: 'm_hr',    title: 'HR Management (人事管理)',    department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['招聘', '档案管理', '薪资处理', '劳资关系'], allowedModules: ['HR_FILES', 'REPORTS', 'ROSTER', 'ASSESSMENT'] },
+    { id: 'm_store', title: 'Store Management (店面管理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['库存管理', '采购协调', '设备维护', '营业跟进'], allowedModules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'SUPPLIER_CONTACTS', 'LOGBOOK', 'SOP_INSPECT', 'REPORTS'] },
+    { id: 'x_delivery', title: 'Delivery (外卖)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['外卖配送'], allowedModules: [] },
+    { id: 'x_order_checker', title: 'Order Checker (看单)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['核单'], allowedModules: [] },
 ];
 
 export const DEFAULT_STAFF: Employee[] = [
   // OWNERS
-  { id: '001', pin: '8888', name: 'BEN', role: 'Owner (老板)', status: 'CONFIRMED', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
-  { id: '002', pin: '8888', name: 'JAKE', role: 'Owner (老板)', status: 'CONFIRMED', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
-  { id: '003', pin: '8888', name: 'JEFFREY', role: 'Owner (老板)', status: 'CONFIRMED', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
-  { id: '004', pin: '8888', name: 'EVELYN', role: 'Owner (老板)', status: 'CONFIRMED', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Female', nationality: 'Malaysian 🇲🇾' }
+  { id: '001', pin: '8888', name: 'BEN', role: 'Owner (老板)', status: 'CONFIRMED', orgLevel: 'OWNER', systemRole: 'STANDARD_USER', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
+  { id: '002', pin: '8888', name: 'JAKE', role: 'Owner (老板)', status: 'CONFIRMED', orgLevel: 'OWNER', systemRole: 'SYSTEM_ADMIN', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
+  { id: '003', pin: '8888', name: 'JEFFREY', role: 'Owner (老板)', status: 'CONFIRMED', orgLevel: 'OWNER', systemRole: 'STANDARD_USER', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Male', nationality: 'Malaysian 🇲🇾' },
+  { id: '004', pin: '8888', name: 'EVELYN', role: 'Owner (老板)', status: 'CONFIRMED', orgLevel: 'OWNER', systemRole: 'STANDARD_USER', rank: 'TOP', level: 'Confirmed', basicSalary: 0, phone: '', joinDate: '2024-01-01', absentDays: 0, gender: 'Female', nationality: 'Malaysian 🇲🇾' }
 ];
 
 export const NATIONALITY_OPTS = ['Malaysian 🇲🇾', 'Foreigner (WP)', 'Indonesian 🇮🇩', 'Bangladeshi 🇧🇩', 'Nepalese 🇳🇵', 'Vietnamese 🇻🇳', 'Myanmar 🇲🇲', 'Chinese 🇨🇳', 'Other'];

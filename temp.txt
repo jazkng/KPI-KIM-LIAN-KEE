@@ -1,0 +1,69 @@
+    const totalAmount = voucher.items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0);
+    const titleMap: Record<string, string> = {
+        PURCHASE_RECEIPT: '采购支出凭单',
+        DELIVERY_RECEIPT: '司机 / 运输费凭单',
+        PAYMENT_VOUCHER: '付款凭单',
+        CASH_VOUCHER: '现金支出凭单',
+        CASH_BILL: '自开收款收据',
+    };
+    const paymentText = voucher.paymentMethod === 'ONLINE_TRANSFER' ? '银行转账' : '现金';
+
+    return (
+        <div className="w-[595px] h-[842px] bg-white text-[#111111] p-9 flex flex-col font-sans" style={{ boxSizing:'border-box', fontFamily:'Inter, PingFang SC, system-ui, sans-serif' }}>
+            <div className="h-2 bg-[#FFD200] rounded-full mb-7" />
+
+            <div className="flex items-start justify-between border-b-2 border-[#111111] pb-5">
+                <div>
+                    <h1 className="text-[22px] font-black tracking-tight">kim lian kee Group</h1>
+                    <p className="text-[9px] text-gray-500 mt-1">{(voucher.companyName || '金莲记甲洞').replace(/吉隆坡金莲记/g,'金莲记甲洞')}</p>
+                </div>
+                <div className="text-right">
+                    <h2 className="text-[16px] font-black">{titleMap[voucher.voucherType] || '支出凭单'}</h2>
+                    <p className="font-mono text-[10px] font-bold mt-2">{voucher.voucherNo}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 py-6 text-[11px]">
+                <div><span className="text-gray-500 block text-[9px] mb-1">日期 DATE</span><strong>{voucher.date}</strong></div>
+                <div><span className="text-gray-500 block text-[9px] mb-1">付款方式 PAYMENT</span><strong>{paymentText}</strong></div>
+                <div className="col-span-2"><span className="text-gray-500 block text-[9px] mb-1">收款人 PAYEE</span><strong className="text-[14px]">{voucher.payeeName}</strong>{voucher.payeePhone && <span className="text-gray-500 ml-3">{voucher.payeePhone}</span>}</div>
+            </div>
+
+            <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden">
+                <table className="w-full text-left border-collapse text-[10px]">
+                    <thead className="bg-[#111111] text-white">
+                        <tr><th className="p-3 w-8 text-center">#</th><th className="p-3">支出项目 / PARTICULARS</th><th className="p-3 w-12 text-center">数量</th><th className="p-3 w-20 text-right">单价</th><th className="p-3 w-24 text-right">金额</th></tr>
+                    </thead>
+                    <tbody>
+                        {voucher.items.map((item,index)=><tr key={index} className="border-b border-[#E5E7EB] last:border-b-0">
+                            <td className="p-3 text-center text-gray-500">{index+1}</td>
+                            <td className="p-3 font-semibold">{item.description || '-'}</td>
+                            <td className="p-3 text-center font-mono">{Number(item.qty || 0)}{item.unit ? ` ${item.unit}` : ''}</td>
+                            <td className="p-3 text-right font-mono">{Number(item.unitPrice || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right font-mono font-black">{(Number(item.qty || 0)*Number(item.unitPrice || 0)).toFixed(2)}</td>
+                        </tr>)}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+                <div className="rounded-2xl border-2 border-[#111111] overflow-hidden flex items-stretch">
+                    <div className="bg-[#FFD200] px-5 py-3 text-[11px] font-black flex items-center">总金额 TOTAL</div>
+                    <div className="px-6 py-3 text-[20px] font-black font-mono min-w-[170px] text-right">RM {totalAmount.toFixed(2)}</div>
+                </div>
+            </div>
+
+            {voucher.notes && <div className="mt-5 rounded-xl bg-[#F6F7FB] border border-[#E5E7EB] p-3 text-[9px] text-gray-600"><strong className="text-[#111111]">备注：</strong> {voucher.notes.replace(/吉隆坡金莲记/g,'金莲记甲洞')}</div>}
+
+            <div className="mt-auto">
+                <p className="text-[9px] text-gray-500 mb-8">本凭单作为该笔付款的内部记录及收款证明。</p>
+                <div className="grid grid-cols-3 gap-7 text-center">
+                    <div><div className="h-12 border-b border-gray-500 flex items-end justify-center pb-1 text-[10px] font-semibold">{voucher.preparedBy || ''}</div><p className="text-[8px] font-bold mt-2">经手人 PREPARED BY</p></div>
+                    <div><div className="h-12 border-b border-gray-500"></div><p className="text-[8px] font-bold mt-2">收款人签名 PAYEE</p></div>
+                    <div><div className="h-12 border-b border-gray-500 flex items-end justify-center pb-1 text-[10px] font-semibold">{voucher.approvedBy || ''}</div><p className="text-[8px] font-bold mt-2">批准人 APPROVED BY</p></div>
+                </div>
+                <div className="mt-8 pt-3 border-t border-[#E5E7EB] flex justify-between text-[7px] text-gray-400 font-mono"><span>System record</span><span>{voucher.voucherNo}</span></div>
+            </div>
+        </div>
+    );
+};

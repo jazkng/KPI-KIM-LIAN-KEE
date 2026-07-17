@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-    Users, Crown, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
+    Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, Layout, Box, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
-    AlertTriangle, ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, Palette, X,
-    FileText, Calculator
+    ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
+    FileText, Calculator, Star, Search, Sparkles, BellRing
 } from 'lucide-react';
 import { Employee } from '../types';
 import { HRSystem } from './features/HRSystem';
@@ -22,102 +22,75 @@ import { TranslationManager } from './features/TranslationManager';
 import { SelfInvoiceModule } from './features/SelfInvoiceModule';
 import { AIOperationsAssistant } from './features/AIOperationsAssistant';
 import { DataManager } from '../utils/dataManager';
+import { needsReplenishment } from '../utils/unitConversion';
+import {
+    MODULE_CATEGORIES,
+    getModuleNavigationRule,
+    sortNavigationItems,
+} from '../constants/moduleNavigation';
 
-// ─────────────────────────────────────────────────────────────
-// 1. 常量与缓存配置 (外置，避免重新渲染)
-// ─────────────────────────────────────────────────────────────
-const CARD_COLORS_KEY  = 'boss_dashboard_card_colors';
+// Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
-const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 分钟缓存
+const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 mins cache
 
-const COLOR_PRESETS = [
-    { dot: 'bg-white border border-gray-300', bgClass: 'bg-white' },
-    { dot: 'bg-red-100',     bgClass: 'bg-red-50' },
-    { dot: 'bg-orange-100',  bgClass: 'bg-orange-50' },
-    { dot: 'bg-amber-100',   bgClass: 'bg-amber-50' },
-    { dot: 'bg-lime-100',    bgClass: 'bg-lime-50' },
-    { dot: 'bg-emerald-100', bgClass: 'bg-emerald-50' },
-    { dot: 'bg-teal-100',    bgClass: 'bg-teal-50' },
-    { dot: 'bg-blue-100',    bgClass: 'bg-blue-50' },
-    { dot: 'bg-indigo-100',  bgClass: 'bg-indigo-50' },
-    { dot: 'bg-purple-100',  bgClass: 'bg-purple-50' },
-    { dot: 'bg-pink-100',    bgClass: 'bg-pink-50' },
-    { dot: 'bg-cyan-100',    bgClass: 'bg-cyan-50' },
-];
-
-const MODAL_KEYS = [
-    'NONE','HR','MENU','BILLS','ORG','REPORTS','ATTENDANCE',
-    'AP','TREASURY','WARRANTY','PLANNING','PRICE_MONITOR','ASSESSMENT','TRANSLATION','SELF_INVOICE',
-] as const;
-type ActiveModal = typeof MODAL_KEYS[number];
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE';
 type PlanningTab  = 'VOTE' | 'OKR' | 'CAMPAIGN' | 'EVENTS';
 
-// ─────────────────────────────────────────────────────────────
-// 2. 数据驱动的 UI 配置 (新增任何卡片只需在这里加一行)
-// ─────────────────────────────────────────────────────────────
 type CardConfig = {
-    id: string; title: string; sub: string; icon: React.ElementType; 
-    colorClass: string; iconColor: string; 
-    actionType: 'MODAL' | 'NAVIGATE' | 'PLANNING'; target: string;
-    alertKey?: 'bills' | 'stock' | 'logs' | 'absent'; alertColor?: string;
+    id: string; 
+    title: string; 
+    sub: string; 
+    icon: React.ComponentType<{ size?: number; className?: string }>; 
+    colorClass: string; 
+    iconColor: string; 
+    actionType: 'MODAL' | 'NAVIGATE' | 'PLANNING'; 
+    target: string;
+    alertKey?: 'bills' | 'stock' | 'logs' | 'absent'; 
+    alertColor?: string;
 };
 
-const DASHBOARD_SECTIONS = [
-    {
-        title: "财务与资金", sub: "Finance & Capital", icon: Crown,
-        cards: [
-            { id: "settlement", title: "每日结算", sub: "SETTLEMENT", icon: Calculator, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'SETTLEMENT' },
-            { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
-            { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
-            { id: "bills", title: "固定支出", sub: "SUBSCRIPTIONS", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
-            { id: "ap", title: "应付账款", sub: "ACCOUNTS PAYABLE", icon: CreditCard, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'MODAL', target: 'AP' },
-            { id: "price", title: "成本监控", sub: "PRICE MONITOR", icon: TrendingUp, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'PRICE_MONITOR' },
-        ] as CardConfig[]
-    },
-    {
-        title: "人事与考勤", sub: "HR & Workforce",
-        cards: [
-            { id: "hr", title: "HR 指挥中心", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
-            { id: "attendance", title: "考勤总控台", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
-            { id: "assess", title: "能力评测", sub: "SKILL MATRIX", icon: Award, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'MODAL', target: 'ASSESSMENT' },
-            { id: "roster", title: "排班缺席", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
-            { id: "org", title: "组织结构", sub: "ORG STRUCTURE", icon: Layout, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'ORG' },
-        ] as CardConfig[]
-    },
-    {
-        title: "供应链与产品", sub: "Supply & Product",
-        cards: [
-            { id: "order", title: "智能订货", sub: "SMART ORDER", icon: ShoppingCart, colorClass: "bg-lime-50", iconColor: "text-lime-600", actionType: 'NAVIGATE', target: 'PROCUREMENT' },
-            { id: "supplier", title: "供应商", sub: "PURCHASING", icon: Truck, colorClass: "bg-blue-50", iconColor: "text-blue-600", actionType: 'NAVIGATE', target: 'SUPPLIER_CONTACTS' },
-            { id: "stock", title: "库存总览", sub: "STOCK VALUE", icon: Eye, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'NAVIGATE', target: 'INVENTORY_VIEW', alertKey: 'stock' },
-            { id: "translation", title: "翻译管理", sub: "TRANSLATION", icon: Languages, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'TRANSLATION' },
-            { id: "menu", title: "智能菜谱", sub: "SMART RECIPE", icon: Coffee, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'MODAL', target: 'MENU' },
-            { id: "warranty", title: "保修记录", sub: "WARRANTY", icon: ShieldCheck, colorClass: "bg-cyan-50", iconColor: "text-cyan-600", actionType: 'MODAL', target: 'WARRANTY' },
-            { id: "self_invoice", title: "自制凭单", sub: "VOUCHER MAKER", icon: FileText, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'SELF_INVOICE' },
-        ] as CardConfig[]
-    },
-    {
-        title: "活动与计划", sub: "Strategy & Planning",
-        cards: [
-            { id: "vote", title: "决策投票", sub: "BOARDROOM VOTE", icon: Vote, colorClass: "bg-black text-white", iconColor: "text-[#FFD700]", actionType: 'PLANNING', target: 'VOTE' },
-            { id: "okr", title: "目标规划", sub: "OKRs & KPI", icon: Target, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'PLANNING', target: 'OKR' },
-            { id: "campaign", title: "营销推广", sub: "CAMPAIGNS (ROI)", icon: Megaphone, colorClass: "bg-pink-50", iconColor: "text-pink-600", actionType: 'PLANNING', target: 'CAMPAIGN' },
-            { id: "events", title: "节日活动", sub: "EVENTS CALENDAR", icon: PartyPopper, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'PLANNING', target: 'EVENTS' },
-        ] as CardConfig[]
-    }
-];
-
-const DAILY_OPS_CARDS: CardConfig[] = [
-    { id: "queue", title: "排队叫号", sub: "QUEUE TV", icon: Armchair, colorClass: "bg-white border-2 border-gray-100", iconColor: "text-gray-600", actionType: 'NAVIGATE', target: 'QUEUE' },
-    { id: "invcheck", title: "库存盘点", sub: "CHECK", icon: CheckSquare, colorClass: "bg-blue-50", iconColor: "text-blue-500", actionType: 'NAVIGATE', target: 'INVENTORY_CHECK' },
+const BOSS_CARDS: CardConfig[] = [
+    { id: "settlement", title: "每日结算", sub: "SETTLEMENT", icon: Calculator, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'SETTLEMENT' },
+    { id: "kitchen_alert", title: "通知厨房", sub: "KITCHEN ALERT", icon: BellRing, colorClass: "bg-red-50", iconColor: "text-red-500", actionType: 'NAVIGATE', target: 'KITCHEN_ALERT' },
+    { id: "queue", title: "排队叫号", sub: "QUEUE TV", icon: Armchair, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'QUEUE' },
     { id: "logwrite", title: "运营日志（写）", sub: "ADD LOG", icon: PenTool, colorClass: "bg-orange-50", iconColor: "text-orange-500", actionType: 'NAVIGATE', target: 'LOGBOOK' },
     { id: "logview", title: "运营日志（查）", sub: "VIEW", icon: BookOpen, colorClass: "bg-emerald-50", iconColor: "text-emerald-500", actionType: 'NAVIGATE', target: 'LOGBOOK_VIEW', alertKey: 'logs', alertColor: 'bg-blue-500' },
     { id: "sop", title: "SOP 稽查", sub: "INSPECT", icon: ClipboardCheck, colorClass: "bg-violet-50", iconColor: "text-violet-500", actionType: 'NAVIGATE', target: 'SOP_INSPECT' },
+    { id: "invcheck", title: "库存盘点", sub: "CHECK", icon: CheckSquare, colorClass: "bg-blue-50", iconColor: "text-blue-500", actionType: 'NAVIGATE', target: 'INVENTORY_CHECK' },
+    { id: "stock", title: "库存总览", sub: "STOCK VALUE", icon: Eye, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'NAVIGATE', target: 'INVENTORY_VIEW', alertKey: 'stock' },
+    { id: "order", title: "智能订货", sub: "SMART ORDER", icon: ShoppingCart, colorClass: "bg-lime-50", iconColor: "text-lime-600", actionType: 'NAVIGATE', target: 'PROCUREMENT' },
+    { id: "supplier", title: "供应商", sub: "PURCHASING", icon: Truck, colorClass: "bg-blue-50", iconColor: "text-blue-600", actionType: 'NAVIGATE', target: 'SUPPLIER_CONTACTS' },
+    { id: "menu", title: "智能菜谱", sub: "SMART RECIPE", icon: Coffee, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'MODAL', target: 'MENU' },
+    { id: "price", title: "成本监控", sub: "PRICE MONITOR", icon: TrendingUp, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'PRICE_MONITOR' },
+    { id: "ap", title: "应付账款", sub: "ACCOUNTS PAYABLE", icon: CreditCard, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'MODAL', target: 'AP' },
+    { id: "self_invoice", title: "自制凭单", sub: "VOUCHER MAKER", icon: FileText, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'SELF_INVOICE' },
+    { id: "bills", title: "固定支出", sub: "SUBSCRIPTIONS", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
+    { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
+    { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
+    { id: "hr", title: "HR 指挥中心", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
+    { id: "attendance", title: "考勤总控台", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
+    { id: "roster", title: "排班缺席", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
+    { id: "assess", title: "能力评测", sub: "SKILL MATRIX", icon: Award, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'MODAL', target: 'ASSESSMENT' },
+    { id: "org", title: "组织结构", sub: "ORG STRUCTURE", icon: Layout, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'ORG' },
+    { id: "vote", title: "决策投票", sub: "BOARDROOM VOTE", icon: Vote, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'PLANNING', target: 'VOTE' },
+    { id: "okr", title: "目标规划", sub: "OKRs & KPI", icon: Target, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'PLANNING', target: 'OKR' },
+    { id: "campaign", title: "营销推广", sub: "CAMPAIGNS (ROI)", icon: Megaphone, colorClass: "bg-pink-50", iconColor: "text-pink-600", actionType: 'PLANNING', target: 'CAMPAIGN' },
+    { id: "events", title: "节日活动", sub: "EVENTS CALENDAR", icon: PartyPopper, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'PLANNING', target: 'EVENTS' },
+    { id: "translation", title: "翻译管理", sub: "TRANSLATION", icon: Languages, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'TRANSLATION' },
+    { id: "warranty", title: "保修记录", sub: "WARRANTY", icon: ShieldCheck, colorClass: "bg-cyan-50", iconColor: "text-cyan-600", actionType: 'MODAL', target: 'WARRANTY' },
 ];
 
-// ─────────────────────────────────────────────────────────────
-// 3. 自定义 Hook: 独立处理数据获取逻辑，不阻塞 UI 渲染
-// ─────────────────────────────────────────────────────────────
+const BOSS_DASHBOARD_SECTIONS = MODULE_CATEGORIES.map(category => ({
+    title: category.title,
+    sub: category.subtitle,
+    cards: sortNavigationItems(
+        BOSS_CARDS.filter(card => getModuleNavigationRule(card.target).category === category.id),
+        card => card.target,
+    ),
+})).filter(section => section.cards.length > 0);
+
+
+// Custom Hook for Alerts
 function useDashboardAlerts() {
     const [alerts, setAlerts] = useState({ bills: 0, stock: 0, logs: 0, absent: 0 });
     const [loadingAlerts, setLoadingAlerts] = useState(true);
@@ -145,7 +118,12 @@ function useDashboardAlerts() {
             try {
                 const results = await Promise.allSettled([
                     DataManager.getRecurringBills(),
-                    Promise.all([DataManager.getStock('KITCHEN'), DataManager.getStock('BAR'), DataManager.getStock('GENERAL')]),
+                    Promise.all([
+                        DataManager.getStock('KITCHEN'),
+                        DataManager.getStock('BAR'),
+                        DataManager.getStock('GENERAL'),
+                        DataManager.getStock('FUEL')
+                    ]),
                     DataManager.getRosterData(),
                     DataManager.getLogs(),
                 ]);
@@ -170,7 +148,7 @@ function useDashboardAlerts() {
                 }
                 if (results[1].status === 'fulfilled') {
                     const all = results[1].value.flat();
-                    next.stock = all.filter((i: any) => i.currentQty <= (i.minLevel || 0)).length;
+                    next.stock = all.filter(needsReplenishment).length;
                 }
                 if (results[2].status === 'fulfilled') {
                     const todayRoster = results[2].value.roster[dateStr] || {};
@@ -196,135 +174,123 @@ function useDashboardAlerts() {
     return { alerts, loadingAlerts, totalAlerts };
 }
 
-// ─────────────────────────────────────────────────────────────
-// 4. UI 组件 (DashboardCard & SectionBlock 原样保留)
-// ─────────────────────────────────────────────────────────────
 interface DashboardCardProps {
-    id?: string; title: string; sub: string; icon: React.ElementType; colorClass: string; iconColor: string;
-    onClick: () => void; alertCount?: number; alertColor?: string;
-    cardColors: Record<string, string>; colorPickerOpen: string | null; pickerRef: React.RefObject<HTMLDivElement | null>;
-    onOpenPicker: (id: string) => void; onSetColor: (id: string, bgClass: string) => void; onResetColor: (id: string) => void;
+    card: CardConfig;
+    isFavorite: boolean;
+    isEditingFavorites: boolean;
+    alertCount: number;
+    onCardClick: (card: CardConfig) => void;
+    onToggleFavorite: (id: string) => void;
 }
 
-const DashboardCard = React.memo(({ id, title, sub, icon: Icon, colorClass, onClick, iconColor, alertCount = 0, alertColor = 'bg-red-500', cardColors, colorPickerOpen, pickerRef, onOpenPicker, onSetColor, onResetColor }: DashboardCardProps) => {
-    const cardBg = (id && cardColors[id]) ? cardColors[id] : 'bg-white';
-    const isPickerOpen = id ? colorPickerOpen === id : false;
-
-    // Mobile long press states & references
-    const timerRef = React.useRef<any>(null);
-    const progressIntervalRef = React.useRef<any>(null);
-    const [isHolding, setIsHolding] = React.useState(false);
-    const [holdProgress, setHoldProgress] = React.useState(0);
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        e.stopPropagation();
-        
-        // Reset and clear any existing timers
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-
-        setIsHolding(true);
-        setHoldProgress(0);
-
-        let elapsed = 0;
-        // Total duration 3000ms. An update every 50ms (60 updates total)
-        progressIntervalRef.current = setInterval(() => {
-            elapsed += 50;
-            const percentage = Math.min((elapsed / 3000) * 100, 100);
-            setHoldProgress(percentage);
-        }, 50);
-
-        timerRef.current = setTimeout(() => {
-            onOpenPicker(isPickerOpen ? '' : (id ?? ''));
-            setIsHolding(false);
-            setHoldProgress(0);
-            if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-            if (navigator.vibrate) {
-                try { navigator.vibrate(80); } catch (_) {}
-            }
-        }, 3000); // 3 seconds hold required strictly
-    };
-
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        e.stopPropagation();
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-            timerRef.current = null;
-        }
-        if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current);
-            progressIntervalRef.current = null;
-        }
-        setIsHolding(false);
-        setHoldProgress(0);
-    };
-
-    const handleMouseClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const isMobile = window.innerWidth < 768;
-        if (!isMobile) {
-            // Desktop users enjoy immediate single clicks for fast setup
-            onOpenPicker(isPickerOpen ? '' : (id ?? ''));
-        }
-    };
+const DashboardCard: React.FC<DashboardCardProps> = ({
+    card,
+    isFavorite,
+    isEditingFavorites,
+    alertCount,
+    onCardClick,
+    onToggleFavorite
+}) => {
+    const Icon = card.icon;
+    const alertBg = card.alertColor || 'bg-rose-500';
 
     return (
-        <button
-            onClick={onClick}
-            style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
-            className={[cardBg, 'p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all text-left group h-full min-h-[72px] md:min-h-0 flex flex-col justify-between relative overflow-visible active:scale-[0.97] active:shadow-none select-none'].join(' ')}
-        >
-            {alertCount > 0 && (
-                <div className={['absolute top-6 md:top-7 -right-2', alertColor, 'text-white text-[10px] font-black min-w-[1.25rem] h-5 px-1.5 rounded-full flex items-center justify-center shadow-md animate-pulse z-10 border-2 border-white'].join(' ')}>
-                    {alertCount}
+        <div className="relative group select-none">
+            {/* Card Main Button */}
+            <button
+                onClick={() => onCardClick(card)}
+                className={`w-full bg-white border ${
+                    isEditingFavorites ? 'border-amber-400/80 ring-2 ring-amber-400/10 shadow-[0_4px_12px_rgba(255,210,0,0.1)]' : 'border-stone-200/60 hover:border-stone-300'
+                } rounded-2xl p-4 flex flex-col justify-between text-left shadow-sm active:scale-95 active:shadow-none transition-all duration-150 outline-none min-h-[114px] md:min-h-[124px] relative`}
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+            >
+                {/* Icon Wrapper with subtle colored background */}
+                <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center relative ${card.colorClass}`}>
+                    <Icon size={18} className={`${card.iconColor}`} />
+                    
+                    {/* Badge */}
+                    {alertCount > 0 && (
+                        <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 ${alertBg} text-white text-[9px] font-black rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse z-10`}>
+                            {alertCount}
+                        </span>
+                    )}
                 </div>
-            )}
-            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center mb-2 md:mb-4 ${colorClass}`}>
-                <Icon size={20} className={`md:w-6 md:h-6 ${iconColor}`} />
-            </div>
-            <div>
-                <h4 className="font-bold text-[#1A1A1A] text-xs md:text-sm mb-0.5 md:mb-1 group-hover:text-black transition-colors leading-tight">{title}</h4>
-                <p className="text-[9px] md:text-[10px] text-gray-400 font-bold uppercase tracking-wider leading-tight line-clamp-1">{sub}</p>
-            </div>
-        </button>
+
+                {/* Information */}
+                <div className="mt-3">
+                    <h4 className="font-extrabold text-[#111111] text-xs md:text-sm mb-0.5 leading-tight truncate">
+                        {card.title}
+                    </h4>
+                    <p className="text-[9px] md:text-[10px] text-stone-400 font-bold uppercase tracking-wider leading-tight truncate">
+                        {card.sub}
+                    </p>
+                </div>
+            </button>
+
+            {/* Favorite Star Icon Button (Min 44x44px Touch Target) */}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(card.id);
+                }}
+                className="absolute -top-1 -right-1 w-11 h-11 flex items-center justify-center text-stone-300 hover:text-amber-500 active:scale-90 transition-all z-20 outline-none"
+                style={{ width: '44px', height: '44px' }}
+                title={isFavorite ? '取消常用' : '加入常用'}
+            >
+                <Star 
+                    size={16} 
+                    className={`${
+                        isFavorite 
+                            ? 'fill-amber-400 text-amber-500 filter drop-shadow-[0_1px_3px_rgba(245,158,11,0.2)]' 
+                            : 'text-stone-300 group-hover:text-stone-400'
+                    } transition-all`} 
+                />
+            </button>
+        </div>
     );
-});
-DashboardCard.displayName = 'DashboardCard';
+};
 
-const SectionBlock: React.FC<{ title: string; sub: string; children: React.ReactNode }> = ({ title, sub, children }) => (
-    <div>
-        <h4 className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 px-1">{title} · <span className="text-gray-300 font-normal">{sub}</span></h4>
-        {children}
-    </div>
-);
-
-export const BossDashboard: React.FC<{ currentEmployee: Employee; onNavigate: (tab: string) => void; onOpenConfig?: () => void }> = ({ currentEmployee, onNavigate, onOpenConfig }) => {
-    const { alerts, loadingAlerts, totalAlerts } = useDashboardAlerts();
+export const BossDashboard: React.FC<{ 
+    currentEmployee: Employee; 
+    onNavigate: (tab: string) => void; 
+    onOpenConfig?: () => void 
+}> = ({ currentEmployee, onNavigate, onOpenConfig }) => {
+    const { alerts } = useDashboardAlerts();
     const [activeModal, setActiveModal] = useState<ActiveModal>('NONE');
     const [planningTab, setPlanningTab] = useState<PlanningTab>('VOTE');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isEditingFavorites, setIsEditingFavorites] = useState(false);
+    const [aiOpen, setAiOpen] = useState(false);
 
-    // Notify parent App.tsx when activeModal changes
+    // Load Favorites from LocalStorage
+    const [favorites, setFavorites] = useState<string[]>(() => {
+        try {
+            const raw = localStorage.getItem('boss_favorites');
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    // Load Recently Used from LocalStorage
+    const [recent, setRecent] = useState<string[]>(() => {
+        try {
+            const raw = localStorage.getItem('boss_recent_used');
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    // Notify parent App.tsx when activeModal changes (hiding bottom navigation)
     useEffect(() => {
         if (typeof window !== 'undefined') {
             (window as any).bossActiveModal = activeModal;
             window.dispatchEvent(new Event('boss-modal-change'));
         }
     }, [activeModal]);
-    const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null);
-    const [cardColors, setCardColors] = useState<Record<string, string>>(() => {
-        try {
-            const raw = localStorage.getItem(CARD_COLORS_KEY);
-            return raw ? JSON.parse(raw) : {};
-        } catch {
-            return {};
-        }
-    });
-    const [alertDismissed, setAlertDismissed] = useState(false);
-    const [aiOpen, setAiOpen] = useState(false);
 
-    const pickerRef = useRef<HTMLDivElement | null>(null);
-
-    // 监听跨模块跳转意图以打开 AP 等 Modal
+    // Global synchronizer listener
     useEffect(() => {
         const checkNav = () => {
             const modal = localStorage.getItem('klk_boss_active_modal');
@@ -338,39 +304,57 @@ export const BossDashboard: React.FC<{ currentEmployee: Employee; onNavigate: (t
         return () => window.removeEventListener('storage-sync-navigation', checkNav);
     }, []);
 
-    // 全局事件监听：点击外部关闭调色板
-    useEffect(() => {
-        if (!colorPickerOpen) return;
-        const handler = (e: MouseEvent) => {
-            if (!pickerRef.current || !pickerRef.current.contains(e.target as Node)) {
-                setColorPickerOpen(null);
-            }
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [colorPickerOpen]);
-
-    // Handlers (useCallback 保证组件 memo 性能)
-    const handleOpenPicker = useCallback((id: string) => setColorPickerOpen(id || null), []);
-    const handleSetCardColor = useCallback((cardId: string, bgClass: string) => {
-        setCardColors(prev => {
-            const next = { ...prev, [cardId]: bgClass };
-            try { localStorage.setItem(CARD_COLORS_KEY, JSON.stringify(next)); } catch {}
-            return next;
-        });
-        setColorPickerOpen(null);
-    }, []);
-    const handleResetCardColor = useCallback((cardId: string) => {
-        setCardColors(prev => {
-            const next = { ...prev }; delete next[cardId];
-            try { localStorage.setItem(CARD_COLORS_KEY, JSON.stringify(next)); } catch {}
-            return next;
-        });
-        setColorPickerOpen(null);
+    // Flatten all cards list
+    const allCards = useMemo(() => {
+        return BOSS_CARDS;
     }, []);
 
-    // 核心跳转中枢（解析 Config）
+    // Filter cards by Search Query
+    const filteredSections = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return BOSS_DASHBOARD_SECTIONS;
+
+        return BOSS_DASHBOARD_SECTIONS.map(section => {
+            const filteredCards = section.cards.filter(card => 
+                card.title.toLowerCase().includes(q) || 
+                card.sub.toLowerCase().includes(q)
+            );
+            return {
+                ...section,
+                cards: filteredCards
+            };
+        }).filter(section => section.cards.length > 0);
+    }, [searchQuery]);
+
+    // Favorites cards configurations
+    const favoriteCards = useMemo(() => {
+        return favorites
+            .map(id => allCards.find(c => c.id === id))
+            .filter((c): c is CardConfig => !!c);
+    }, [favorites, allCards]);
+
+    // Recently used configurations (Filtered to valid existings, max 4)
+    const recentCards = useMemo(() => {
+        return recent
+            .filter(id => allCards.some(c => c.id === id))
+            .slice(0, 4)
+            .map(id => allCards.find(c => c.id === id))
+            .filter((c): c is CardConfig => !!c);
+    }, [recent, allCards]);
+
+    // Handle Card Click - Updates Recently Used storage as well
     const handleCardClick = useCallback((card: CardConfig) => {
+        setRecent(prev => {
+            const filtered = prev.filter(id => id !== card.id);
+            const next = [card.id, ...filtered].slice(0, 4);
+            try {
+                localStorage.setItem('boss_recent_used', JSON.stringify(next));
+            } catch (e) {
+                console.error(e);
+            }
+            return next;
+        });
+
         if (card.actionType === 'MODAL') {
             setActiveModal(card.target as ActiveModal);
         } else if (card.actionType === 'NAVIGATE') {
@@ -381,12 +365,21 @@ export const BossDashboard: React.FC<{ currentEmployee: Employee; onNavigate: (t
         }
     }, [onNavigate]);
 
-    const pickerProps = useMemo(() => ({
-        cardColors, colorPickerOpen, pickerRef,
-        onOpenPicker: handleOpenPicker, onSetColor: handleSetCardColor, onResetColor: handleResetCardColor,
-    }), [cardColors, colorPickerOpen, handleOpenPicker, handleSetCardColor, handleResetCardColor]);
+    // Toggle Favorites Action
+    const toggleFavorite = useCallback((cardId: string) => {
+        setFavorites(prev => {
+            const next = prev.includes(cardId) 
+                ? prev.filter(id => id !== cardId)
+                : [...prev, cardId];
+            try {
+                localStorage.setItem('boss_favorites', JSON.stringify(next));
+            } catch (e) {
+                console.error(e);
+            }
+            return next;
+        });
+    }, []);
 
-    // 字典映射渲染 Modal（比长串的 && 判断更清晰且性能更好）
     const renderModal = () => {
         const close = () => setActiveModal('NONE');
         const modalMap: Record<string, React.ReactElement> = {
@@ -412,109 +405,195 @@ export const BossDashboard: React.FC<{ currentEmployee: Employee; onNavigate: (t
     };
 
     return (
-        <div className="p-3 md:p-8 max-w-7xl mx-auto space-y-4 md:space-y-8 bg-[#FAFAFA] min-h-screen overflow-x-hidden" style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
-            
-            {/* ── 🔮 AI 智控决策脑库旗舰面板 (AI Core Intelligence Operations Center) ── */}
-            <div className="hidden md:block bg-gradient-to-br from-[#0E0E10] via-[#151518] to-[#0A0A0C] border border-[#FFD700]/25 rounded-[1.5rem] p-5 text-white shadow-[0_10px_40px_rgba(0,0,0,0.8),0_0_20px_rgba(255,215,0,0.03)] relative overflow-hidden animate-in fade-in-50 duration-500">
-                {/* Micro Gold-Glow Ambient Light Source */}
-                <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-b from-[#FFD700]/6 to-transparent rounded-full blur-3xl pointer-events-none z-0"></div>
-
-                <div className="flex flex-row items-center justify-between gap-6 relative z-10">
-                    <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center shrink-0">
-                            <span className="absolute inline-flex h-8 w-8 rounded-full bg-[#FFD700]/25 animate-ping opacity-75"></span>
-                            <div className="bg-gradient-to-b from-[#3a3418] to-[#15140f] p-2.5 rounded-2xl border border-[#FFD700]/40 shadow-inner">
-                                <span className="text-xl inline-block drop-shadow-[0_0_5px_rgba(255,215,0,0.5)]">🔮</span>
-                            </div>
+        <div className="w-full min-h-screen bg-[#F6F7FB] px-4 md:px-8 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-12" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+            <div className="max-w-7xl mx-auto space-y-6">
+                
+                {/* 1. TOP HEADER & SEARCH TOOLS */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2 border-b border-stone-200/50">
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                            <h2 className="font-extrabold text-stone-950 text-xl md:text-2xl font-sans tracking-tight">全部功能</h2>
+                            <span className="bg-stone-200 text-stone-700 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider font-mono">ALL MODULES</span>
                         </div>
-                        <div>
-                            <h3 className="font-extrabold text-[#FFD700] text-sm md:text-base tracking-widest uppercase flex items-center gap-2">
-                                御膳 AI 智控脑库
-                                <span className="bg-gradient-to-r from-stone-700 to-stone-850 text-[#FFD700] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm border border-[#FFD700]/30 font-mono">BETA</span>
-                            </h3>
-                            <p className="text-[10px] text-stone-400 font-semibold tracking-wide mt-1">
-                                餐饮财务专职智脑 • 多维自动对账与日常经营智能稽查
-                            </p>
-                        </div>
+                        <span className="text-xs text-stone-400 font-bold uppercase tracking-widest mt-0.5">Business Tools Dashboard</span>
                     </div>
 
-                    <div className="shrink-0">
+                    {/* Search & Actions Bar */}
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        {/* Search Input */}
+                        <div className="relative flex-1 md:w-64">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="搜索功能 (例：结算、库存...)"
+                                className="w-full pl-10 pr-4 py-2.5 rounded-full text-xs font-bold text-stone-900 bg-white border border-stone-200 placeholder-stone-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 shadow-sm"
+                                style={{ minHeight: '44px' }}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 active:scale-90 transition-all outline-none"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Edit Favorites Button */}
                         <button
-                            onClick={() => {
-                                setAiOpen(true);
-                            }}
-                            style={{ minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
-                            className="bg-gradient-to-r from-[#FFD700] via-[#F5C73C] to-[#E5A93C] text-stone-950 font-black text-xs px-6 py-2.5 rounded-xl active:scale-95 hover:brightness-110 shadow-[0_5px_15px_rgba(255,215,0,0.25)] transition-all duration-200 flex items-center justify-center gap-2 select-none"
+                            onClick={() => setIsEditingFavorites(!isEditingFavorites)}
+                            className={`px-4 py-2.5 rounded-full text-xs font-black tracking-wider transition-all outline-none border flex items-center justify-center gap-1.5 shrink-0 ${
+                                isEditingFavorites 
+                                    ? 'bg-[#FFD200] text-stone-950 border-[#FFD200] shadow-sm' 
+                                    : 'bg-white text-stone-700 border-stone-200 hover:border-stone-300'
+                            }`}
+                            style={{ minHeight: '44px' }}
                         >
-                            <span className="text-sm">🗣️</span>
-                            立即唤醒语音提问
+                            <Star size={14} className={isEditingFavorites ? 'fill-stone-950' : ''} />
+                            <span>{isEditingFavorites ? '完成编辑' : '编辑常用'}</span>
                         </button>
                     </div>
                 </div>
-            </div>
 
-            {/* ── 1. CORE MANAGEMENT ───────────────────── */}
-            <div className="bg-[#F3F4F6] rounded-[1.5rem] md:rounded-[2.5rem] p-4 md:p-8 border border-gray-200/60 space-y-5 md:space-y-8">
-                <div className="flex justify-between items-center px-1">
-                    <h3 className="font-black text-[#8B0000] text-sm md:text-base flex items-center gap-2 uppercase tracking-widest">
-                        <Crown size={18} className="fill-current" />
-                        核心管理
-                        <span className="hidden sm:inline">(Owner's Office)</span>
-                    </h3>
-                </div>
-
-                {/* 通过遍历配置渲染区块与卡片 */}
-                {DASHBOARD_SECTIONS.map((section, idx) => (
-                    <SectionBlock key={idx} title={section.title} sub={section.sub}>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
-                            {section.cards.map((card) => (
-                                <DashboardCard 
-                                    key={card.id}
-                                    {...pickerProps} 
-                                    id={card.id} 
-                                    title={card.title} 
-                                    sub={card.sub} 
-                                    icon={card.icon} 
-                                    colorClass={card.colorClass} 
-                                    iconColor={card.iconColor} 
-                                    onClick={() => handleCardClick(card)} 
+                {/* 2. MY FAVORITES (我的常用) */}
+                {favoriteCards.length > 0 && (
+                    <div className="bg-white rounded-3xl p-5 border border-amber-300/40 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-br from-white to-amber-50/5">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFD200]/5 rounded-full blur-2xl pointer-events-none"></div>
+                        <div className="flex justify-between items-center pb-2 border-b border-stone-100">
+                            <h3 className="font-black text-amber-600 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
+                                <Star size={16} className="fill-amber-400 text-amber-500" />
+                                我的常用功能
+                                <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case">({favoriteCards.length})</span>
+                            </h3>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                            {favoriteCards.map(card => (
+                                <DashboardCard
+                                    key={`fav-${card.id}`}
+                                    card={card}
+                                    isFavorite={true}
+                                    isEditingFavorites={isEditingFavorites}
                                     alertCount={card.alertKey ? alerts[card.alertKey] : 0}
-                                    alertColor={card.alertColor}
+                                    onCardClick={handleCardClick}
+                                    onToggleFavorite={toggleFavorite}
                                 />
                             ))}
                         </div>
-                    </SectionBlock>
+                    </div>
+                )}
+
+                {/* Empty State when editing but no favorites selected yet */}
+                {favoriteCards.length === 0 && isEditingFavorites && (
+                    <div className="bg-stone-100/50 border-2 border-dashed border-stone-200 rounded-3xl p-6 text-center text-stone-500">
+                        <Star size={24} className="text-stone-300 mx-auto mb-2" />
+                        <p className="text-xs font-bold">暂无常用功能</p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">点击下方任何功能卡片上的星标，即可固定在顶部常用栏中。</p>
+                    </div>
+                )}
+
+                {/* 3. RECENTLY USED (最近使用) */}
+                {recentCards.length > 0 && (
+                    <div className="bg-white rounded-2xl p-4 border border-stone-200/50 shadow-sm space-y-3">
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-black text-stone-600 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
+                                <Clock size={16} />
+                                最近使用
+                            </h3>
+                        </div>
+                        <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+                            {recentCards.map(card => {
+                                const Icon = card.icon;
+                                return (
+                                    <button
+                                        key={`rec-${card.id}`}
+                                        onClick={() => handleCardClick(card)}
+                                        className="min-w-[155px] md:min-w-[175px] min-h-[58px] rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2.5 flex items-center gap-3 text-left active:scale-[0.98] transition-all"
+                                    >
+                                        <span className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center ${card.colorClass}`}>
+                                            <Icon size={16} className={card.iconColor} />
+                                        </span>
+                                        <span className="min-w-0">
+                                            <span className="block text-xs font-black text-stone-900 truncate">{card.title}</span>
+                                            <span className="block text-[9px] font-bold text-stone-400 uppercase truncate mt-0.5">{card.sub}</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* 4. ALL CATEGORIZED FUNCTIONS */}
+                {filteredSections.map((section, idx) => (
+                    <div key={idx} className="bg-white rounded-3xl p-5 border border-stone-200/50 shadow-sm space-y-4">
+                        <div className="flex justify-between items-center pb-2 border-b border-stone-100">
+                            <h3 className="font-black text-stone-850 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
+                                <span className="text-[#FFD200] font-black">■</span>
+                                {section.title}
+                                <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case"> · {section.sub}</span>
+                            </h3>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                            {section.cards.map((card) => (
+                                <DashboardCard 
+                                    key={card.id}
+                                    card={card}
+                                    isFavorite={favorites.includes(card.id)}
+                                    isEditingFavorites={isEditingFavorites}
+                                    alertCount={card.alertKey ? alerts[card.alertKey] : 0}
+                                    onCardClick={handleCardClick}
+                                    onToggleFavorite={toggleFavorite}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 ))}
-            </div>
 
-            {/* ── 2. DAILY OPERATIONS ──────────────────── */}
-            <div className="bg-[#F3F4F6] rounded-[1.5rem] md:rounded-[2.5rem] p-4 md:p-8 border border-gray-200/60">
-                <h3 className="font-black text-gray-500 text-sm mb-4 md:mb-6 flex items-center gap-2 uppercase tracking-widest px-1">
-                    <Box size={18} />日常运营<span className="hidden sm:inline">(Store Operations)</span>
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
-                    {DAILY_OPS_CARDS.map((card) => (
-                        <DashboardCard 
-                            key={card.id}
-                            {...pickerProps} 
-                            id={card.id} 
-                            title={card.title} 
-                            sub={card.sub} 
-                            icon={card.icon} 
-                            colorClass={card.colorClass} 
-                            iconColor={card.iconColor} 
-                            onClick={() => handleCardClick(card)} 
-                            alertCount={card.alertKey ? alerts[card.alertKey] : 0}
-                            alertColor={card.alertColor}
-                        />
-                    ))}
+                {/* NO RESULTS VIEW */}
+                {filteredSections.length === 0 && (
+                    <div className="bg-white rounded-3xl border border-stone-200 p-12 text-center text-stone-500 shadow-sm">
+                        <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center text-stone-400 mx-auto mb-3">
+                            <Search size={20} />
+                        </div>
+                        <p className="text-sm font-extrabold text-stone-850">未找到相关功能</p>
+                        <p className="text-xs text-stone-400 mt-1">没有找到匹配 "{searchQuery}" 的功能</p>
+                    </div>
+                )}
+
+                {/* 5. BRAND INSPIRATIONAL FOOTER (Monzo/Linear vibe) */}
+                <div className="bg-gradient-to-br from-stone-900 via-stone-920 to-stone-950 border border-[#FFD200]/20 rounded-3xl p-5 text-white shadow-md relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-b from-[#FFD200]/5 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-[#FFD200]/15 p-2 rounded-xl border border-[#FFD200]/35 shrink-0">
+                                <Sparkles size={18} className="text-[#FFD200] animate-pulse" />
+                            </div>
+                            <div>
+                                <h4 className="font-extrabold text-[#FFD200] text-sm tracking-wide uppercase">AI 经营分析重点建议</h4>
+                                <p className="text-[10px] text-stone-400 font-semibold mt-0.5">点击进入 AI 智脑，向专属餐饮财务专家提问以进行经营对账与智能稽查。</p>
+                            </div>
+                        </div>
+
+                        {/* Trigger AI Assistant Dialog */}
+                        <button
+                            onClick={() => setAiOpen(true)}
+                            className="bg-[#FFD200] active:bg-[#FFD200]/90 text-stone-950 font-black text-xs px-4 py-2.5 rounded-xl shrink-0 active:scale-95 transition-all outline-none border border-[#FFD200]"
+                            style={{ minHeight: '44px' }}
+                        >
+                            提问智脑
+                        </button>
+                    </div>
                 </div>
+
             </div>
 
-            {/* ── MODALS ────────────────────────────────── */}
+            {/* Modals rendering area */}
             {renderModal()}
 
-            {/* ── AI OPERATIONS WORKFLOW DRAWER ── */}
+            {/* AI Assistant dialog */}
             <AIOperationsAssistant isOpen={aiOpen} onClose={() => setAiOpen(false)} />
         </div>
     );

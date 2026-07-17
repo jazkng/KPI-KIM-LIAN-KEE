@@ -438,22 +438,22 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
             <div className="bg-[#F5F7FA] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* Header */}
-                <div className="bg-[#1A1A1A] p-5 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-[#FFD700] text-black p-3 rounded-2xl shadow-lg"><Layout size={24}/></div>
-                        <div>
-                            <h3 className="font-serif font-black text-xl tracking-wide">战略与决策中心</h3>
-                            <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">STRATEGY & DIGITAL BOARDROOM</p>
+                <div className="bg-[#1A1A1A] px-4 pb-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] md:p-5 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
+                    <div className="flex items-center gap-2.5 md:gap-4 min-w-0">
+                        <div className="bg-[#FFD700] text-black p-2 md:p-3 rounded-xl md:rounded-2xl shadow-lg shrink-0"><Layout size={20} className="md:w-6 md:h-6"/></div>
+                        <div className="min-w-0">
+                            <h3 className="font-serif font-black text-base md:text-xl tracking-wide truncate">战略与决策中心</h3>
+                            <p className="text-[8px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 truncate">STRATEGY & DIGITAL BOARDROOM</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                         <ModuleGuideButton module="HR" />
-                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X size={24}/></button>
+                        <button onClick={onClose} className="mobile-touch-target p-2 hover:bg-white/10 rounded-full flex items-center justify-center"><X size={24}/></button>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="bg-white border-b border-gray-200 px-6 pt-4 pb-2 flex gap-4 overflow-x-auto shrink-0">
+                <div className="bg-white border-b border-gray-200 px-3 md:px-6 pt-2 md:pt-4 pb-1 md:pb-2 flex gap-2 md:gap-4 overflow-x-auto shrink-0">
                     {[
                         { id: 'VOTING', label: '决策投票 (Boardroom)', icon: Vote },
                         { id: 'OKR', label: '目标规划 (OKR)', icon: Target },
@@ -463,7 +463,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-3 px-2 text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-4 transition-all ${activeTab === tab.id ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                            className={`min-h-[44px] pb-2 md:pb-3 px-2 text-[11px] md:text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-4 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                         >
                             <tab.icon size={16}/> {tab.label}
                         </button>
@@ -471,7 +471,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                 </div>
 
                 {/* Content */}
-                <div className="flex-grow overflow-y-auto p-6 bg-[#F5F7FA]">
+                <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-[#F5F7FA]">
                     
                     {/* --- 1. VOTING (BOARDROOM) --- */}
                     {activeTab === 'VOTING' && (

@@ -1,5 +1,60 @@
 
-import { Employee } from '../types';
+import { Employee, CatalogItem, StockItem } from '../types';
+
+export const normalizeCatalogItem = (item: CatalogItem, stockList: StockItem[]): CatalogItem => {
+  const linkedStock = item.linkedStockId ? stockList.find(s => s.id === item.linkedStockId) : undefined;
+  
+  const baseUnit = item.baseUnit || linkedStock?.baseUnit || linkedStock?.unit || item.unit || 'pcs';
+  const displayUnit = item.displayUnit || linkedStock?.displayUnit;
+  const displayToBaseRatio = item.displayToBaseRatio || linkedStock?.displayToBaseRatio || 1;
+  
+  let purchaseUnitName = item.purchaseUnitName || item.unit || 'unit';
+  
+  // toBaseRatio safety
+  let toBaseRatio = item.toBaseRatio;
+  if (toBaseRatio === undefined || toBaseRatio <= 0 || isNaN(toBaseRatio) || !isFinite(toBaseRatio)) {
+    const matchPU = linkedStock?.purchaseUnits?.find(pu => pu.unitName.toLowerCase() === purchaseUnitName.toLowerCase());
+    if (matchPU && matchPU.toBaseRatio > 0) {
+      toBaseRatio = matchPU.toBaseRatio;
+    } else {
+      toBaseRatio = 1;
+    }
+  }
+  
+  // price safety
+  let pricePerPurchaseUnit = item.pricePerPurchaseUnit !== undefined && item.pricePerPurchaseUnit > 0 && isFinite(item.pricePerPurchaseUnit)
+    ? item.pricePerPurchaseUnit 
+    : (item.price > 0 && isFinite(item.price) ? item.price : 0);
+      
+  // costPerBaseUnit safety
+  let costPerBaseUnit = item.costPerBaseUnit !== undefined && item.costPerBaseUnit > 0 && isFinite(item.costPerBaseUnit)
+    ? item.costPerBaseUnit
+    : (toBaseRatio > 0 ? pricePerPurchaseUnit / toBaseRatio : pricePerPurchaseUnit);
+      
+  if (isNaN(costPerBaseUnit) || !isFinite(costPerBaseUnit) || costPerBaseUnit < 0) {
+    costPerBaseUnit = 0;
+  }
+      
+  let linkedPurchaseUnitId = item.linkedPurchaseUnitId;
+  if (!linkedPurchaseUnitId && linkedStock && linkedStock.purchaseUnits) {
+    const matchPU = linkedStock.purchaseUnits.find(pu => pu.unitName.toLowerCase() === purchaseUnitName.toLowerCase());
+    if (matchPU) {
+      linkedPurchaseUnitId = matchPU.id;
+    }
+  }
+
+  return {
+    ...item,
+    linkedPurchaseUnitId,
+    purchaseUnitName,
+    toBaseRatio,
+    baseUnit,
+    displayUnit,
+    displayToBaseRatio,
+    pricePerPurchaseUnit,
+    costPerBaseUnit
+  };
+};
 
 export const mapRoleToCode = (roleTitle: string): string => {
   if (!roleTitle) return 'PENDING';

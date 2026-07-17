@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     FileText, Plus, Search, X, Save, Trash2, Calendar, Download, 
     Sparkles, RefreshCw, Printer, AlertCircle, CheckCircle2, User, Phone, 
     FileSignature, Coins, Receipt, HelpCircle, ArrowLeftRight, HardDrive,
-    ExternalLink, FileCheck, Loader2
+    ExternalLink, FileCheck, Loader2, ChevronDown, SlidersHorizontal
 } from 'lucide-react';
 import { SelfIssuedVoucher, SelfVoucherItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+
 import { numberToWords, COMPANY_INFO } from '../../utils/paymentVoucherUtils';
 
 // Preset default voucher values for quick-fill
@@ -20,6 +23,15 @@ const QUICK_CONTENT_PRESETS = [
     { description: '紧急运货冰块 / Urgent ice bags delivery', qty: 4, unitPrice: 12, unit: '包' },
 ];
 
+const VOUCHER_TYPE_FILTERS = [
+    { id: 'ALL', label: '全部' },
+    { id: 'CASH_BILL', label: '现金账单' },
+    { id: 'PAYMENT_VOUCHER', label: '付款证明' },
+    { id: 'DELIVERY_RECEIPT', label: '运费单' },
+    { id: 'CASH_VOUCHER', label: '现金条' },
+    { id: 'PURCHASE_RECEIPT', label: '无单采买' },
+];
+
 interface SelfInvoiceModuleProps {
     onClose: () => void;
 }
@@ -29,6 +41,8 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('ALL');
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [entryMode, setEntryMode] = useState<'QUICK' | 'ITEMIZED'>('QUICK');
+    const [showAdvancedFields, setShowAdvancedFields] = useState(false);
     
     // Core edit form state
     const [editingVoucher, setEditingVoucher] = useState<Partial<SelfIssuedVoucher>>({});
@@ -40,6 +54,9 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     const [isExporting, setIsExporting] = useState<string | null>(null); // holds voucherId when downloading
     const [previewVoucher, setPreviewVoucher] = useState<SelfIssuedVoucher | null>(null);
     const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+    const [mobilePreviewScale, setMobilePreviewScale] = useState(() =>
+        typeof window === 'undefined' ? 1 : Math.min(1, Math.max(0.45, (window.innerWidth - 24) / 595))
+    );
     const [capturedImgUrl, setCapturedImgUrl] = useState<string | null>(null);
     const [isGeneratingImg, setIsGeneratingImg] = useState(false);
 
@@ -47,6 +64,8 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('ALL');
+    const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+    const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
 
     // === BATCH PRINT STATES ===
     const [selectedVoucherIds, setSelectedVoucherIds] = useState<string[]>([]);
@@ -120,6 +139,15 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
         }
     }, [isBulkGeneratorOpen]);
 
+    useEffect(() => {
+        const updateMobilePreviewScale = () => {
+            setMobilePreviewScale(Math.min(1, Math.max(0.45, (window.innerWidth - 24) / 595)));
+        };
+        updateMobilePreviewScale();
+        window.addEventListener('resize', updateMobilePreviewScale);
+        return () => window.removeEventListener('resize', updateMobilePreviewScale);
+    }, []);
+
     const toggleStarPayee = (name: string, phone: string, type: 'INDIVIDUAL' | 'AGENT' | 'DRIVER' | 'INFORMAL_VENDOR') => {
         if (!name.trim()) return;
         const index = savedPayees.findIndex(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -160,6 +188,13 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 scrollY: 0,
                 windowWidth: 595,
                 windowHeight: 842,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('a5-capture-global');
+                    const originalEl = document.getElementById('a5-capture-global');
+                    if (originalEl && clonedEl) {
+                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
             });
             
             const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -344,14 +379,18 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
             templateStyle: 'CASH_BILL_GREEN',
         });
         setVoucherItems([
-            { description: '临时现付支出 / Urgent cash purchase particulars', qty: 1, unitPrice: 50, unit: '次', amount: 50 }
+            { description: '', qty: 1, unitPrice: 0, unit: '项', amount: 0 }
         ]);
+        setEntryMode('QUICK');
+        setShowAdvancedFields(false);
         setIsFormOpen(true);
     };
 
     const handleOpenEdit = (voucher: SelfIssuedVoucher) => {
         setEditingVoucher({ ...voucher });
         setVoucherItems([...voucher.items]);
+        setEntryMode(voucher.items.length > 1 ? 'ITEMIZED' : 'QUICK');
+        setShowAdvancedFields(false);
         setIsFormOpen(true);
     };
 
@@ -437,6 +476,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 totalAmount: total,
                 preparedBy: editingVoucher.preparedBy || 'Jaz',
                 approvedBy: editingVoucher.approvedBy || '',
+                paymentMethod: editingVoucher.paymentMethod || 'CASH',
                 notes: editingVoucher.notes || '',
                 templateStyle: editingVoucher.templateStyle || 'VINTAGE_GOLD',
                 createdAt: editingVoucher.createdAt || new Date().toISOString(),
@@ -493,6 +533,13 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 scrollY: 0,
                 windowWidth: 595,
                 windowHeight: 842,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('a5-capture-global');
+                    const originalEl = document.getElementById('a5-capture-global');
+                    if (originalEl && clonedEl) {
+                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
             });
 
             const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -506,9 +553,9 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
             // Format filename safely
             const safePayee = voucher.payeeName.replace(/[\s\W]+/g, '_');
             pdf.save(`VOUCHER_${voucher.voucherNo}_${safePayee}.pdf`);
-        } catch (e) {
+        } catch (e: any) {
             console.error("A5 PDF Generation Error: ", e);
-            alert("导出 PDF 失败，外部字体或CDN渲染延迟，请重试。");
+            alert("PDF生成错误: " + (e?.message || e?.toString() || JSON.stringify(e)));
         } finally {
             setIsExporting(null);
         }
@@ -538,13 +585,20 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 scrollY: 0,
                 windowWidth: 595,
                 windowHeight: 842,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('a5-capture-global');
+                    const originalEl = document.getElementById('a5-capture-global');
+                    if (originalEl && clonedEl) {
+                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
             });
 
             const imgData = canvas.toDataURL('image/jpeg', 0.95);
             setCapturedImgUrl(imgData);
-        } catch (e) {
+        } catch (e: any) {
             console.error("Mobile Image Generation Error: ", e);
-            alert("生成图片失败，请重试。");
+            alert("生成图片错误: " + (e?.message || e?.toString() || JSON.stringify(e)));
         } finally {
             setIsGeneratingImg(false);
         }
@@ -996,12 +1050,12 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 };
             case 'MODERN_DARK':
                 return {
-                    bgClass: 'bg-white',
+                    bgClass: 'bg-[#ffffff]',
                     borderClass: 'border-2 border-slate-800',
                     textTitleClass: 'text-slate-900 font-sans tracking-wider',
                     accentColor: '#1E293B', // Slate gray
                     headerBg: 'bg-slate-100',
-                    tableHeaderBg: 'bg-slate-800 text-white',
+                    tableHeaderBg: 'bg-slate-800 text-[#ffffff]',
                     stampText: 'APPROVED & ISSUED',
                     stampColor: 'border-blue-600/70 text-blue-600/70',
                     fontSans: 'font-sans',
@@ -1025,7 +1079,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                     textTitleClass: 'text-[#094F2B] font-sans font-bold',
                     accentColor: '#094F2B', // Forest green
                     headerBg: 'bg-[#8BC43F]/20',
-                    tableHeaderBg: 'bg-[#094F2B] text-white',
+                    tableHeaderBg: 'bg-[#094F2B] text-[#ffffff]',
                     stampText: 'VERIFIED PAID',
                     stampColor: 'border-[#094F2B]/65 text-[#094F2B]/65',
                     fontSans: 'font-sans',
@@ -1037,14 +1091,14 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                     textTitleClass: 'text-emerald-900 font-sans font-bold',
                     accentColor: '#059669', // Emerald
                     headerBg: 'bg-emerald-50',
-                    tableHeaderBg: 'bg-emerald-700 text-white',
+                    tableHeaderBg: 'bg-emerald-700 text-[#ffffff]',
                     stampText: 'KIM LIAN KEE PAID',
                     stampColor: 'border-emerald-500 text-emerald-500',
                     fontSans: 'font-sans',
                 };
             default:
                 return {
-                    bgClass: 'bg-white',
+                    bgClass: 'bg-[#ffffff]',
                     borderClass: 'border border-gray-300',
                     textTitleClass: 'text-gray-900 font-sans',
                     accentColor: '#4b5563',
@@ -1061,70 +1115,78 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
         <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
             <div className="bg-[#F5F7FA] w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
-                {/* Header */}
-                <div className="bg-[#1A1A1A] px-4 pb-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] safe-area-top">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-[#FFD700] text-black p-2.5 rounded-xl shadow-lg">
-                            <Sparkles size={24} className="animate-pulse" />
+                {/* Compact mobile-first header */}
+                <header className="shrink-0 bg-[#FFFFFF] border-b border-[#E5E7EB] safe-area-top">
+                    <div className="px-4 pb-3 flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-[#FFD200] text-[#111111] flex items-center justify-center shadow-[0_6px_18px_rgba(255,210,0,0.28)] shrink-0">
+                            <Receipt size={22} strokeWidth={2.2} />
                         </div>
-                        <div>
-                            <h3 className="font-serif font-black text-xl tracking-wide flex items-center gap-2">
-                                自制对账收据联 & 支出凭单工具
-                                <span className="bg-amber-400 text-black text-[9px] px-2 py-0.5 rounded-full font-sans font-black">A5 PDF 下载</span>
-                            </h3>
-                            <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">SELF-ISSUED VOUCHERS / DRIVERS BILL CREATOR</p>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-[17px] md:text-xl font-black tracking-tight text-[#111111] truncate">自制账单</h1>
+                                <span className="px-2 py-1 rounded-full bg-[#FFF8D6] text-[#7A6100] text-[9px] font-extrabold whitespace-nowrap">A5 凭单</span>
+                            </div>
+                            <p className="text-[11px] text-[#6B7280] mt-0.5 truncate">补录无原始单据的支出与对账记录</p>
                         </div>
+                        <button aria-label="关闭" onClick={onClose} className="w-11 h-11 flex items-center justify-center text-[#4B5563] bg-[#F6F7FB] hover:bg-[#E5E7EB] rounded-2xl select-none transition-all active:scale-95 shrink-0">
+                            <X size={20}/>
+                        </button>
                     </div>
-                    <button onClick={onClose} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/10 rounded-full select-none transition-all active:scale-90">
-                        <X size={20}/>
-                    </button>
-                </div>
+                    <div className="h-1 bg-[#FFD200]" />
+                </header>
 
                 {/* Main Body Grid */}
                 <div className="flex-grow overflow-hidden flex flex-col lg:flex-row">
                     
                     {/* Left Column: List and Management */}
-                    <div className="w-full lg:w-5/12 border-r border-gray-200 flex flex-col bg-white overflow-hidden">
+                    <div className="w-full lg:w-5/12 border-r border-gray-200 flex flex-col bg-[#ffffff] overflow-hidden">
                         
                         {/* Search and Filters */}
-                        <div className="p-4 bg-gray-50 border-b border-gray-200 space-y-3 shrink-0">
-                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                <div className="relative sm:col-span-6 col-span-1">
-                                    <Search className="absolute left-3 top-3 text-gray-400" size={16}/>
-                                    <input 
-                                        type="text" 
-                                        placeholder="搜索收款人、单号或备注内容..." 
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none shadow-sm h-full"
-                                    />
-                                </div>
-                                <div className="sm:col-span-6 col-span-1 flex gap-1.5">
+                        <div className="p-4 bg-[#F6F7FB] border-b border-[#E5E7EB] space-y-3 shrink-0">
+                            <div className="grid grid-cols-[1fr_1fr_48px] gap-2">
+                                <div className="contents">
                                     <button 
                                         onClick={handleOpenCreateNew}
-                                        className="flex-1 bg-[#1A1A1A] text-[#FFD700] font-bold text-xs px-2.5 py-2.5 rounded-xl hover:bg-black transition-all shadow-md flex items-center justify-center gap-1.5 shrink-0 active:scale-95 min-h-[44px]"
+                                        className="flex-1 bg-[#111111] text-[#FFD200] font-extrabold text-xs px-3 py-3 rounded-2xl hover:bg-black transition-all shadow-[0_4px_12px_rgba(17,17,17,0.12)] flex items-center justify-center gap-2 shrink-0 active:scale-[0.98] min-h-[48px]"
                                     >
-                                        <Plus size={14} className="bg-[#FFD700] text-black rounded-full" />
-                                        单张手工录入
+                                        <Plus size={16} />
+                                        新建账单
                                     </button>
                                     <button 
                                         onClick={() => setIsBulkGeneratorOpen(true)}
-                                        className="flex-1 bg-amber-400 text-black font-extrabold text-xs px-2.5 py-2.5 rounded-xl hover:bg-amber-500 transition-all shadow-md flex items-center justify-center gap-1.5 shrink-0 active:scale-95 min-h-[44px]"
+                                        className="flex-1 bg-[#FFD200] text-[#111111] font-extrabold text-xs px-3 py-3 rounded-2xl hover:bg-[#E5C100] transition-all shadow-[0_4px_14px_rgba(255,210,0,0.25)] flex items-center justify-center gap-2 shrink-0 active:scale-[0.98] min-h-[48px]"
                                     >
-                                        <Sparkles size={14} className="animate-pulse" />
-                                        智能批量快速生成
+                                        <Sparkles size={16} />
+                                        批量生成
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label="搜索与筛选"
+                                        title="搜索与筛选"
+                                        onClick={() => setIsMobileFiltersOpen(value => !value)}
+                                        className={`relative w-12 h-12 rounded-2xl border flex items-center justify-center transition-all active:scale-95 ${
+                                            isMobileFiltersOpen || searchTerm || startDate || endDate || selectedCompanyFilter !== 'ALL'
+                                                ? 'bg-[#FFF9DF] border-[#FFD200] text-[#111111]'
+                                                : 'bg-[#FFFFFF] border-[#E5E7EB] text-[#4B5563]'
+                                        }`}
+                                    >
+                                        <SlidersHorizontal size={19}/>
+                                        {(searchTerm || startDate || endDate || selectedCompanyFilter !== 'ALL') && (
+                                            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#EF4444] ring-2 ring-[#FFFFFF]"/>
+                                        )}
                                     </button>
                                 </div>
                             </div>
 
                             {/* Company and Date Range Multi-Filters */}
-                            <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2.5 shadow-xs">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase">🛡️ 记账度量控制 Filter Dashboard</span>
-                                    {(startDate || endDate || selectedCompanyFilter !== 'ALL') && (
+                            <div className={`${isMobileFiltersOpen ? 'block' : 'hidden'} bg-[#FFFFFF] p-3.5 rounded-2xl border border-[#E5E7EB] space-y-3 shadow-[0_2px_10px_rgba(17,17,17,0.04)]`}>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[11px] font-extrabold text-[#111111] flex items-center gap-1.5"><Search size={14} className="text-[#9A7D00]"/> 搜索与筛选</span>
+                                    {(searchTerm || startDate || endDate || selectedCompanyFilter !== 'ALL') && (
                                         <button 
                                             type="button"
                                             onClick={() => {
+                                                setSearchTerm('');
                                                 setStartDate('');
                                                 setEndDate('');
                                                 setSelectedCompanyFilter('ALL');
@@ -1135,15 +1197,26 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </button>
                                     )}
                                 </div>
+
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-3 text-[#9CA3AF]" size={16}/>
+                                    <input
+                                        type="text"
+                                        placeholder="搜索收款人、单号或备注..."
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        className="w-full min-h-[42px] pl-9 pr-3 bg-[#F6F7FB] border border-[#E5E7EB] rounded-xl text-[11px] outline-none focus:ring-2 focus:ring-[#FFD200]"
+                                    />
+                                </div>
                                 
-                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[10px]">
                                     {/* Company selector */}
                                     <div className="flex flex-col gap-1">
-                                        <span className="font-bold text-gray-400">选择公司 Issuer:</span>
+                                        <span className="font-bold text-[#6B7280]">公司</span>
                                         <select
                                             value={selectedCompanyFilter}
                                             onChange={e => setSelectedCompanyFilter(e.target.value)}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-lg p-1.5 focus:ring-1 focus:ring-amber-400 text-[10px] font-bold outline-none"
+                                            className="w-full min-h-[42px] bg-[#F6F7FB] border border-[#E5E7EB] rounded-xl px-3 focus:ring-2 focus:ring-[#FFD200] text-[11px] font-bold outline-none"
                                         >
                                             <option value="ALL">🏢 全部公司 (All)</option>
                                             {Array.from(new Set(vouchers.map(v => v.companyName || '金莲记甲洞(Kim Lian Kee - Kepong)'))).map(c => (
@@ -1154,38 +1227,37 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                     {/* Date selectors */}
                                     <div className="flex flex-col gap-1">
-                                        <span className="font-bold text-gray-400">日期区间 Date Range:</span>
+                                        <span className="font-bold text-[#6B7280]">日期范围</span>
                                         <div className="flex items-center gap-1">
                                             <input 
                                                 type="date"
                                                 value={startDate}
                                                 onChange={e => setStartDate(e.target.value)}
-                                                className="bg-gray-50 border border-gray-200 rounded-lg p-1 w-full text-[9px] outline-none font-mono"
+                                                className="bg-[#F6F7FB] border border-[#E5E7EB] rounded-xl px-2 min-h-[42px] w-full text-[10px] outline-none font-mono focus:ring-2 focus:ring-[#FFD200]"
                                             />
-                                            <span className="text-gray-400 text-[8px]">-</span>
+                                            <span className="text-[#9ca3af] text-[8px]">-</span>
                                             <input 
                                                 type="date"
                                                 value={endDate}
                                                 onChange={e => setEndDate(e.target.value)}
-                                                className="bg-gray-50 border border-gray-200 rounded-lg p-1 w-full text-[9px] outline-none font-mono"
+                                                className="bg-[#F6F7FB] border border-[#E5E7EB] rounded-xl px-2 min-h-[42px] w-full text-[10px] outline-none font-mono focus:ring-2 focus:ring-[#FFD200]"
                                             />
                                         </div>
                                     </div>
                                 </div>
                                 
                                 {/* Auditor Statement & total filtered sum */}
-                                <div className="bg-amber-50/55 p-2 rounded-lg border border-amber-100 flex items-center justify-between text-[11px] font-bold sm:flex-row flex-col gap-1 text-center sm:text-left">
-                                    <span className="text-gray-500 font-bold block">本期对账总额 Total Sum:</span>
-                                    <span className="text-red-650 text-red-600 font-extrabold font-mono text-xs">
+                                <div className="flex bg-[#FFF9DF] px-3.5 py-2.5 rounded-xl border border-[#F4E6A2] items-center justify-between gap-3 text-left">
+                                    <div><span className="text-[#6B7280] text-[9px] font-bold block">本期合计</span><span className="text-[#111111] text-[11px] font-extrabold">{filteredVouchers.length} 张账单</span></div>
+                                    <span className="text-[#111111] font-black font-mono text-[15px]">
                                         RM {filteredTotalSum.toFixed(2)}
-                                        <span className="text-[9px] text-gray-400 font-normal ml-1">({filteredVouchers.length} 张单)</span>
                                     </span>
                                 </div>
 
                                 {/* Select All & Batch action button */}
                                 {filteredVouchers.length > 0 && (
                                     <div className="flex items-center justify-between border-t border-gray-200/50 pt-2 text-[10px]">
-                                        <label className="flex items-center gap-1.5 font-bold text-gray-500 cursor-pointer select-none">
+                                        <label className="flex items-center gap-1.5 font-bold text-[#6b7280] cursor-pointer select-none">
                                             <input 
                                                 type="checkbox" 
                                                 checked={isAllVouchersSelected} 
@@ -1218,39 +1290,51 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 )}
                             </div>
 
-                            {/* Categorization filter */}
-                            <div className="flex gap-1 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-none">
-                                {[
-                                    { id: 'ALL', label: '全部' },
-                                    { id: 'CASH_BILL', label: '🧾 现金账单 (Cash Bill)' },
-                                    { id: 'PAYMENT_VOUCHER', label: '💶 付款证明' },
-                                    { id: 'DELIVERY_RECEIPT', label: '🚚 运费单' },
-                                    { id: 'CASH_VOUCHER', label: '🪙 现金条' },
-                                    { id: 'PURCHASE_RECEIPT', label: '🛒 无单采买' },
-                                ].map(btn => (
-                                    <button
-                                        key={btn.id}
-                                        type="button"
-                                        onClick={() => setSelectedTypeFilter(btn.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap active:scale-95 ${
-                                            selectedTypeFilter === btn.id 
-                                            ? 'bg-amber-400 text-black border-amber-400 shadow-sm' 
-                                            : 'bg-white text-gray-500 border-gray-100 hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        {btn.label}
-                                    </button>
-                                ))}
+                            {/* Compact voucher type dropdown */}
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTypeFilterOpen(value => !value)}
+                                    aria-expanded={isTypeFilterOpen}
+                                    className="min-h-[40px] w-full px-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E7EB] flex items-center justify-between text-[11px] font-extrabold text-[#111111] active:scale-[0.99] transition-all"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Receipt size={14} className="text-[#9A7D00]"/>
+                                        {VOUCHER_TYPE_FILTERS.find(item => item.id === selectedTypeFilter)?.label || '全部'}
+                                    </span>
+                                    <ChevronDown size={15} className={`text-[#6B7280] transition-transform ${isTypeFilterOpen ? 'rotate-180' : ''}`}/>
+                                </button>
+                                {isTypeFilterOpen && (
+                                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 p-2 bg-[#FFFFFF] border border-[#E5E7EB] rounded-2xl shadow-[0_12px_30px_rgba(17,17,17,0.14)] grid grid-cols-2 gap-1.5">
+                                        {VOUCHER_TYPE_FILTERS.map(item => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedTypeFilter(item.id);
+                                                    setIsTypeFilterOpen(false);
+                                                }}
+                                                className={`min-h-[40px] px-3 rounded-xl text-left text-[11px] font-bold transition-all ${
+                                                    selectedTypeFilter === item.id
+                                                        ? 'bg-[#FFD200] text-[#111111]'
+                                                        : 'bg-[#F6F7FB] text-[#4B5563] hover:bg-[#E5E7EB]'
+                                                }`}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Vouchers List */}
                         <div className="flex-grow overflow-y-auto p-3 space-y-2.5 bg-gray-50/50">
                             {filteredVouchers.length === 0 ? (
-                                <div className="text-center py-16 px-4 bg-white rounded-2xl border border-gray-100 shadow-inner">
+                                <div className="text-center py-16 px-4 bg-[#ffffff] rounded-2xl border border-gray-100 shadow-inner">
                                     <div className="text-4xl mb-3">📬</div>
-                                    <p className="text-xs text-gray-400 font-bold">没有找到自制凭单记录</p>
-                                    <p className="text-[10px] text-gray-400 mt-1">此工具用于由于运输承运商、买菜无票等情况需要手工补充规范化对账单据的场景。</p>
+                                    <p className="text-xs text-[#9ca3af] font-bold">没有找到自制凭单记录</p>
+                                    <p className="text-[10px] text-[#9ca3af] mt-1">此工具用于由于运输承运商、买菜无票等情况需要手工补充规范化对账单据的场景。</p>
                                     <button 
                                         onClick={handleOpenCreateNew} 
                                         className="mt-4 inline-flex items-center gap-1.5 text-xs font-black text-amber-600 bg-amber-50 hover:bg-amber-100 px-4 py-2 border border-amber-200 rounded-xl"
@@ -1265,16 +1349,16 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                     const isCurrentPreview = previewVoucher?.id === v.id;
                                     
                                     return (
-                                        <div 
+                                        <div
                                             key={v.id}
                                             onClick={() => setPreviewVoucher(v)}
-                                            className={`p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col gap-2 relative group ${
+                                            className={`p-3 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col gap-2 relative group ${
                                                 isCurrentPreview 
-                                                ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white shadow-lg shadow-black/10' 
-                                                : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm'
+                                                ? 'bg-[#FFF9DF] border-[#FFD200] text-[#111111] shadow-[0_6px_18px_rgba(255,210,0,0.16)] ring-1 ring-[#FFD200]/30' 
+                                                : 'bg-[#ffffff] border-gray-200 hover:border-gray-300 shadow-sm'
                                             }`}
                                         >
-                                            <div className="flex justify-between items-start gap-2">
+                                            <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                     <input 
                                                         type="checkbox" 
@@ -1287,52 +1371,37 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                         className="w-4 h-4 rounded text-amber-500 accent-amber-500 cursor-pointer shrink-0"
                                                     />
                                                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold border uppercase flex items-center gap-1 shrink-0 ${
-                                                        isCurrentPreview ? 'bg-white/10 text-amber-300 border-white/10' : typeMeta.color
+                                                        isCurrentPreview ? 'bg-[#FFD200] text-[#111111] border-[#FFD200]' : typeMeta.color
                                                     }`}>
                                                         <TypeIcon size={10} />
                                                         {typeMeta.text}
                                                     </span>
                                                 </div>
-                                                <span className="text-[11px] font-mono font-bold tracking-tight opacity-70">
-                                                    {v.voucherNo}
-                                                </span>
                                             </div>
 
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-1.5">
-                                                    <User size={12} className={isCurrentPreview ? 'text-amber-400' : 'text-gray-400'} />
-                                                    <h4 className="font-extrabold text-sm truncate">
+                                            <div className="flex items-center justify-between gap-3 min-w-0">
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <User size={11} className={isCurrentPreview ? 'text-[#9A7D00]' : 'text-[#9ca3af]'} />
+                                                    <h4 className="font-extrabold text-[13px] truncate">
                                                         {v.payeeName || '未知收款方'}
                                                     </h4>
                                                 </div>
-                                                {v.payeePhone && (
-                                                    <p className={`text-[10px] flex items-center gap-1 mt-0.5 font-mono ${isCurrentPreview ? 'text-gray-300' : 'text-gray-400'}`}>
-                                                        <Phone size={10} /> {v.payeePhone}
-                                                    </p>
-                                                )}
-                                                {v.notes && (
-                                                    <p className={`text-[10px] mt-2 line-clamp-1 italic ${isCurrentPreview ? 'text-gray-300' : 'text-gray-400'}`}>
-                                                        {v.notes.replace(/吉隆坡金莲记/g, '金莲记甲洞')}
-                                                    </p>
-                                                )}
+                                                <span className={`text-[13px] font-sans font-black whitespace-nowrap ${isCurrentPreview ? 'text-[#111111]' : 'text-[#EF4444]'}`}>
+                                                    RM {v.totalAmount.toFixed(2)}
+                                                </span>
                                             </div>
 
-                                            <div className="border-t border-dashed mt-2 pt-2 flex flex-col gap-2">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-1.5 font-mono">
-                                                        <Calendar size={11} className="opacity-60" />
-                                                        <span className="text-[10px] opacity-70">{v.date}</span>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <span className="text-[9px] block opacity-60">凭单总额 Amount</span>
-                                                        <span className={`text-sm font-serif font-black ${isCurrentPreview ? 'text-amber-300' : 'text-red-650 text-red-600'}`}>
-                                                            RM {v.totalAmount.toFixed(2)}
-                                                        </span>
-                                                    </div>
+                                            <div className="border-t border-[#E5E7EB] pt-2 flex flex-col gap-2">
+                                                <div className="flex items-center justify-between gap-3 text-[10px] text-[#6B7280] font-mono">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <Calendar size={11}/>
+                                                        {v.date}
+                                                    </span>
+                                                    <span className="font-bold truncate">{v.voucherNo}</span>
                                                 </div>
 
                                                 {/* Apple HIG Tactile Touch Handles (>=44px) - Touch friendly */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1 border-t border-gray-150 pt-2 shrink-0">
+                                                <div className="grid grid-cols-[1fr_auto_auto] gap-1.5 border-t border-[#E5E7EB] pt-2 shrink-0">
                                                     <button 
                                                         type="button"
                                                         onClick={(e) => {
@@ -1342,42 +1411,37 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                         }}
                                                         className={`py-2 px-3 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 min-h-[44px] ${
                                                             isCurrentPreview 
-                                                            ? 'bg-amber-400 text-black hover:bg-amber-500' 
+                                                                ? 'bg-[#FFD200] text-[#111111] hover:bg-[#E5C100]' 
                                                             : 'bg-amber-50 text-amber-900 border border-amber-200/55 hover:bg-amber-100'
                                                         }`}
                                                     >
                                                         <Printer size={13} />
-                                                        <span>A5 预览/下载 PDF</span>
+                                                        <span>预览 PDF</span>
                                                     </button>
-                                                    
-                                                    <div className="flex gap-1.5">
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleOpenEdit(v);
-                                                            }}
-                                                            className={`flex-grow py-2 px-2 rounded-xl border font-bold text-[11px] transition-all flex items-center justify-center active:scale-95 min-h-[44px] ${
-                                                                isCurrentPreview 
-                                                                ? 'bg-white/10 text-white border-white/20 hover:bg-white/20' 
-                                                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                                                            }`}
-                                                        >
-                                                            <span>编辑</span>
-                                                        </button>
-                                                        
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDelete(v.id);
-                                                            }}
-                                                            className="p-2.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-xl flex items-center justify-center active:scale-95 min-h-[44px] transition-all border border-red-100 shrink-0"
-                                                            title="删除"
-                                                        >
-                                                            <Trash2 size={13} />
-                                                        </button>
-                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        aria-label="编辑"
+                                                        title="编辑"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenEdit(v);
+                                                        }}
+                                                        className="w-11 h-11 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-[#4B5563] transition-all flex items-center justify-center active:scale-95 hover:bg-[#E5E7EB]"
+                                                    >
+                                                        <FileText size={15}/>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        aria-label="删除"
+                                                        title="删除"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDelete(v.id);
+                                                        }}
+                                                        className="w-11 h-11 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl flex items-center justify-center active:scale-95 transition-all border border-red-100"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1393,75 +1457,24 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             <div className="flex-grow flex flex-col overflow-hidden">
                                 
                                 {/* Info bar & Download */}
-                                <div className="bg-white border-b border-gray-200 p-4 shrink-0 flex items-center justify-between shadow-sm z-10">
+                                <div className="bg-[#ffffff] border-b border-gray-200 p-4 shrink-0 flex items-center justify-between shadow-sm z-10">
                                     <div className="min-w-0">
-                                        <h5 className="font-bold text-xs text-gray-500 uppercase font-mono tracking-wider">A5 模板即时预览区 Previewing</h5>
+                                        <h5 className="font-bold text-xs text-[#6b7280] uppercase font-mono tracking-wider">A5 模板即时预览区 Previewing</h5>
                                         <h4 className="font-black text-sm text-gray-800 truncate mt-0.5">
                                             {previewVoucher.voucherNo} ({getVoucherTypeLabel(previewVoucher.voucherType).text})
                                         </h4>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {driveError && (
-                                            <span className="text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg font-black max-w-[150px] truncate" title={driveError}>
-                                                ⚠️ {driveError}
-                                            </span>
-                                        )}
-                                        
                                         <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl border border-gray-200 gap-1 text-[10px]">
-                                            <span className="px-2 py-0.5 bg-white rounded-lg shadow-xs font-bold text-slate-800">
+                                            <span className="px-2 py-0.5 bg-[#ffffff] rounded-lg shadow-xs font-bold text-slate-800">
                                                 样式Style: {previewVoucher.templateStyle}
                                             </span>
                                         </div>
 
-                                        {/* Save to Drive Button */}
-                                        <button 
-                                            onClick={() => handleSaveToDrive(previewVoucher)}
-                                            disabled={driveState !== 'IDLE' && driveState !== 'ERROR'}
-                                            className={`px-3 py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-md ${
-                                                driveState === 'SUCCESS' && !driveError
-                                                    ? 'bg-emerald-500 text-white shadow-emerald-500/25'
-                                                    : driveState === 'SUCCESS' && driveError
-                                                    ? 'bg-amber-500 text-white shadow-amber-500/25'
-                                                    : driveState === 'ERROR'
-                                                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-600/25'
-                                                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/25'
-                                            } min-h-[36px]`}
-                                        >
-                                            {driveState === 'IDLE' && (
-                                                <>
-                                                    <HardDrive size={14} />
-                                                    原生分享 / 存入 Drive
-                                                </>
-                                            )}
-                                            {driveState === 'GENERATING' && (
-                                                <>
-                                                    <RefreshCw size={13} className="animate-spin" />
-                                                    渲染 PDF...
-                                                </>
-                                            )}
-                                            {driveState === 'SHARING' && (
-                                                <>
-                                                    <RefreshCw size={13} className="animate-spin" />
-                                                    唤起分享...
-                                                </>
-                                            )}
-                                            {driveState === 'SUCCESS' && (
-                                                <>
-                                                    <span>✅ 成功导出!</span>
-                                                </>
-                                            )}
-                                            {driveState === 'ERROR' && (
-                                                <>
-                                                    <HardDrive size={14} />
-                                                    生成失败 (点击重试)
-                                                </>
-                                            )}
-                                        </button>
-
                                         <button 
                                             onClick={() => handleDownloadA5PDF(previewVoucher)}
                                             disabled={!!isExporting}
-                                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-emerald-600/10 min-h-[36px]"
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-[#ffffff] px-3.5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-emerald-600/10 min-h-[44px]"
                                         >
                                             {isExporting === previewVoucher.id ? (
                                                 <>
@@ -1482,7 +1495,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 <div className="flex-grow p-6 overflow-y-auto flex justify-center bg-slate-200/60 shadow-inner">
                                     
                                     {/* Scaled viewport preview card */}
-                                    <div className="p-3 bg-white shadow-xl hover:shadow-2xl transition-all duration-300 rounded-lg max-w-full overflow-x-auto">
+                                    <div className="p-3 bg-[#ffffff] shadow-xl hover:shadow-2xl transition-all duration-300 rounded-lg max-w-full overflow-x-auto">
                                         
                                         <div className="min-w-[595px]">
                                             <A5VoucherDocument voucher={previewVoucher} />
@@ -1492,11 +1505,11 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex-grow flex flex-col items-center justify-center text-center p-8 text-gray-400">
+                            <div className="flex-grow flex flex-col items-center justify-center text-center p-8 text-[#9ca3af]">
                                 <div className="p-6 bg-slate-50 border-2 border-dashed border-gray-200 rounded-[2rem] max-w-sm flex flex-col items-center shadow-inner">
                                     <span className="text-4xl animate-bounce mb-3">📄</span>
                                     <h4 className="font-black text-[#1A1A1A] text-sm">选择左侧凭单，在此即时看单</h4>
-                                    <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                                    <p className="text-[11px] text-[#9ca3af] mt-2 leading-relaxed">
                                         预览器将使用真实的 A5 网格重配比例。支持**仿古金殿风**、**现代硬朗风**、以及**复写票据风**等多套模具，点击即可转换为正规 A5 PDF，完美符合备查凭证。
                                     </p>
                                     <button 
@@ -1518,7 +1531,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                      independent of the device size, browser zooming, or responsive layout constraints,
                      allowing perfect layout structure capture in html2canvas without taint complications.
                  */}
-                {previewVoucher && (
+                {previewVoucher && createPortal(
                     <div 
                         id="a5-capture-global"
                         style={{ 
@@ -1526,29 +1539,29 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             height: '842px', 
                             position: 'absolute', 
                             top: '0', 
-                            left: '0', 
+                            left: '0px', 
                             background: '#ffffff', 
                             color: '#000000',
-                            zIndex: -99, // Completely layered behind all other backdrops (which have zIndex >= 100)
-                            pointerEvents: 'none',
-                            opacity: 0.99, // keep visible for render layout paint but visually hidden under background layers
+                            zIndex: -9999,
+                            pointerEvents: 'none'
                         }}
                     >
                         {/* Perfect standard full size rendering */}
                         <A5VoucherDocument voucher={previewVoucher} isForActualExport={true} />
-                    </div>
+                    </div>,
+                    document.body
                 )}
 
                 {/* FLOATING BULK VOUCHERS BAR */}
                 {selectedVoucherIds.length > 0 && (
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-white rounded-2xl px-5 py-3.5 shadow-2xl flex items-center justify-between gap-5 z-[110] border border-stone-800 animate-in slide-in-from-bottom duration-300 w-[92%] max-w-lg">
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-[#ffffff] rounded-2xl px-5 py-3.5 shadow-2xl flex items-center justify-between gap-5 z-[110] border border-stone-800 animate-in slide-in-from-bottom duration-300 w-[92%] max-w-lg">
                         <div className="text-xs font-black">
                             已选择 <span className="text-amber-400 font-mono text-sm">{selectedVoucherIds.length}</span> 项自制凭证
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <button 
                                 onClick={() => setSelectedVoucherIds([])}
-                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white rounded-xl text-[11px] font-black transition-all cursor-pointer"
+                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-[#ffffff] rounded-xl text-[11px] font-black transition-all cursor-pointer"
                                 style={{ minHeight: '36px' }}
                             >
                                 取消
@@ -1569,22 +1582,22 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 {isBulkGeneratorOpen && (
                     <div className="fixed inset-0 bg-black/75 z-[210] flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-md animate-in fade-in duration-150" onClick={() => setIsBulkGeneratorOpen(false)}>
                         <div 
-                            className="bg-white w-full sm:max-w-xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[100vh] sm:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+                            className="bg-[#ffffff] w-full sm:max-w-xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[100vh] sm:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
                             onClick={e => e.stopPropagation()}
                             style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
                         >
                             {/* Modal Header */}
-                            <div className="bg-[#1A1A1A] p-4 text-white flex justify-between items-center border-b-4 border-amber-400 shrink-0 safe-area-top">
+                            <div className="bg-[#1A1A1A] p-4 text-[#ffffff] flex justify-between items-center border-b-4 border-amber-400 shrink-0 safe-area-top">
                                 <div className="flex items-center gap-2 text-left">
                                     <div className="bg-amber-400 text-black p-1.5 rounded-lg">
                                         <Sparkles size={20} className="animate-pulse" />
                                     </div>
                                     <div>
-                                        <h3 className="font-serif font-black text-sm sm:text-base tracking-wide text-white">⚡ 智能对账补充凭单批量快速生成器</h3>
-                                        <p className="text-[10px] text-gray-400">Bulk Self-Issued Voucher Smart Generator</p>
+                                        <h3 className="font-serif font-black text-sm sm:text-base tracking-wide text-[#ffffff]">⚡ 智能对账补充凭单批量快速生成器</h3>
+                                        <p className="text-[10px] text-[#9ca3af]">Bulk Self-Issued Voucher Smart Generator</p>
                                     </div>
                                 </div>
-                                <button onClick={() => setIsBulkGeneratorOpen(false)} className="p-2 min-w-[44px] min-h-[44px] hover:bg-white/10 rounded-full flex items-center justify-center transition-all select-none">
+                                <button onClick={() => setIsBulkGeneratorOpen(false)} className="p-2 min-w-[44px] min-h-[44px] hover:bg-[#ffffff]/10 rounded-full flex items-center justify-center transition-all select-none">
                                     <X size={18}/>
                                 </button>
                             </div>
@@ -1597,7 +1610,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                 {/* Date selection mode picker */}
                                 <div className="space-y-1.5 text-xs">
-                                    <label className="font-extrabold text-gray-600 block">📅 日期选择模式 Date Selection Mode</label>
+                                    <label className="font-extrabold text-[#4b5563] block">📅 日期选择模式 Date Selection Mode</label>
                                     <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-xl">
                                         <button
                                             type="button"
@@ -1605,7 +1618,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             className={`py-2 rounded-lg font-bold transition-all text-center text-xs active:scale-95 ${
                                                 bulkGenDateMode === 'AUTO'
                                                 ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                                                : 'text-[#6b7280] hover:text-gray-800 hover:bg-gray-50'
                                             }`}
                                         >
                                             🤖 智能均匀散布 (Auto Spacing)
@@ -1616,7 +1629,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             className={`py-2 rounded-lg font-bold transition-all text-center text-xs active:scale-95 ${
                                                 bulkGenDateMode === 'MANUAL'
                                                 ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                                                : 'text-[#6b7280] hover:text-gray-800 hover:bg-gray-50'
                                             }`}
                                         >
                                             📆 手动指定日期 (Custom Pick)
@@ -1628,7 +1641,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 {bulkGenDateMode === 'AUTO' ? (
                                     <div className="grid grid-cols-2 gap-3 text-xs animate-in fade-in duration-100">
                                         <div className="space-y-1">
-                                            <label className="font-extrabold text-gray-600 block">📅 选择目标月份 Target Month</label>
+                                            <label className="font-extrabold text-[#4b5563] block">📅 选择目标月份 Target Month</label>
                                             <input 
                                                 type="month" 
                                                 value={bulkGenMonth} 
@@ -1637,12 +1650,12 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="font-extrabold text-gray-600 block">🔢 计划生成张数 Total Sheets</label>
+                                            <label className="font-extrabold text-[#4b5563] block">🔢 计划生成张数 Total Sheets</label>
                                             <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl px-1.5 py-1 min-h-[44px]">
                                                 <button 
                                                     type="button" 
                                                     onClick={() => setBulkGenCount(prev => Math.max(1, prev - 1))}
-                                                    className="w-8 h-8 rounded-lg bg-white shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
+                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
                                                 >
                                                     -
                                                 </button>
@@ -1657,7 +1670,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <button 
                                                     type="button" 
                                                     onClick={() => setBulkGenCount(prev => Math.min(31, prev + 1))}
-                                                    className="w-8 h-8 rounded-lg bg-white shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
+                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
                                                 >
                                                     +
                                                 </button>
@@ -1668,7 +1681,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                     <div className="space-y-3 text-xs animate-in fade-in duration-100">
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <label className="font-extrabold text-gray-600 block">📅 选择目标月份 Target Month</label>
+                                                <label className="font-extrabold text-[#4b5563] block">📅 选择目标月份 Target Month</label>
                                                 <input 
                                                     type="month" 
                                                     value={bulkGenMonth} 
@@ -1680,7 +1693,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="font-extrabold text-gray-600 block">🔢 已选生成张数 Selected Sheets</label>
+                                                <label className="font-extrabold text-[#4b5563] block">🔢 已选生成张数 Selected Sheets</label>
                                                 <div className="w-full bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex items-center justify-center font-black font-mono text-base min-h-[44px]">
                                                     {bulkGenSelectedDays.length} 张单据
                                                 </div>
@@ -1689,8 +1702,8 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                         <div className="space-y-1.5">
                                             <div className="flex justify-between items-center">
-                                                <label className="font-extrabold text-gray-600 block">🎯 点选具体日期 Target Days (请在下方网格中点击选择)</label>
-                                                <span className="text-[10px] text-gray-400 font-bold">按月历天数点击</span>
+                                                <label className="font-extrabold text-[#4b5563] block">🎯 点选具体日期 Target Days (请在下方网格中点击选择)</label>
+                                                <span className="text-[10px] text-[#9ca3af] font-bold">按月历天数点击</span>
                                             </div>
                                             
                                             {/* Days Calendar-Style Grid */}
@@ -1720,7 +1733,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                                 className={`h-10 w-full rounded-xl font-mono font-black text-xs transition-all flex items-center justify-center border active:scale-95 ${
                                                                     isSelected
                                                                     ? 'bg-amber-400 border-amber-400 text-black shadow-md ring-2 ring-amber-400/20'
-                                                                    : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                                                                    : 'bg-[#ffffff] border-gray-200 text-gray-700 hover:border-gray-300'
                                                                 }`}
                                                             >
                                                                 {dayNum}
@@ -1735,28 +1748,28 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSelectPresetDays('ODD')}
-                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 active:scale-95 min-h-[36px]"
+                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-[#4b5563] active:scale-95 min-h-[44px]"
                                                 >
                                                     📅 选单数日 (Odds)
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSelectPresetDays('EVEN')}
-                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 active:scale-95 min-h-[36px]"
+                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-[#4b5563] active:scale-95 min-h-[44px]"
                                                 >
                                                     📅 选双数日 (Evens)
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSelectPresetDays('MON_WED_FRI')}
-                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 active:scale-95 min-h-[36px]"
+                                                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-[10px] font-bold text-[#4b5563] active:scale-95 min-h-[44px]"
                                                 >
                                                     📅 选一三五 (Mon/Wed/Fri)
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSelectPresetDays('CLEAR')}
-                                                    className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-[10px] font-bold text-red-600 active:scale-95 min-h-[36px] ml-auto"
+                                                    className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-[10px] font-bold text-red-600 active:scale-95 min-h-[44px] ml-auto"
                                                 >
                                                     🧹 清除所选 (Clear)
                                                 </button>
@@ -1768,7 +1781,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 {/* Payee Info & Saved Payee Quick Selector */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center text-xs">
-                                        <label className="font-extrabold text-gray-600">👤 收款人/临时供应商 Payee Name</label>
+                                        <label className="font-extrabold text-[#4b5563]">👤 收款人/临时供应商 Payee Name</label>
                                         {savedPayees.length > 0 && (
                                             <span className="text-[10px] text-amber-600 font-extrabold">⭐️ 支持星标常用人</span>
                                         )}
@@ -1797,7 +1810,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                     className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition-all active:scale-95 ${
                                                         bulkGenPayeeName.trim().toLowerCase() === p.name.trim().toLowerCase()
                                                         ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-xs'
-                                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                        : 'bg-[#ffffff] border-gray-200 text-[#4b5563] hover:bg-gray-50'
                                                     }`}
                                                 >
                                                     ⭐️ {p.name}
@@ -1810,7 +1823,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 {/* Payee Type and Voucher Type */}
                                 <div className="grid grid-cols-2 gap-3 text-xs">
                                     <div className="space-y-1">
-                                        <label className="font-extrabold text-gray-600 block">📁 凭单类别 Voucher Type</label>
+                                        <label className="font-extrabold text-[#4b5563] block">📁 凭单类别 Voucher Type</label>
                                         <select
                                             value={bulkGenVoucherType}
                                             onChange={e => setBulkGenVoucherType(e.target.value as any)}
@@ -1824,7 +1837,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="font-extrabold text-gray-600 block">🎭 收款人身份 Identity</label>
+                                        <label className="font-extrabold text-[#4b5563] block">🎭 收款人身份 Identity</label>
                                         <select
                                             value={bulkGenPayeeType}
                                             onChange={e => setBulkGenPayeeType(e.target.value as any)}
@@ -1840,13 +1853,13 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                 {/* Item Particulars Specification */}
                                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-3">
-                                    <h4 className="font-extrabold text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                                    <h4 className="font-extrabold text-xs text-[#6b7280] uppercase tracking-wider flex items-center gap-1">
                                         <span>🛍️ 基准货品与单价基数 Base Items Particulars</span>
                                     </h4>
 
                                     <div className="space-y-1 text-xs">
                                         <div className="flex justify-between items-center">
-                                            <label className="font-extrabold text-gray-600">货品明细 Description</label>
+                                            <label className="font-extrabold text-[#4b5563]">货品明细 Description</label>
                                             <div className="flex gap-1">
                                                 {['鱼饼 / Fish Cake', '黄面 / Yellow Noodles', '路费 / Transport', '冰块 / Ice Bags'].map(itemText => (
                                                     <button
@@ -1868,7 +1881,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                                 setBulkGenItemUnitPrice(6.00);
                                                             }
                                                         }}
-                                                        className="px-1.5 py-0.5 text-[8px] bg-white hover:bg-gray-100 border border-gray-200 rounded text-gray-500 font-extrabold"
+                                                        className="px-1.5 py-0.5 text-[8px] bg-[#ffffff] hover:bg-gray-100 border border-gray-200 rounded text-[#6b7280] font-extrabold"
                                                     >
                                                         {itemText.split('/')[0]}
                                                     </button>
@@ -1880,42 +1893,42 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             placeholder="输入货品名称, 如: Fish Cake" 
                                             value={bulkGenItemDesc} 
                                             onChange={e => setBulkGenItemDesc(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-amber-400 min-h-[40px]"
+                                            className="w-full bg-[#ffffff] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-amber-400 min-h-[40px]"
                                         />
                                     </div>
 
                                     <div className="grid grid-cols-3 gap-2.5 text-xs">
                                         <div className="space-y-1">
-                                            <label className="font-extrabold text-gray-600 block">基础数量 Qty</label>
+                                            <label className="font-extrabold text-[#4b5563] block">基础数量 Qty</label>
                                             <input 
                                                 type="number" 
                                                 min="1"
                                                 value={bulkGenItemQty} 
                                                 onChange={e => setBulkGenItemQty(Math.max(1, parseInt(e.target.value) || 1))}
-                                                className="w-full bg-white border border-gray-200 rounded-xl p-2 font-extrabold font-mono text-sm outline-none min-h-[40px]"
+                                                className="w-full bg-[#ffffff] border border-gray-200 rounded-xl p-2 font-extrabold font-mono text-sm outline-none min-h-[40px]"
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="font-extrabold text-gray-600 block">基准单价 Unit Price</label>
+                                            <label className="font-extrabold text-[#4b5563] block">基准单价 Unit Price</label>
                                             <div className="relative">
-                                                <span className="absolute left-2.5 top-2.5 text-gray-400 font-bold text-[10px]">RM</span>
+                                                <span className="absolute left-2.5 top-2.5 text-[#9ca3af] font-bold text-[10px]">RM</span>
                                                 <input 
                                                     type="number" 
                                                     step="0.01"
                                                     value={bulkGenItemUnitPrice} 
                                                     onChange={e => setBulkGenItemUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                                                    className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-2 py-2 font-extrabold font-mono text-sm outline-none min-h-[40px]"
+                                                    className="w-full bg-[#ffffff] border border-gray-200 rounded-xl pl-8 pr-2 py-2 font-extrabold font-mono text-sm outline-none min-h-[40px]"
                                                 />
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="font-extrabold text-gray-600 block">单位 Unit</label>
+                                            <label className="font-extrabold text-[#4b5563] block">单位 Unit</label>
                                             <input 
                                                 type="text" 
                                                 placeholder="包/趟/箱" 
                                                 value={bulkGenItemUnit} 
                                                 onChange={e => setBulkGenItemUnit(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 rounded-xl p-2 font-bold outline-none min-h-[40px]"
+                                                className="w-full bg-[#ffffff] border border-gray-200 rounded-xl p-2 font-bold outline-none min-h-[40px]"
                                             />
                                         </div>
                                     </div>
@@ -1927,7 +1940,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
                                                     ✨ 开启智能随机价格与重量波动
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 block font-normal leading-relaxed">
+                                                <span className="text-[10px] text-[#9ca3af] block font-normal leading-relaxed">
                                                     自动对每张单据的价格/数量进行微小随机波动（使审计对账极其真实自然，拒绝千篇一律的一致）
                                                 </span>
                                             </div>
@@ -1940,8 +1953,8 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </label>
 
                                         {bulkGenEnableFluctuation && (
-                                            <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-gray-150 animate-in slide-in-from-top-1">
-                                                <span className="text-[10px] font-bold text-gray-500 shrink-0">波动限度 Range:</span>
+                                            <div className="flex items-center gap-3 bg-[#ffffff] p-2 rounded-xl border border-gray-150 animate-in slide-in-from-top-1">
+                                                <span className="text-[10px] font-bold text-[#6b7280] shrink-0">波动限度 Range:</span>
                                                 <input 
                                                     type="range" 
                                                     min="3" 
@@ -1980,9 +1993,9 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                             {bulkPreviewItems.map((item, index) => (
-                                                <div key={item.id} className="bg-white p-3 rounded-xl border border-gray-200 flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between text-xs shadow-xs">
+                                                <div key={item.id} className="bg-[#ffffff] p-3 rounded-xl border border-gray-200 flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between text-xs shadow-xs">
                                                     <div className="flex items-center gap-1.5 shrink-0">
-                                                        <span className="font-mono text-[10px] text-gray-400 font-black w-5 text-center">#{index + 1}</span>
+                                                        <span className="font-mono text-[10px] text-[#9ca3af] font-black w-5 text-center">#{index + 1}</span>
                                                         <input 
                                                             type="date"
                                                             value={item.date}
@@ -1999,7 +2012,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                     <div className="flex items-center gap-2 flex-grow w-full sm:w-auto">
                                                         {/* Qty edit */}
                                                         <div className="flex items-center gap-1 w-20 shrink-0">
-                                                            <span className="text-[10px] text-gray-400 font-bold shrink-0">数:</span>
+                                                            <span className="text-[10px] text-[#9ca3af] font-bold shrink-0">数:</span>
                                                             <input 
                                                                 type="number"
                                                                 min="1"
@@ -2017,9 +2030,9 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                                         {/* Price edit */}
                                                         <div className="flex items-center gap-1 flex-grow">
-                                                            <span className="text-[10px] text-gray-400 font-bold shrink-0">单价:</span>
+                                                            <span className="text-[10px] text-[#9ca3af] font-bold shrink-0">单价:</span>
                                                             <div className="relative w-full">
-                                                                <span className="absolute left-1.5 top-2 text-gray-400 font-bold text-[9px]">RM</span>
+                                                                <span className="absolute left-1.5 top-2 text-[#9ca3af] font-bold text-[9px]">RM</span>
                                                                 <input 
                                                                     type="number"
                                                                     step="0.01"
@@ -2041,7 +2054,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                     {/* Amount & Delete */}
                                                     <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t sm:border-t-0 border-gray-100 pt-2 sm:pt-0 shrink-0">
                                                         <div className="text-right">
-                                                            <span className="text-[9px] text-gray-400 font-bold block leading-none">总计 Amount</span>
+                                                            <span className="text-[9px] text-[#9ca3af] font-bold block leading-none">总计 Amount</span>
                                                             <span className="font-mono text-xs font-black text-amber-600 leading-normal">
                                                                 RM {item.amount.toFixed(2)}
                                                             </span>
@@ -2051,7 +2064,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                             onClick={() => {
                                                                 setBulkPreviewItems(bulkPreviewItems.filter(draft => draft.id !== item.id));
                                                             }}
-                                                            className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center font-bold active:scale-95 min-h-[34px] min-w-[34px]"
+                                                            className="w-11 h-11 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center font-bold active:scale-95 min-h-[44px] min-w-[44px]"
                                                         >
                                                             <X size={12}/>
                                                         </button>
@@ -2076,7 +2089,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 {/* Custom Config: Style and Company Name */}
                                 <div className="grid grid-cols-2 gap-3 text-xs">
                                     <div className="space-y-1">
-                                        <label className="font-extrabold text-gray-600 block">🎨 模板视觉风格 Theme Style</label>
+                                        <label className="font-extrabold text-[#4b5563] block">🎨 模板视觉风格 Theme Style</label>
                                         <select
                                             value={bulkGenTemplateStyle}
                                             onChange={e => setBulkGenTemplateStyle(e.target.value as any)}
@@ -2090,7 +2103,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="font-extrabold text-gray-600 block">🏢 出账主体 Company / Issuer</label>
+                                        <label className="font-extrabold text-[#4b5563] block">🏢 出账主体 Company / Issuer</label>
                                         <select
                                             value={bulkGenCompanyName}
                                             onChange={e => setBulkGenCompanyName(e.target.value)}
@@ -2105,7 +2118,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                 {/* Notes field */}
                                 <div className="space-y-1 text-xs">
-                                    <label className="font-extrabold text-gray-600 block">✍️ 内部备注/单据说明 Notes</label>
+                                    <label className="font-extrabold text-[#4b5563] block">✍️ 内部备注/单据说明 Notes</label>
                                     <input 
                                         type="text" 
                                         placeholder="例如：五月份菜市采购小额补充自制收据凭单，以现金支付结清。" 
@@ -2121,7 +2134,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 <button 
                                     type="button" 
                                     onClick={() => setIsBulkGeneratorOpen(false)}
-                                    className="flex-1 py-3 bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-extrabold text-xs rounded-xl transition-all active:scale-95 min-h-[44px]"
+                                    className="flex-1 py-3 bg-[#ffffff] hover:bg-gray-100 border border-gray-300 text-gray-700 font-extrabold text-xs rounded-xl transition-all active:scale-95 min-h-[44px]"
                                 >
                                     取消 Cancel
                                 </button>
@@ -2203,7 +2216,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                         <div className="bg-stone-100 dark:bg-stone-100 text-stone-900 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col lg:flex-row max-h-[92vh] border border-stone-300 animate-in zoom-in-95">
                             
                             {/* Left Config Panel */}
-                            <div className="w-full lg:w-96 bg-white border-b lg:border-b-0 lg:border-r border-stone-200 p-5 md:p-6 overflow-y-auto max-h-[40vh] lg:max-h-[92vh] space-y-4 shrink-0 text-left">
+                            <div className="w-full lg:w-96 bg-[#ffffff] border-b lg:border-b-0 lg:border-r border-stone-200 p-5 md:p-6 overflow-y-auto max-h-[40vh] lg:max-h-[92vh] space-y-4 shrink-0 text-left">
                                 <div className="flex items-center justify-between">
                                     <h3 className="font-black text-base text-stone-800 flex items-center gap-1.5">
                                         <Printer size={18} className="text-amber-500"/>
@@ -2271,7 +2284,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 onChange={() => setBatchVoucherChopEnabled(!batchVoucherChopEnabled)}
                                                 className="sr-only peer"
                                             />
-                                            <div className="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                                            <div className="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#ffffff] after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
                                         </label>
                                     </div>
                                 </div>
@@ -2308,7 +2321,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             approvedBy: batchVoucherApprovedBy || v.approvedBy,
                                         };
                                         return (
-                                            <div key={v.id} className="batch-print-page bg-white p-6 shadow-md rounded-2xl border border-stone-200 relative max-w-[595px] mx-auto overflow-hidden">
+                                            <div key={v.id} className="batch-print-page bg-[#ffffff] p-6 shadow-md rounded-2xl border border-stone-200 relative max-w-[595px] mx-auto overflow-hidden">
                                                 <div className="flex justify-between items-center border-b pb-2 mb-4 text-[10px] text-gray-450 font-mono print:hidden">
                                                     <span>批量对账打印 (Batch Print Proof)</span>
                                                     <span>单号 Ref: {v.voucherNo}</span>
@@ -2333,7 +2346,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                     >
                         {/* Drawer Header */}
                         <div 
-                            className="bg-[#1A1A1A] p-4 flex justify-between items-center text-white shrink-0 border-b border-amber-400" 
+                            className="bg-[#1A1A1A] px-4 py-3 flex justify-between items-center text-[#ffffff] shrink-0 border-b border-[#FFD200]" 
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="min-w-0">
@@ -2346,22 +2359,29 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             </div>
                             <button 
                                 onClick={() => setIsMobilePreviewOpen(false)} 
-                                className="p-2.5 hover:bg-white/10 rounded-full transition-transform active:scale-90"
+                                className="p-2.5 hover:bg-[#ffffff]/10 rounded-full transition-transform active:scale-90"
                             >
                                 <X size={20}/>
                             </button>
                         </div>
 
-                        {/* Interactive scroll-scale canvas container */}
+                        {/* Width-aware A5 preview: always fits the mobile viewport horizontally */}
                         <div 
-                            className="flex-grow overflow-auto p-4 flex items-center justify-center bg-zinc-900/60"
+                            className="flex-grow min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 flex items-start justify-center bg-zinc-900/60"
                             onClick={() => setIsMobilePreviewOpen(false)}
                         >
-                            <div 
-                                className="p-3 bg-white rounded-xl shadow-2xl max-w-full overflow-auto scale-90 sm:scale-100 origin-center" 
+                            <div
+                                className="relative shrink-0 bg-[#FFFFFF] shadow-2xl overflow-hidden"
+                                style={{
+                                    width: `${595 * mobilePreviewScale}px`,
+                                    height: `${842 * mobilePreviewScale}px`
+                                }}
                                 onClick={e => e.stopPropagation()}
                             >
-                                <div className="min-w-[595px]">
+                                <div
+                                    className="absolute left-0 top-0 w-[595px] h-[842px] origin-top-left"
+                                    style={{ transform: `scale(${mobilePreviewScale})` }}
+                                >
                                     <A5VoucherDocument voucher={previewVoucher} />
                                 </div>
                             </div>
@@ -2369,88 +2389,25 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                         {/* Bottom Action Footer Sheet (Apple HIG Compliant, >=44px controls) */}
                         <div 
-                            className="bg-[#1A1A1A] p-5 border-t border-white/10 space-y-3 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]" 
+                            className="bg-[#1A1A1A] px-4 pt-3 border-t border-white/10 space-y-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]" 
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="flex justify-between items-center text-xs text-gray-300 font-mono tracking-tight px-1">
-                                <span className="opacity-80">对账模具 Style: {previewVoucher.templateStyle}</span>
-                                <span className="text-amber-400 font-bold text-sm">RM {previewVoucher.totalAmount.toFixed(2)}</span>
+                            <div className="flex justify-between items-center text-xs font-mono px-1">
+                                <span className="text-gray-400">凭单金额</span>
+                                <span className="text-[#FFD200] font-black text-sm">RM {previewVoucher.totalAmount.toFixed(2)}</span>
                             </div>
                             
-                            {/* Mobile Smart High-Res Image Saver Button */}
-                            <button
-                                onClick={() => handleGenerateMobileImage(previewVoucher)}
-                                disabled={isGeneratingImg}
-                                className="w-full py-3 px-4 bg-amber-400 hover:bg-amber-500 text-black rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all min-h-[44px]"
-                            >
-                                {isGeneratingImg ? (
-                                    <>
-                                        <RefreshCw size={14} className="animate-spin" />
-                                        正在生成超清 A5 图片...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles size={14} />
-                                        手机端推荐：生成高清 A5 表单 (长按保存/分享)
-                                    </>
-                                )}
-                            </button>
-
-                            {/* Mobile Google Drive Button */}
-                            <button 
-                                onClick={() => handleSaveToDrive(previewVoucher)}
-                                disabled={driveState !== 'IDLE' && driveState !== 'ERROR'}
-                                className={`w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all min-h-[44px] shadow-lg ${
-                                    driveState === 'SUCCESS' && !driveError
-                                        ? 'bg-emerald-500 text-white'
-                                        : driveState === 'SUCCESS' && driveError
-                                        ? 'bg-amber-500 text-white'
-                                        : driveState === 'ERROR'
-                                        ? 'bg-red-600 text-white'
-                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                                }`}
-                            >
-                                {driveState === 'IDLE' && (
-                                    <>
-                                        <HardDrive size={14} />
-                                        🌐 系统原生分享 / 存入 Google Drive
-                                    </>
-                                )}
-                                {driveState === 'GENERATING' && (
-                                    <>
-                                        <RefreshCw size={14} className="animate-spin" />
-                                        正在生成高清 A5 PDF 并优化排版...
-                                    </>
-                                )}
-                                {driveState === 'SHARING' && (
-                                    <>
-                                        <RefreshCw size={14} className="animate-spin" />
-                                        正在唤起系统分享菜单 (免登免密)...
-                                    </>
-                                )}
-                                {driveState === 'SUCCESS' && (
-                                    <>
-                                        <span>✅ 成功拉起！请选择分享或存入云盘</span>
-                                    </>
-                                )}
-                                {driveState === 'ERROR' && (
-                                    <>
-                                        <span>❌ 发生错误 (点击重试)</span>
-                                    </>
-                                )}
-                            </button>
-
-                            <div className="grid grid-cols-2 gap-3 pb-2">
+                            <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => setIsMobilePreviewOpen(false)}
-                                    className="py-3 px-4 border border-white/20 hover:border-white/40 text-white rounded-xl font-bold text-xs active:scale-95 transition-all min-h-[44px]"
+                                    className="py-3 px-4 border border-white/20 hover:border-white/40 text-[#ffffff] rounded-xl font-bold text-xs active:scale-95 transition-all min-h-[44px]"
                                 >
                                     返回列表
                                 </button>
                                 <button
                                     onClick={() => handleDownloadA5PDF(previewVoucher)}
                                     disabled={!!isExporting}
-                                    className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all min-h-[44px]"
+                                    className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-[#ffffff] rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all min-h-[44px]"
                                 >
                                     {isExporting === previewVoucher.id ? (
                                         <>
@@ -2476,7 +2433,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                         onClick={() => setCapturedImgUrl(null)}
                     >
                         <div 
-                            className="bg-white rounded-3xl p-5 md:p-6 shadow-2xl max-w-sm sm:max-w-md w-full flex flex-col items-center space-y-4 animate-in slide-in-from-bottom"
+                            className="bg-[#ffffff] rounded-3xl p-5 md:p-6 shadow-2xl max-w-sm sm:max-w-md w-full flex flex-col items-center space-y-4 animate-in slide-in-from-bottom"
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="flex justify-between items-center w-full pb-2 border-b border-gray-100">
@@ -2515,14 +2472,14 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                     className="w-full h-auto object-contain select-none pointer-events-auto"
                                     referrerPolicy="no-referrer"
                                 />
-                                <div className="absolute top-2 right-2 bg-black/60 text-white text-[9px] px-2 py-1 rounded font-bold pointer-events-none">
+                                <div className="absolute top-2 right-2 bg-black/60 text-[#ffffff] text-[9px] px-2 py-1 rounded font-bold pointer-events-none">
                                     📱 手机端长按此图保存
                                 </div>
                             </div>
                             
                             <button
                                 onClick={() => setCapturedImgUrl(null)}
-                                className="w-full py-3 bg-[#1A1A1A] hover:bg-black text-white font-black text-xs rounded-xl transition-all active:scale-95"
+                                className="w-full py-3 bg-[#1A1A1A] hover:bg-black text-[#ffffff] font-black text-xs rounded-xl transition-all active:scale-95"
                             >
                                 返回预览
                             </button>
@@ -2530,506 +2487,106 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                     </div>
                 )}
 
-                {/* 👑 === EDIT FORM MODAL === Bottom Sheet on mobile / Center on desktop */}
+                {/* SIMPLIFIED CREATE / EDIT FORM */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in" onClick={handleCloseForm}>
-                        <div className="bg-white w-full md:max-w-4xl rounded-t-[2.2rem] md:rounded-[2.2rem] p-5 md:p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 duration-300 max-h-[95vh] md:max-h-[90vh] overflow-y-auto relative" onClick={e => e.stopPropagation()} style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}>
-                            {/* Drag handle */}
-                            <div className="md:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 -mt-1 sticky top-0"></div>
-
-                            <div className="flex justify-between items-center mb-5 pb-2 border-b border-gray-100">
-                                <h3 className="font-serif font-black text-lg text-[#1A1A1A] flex items-center gap-2">
-                                    ✍️ {editingVoucher.id ? '编辑自制凭单内容' : '新开自制凭单/收据'}
-                                </h3>
-                                <button onClick={handleCloseForm} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
-                                    <X size={18}/>
-                                </button>
+                    <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm" onClick={handleCloseForm}>
+                        <div className="bg-[#F6F7FB] w-full md:max-w-3xl rounded-t-[28px] md:rounded-[28px] shadow-2xl max-h-[96vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                            <div className="bg-[#ffffff] px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
+                                <div>
+                                    <h3 className="text-base md:text-lg font-black text-[#111111]">{editingVoucher.createdAt ? '编辑凭单' : '新建支出凭单'}</h3>
+                                    <p className="text-[11px] text-[#6b7280] mt-0.5">先填写收款人、用途与金额，其余资料按需要展开。</p>
+                                </div>
+                                <button onClick={handleCloseForm} className="w-11 h-11 rounded-full bg-[#F6F7FB] flex items-center justify-center text-[#4b5563]"><X size={18}/></button>
                             </div>
 
-                            {/* 💡 Accounts Payable Prefill Context Banner */}
-                            {apPrefillRef && (
-                                <div className="mb-5 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200/80 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2 shadow-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <div className="flex items-center gap-2 font-black text-emerald-800">
-                                            <span>💡 正在基于应付账款一键生成现金核销凭单 (AP Cash Bill Prefill)</span>
-                                            <span className="bg-emerald-200/70 text-emerald-900 px-1.5 py-0.5 rounded text-[8px] font-bold">参考资料 Reference Panel</span>
+                            <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-4">
+                                {apPrefillRef && (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black text-emerald-800">已从应付账款带入资料</p>
+                                            <p className="text-[11px] text-emerald-700 mt-1 truncate">{apPrefillRef.company} · RM {Number(apPrefillRef.totalAmount || 0).toFixed(2)}</p>
+                                            <p className="text-[10px] text-emerald-600 mt-1 line-clamp-2">{apPrefillRef.particulars}</p>
                                         </div>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setApPrefillRef(null)} 
-                                            className="text-gray-400 hover:text-gray-650 font-bold hover:underline transition-colors"
-                                            title="关闭并隐藏此块参考信息"
-                                        >
-                                            关闭参考 [✕]
-                                        </button>
+                                        <button onClick={() => setApPrefillRef(null)} className="text-emerald-700 text-[10px] font-bold shrink-0">隐藏</button>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-gray-700 font-medium">
-                                        <div>
-                                            <span className="text-gray-400 font-bold">供应商 Company / Supplier:</span>
-                                            <div className="font-extrabold text-[#1A1A1A] text-sm mt-0.5">{apPrefillRef.company || '未指定供应商'}</div>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-400 font-bold">账单核对金额 Total Amount:</span>
-                                            <div className="font-mono font-extrabold text-blue-700 text-sm mt-0.5">RM {Number(apPrefillRef.totalAmount || 0).toFixed(2)}</div>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-400 font-bold">记账日期 Invoice Date:</span>
-                                            <div className="font-mono font-extrabold text-gray-800 text-sm mt-0.5">{apPrefillRef.date}</div>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-400 font-bold">账账关联 ID AP Ref ID:</span>
-                                            <div className="font-mono text-gray-500 mt-0.5 truncate">{apPrefillRef.billRefId || '-'}</div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2.5 pt-2 border-t border-dashed border-gray-200 text-gray-500 flex flex-col gap-1">
-                                        <span className="text-gray-400 font-bold">账单备注/事由 Particulars:</span>
-                                        <div className="mt-0.5 font-bold text-gray-700 leading-relaxed text-[11px]">{apPrefillRef.particulars}</div>
-                                    </div>
-                                </div>
-                            )}
+                                )}
 
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 text-left">
-                                
-                                {/* Fields details */}
-                                <div className="md:col-span-12 space-y-3.5">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                                        
-                                        {/* Type */}
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">凭单类型 Voucher Type</label>
-                                            <select 
-                                                value={editingVoucher.voucherType}
-                                                onChange={e => {
-                                                    const vt = e.target.value as any;
-                                                    let ts = editingVoucher.templateStyle;
-                                                    if (vt === 'PURCHASE_RECEIPT') ts = 'CASH_BILL_GREEN';
-                                                    else if (vt === 'PAYMENT_VOUCHER') ts = 'MODERN_DARK';
-                                                    else if (vt === 'CASH_VOUCHER') ts = 'VINTAGE_GOLD';
-                                                    else if (vt === 'DELIVERY_RECEIPT') ts = 'EMERALD_CLEAN';
-                                                    else if (vt === 'CASH_BILL') ts = 'TRADITIONAL_CARBON';
-                                                    
-                                                    const autoNo = generateSequenceNoForDate(editingVoucher.date, vt);
-                                                    setEditingVoucher({ 
-                                                        ...editingVoucher, 
-                                                        voucherType: vt, 
-                                                        templateStyle: ts as any,
-                                                        voucherNo: autoNo
-                                                    });
-                                                }}
-                                                className="w-full bg-white border border-gray-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-bold animate-pulse-once"
-                                            >
-                                                <option value="PURCHASE_RECEIPT">🟢 双色收据 (供应商未开单)</option>
-                                                <option value="PAYMENT_VOUCHER">🌌 极简黑 (员工薪资)</option>
-                                                <option value="CASH_VOUCHER">⚜️ 经典黄 (个人/Agent)</option>
-                                                <option value="DELIVERY_RECEIPT">☘️ 交易绿 (运输)</option>
-                                                <option value="CASH_BILL">🎟️ 三联红 (金莲记自开收据 - 收入)</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Template selector */}
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">视觉风格 Style</label>
-                                            <select 
-                                                value={editingVoucher.templateStyle}
-                                                onChange={e => {
-                                                    const ts = e.target.value as any;
-                                                    let vt = editingVoucher.voucherType;
-                                                    if (ts === 'CASH_BILL_GREEN') vt = 'PURCHASE_RECEIPT';
-                                                    else if (ts === 'MODERN_DARK') vt = 'PAYMENT_VOUCHER';
-                                                    else if (ts === 'VINTAGE_GOLD') vt = 'CASH_VOUCHER';
-                                                    else if (ts === 'EMERALD_CLEAN') vt = 'DELIVERY_RECEIPT';
-                                                    else if (ts === 'TRADITIONAL_CARBON') vt = 'CASH_BILL';
-                                                     
-                                                    const autoNo = generateSequenceNoForDate(editingVoucher.date, vt);
-                                                    setEditingVoucher({ 
-                                                        ...editingVoucher, 
-                                                        templateStyle: ts, 
-                                                        voucherType: vt as any,
-                                                        voucherNo: autoNo
-                                                    });
-                                                }}
-                                                className="w-full bg-white border border-[#FFD700] rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-bold text-amber-900"
-                                            >
-                                                <option value="CASH_BILL_GREEN">🟢 双色收据 (供应商未开单)</option>
-                                                <option value="MODERN_DARK">🌌 极简黑 (员工薪资)</option>
-                                                <option value="VINTAGE_GOLD">⚜️ 经典黄 (个人/Agent)</option>
-                                                <option value="EMERALD_CLEAN">☘️ 交易绿 (运输)</option>
-                                                <option value="TRADITIONAL_CARBON">🎟️ 三联红 (金莲记自开收据 - 收入)</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Payment Method Option */}
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">支付方式 Payment</label>
-                                            <select 
-                                                value={editingVoucher.paymentMethod || 'CASH'}
-                                                onChange={e => setEditingVoucher({ ...editingVoucher, paymentMethod: e.target.value as any })}
-                                                className="w-full bg-white border border-red-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-bold text-red-700"
-                                            >
-                                                <option value="CASH">💵 现金 (Cash)</option>
-                                                <option value="ONLINE_TRANSFER">🏦 网上转账 (Online)</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Date */}
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">日期 Date</label>
-                                            <input 
-                                                type="date"
-                                                value={editingVoucher.date}
-                                                onChange={e => {
-                                                    const newDate = e.target.value;
-                                                    const autoNo = generateSequenceNoForDate(newDate);
-                                                    setEditingVoucher({ 
-                                                        ...editingVoucher, 
-                                                        date: newDate,
-                                                        voucherNo: autoNo 
-                                                    });
-                                                }}
-                                                className="w-full bg-white border border-gray-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-mono"
-                                            />
-                                        </div>
-
-                                        {/* Invoice Num */}
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">单号 No.</label>
-                                            <input 
-                                                type="text"
-                                                value={editingVoucher.voucherNo}
-                                                onChange={e => setEditingVoucher({ ...editingVoucher, voucherNo: e.target.value })}
-                                                className="w-full bg-white border border-gray-205 border-gray-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-mono font-bold"
-                                                placeholder="例: KLK-SELF-1"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Company name and payee name */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        <div className="sm:col-span-2">
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">开具主体公司名 Issuer Company Name</label>
-                                            <input 
-                                                type="text"
-                                                value={editingVoucher.companyName}
-                                                onChange={e => setEditingVoucher({ ...editingVoucher, companyName: e.target.value })}
-                                                className="w-full bg-[#FAFAFA] border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-bold"
-                                                placeholder="输入金莲记甲洞或者其他公司公司名"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">制单经办人 Prepared By</label>
-                                            <input 
-                                                type="text"
-                                                value={editingVoucher.preparedBy}
-                                                onChange={e => setEditingVoucher({ ...editingVoucher, preparedBy: e.target.value })}
-                                                className="w-full bg-[#FAFAFA] border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-mono"
-                                                placeholder="如: Jaz"
-                                            />
-                                        </div>
-                                    </div>
-
+                                <div className="bg-[#ffffff] rounded-2xl border border-[#E5E7EB] shadow-sm p-4 space-y-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-[10px] font-bold text-gray-400 uppercase block">收款人/对方姓名 Payee Name (⚠️ 必须填写)</label>
-                                                {editingVoucher.payeeName?.trim() && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => toggleStarPayee(
-                                                            editingVoucher.payeeName || '',
-                                                            editingVoucher.payeePhone || '',
-                                                            editingVoucher.payeeType || 'DRIVER'
-                                                        )}
-                                                        className="text-[10px] flex items-center gap-1 font-extrabold text-amber-600 hover:text-amber-700 transition-colors"
-                                                    >
-                                                        {isPayeeStarred(editingVoucher.payeeName || '') ? '⭐️ 已收藏 Starred' : '☆ 收藏此收款人 Star'}
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <div className="relative">
-                                                <input 
-                                                    type="text"
-                                                    value={editingVoucher.payeeName}
-                                                    onChange={e => setEditingVoucher({ ...editingVoucher, payeeName: e.target.value })}
-                                                    className="w-full bg-amber-50/50 border border-amber-200 rounded-xl pl-3 pr-10 py-2.5 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-bold placeholder-gray-400"
-                                                    placeholder="输入运输司机名/购买无发票商家名"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleStarPayee(
-                                                        editingVoucher.payeeName || '',
-                                                        editingVoucher.payeePhone || '',
-                                                        editingVoucher.payeeType || 'DRIVER'
-                                                    )}
-                                                    className="absolute right-3 top-2.5 text-amber-500 hover:scale-110 active:scale-95 transition-transform"
-                                                    title="收藏/取消收藏收款人"
-                                                >
-                                                    {isPayeeStarred(editingVoucher.payeeName || '') ? '★' : '☆'}
-                                                </button>
-                                            </div>
+                                            <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">收款人 / Payee *</label>
+                                            <input value={editingVoucher.payeeName || ''} onChange={e => setEditingVoucher({...editingVoucher, payeeName:e.target.value})} placeholder="司机、员工或临时供应商名称" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm font-semibold outline-none focus:border-[#FFD200] focus:bg-[#ffffff]"/>
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">联系电话 / 车牌号 Payee Contact / Vehicle No.</label>
-                                            <input 
-                                                type="text"
-                                                value={editingVoucher.payeePhone}
-                                                onChange={e => setEditingVoucher({ ...editingVoucher, payeePhone: e.target.value })}
-                                                className="w-full bg-[#FAFAFA] border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-amber-400 outline-none font-mono"
-                                                placeholder="输入司机电话或车牌号 (如: WXX 1234)"
-                                            />
+                                            <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">日期 / Date</label>
+                                            <input type="date" value={editingVoucher.date || ''} onChange={e => { const date=e.target.value; setEditingVoucher({...editingVoucher,date,voucherNo:generateSequenceNoForDate(date)}); }} className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm font-semibold outline-none focus:border-[#FFD200]"/>
                                         </div>
                                     </div>
 
-                                    {/* Starred Payees Quick Selection list */}
-                                    {savedPayees.length > 0 && (
-                                        <div className="bg-amber-50/20 p-2.5 rounded-xl border border-dashed border-amber-200/50">
-                                            <span className="text-[9px] font-black text-amber-800 uppercase block mb-1.5 flex items-center gap-1">⭐️ 常用速填 Starred Payees (点击一键填入):</span>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {savedPayees.map((p, pIdx) => (
-                                                    <button
-                                                        key={pIdx}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setEditingVoucher({
-                                                                ...editingVoucher,
-                                                                payeeName: p.name,
-                                                                payeePhone: p.phone,
-                                                                payeeType: p.type
-                                                            });
-                                                        }}
-                                                        className="bg-white hover:bg-amber-50 border border-amber-200/70 text-[9px] font-bold text-gray-700 px-2 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95"
-                                                    >
-                                                        🧑 {p.name} {p.phone ? `(${p.phone})` : ''}
-                                                    </button>
-                                                ))}
+                                    <div className="grid grid-cols-2 gap-2 bg-[#F6F7FB] p-1 rounded-xl">
+                                        <button type="button" onClick={() => setEntryMode('QUICK')} className={`h-11 rounded-lg text-xs font-black transition-all ${entryMode==='QUICK'?'bg-[#ffffff] text-[#111111] shadow-sm':'text-[#6b7280]'}`}>快速金额</button>
+                                        <button type="button" onClick={() => setEntryMode('ITEMIZED')} className={`h-11 rounded-lg text-xs font-black transition-all ${entryMode==='ITEMIZED'?'bg-[#ffffff] text-[#111111] shadow-sm':'text-[#6b7280]'}`}>详细项目</button>
+                                    </div>
+
+                                    {entryMode === 'QUICK' ? (
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">支出说明 / Purpose *</label>
+                                                <input value={voucherItems[0]?.description || ''} onChange={e => handleItemChange(0,'description',e.target.value)} placeholder="例如：甲洞至半山芭送货费" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm outline-none focus:border-[#FFD200]"/>
+                                                <div className="flex gap-1.5 overflow-x-auto mt-2 pb-1">
+                                                    {QUICK_CONTENT_PRESETS.map((preset,idx)=><button key={idx} type="button" onClick={()=>handleQuickPresetFill(0,preset)} className="shrink-0 px-3 py-1.5 rounded-lg bg-[#FFF8D6] text-[#5F4B00] text-[10px] font-bold border border-[#FFD200]/40">{preset.description.split('/')[0].trim()}</button>)}
+                                                </div>
                                             </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">总金额 / Amount *</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-3.5 text-sm font-black text-[#6b7280]">RM</span>
+                                                    <input type="number" step="0.01" value={voucherItems[0]?.unitPrice || ''} onChange={e => { handleItemChange(0,'qty',1); handleItemChange(0,'unitPrice',e.target.value); }} className="w-full h-14 pl-11 pr-3 rounded-xl border border-[#FFD200] bg-[#FFFDF3] text-2xl font-black tabular-nums outline-none" placeholder="0.00"/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {voucherItems.map((item,idx)=><div key={idx} className="rounded-2xl border border-[#E5E7EB] p-3 bg-[#ffffff] space-y-3">
+                                                <div className="flex justify-between items-center"><span className="text-xs font-black">项目 {idx+1}</span><button disabled={voucherItems.length<=1} onClick={()=>handleRemoveItemRow(idx)} className="w-11 h-11 rounded-lg bg-red-50 text-red-500 flex items-center justify-center disabled:opacity-30"><Trash2 size={14}/></button></div>
+                                                <input value={item.description} onChange={e=>handleItemChange(idx,'description',e.target.value)} placeholder="项目说明" className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs outline-none focus:border-[#FFD200]"/>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <input type="number" value={item.qty} onChange={e=>handleItemChange(idx,'qty',e.target.value)} placeholder="数量" className="h-11 px-2 rounded-xl border border-[#E5E7EB] text-xs text-center"/>
+                                                    <input value={item.unit || ''} onChange={e=>handleItemChange(idx,'unit',e.target.value)} placeholder="单位" className="h-11 px-2 rounded-xl border border-[#E5E7EB] text-xs text-center"/>
+                                                    <input type="number" value={item.unitPrice || ''} onChange={e=>handleItemChange(idx,'unitPrice',e.target.value)} placeholder="单价" className="h-11 px-2 rounded-xl border border-[#E5E7EB] text-xs text-right"/>
+                                                </div>
+                                                <div className="text-right text-xs font-black tabular-nums">小计 RM {Number(item.amount || 0).toFixed(2)}</div>
+                                            </div>)}
+                                            <button type="button" onClick={handleAddItemRow} className="w-full h-11 rounded-xl border border-dashed border-[#FFD200] bg-[#FFFDF3] text-xs font-black text-[#5F4B00] flex items-center justify-center gap-1"><Plus size={14}/> 添加项目</button>
                                         </div>
                                     )}
 
-                                    {/* 👑 IMPORTANT: User-requested Partner Type selection for Self-Issued logic */}
-                                    <div className="bg-amber-50/30 p-4 rounded-2xl border border-amber-100 space-y-3">
-                                       <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
-                                           <span>💡 对方资质与代开声明 Partners & Self-Billing Statement</span>
-                                       </div>
-                                       <p className="text-[10px] text-gray-600 leading-normal">
-                                           对方如果是个人或手写单Agent（无注册公司），系统将协助您以<b>“金莲记甲洞(Kim Lian Kee - Kepong)”名义代开发票凭证 (Self-Billing / Recipient-Created Bill)</b>。此功能将在 A5 PDF 中显化“由于交易商无注册公司，故由我司代开凭单进行对账”的声明，确保企业做账规范合法。
-                                       </p>
-
-                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                                           {/* Payee Type Selector */}
-                                           <div>
-                                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">对方身份属性 / Partner Type</label>
-                                               <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                                   {[
-                                                       { id: 'DRIVER', label: '🚚 承运司机 Lorry Driver' },
-                                                       { id: 'AGENT', label: '👤 临时 Agent (无公司)' },
-                                                       { id: 'INDIVIDUAL', label: '🧑 个人散工 Individual' },
-                                                       { id: 'INFORMAL_VENDOR', label: '🏪 零散商贩 Unregistered' }
-                                                   ].map(opt => (
-                                                       <button
-                                                           key={opt.id}
-                                                           type="button"
-                                                           onClick={() => setEditingVoucher({ ...editingVoucher, payeeType: opt.id as any })}
-                                                           className={`p-2 rounded-xl border text-left font-bold transition-all flex flex-col justify-center gap-0.5 active:scale-95 min-h-[44px] ${
-                                                               (editingVoucher.payeeType || 'DRIVER') === opt.id
-                                                               ? 'bg-amber-100 text-amber-950 border-amber-400 ring-2 ring-amber-400'
-                                                               : 'bg-white text-gray-600 border-gray-200'
-                                                           }`}
-                                                       >
-                                                           {opt.label}
-                                                       </button>
-                                                   ))}
-                                               </div>
-                                           </div>
-
-                                           {/* Self billing mode toggle */}
-                                           <div>
-                                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">代开备案确认 / Self-Billing Confirmation</label>
-                                               <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                                   <button
-                                                       type="button"
-                                                       onClick={() => setEditingVoucher({ ...editingVoucher, isSelfIssued: true })}
-                                                       className={`p-2 rounded-xl border font-bold text-center active:scale-95 min-h-[44px] flex items-center justify-center ${
-                                                           editingVoucher.isSelfIssued !== false
-                                                           ? 'bg-emerald-50 text-emerald-900 border-emerald-400 ring-2 ring-emerald-400'
-                                                           : 'bg-white text-gray-450 border-gray-200'
-                                                       }`}
-                                                   >
-                                                       <div>
-                                                           <div className="text-[11px]">✍️ 启动代开声明</div>
-                                                           <span className="text-[8px] font-normal text-emerald-600 block mt-0.5">防手写单篡改・用于做账</span>
-                                                       </div>
-                                                   </button>
-                                                   <button
-                                                       type="button"
-                                                       onClick={() => setEditingVoucher({ ...editingVoucher, isSelfIssued: false })}
-                                                       className={`p-2 rounded-xl border font-bold text-center active:scale-95 min-h-[44px] flex items-center justify-center ${
-                                                           editingVoucher.isSelfIssued === false
-                                                           ? 'bg-gray-100 text-gray-800 border-gray-400 ring-2 ring-gray-400'
-                                                           : 'bg-white text-gray-450 border-gray-200'
-                                                       }`}
-                                                   >
-                                                       <div>
-                                                           <div className="text-[11px]">📄 普通自制收据</div>
-                                                           <span className="text-[8px] font-normal text-gray-400 block mt-0.5">只作为备考流水备注</span>
-                                                       </div>
-                                                   </button>
-                                               </div>
-                                           </div>
-                                       </div>
+                                    <div className="flex items-center justify-between bg-[#111111] text-[#ffffff] rounded-2xl px-4 py-3">
+                                        <span className="text-xs text-gray-300">凭单总额</span>
+                                        <span className="text-xl font-black text-[#FFD200] tabular-nums">RM {calculateTotal(voucherItems).toFixed(2)}</span>
                                     </div>
+                                </div>
 
-                                    {/* Items Table Description Generator */}
-                                    <div className="border border-gray-200 rounded-2xl overflow-hidden mt-3 shadow-inner bg-white">
-                                        <div className="bg-gray-100 p-2 px-3 text-[10px] font-bold text-gray-500 uppercase flex justify-between items-center border-b border-gray-200">
-                                            <span>账目明细条款 Particulars Table</span>
-                                            <button 
-                                                onClick={handleAddItemRow}
-                                                className="bg-[#1A1A1A] hover:bg-black text-white px-2.5 py-1 text-[9px] font-black rounded-lg flex items-center gap-1"
-                                            >
-                                                添加空行 +
-                                            </button>
-                                        </div>
-
-                                        <div className="p-3 space-y-2 max-h-[250px] overflow-y-auto">
-                                            {voucherItems.map((item, idx) => (
-                                                <div key={idx} className="flex flex-col sm:flex-row gap-2 border-b border-gray-100 pb-2 sm:pb-0 sm:border-0 items-center justify-between">
-                                                    
-                                                    {/* Row Description with quick fill preset */}
-                                                    <div className="w-full sm:flex-grow">
-                                                        <div className="flex gap-1 items-center">
-                                                            <span className="text-[9px] font-mono text-gray-400 font-bold shrink-0">#{idx + 1}</span>
-                                                            <input 
-                                                                type="text"
-                                                                value={item.description}
-                                                                onChange={e => handleItemChange(idx, 'description', e.target.value)}
-                                                                placeholder="填入内容明细描述，或使用下方快捷选项填入"
-                                                                className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-amber-400 outline-none"
-                                                            />
-                                                        </div>
-                                                        {/* Quick fill buttons */}
-                                                        {(!item.description) && (
-                                                            <div className="flex flex-wrap gap-1 mt-1 pl-4">
-                                                                {QUICK_CONTENT_PRESETS.map((preset, pIdx) => (
-                                                                    <button
-                                                                        key={pIdx}
-                                                                        onClick={() => handleQuickPresetFill(idx, preset)}
-                                                                        className="bg-gray-100 hover:bg-amber-100 hover:text-amber-900 border border-gray-200/50 text-[8px] font-extrabold text-gray-600 px-1.5 py-0.5 rounded-md truncate max-w-[150px]"
-                                                                        title={preset.description}
-                                                                    >
-                                                                        ⚡ {preset.description.split('/')[0].trim()} (RM {preset.unitPrice})
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex gap-2 w-full sm:w-auto shrink-0 items-center">
-                                                        
-                                                        {/* Unit */}
-                                                        <div className="w-16">
-                                                            <input 
-                                                                type="text"
-                                                                value={item.unit || ''}
-                                                                onChange={e => handleItemChange(idx, 'unit', e.target.value)}
-                                                                placeholder="单位"
-                                                                className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-1.5 py-1.5 text-xs text-center focus:ring-1 focus:ring-amber-400 outline-none"
-                                                            />
-                                                        </div>
-
-                                                        {/* Qty */}
-                                                        <div className="w-14">
-                                                            <input 
-                                                                type="number"
-                                                                value={item.qty}
-                                                                onChange={e => handleItemChange(idx, 'qty', e.target.value)}
-                                                                placeholder="数量"
-                                                                className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-1.5 py-1.5 text-xs text-center focus:ring-1 focus:ring-amber-400 outline-none font-mono"
-                                                            />
-                                                        </div>
-
-                                                        {/* Unit price */}
-                                                        <div className="w-24">
-                                                            <div className="relative">
-                                                                <span className="absolute left-1.5 top-1.5 text-[10px] text-gray-400 font-mono">RM</span>
-                                                                <input 
-                                                                    type="number"
-                                                                    value={item.unitPrice || ''}
-                                                                    onChange={e => handleItemChange(idx, 'unitPrice', e.target.value)}
-                                                                    placeholder="单价"
-                                                                    className="w-full pl-6 pr-2 bg-gray-50/50 border border-gray-200 rounded-xl py-1.5 text-xs focus:ring-1 focus:ring-amber-400 outline-none font-mono text-right"
-                                                                />
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Row subtotal output */}
-                                                        <div className="w-20 text-right font-mono font-bold text-xs pr-1">
-                                                            RM {(item.qty * item.unitPrice).toFixed(2)}
-                                                        </div>
-
-                                                        {/* Delete button */}
-                                                        <button 
-                                                            disabled={voucherItems.length <= 1}
-                                                            onClick={() => handleRemoveItemRow(idx)}
-                                                            className={`p-1.5 rounded-lg border flex items-center justify-center shrink-0 ${
-                                                                voucherItems.length <= 1 
-                                                                ? 'text-gray-200 border-gray-100 bg-gray-50 cursor-not-allowed' 
-                                                                : 'text-red-500 hover:bg-red-50 hover:text-red-600 border-red-100 bg-red-50/20 active:scale-95 transition-all'
-                                                            }`}
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        <div className="bg-slate-50 p-3 px-4 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-between items-center gap-2">
-                                            <span className="text-[10px] text-gray-400 font-bold font-mono">总共包含 {voucherItems.length} 行条款</span>
-                                            <div className="text-right">
-                                                <span className="text-[10px] font-bold text-gray-500 uppercase mr-2">凭证总值 GRAND TOTAL:</span>
-                                                <span className="font-serif font-black text-rose-600 text-lg">
-                                                    RM {calculateTotal(voucherItems).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Notes */}
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">财务特别备考/审核批注 Note & Terms</label>
-                                        <textarea 
-                                            rows={2}
-                                            value={editingVoucher.notes || ''}
-                                            onChange={e => setEditingVoucher({ ...editingVoucher, notes: e.target.value })}
-                                            className="w-full bg-[#FAFAFA] border border-gray-200 rounded-2xl px-3 py-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none placeholder-gray-300"
-                                            placeholder="比如: 说明此次支出没有获得正式单据的原因，运输司机的具体出车路线或事件证明说明..."
-                                        />
-                                    </div>
+                                <div className="bg-[#ffffff] rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
+                                    <button type="button" onClick={()=>setShowAdvancedFields(!showAdvancedFields)} className="w-full min-h-[52px] px-4 flex items-center justify-between text-left">
+                                        <span className="flex items-center gap-2 text-xs font-black text-[#111111]"><SlidersHorizontal size={15}/> 更多资料与财务设置</span>
+                                        <ChevronDown size={17} className={`transition-transform ${showAdvancedFields?'rotate-180':''}`}/>
+                                    </button>
+                                    {showAdvancedFields && <div className="p-4 pt-0 border-t border-[#E5E7EB] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单类型</label><select value={editingVoucher.voucherType || 'PURCHASE_RECEIPT'} onChange={e=>{const vt=e.target.value as any;setEditingVoucher({...editingVoucher,voucherType:vt,voucherNo:generateSequenceNoForDate(editingVoucher.date || new Date().toISOString().split('T')[0],vt)});}} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-bold"><option value="PURCHASE_RECEIPT">临时采购</option><option value="DELIVERY_RECEIPT">司机及运输费</option><option value="PAYMENT_VOUCHER">员工或个人代付</option><option value="CASH_VOUCHER">一般现金支出</option><option value="CASH_BILL">自开收入收据</option></select></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">付款方式</label><select value={editingVoucher.paymentMethod || 'CASH'} onChange={e=>setEditingVoucher({...editingVoucher,paymentMethod:e.target.value as any})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-bold"><option value="CASH">现金</option><option value="ONLINE_TRANSFER">银行转账</option></select></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">联系电话 / 车牌号</label><input value={editingVoucher.payeePhone || ''} onChange={e=>setEditingVoucher({...editingVoucher,payeePhone:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单编号</label><input value={editingVoucher.voucherNo || ''} onChange={e=>setEditingVoucher({...editingVoucher,voucherNo:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-mono font-bold"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">制单人</label><input value={editingVoucher.preparedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,preparedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">批准人</label><input value={editingVoucher.approvedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,approvedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
+                                        <div className="sm:col-span-2"><label className="text-[10px] font-bold text-[#6b7280] block mb-1">备注</label><textarea rows={2} value={editingVoucher.notes || ''} onChange={e=>setEditingVoucher({...editingVoucher,notes:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs" placeholder="仅填写必要的内部说明"/></div>
+                                    </div>}
                                 </div>
                             </div>
 
-                            {/* Footer actions with Apple HIG touch sizes >= 44px */}
-                            <div className="mt-6 pt-3 border-t border-gray-100 flex gap-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] shrink-0">
-                                <button 
-                                    type="button"
-                                    onClick={handleCloseForm} 
-                                    className="px-6 py-3 border border-gray-200 text-gray-500 hover:text-gray-700 font-bold rounded-2xl text-xs active:scale-95 transition-all min-h-[44px] flex items-center justify-center font-sans"
-                                >
-                                    取消编辑
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={handleSave} 
-                                    disabled={isSaving}
-                                    className="flex-grow bg-[#1A1A1A] hover:bg-black text-[#FFD700] py-3 rounded-2xl font-black text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all min-h-[44px] font-sans"
-                                >
-                                    {isSaving ? (
-                                        <RefreshCw size={14} className="animate-spin" />
-                                    ) : (
-                                        <Save size={14} />
-                                    )}
-                                    保存此单据 & 导入后台库
-                                </button>
+                            <div className="bg-[#ffffff] border-t border-[#E5E7EB] p-4 flex gap-3 shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                                <button onClick={handleCloseForm} className="w-28 h-12 rounded-xl border border-[#E5E7EB] text-[#4b5563] text-xs font-bold">取消</button>
+                                <button onClick={handleSave} disabled={isSaving} className="flex-1 h-12 rounded-xl bg-[#FFD200] text-[#111111] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-50">{isSaving?<RefreshCw size={15} className="animate-spin"/>:<Save size={15}/>} 保存凭单</button>
                             </div>
                         </div>
                     </div>
@@ -3039,610 +2596,79 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     );
 };
 
-// ── CUSTOM REUSABLE A5 SHEETS RENDERING ENGINE ──
+// ── SIMPLIFIED A5 VOUCHER DOCUMENT ──
 interface A5VoucherDocumentProps {
     voucher: SelfIssuedVoucher;
     isForActualExport?: boolean;
 }
 
-const A5VoucherDocument: React.FC<A5VoucherDocumentProps> = ({ voucher, isForActualExport = false }) => {
-    // Styling values
-    const styleConfig = (() => {
-        switch (voucher.templateStyle) {
-            case 'VINTAGE_GOLD':
-                return {
-                    bgClass: 'bg-[#FDFBF7]',
-                    borderClass: 'border-[4px] border-double border-[#C5A059]',
-                    textTitleClass: 'text-[#614713]',
-                    accentColor: '#D4AF37', // Gold 
-                    headerBg: 'bg-[#F2E5CE]',
-                    tableHeaderBg: 'bg-[#ECCF9B] text-[#553C0C]',
-                    stampText: 'KIM LIAN KEE PAID',
-                    stampColor: 'border-red-500/70 text-red-500/70',
-                    fontSans: 'font-serif',
-                };
-            case 'MODERN_DARK':
-                return {
-                    bgClass: 'bg-white',
-                    borderClass: 'border-[2px] border-slate-800',
-                    textTitleClass: 'text-slate-900',
-                    accentColor: '#1E293B', // Slate gray
-                    headerBg: 'bg-slate-100',
-                    tableHeaderBg: 'bg-slate-800 text-white',
-                    stampText: 'APPROVED & COGS PAID',
-                    stampColor: 'border-[#1E293B]/60 text-[#1E293B]/60',
-                    fontSans: 'font-sans',
-                };
-            case 'TRADITIONAL_CARBON':
-                return {
-                    bgClass: 'bg-[#FFFCFC]', // Carbon pink tint
-                    borderClass: 'border-2 border-dashed border-red-300',
-                    textTitleClass: 'text-red-700',
-                    accentColor: '#EC4899', // Pink
-                    headerBg: 'bg-red-50/60',
-                    tableHeaderBg: 'bg-red-100/80 text-red-900',
-                    stampText: 'CASH RECEIVED PAID',
-                    stampColor: 'border-cyan-500/60 text-cyan-500/60',
-                    fontSans: 'font-mono',
-                };
-            case 'CASH_BILL_GREEN':
-                return {
-                    bgClass: 'bg-[#FCFFF9]',
-                    borderClass: 'border-[3px] border-[#094F2B]',
-                    textTitleClass: 'text-[#094F2B]',
-                    accentColor: '#094F2B',
-                    headerBg: 'bg-[#8BC43F]/20',
-                    tableHeaderBg: 'bg-[#094F2B] text-white',
-                    stampText: 'VERIFIED PAID',
-                    stampColor: 'border-[#094F2B]/65 text-[#094F2B]/65',
-                    fontSans: 'font-sans',
-                };
-            case 'EMERALD_CLEAN':
-                return {
-                    bgClass: 'bg-white',
-                    borderClass: 'border-[2px] border-emerald-700',
-                    textTitleClass: 'text-emerald-900',
-                    accentColor: '#047857', // Emerald
-                    headerBg: 'bg-emerald-50',
-                    tableHeaderBg: 'bg-emerald-700 text-white',
-                    stampText: 'KIM LIAN KEE PAID',
-                    stampColor: 'border-emerald-500 text-emerald-500',
-                    fontSans: 'font-sans',
-                };
-        }
-    })();
-
-    const voucherTitle = (() => {
-        const prefix = voucher.isSelfIssued !== false ? 'RECIPIENT-CREATED: ' : '';
-        switch (voucher.voucherType) {
-            case 'CASH_BILL': return 'CASH BILL';
-            case 'PAYMENT_VOUCHER': return `${prefix}PAYMENT VOUCHER`;
-            case 'DELIVERY_RECEIPT': return `${prefix}DELIVERY / TRANSPORT FREIGHT RECEIPT`;
-            case 'CASH_VOUCHER': return `${prefix}CASH COMPENSATIVE RECEIPT`;
-            case 'PURCHASE_RECEIPT': return `${prefix}SELF-ISSUED COGS PURCHASE SLIP`;
-            default: return `${prefix}INTERNAL SETTLEMENT VOUCHER`;
-        }
-    })();
-
-    // Sum
-    const totalAmount = voucher.items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
-
-    if (voucher.templateStyle === 'CASH_BILL_GREEN') {
-        return (
-            <div 
-                className="w-[595px] h-[842px] p-7 flex flex-col justify-between tracking-normal leading-normal bg-white relative font-sans border-[3px] border-[#094F2B]"
-                style={{ 
-                    boxSizing: 'border-box',
-                    color: '#1A3322',
-                    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
-                }}
-            >
-                {/* Visual Header Ribbon Top Curve */}
-                <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-[#094F2B] via-[#8BC43F] to-[#094F2B]"></div>
-
-                {/* Main Content Area */}
-                <div className="flex flex-col gap-4 mt-2">
-                    
-                    {/* Header Row: Title & Shields */}
-                    <div className="flex justify-between items-start border-b border-emerald-100 pb-3">
-                        <div>
-                            {/* Giant Title Style matching the Uploaded Image */}
-                            <div className="flex flex-col">
-                                <h1 className="text-[26px] font-black tracking-tight leading-none text-[#094F2B] font-sans italic">
-                                    CASH BILL /
-                                </h1>
-                                <h1 className="text-[26px] font-black tracking-tight leading-none text-[#8BC43F] font-sans italic mt-1 uppercase">
-                                    {voucher.voucherType === 'CASH_BILL' ? 'INVOICE' : voucher.voucherType.replace(/_/g, ' ')}
-                                </h1>
-                            </div>
-                            <span className="text-[7.5px] text-gray-400 block tracking-wider uppercase font-extrabold font-mono mt-1.5">
-                                Official Internal Accounting Proof & Receipts
-                            </span>
-                        </div>
-
-                        {/* Top-Right Shield Logo */}
-                        <div className="flex items-center gap-3">
-                            <div className="flex flex-col items-end">
-                                <span className="text-[7.5px] text-gray-400 font-bold block uppercase">Vou. Serial No.</span>
-                                <span className="font-mono text-xs font-black text-red-600 tracking-wider">
-                                    {voucher.voucherNo}
-                                </span>
-                            </div>
-                            <div className="w-11 h-11 bg-white rounded-xl shadow-sm border border-emerald-50 flex items-center justify-center p-1">
-                                <svg className="w-full h-full" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M50 5C50 5 85 15 85 45C85 75 50 95 50 95C50 95 15 75 15 45C15 15 50 5 50 5Z" fill="#094F2B"/>
-                                    <path d="M50 15C50 15 75 22.5 75 45C75 67.5 50 82.5 50 82.5C50 82.5 25 67.5 25 45C25 22.5 50 15 50 15Z" fill="#8BC43F" opacity="0.9"/>
-                                    <polygon points="50,30 53,38 62,38 55,43 57,51 50,46 43,51 45,43 38,38 47,38" fill="white" />
-                                    <polygon points="35,46 37,51 43,51 38,54 39,60 35,56 31,60 32,54 27,51 33,51" fill="white" opacity="0.9"/>
-                                    <polygon points="65,46 67,51 73,51 68,54 69,60 65,56 61,60 62,54 57,51 63,51" fill="white" opacity="0.9"/>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Metadata Section: PAYMENT INFO (RECIPIENT) Only (Full-Width) */}
-                    <div className="mt-1 bg-gradient-to-r from-emerald-50/10 to-transparent p-3 rounded-2xl border border-emerald-500/10">
-                        <div className="bg-[#094F2B] text-white font-black text-[9px] px-3 py-1 rounded-full inline-block uppercase tracking-wider mb-2">
-                            PAYMENT INFO (RECIPIENT)
-                        </div>
-                        <div className="grid grid-cols-12 gap-4 mt-1 text-[10.5px]">
-                            {/* Left Column in PAYMENT INFO */}
-                            <div className="col-span-7 text-left space-y-1.5 pr-2">
-                                <p className="text-gray-755 leading-tight flex">
-                                    <span className="font-extrabold text-gray-400 w-20 shrink-0">Recipient:</span>
-                                    <span className="font-black text-[#094F2B] leading-snug">{voucher.payeeName}</span>
-                                </p>
-                                <p className="text-gray-750 leading-tight flex">
-                                    <span className="font-extrabold text-gray-400 w-20 shrink-0">Customer/ID:</span>
-                                    <span className="font-semibold text-gray-800 leading-snug">{voucher.payeePhone || 'Casual Partner / Unregistered'}</span>
-                                </p>
-                            </div>
-                            
-                            {/* Right Column in PAYMENT INFO */}
-                            <div className="col-span-5 text-left pl-4 border-l border-emerald-100 space-y-1.5">
-                                <p className="text-gray-750 leading-tight flex">
-                                    <span className="font-extrabold text-gray-400 w-20 shrink-0">Pay Date:</span>
-                                    <span className="font-mono font-bold text-gray-800">{voucher.date}</span>
-                                </p>
-                                <p className="text-gray-750 leading-tight flex">
-                                    <span className="font-extrabold text-gray-400 w-20 shrink-0">Voucher No:</span>
-                                    <span className="font-mono font-black text-red-650 underline decoration-dotted decoration-red-300">{voucher.voucherNo}</span>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Table Container exactly as shown in the requested layout representation */}
-                    <div className="mt-1 border border-emerald-500/10 rounded-2xl overflow-hidden shadow-sm bg-white">
-                        <table className="w-full text-left font-sans border-collapse text-[10px]">
-                            <thead>
-                                <tr className="bg-[#094F2B] text-white">
-                                    <th className="p-2 text-center font-black w-8">NO</th>
-                                    <th className="p-2 text-left font-black">SERVICE / PRODUCT DESCRIPTION</th>
-                                    <th className="p-2 text-center font-black w-10">QTY</th>
-                                    <th className="p-2 text-right font-black w-20">RATE (RM)</th>
-                                    <th className="p-2 text-right font-black w-24">AMOUNT (RM)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-emerald-100/50">
-                                {voucher.items.map((item, index) => (
-                                    <tr key={index} className="hover:bg-emerald-50/5">
-                                        <td className="p-2 text-center font-mono font-bold text-gray-400 border-r border-[#094F2B]/5">
-                                            {index + 1}
-                                        </td>
-                                        <td className="p-2 font-bold text-slate-800 border-r border-[#094F2B]/5">
-                                            {item.description || ' (No Description Provided) '}
-                                            {item.unit ? <span className="text-[8px] text-gray-400 ml-1 select-none">({item.unit})</span> : null}
-                                        </td>
-                                        <td className="p-2 text-center font-mono font-bold text-[#1A3322] border-r border-[#094F2B]/5">
-                                            {item.qty}
-                                        </td>
-                                        <td className="p-2 text-right font-mono text-gray-650 border-r border-[#094F2B]/5">
-                                            {Number(item.unitPrice || 0).toFixed(2)}
-                                        </td>
-                                        <td className="p-2 text-right font-mono font-black text-slate-900 bg-emerald-50/5">
-                                            {(Number(item.qty || 0) * Number(item.unitPrice || 0)).toFixed(2)}
-                                        </td>
-                                    </tr>
-                                ))}
-                                
-                                {/* Fill spacing empty rows exactly like classic paper receipts */}
-                                {Array.from({ length: Math.max(1, 4 - voucher.items.length) }).map((_, i) => (
-                                    <tr key={`empty-${i}`} className="opacity-40">
-                                        <td className="p-2 text-center border-r border-[#094F2B]/5">&nbsp;</td>
-                                        <td className="p-2 border-r border-[#094F2B]/5">&nbsp;</td>
-                                        <td className="p-2 border-r border-[#094F2B]/5">&nbsp;</td>
-                                        <td className="p-2 border-r border-[#094F2B]/5">&nbsp;</td>
-                                        <td className="p-2 bg-emerald-50/5">&nbsp;</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Bottom-right AMOUNT PAID Pill */}
-                    <div className="flex justify-between items-center mt-1.5 px-1.5">
-                        <div className="text-[8.5px] text-gray-400 leading-tight pr-5 flex-grow text-left">
-                            {voucher.isSelfIssued !== false ? (
-                                <p className="font-semibold text-[#094F2B]/80 font-sans">
-                                    ✍️ 代开凭单说明: 由于收款商户属非注册实体，此单为吉隆坡金莲记代开发票对账专用。
-                                </p>
-                            ) : (
-                                <p className="font-semibold text-gray-400 font-sans">
-                                    * 内部结算说明: 账目经出纳系统自动审核并发放，直接列入当月损耗/费用账册备份。
-                                </p>
-                            )}
-                        </div>
-                        
-                        <div className="flex items-stretch border-[1.5px] border-[#094F2B] rounded-2xl overflow-hidden shadow-sm h-10 w-fit shrink-0 font-sans">
-                            <div className="bg-[#8BC43F] text-[#094F2B]/90 font-black text-[10.5px] px-4 flex items-center justify-center uppercase tracking-wider">
-                                Amount Paid
-                            </div>
-                            <div className="bg-[#FCFFF9] px-5 flex items-center justify-center font-mono font-black text-[14.5px] text-[#094F2B] border-l border-[#094F2B] min-w-[125px] text-right justify-end select-all">
-                                RM {totalAmount.toFixed(2)}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Additional Notes Container */}
-                    {voucher.notes && (
-                        <div className="bg-[#FCFFF9] border border-emerald-500/10 rounded-xl p-2.5 text-[8.5px] text-left">
-                            <span className="font-black text-[#094F2B] uppercase tracking-wider block mb-0.5">Note / Remark 财务稽核附注:</span>
-                            <p className="text-gray-650 italic leading-snug">
-                                {voucher.notes}
-                            </p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Bottom Section: Footer Legalities, Signature Lines, Green Curved Wave Decoration */}
-                <div className="flex flex-col mt-auto pt-3 border-t border-dashed border-emerald-200/50">
-                    <div className="grid grid-cols-12 gap-4 text-left">
-                        {/* Terms and Conditions Block */}
-                        <div className="col-span-7 pr-4">
-                            <h4 className="font-extrabold text-[#094F2B] text-[8.5px] uppercase tracking-widest mb-1.5">Terms & Conditions</h4>
-                            <ol className="list-decimal pl-3 text-[7.5px] leading-relaxed text-gray-400 font-semibold space-y-0.5">
-                                <li>This self-issued voucher serves as an official proof of internal settlement and tax deduction for auditing purposes.</li>
-                                <li>The recipient bears full responsibility for confirming the accuracy of the items, descriptions, and unit prices listed.</li>
-                                <li>This ledger system is managed directly by the corporate finance department of Kim Lian Kee (Kepong) with complete change-logs.</li>
-                                <li>This voucher is prepared in duplicate. The original copy is held for audit, and the duplicate is filed by the buyer.</li>
-                            </ol>
-                        </div>
-
-                        {/* Signatures Field Block */}
-                        <div className="col-span-5 pl-4 border-l border-emerald-50 flex flex-col justify-between">
-                            <div>
-                                <h4 className="font-extrabold text-[#094F2B] text-[8.5px] uppercase tracking-widest mb-1">Disbursement Options</h4>
-                                <div className="text-[8px] space-y-0.5 font-bold">
-                                    <p className="text-gray-500">Method: <span className="text-red-650 font-mono font-black">{voucher.paymentMethod === 'ONLINE_TRANSFER' ? '🏦 BANK TRANSFER' : '💵 CASH PAYMENT'}</span></p>
-                                    <p className="text-gray-500">Approver: <span className="text-gray-800">{voucher.approvedBy || 'SYSTEM'}</span></p>
-                                </div>
-                            </div>
-
-                            <div className="mt-3">
-                                <div className="text-[7.5px] text-gray-400 font-black uppercase mb-1">SIGNATED BY:</div>
-                                <div className="border-b border-[#094F2B]/35 w-full pb-3 text-center">
-                                    &nbsp;
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Standard Legal Footer Ribbon in Deep Green & Lime */}
-                    <div className="mt-5 -mx-7 -mb-7 rounded-b-2xl overflow-hidden shadow-md">
-                        <div className="bg-[#094F2B] h-6 px-4 flex items-center justify-between text-[7px] text-white font-mono uppercase tracking-widest relative">
-                            {/* Accent Lime line in ribbon */}
-                            <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#8BC43F]"></div>
-                            <span>Payment Options / System Generated</span>
-                            <span>Kim Lian Kee (Kepong) ERP Dashboard</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+const A5VoucherDocument: React.FC<A5VoucherDocumentProps> = ({ voucher }) => {
+    const totalAmount = voucher.items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0);
+    const titleMap: Record<string, string> = {
+        PURCHASE_RECEIPT: '采购支出凭单',
+        DELIVERY_RECEIPT: '司机 / 运输费凭单',
+        PAYMENT_VOUCHER: '付款凭单',
+        CASH_VOUCHER: '现金支出凭单',
+        CASH_BILL: '自开收款收据',
+    };
+    const paymentText = voucher.paymentMethod === 'ONLINE_TRANSFER' ? '银行转账' : '现金';
 
     return (
-        <div 
-            className={`w-[595px] h-[842px] p-6 flex flex-col justify-between tracking-normal leading-normal relative ${styleConfig.bgClass} ${styleConfig.borderClass} ${styleConfig.fontSans}`}
-            style={{ 
-                boxSizing: 'border-box',
-                color: '#111111'
-            }}
-        >
-            {/* Watermark diagonal text */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] select-none pointer-events-none transform -rotate-45 font-black text-4xl text-gray-500 tracking-wider">
-                {voucher.templateStyle === 'TRADITIONAL_CARBON' ? 'KIM LIAN KEE OFFICIAL RECEIPT' : 'KIM LIAN KEE INTERNAL USE ONLY'}
+        <div className="w-[595px] h-[842px] bg-[#ffffff] text-[#111111] p-9 flex flex-col font-sans" style={{ boxSizing:'border-box', fontFamily:'Inter, PingFang SC, system-ui, sans-serif' }}>
+            <div className="h-2 bg-[#FFD200] rounded-full mb-7" />
+
+            <div className="flex items-start justify-between border-b-2 border-[#111111] pb-5">
+                <div>
+                    <h1 className="text-[22px] font-black tracking-tight">kim lian kee Group</h1>
+                    <p className="text-[9px] text-[#6b7280] mt-1">{(voucher.companyName || '金莲记甲洞').replace(/吉隆坡金莲记/g,'金莲记甲洞')}</p>
+                </div>
+                <div className="text-right">
+                    <h2 className="text-[16px] font-black">{titleMap[voucher.voucherType] || '支出凭单'}</h2>
+                    <p className="font-mono text-[10px] font-bold mt-2">{voucher.voucherNo}</p>
+                </div>
             </div>
 
-            {/* Top Sheet */}
-            <div>
-                {/* A5 Document Header Brand */}
-                <div className="flex justify-between items-start border-b border-gray-350 pb-3">
-                    <div>
-                        <h2 className="text-[9px] tracking-widest font-bold uppercase text-[#8B6508]">
-                            {voucher.templateStyle === 'TRADITIONAL_CARBON' ? 'Official Revenue Receipt / 金莲记正式自开收据：收入' : 'Payment Verification Proof / 内部收付凭证证明'}
-                        </h2>
-                        <h1 className="text-xl font-serif font-black tracking-tight mt-0.5 text-slate-900 select-all">
-                            {voucher.templateStyle === 'TRADITIONAL_CARBON' ? '吉隆坡金莲记 (KIM LIAN KEE)' : (voucher.companyName || '').replace(/吉隆坡金莲记/g, '金莲记甲洞')}
-                        </h1>
-                        <p className="text-[8px] text-gray-500 mt-0.5 uppercase font-medium tracking-wider">
-                            {voucher.templateStyle === 'TRADITIONAL_CARBON' ? 'Official Financial Receipt Reference' : 'Internal Disbursement Voucher Ref'}
-                        </p>
-                    </div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 py-6 text-[11px]">
+                <div><span className="text-[#6b7280] block text-[9px] mb-1">日期 DATE</span><strong>{voucher.date}</strong></div>
+                <div><span className="text-[#6b7280] block text-[9px] mb-1">付款方式 PAYMENT</span><strong>{paymentText}</strong></div>
+                <div className="col-span-2"><span className="text-[#6b7280] block text-[9px] mb-1">收款人 PAYEE</span><strong className="text-[14px]">{voucher.payeeName}</strong>{voucher.payeePhone && <span className="text-[#6b7280] ml-3">{voucher.payeePhone}</span>}</div>
+            </div>
 
-                    <div className="text-right flex flex-col items-end">
-                        <span className="inline-flex items-center justify-center bg-red-600 text-white font-mono font-bold text-[8px] px-2.5 h-5 rounded-sm tracking-widest uppercase leading-none" style={{ backgroundColor: '#dc2626' }}>
-                            {voucher.isSelfIssued !== false ? 'RECIPIENT-CREATED' : 'INTERNAL RECORD'}
-                        </span>
-                        <div className="mt-2 text-right">
-                            <span className="text-[8px] text-gray-400 block font-bold">VOUCHER NO.</span>
-                            <span className="font-mono text-xs font-black text-red-600 tracking-wider">
-                                {voucher.voucherNo}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Voucher Title Sheet */}
-                <div className={`${styleConfig.headerBg} p-2 text-center my-3 rounded-sm border border-slate-200 shadow-sm`}>
-                    <h2 className={`font-serif font-black text-sm tracking-wide uppercase ${styleConfig.textTitleClass}`}>
-                        {voucherTitle}
-                    </h2>
-                </div>
-
-                {/* Secondary Meta details Block */}
-                {voucher.voucherType === 'CASH_BILL' ? (
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[10.5px] mt-2.5 bg-[#F2FAF5] p-3 border border-emerald-100 rounded-lg">
-                        <div className="space-y-2 text-left">
-                            <div className="flex pb-1 border-b border-gray-200">
-                                <span className="text-gray-400 font-bold w-20">
-                                    {voucher.templateStyle === 'TRADITIONAL_CARBON' ? 'Seller (Issuer):' : 'Vendor Name:'}
-                                </span>
-                                <span className="font-extrabold flex-grow pb-0.5 text-slate-900 leading-tight">
-                                    {voucher.templateStyle === 'TRADITIONAL_CARBON' ? '吉隆坡金莲记 (KIM LIAN KEE)' : voucher.payeeName}
-                                </span>
-                            </div>
-                            <div className="flex pb-1 border-b border-gray-200">
-                                <span className="text-gray-400 font-bold w-20">
-                                    {voucher.templateStyle === 'TRADITIONAL_CARBON' ? 'Buyer (Customer):' : 'Buyer Name:'}
-                                </span>
-                                <span className="font-extrabold flex-grow pb-0.5 text-slate-800">
-                                    {voucher.templateStyle === 'TRADITIONAL_CARBON' ? voucher.payeeName : '金莲记甲洞 (Kim Lian Kee - Kepong)'}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="space-y-2 text-left">
-                            <div className="flex pb-1 border-b border-gray-200">
-                                <span className="text-gray-400 font-bold w-20">Bill Date:</span>
-                                <span className="font-mono font-extrabold flex-grow pb-0.5 text-slate-850">
-                                    {voucher.date}
-                                </span>
-                            </div>
-                            <div className="flex pb-1 border-b border-gray-200">
-                                <span className="text-gray-400 font-bold w-20">Paid Method:</span>
-                                <span className="font-extrabold flex-grow pb-0.5 text-[#059669] uppercase font-sans text-[10px]">
-                                    {voucher.paymentMethod === 'ONLINE_TRANSFER' ? '🏦 Online Bank Transfer' : '💵 Cash Payment'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[10px] mt-2.5 bg-slate-50/70 p-3 border border-slate-100 rounded-sm">
-                        <div className="space-y-1.5 text-left">
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Payer / Buyer:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-slate-800">
-                                    金莲记甲洞(Kim Lian Kee - Kepong)
-                                </span>
-                            </div>
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Payee / Driver:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-slate-900">
-                                    {voucher.payeeName}
-                                </span>
-                            </div>
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Payee Status:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-amber-800 font-sans text-[9px]">
-                                    {voucher.payeeType === 'DRIVER' && '🚚 Driver (Unregistered)'}
-                                    {voucher.payeeType === 'AGENT' && '👤 Agent (Unregistered)'}
-                                    {voucher.payeeType === 'INDIVIDUAL' && '🧑 Casual Individual'}
-                                    {voucher.payeeType === 'INFORMAL_VENDOR' && '🏪 Informal Vendor'}
-                                    {!voucher.payeeType && '👤 Informal Partner'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-1.5 text-left">
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Voucher Date:</span>
-                                <span className="font-mono font-bold border-b border-gray-300 flex-grow pb-0.5 text-slate-850">
-                                    {voucher.date}
-                                </span>
-                            </div>
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Voucher Type:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-slate-800">
-                                    {voucher.voucherType === 'PAYMENT_VOUCHER' && 'Recipient Payment'}
-                                    {voucher.voucherType === 'DELIVERY_RECEIPT' && 'Transport Freight'}
-                                    {voucher.voucherType === 'CASH_VOUCHER' && 'Cash Compensative'}
-                                    {voucher.voucherType === 'PURCHASE_RECEIPT' && 'COGS Purchase Slip'}
-                                </span>
-                            </div>
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Compliance:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-emerald-700 font-sans text-[9px]">
-                                    {voucher.isSelfIssued !== false 
-                                        ? '✍️ RECIPIENT BILL' 
-                                        : '📄 INTERNAL RECORD'}
-                                </span>
-                            </div>
-                            <div className="flex border-b border-gray-100 pb-0.5">
-                                <span className="text-gray-400 font-bold w-20">Method/Terms:</span>
-                                <span className="font-bold border-b border-gray-300 flex-grow pb-0.5 text-red-600 font-sans text-[9px] uppercase tracking-wider">
-                                    {voucher.paymentMethod === 'ONLINE_TRANSFER' ? '🏦 Online Transfer' : '💵 Cash Payment'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Main Particulars Table */}
-                <table className="w-full text-left font-sans border-collapse mt-4 text-[10px]">
-                    <thead>
-                        <tr className={`${styleConfig.tableHeaderBg}`}>
-                            <th className="p-1.5 border-b border-gray-300 w-8 text-center font-bold">No.</th>
-                            <th className="p-1.5 border-b border-gray-300 font-bold">Particulars / Description</th>
-                            <th className="p-1.5 border-b border-gray-300 w-20 text-center font-bold">Unit Type</th>
-                            <th className="p-1.5 border-b border-gray-300 w-12 text-center font-bold">Qty</th>
-                            <th className="p-1.5 border-b border-gray-300 w-24 text-right font-bold">Unit Price</th>
-                            <th className="p-1.5 border-b border-gray-300 w-24 text-right font-bold">Amount</th>
-                        </tr>
+            <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden">
+                <table className="w-full text-left border-collapse text-[10px]">
+                    <thead className="bg-[#111111] text-[#ffffff]">
+                        <tr><th className="p-3 w-8 text-center">#</th><th className="p-3">支出项目 / PARTICULARS</th><th className="p-3 w-12 text-center">数量</th><th className="p-3 w-20 text-right">单价</th><th className="p-3 w-24 text-right">金额</th></tr>
                     </thead>
                     <tbody>
-                        {voucher.items.map((item, index) => (
-                            <tr key={index} className="border-b border-gray-200">
-                                <td className="p-1.5 text-center font-mono font-bold text-gray-500">
-                                    {index + 1}
-                                </td>
-                                <td className="p-1.5 font-bold text-gray-800">
-                                    {item.description || ' (Unnamed Item Details) '}
-                                </td>
-                                <td className="p-1.5 text-center font-bold text-gray-500">
-                                    {item.unit || 'PCS'}
-                                </td>
-                                <td className="p-1.5 text-center font-mono font-bold text-gray-800">
-                                    {item.qty}
-                                </td>
-                                <td className="p-1.5 text-right font-mono text-gray-755">
-                                    RM {Number(item.unitPrice || 0).toFixed(2)}
-                                </td>
-                                <td className="p-1.5 text-right font-mono font-bold text-slate-900">
-                                    RM {(Number(item.qty || 0) * Number(item.unitPrice || 0)).toFixed(2)}
-                                </td>
-                            </tr>
-                        ))}
-                        
-                        {/* Empty padding rows to make A5 sheet look full-scale and extremely professional */}
-                        {Array.from({ length: Math.max(1, 3 - voucher.items.length) }).map((_, i) => (
-                            <tr key={`empty-${i}`} className="border-b border-gray-100/50">
-                                <td className="p-1.5 text-center">&nbsp;</td>
-                                <td className="p-1.5">&nbsp;</td>
-                                <td className="p-1.5">&nbsp;</td>
-                                <td className="p-1.5">&nbsp;</td>
-                                <td className="p-1.5">&nbsp;</td>
-                                <td className="p-1.5">&nbsp;</td>
-                            </tr>
-                        ))}
-
-                        {/* Grand Total Row */}
-                        <tr className="bg-slate-50 border-t-2 border-gray-300">
-                            <td colSpan={4} className="p-2 text-right font-bold text-[#1A1A1A] text-[10px] font-sans uppercase tracking-wider">
-                                GRAND TOTAL (MALAYSIAN RINGGIT):
-                            </td>
-                            <td colSpan={2} className="p-2 text-right">
-                                <div className="text-[8px] text-gray-400 uppercase tracking-wider font-bold">RM (MYR)</div>
-                                <span className="font-serif font-black text-[#1A1A1A] text-sm select-all text-red-600 font-bold">
-                                    RM {totalAmount.toFixed(2)}
-                                </span>
-                            </td>
-                        </tr>
+                        {voucher.items.map((item,index)=><tr key={index} className="border-b border-[#E5E7EB] last:border-b-0">
+                            <td className="p-3 text-center text-[#6b7280]">{index+1}</td>
+                            <td className="p-3 font-semibold">{item.description || '-'}</td>
+                            <td className="p-3 text-center font-mono">{Number(item.qty || 0)}{item.unit ? ` ${item.unit}` : ''}</td>
+                            <td className="p-3 text-right font-mono">{Number(item.unitPrice || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right font-mono font-black">{(Number(item.qty || 0)*Number(item.unitPrice || 0)).toFixed(2)}</td>
+                        </tr>)}
                     </tbody>
                 </table>
-
-                {/* Additional notes container */}
-                {(voucher.notes || voucher.isSelfIssued !== false) && (
-                    <div className="mt-3 space-y-1.5">
-                        {voucher.notes && (
-                            <div className="border border-gray-200 rounded-sm p-2.5 text-[9px] font-mono bg-[#FAFAFA]">
-                                <span className="font-bold text-gray-500 block mb-0.5">Note / Remark Details:</span>
-                                <p className="text-gray-700 italic leading-relaxed">
-                                    {(voucher.notes || '')
-                                        .replace(/吉隆坡金莲记/g, '金莲记甲洞')
-                                        .replace(/此单据属于吉隆坡金莲记/g, '此单据属于金莲记甲洞')}
-                                </p>
-                            </div>
-                        )}
-                        {voucher.voucherType !== 'CASH_BILL' && voucher.isSelfIssued !== false && (
-                            <div className="border border-amber-300/40 rounded-sm p-2 text-[8px] bg-amber-50/10 text-amber-900 leading-normal font-sans">
-                                <span className="font-bold text-amber-950 block mb-0.5">✍️ RECIPIENT-CREATED BILL DECLARATION / 自制凭证对账声明</span>
-                                <p className="text-gray-500">
-                                    本凭据由买方代开，主要作为向独立个人或未注册商户支付劳务、运输等费用后的内部收付证明及审计备查。
-                                    (This recipient-created voucher is generated by the buyer as internal disbursement proof for audit records.)
-                                </p>
-                            </div>
-                        )}
-                        {voucher.voucherType === 'CASH_BILL' && (
-                            <div className="border border-emerald-300/40 rounded-sm p-2 text-[8px] bg-emerald-50/10 text-emerald-900 leading-normal font-sans">
-                                <span className="font-bold text-emerald-900 block mb-0.5">✨ CASH BILL DISBURSEMENT PROOF / 现金核销收付证明</span>
-                                <p className="text-gray-500">
-                                    本凭单作为现金发放、转账对账及常规业务采购的内部结算对账核销凭证。(This generated cash voucher serves as solid internal proof of payment for regulatory clearance.)
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
 
-            {/* Bottom Signature Seals Sheet */}
-            <div className="mt-4">
-                <div className="grid grid-cols-3 gap-4 text-center text-[10px]">
-                    
-                    {/* Prepared By */}
-                    <div className="flex flex-col items-center">
-                        <div className="h-10 w-full border-b border-gray-450 flex items-end justify-center pb-1 relative">
-                            {/* Dummy organic font text for visual quality */}
-                            <span className="font-serif italic text-blue-600/60 font-black text-xs absolute bottom-0.5">
-                                {voucher.preparedBy}
-                            </span>
-                        </div>
-                        <span className="text-[8px] mt-1 block font-extrabold text-gray-500 uppercase tracking-wider">
-                            PREPARED BY
-                        </span>
-                        <span className="text-[7px] text-gray-400 block font-mono">({voucher.preparedBy})</span>
-                    </div>
-
-                    {/* Approved By */}
-                    <div className="flex flex-col items-center">
-                        <div className="h-10 w-full border-b border-gray-450 flex items-end justify-center pb-1 relative">
-                            {/* Seal stamp visual decoration */}
-                            <div className={`absolute -top-3 rounded-full border border-dashed ${styleConfig.stampColor} p-1 px-2.5 uppercase text-[7px] font-black -rotate-6 animate-pulse select-none`}>
-                                {styleConfig.stampText}
-                            </div>
-                            <span className="font-serif italic text-gray-650 text-xs">
-                                {voucher.approvedBy || 'Approved'}
-                            </span>
-                        </div>
-                        <span className="text-[8px] mt-1 block font-extrabold text-gray-500 uppercase tracking-wider">
-                            APPROVED BY
-                        </span>
-                    </div>
-
-                    {/* Receiver Signature */}
-                    <div className="flex flex-col items-center">
-                        <div className="h-10 w-full border-b border-gray-450 flex items-end justify-center pb-1 px-2 relative">
-                            <span className="text-[8px] text-gray-400 italic absolute bottom-0.5 text-center">
-                                (TAP OR SIGN RECV)
-                            </span>
-                        </div>
-                        <span className="text-[8px] mt-1 block font-extrabold text-gray-500 uppercase tracking-wider">
-                            PAYEE RECEIVED / SIGN
-                        </span>
-                        <span className="text-[7px] text-gray-400 block font-mono">({voucher.payeeName})</span>
-                    </div>
+            <div className="mt-5 flex justify-end">
+                <div className="rounded-2xl border-2 border-[#111111] overflow-hidden flex items-stretch">
+                    <div className="bg-[#FFD200] px-5 py-3 text-[11px] font-black flex items-center">总金额 TOTAL</div>
+                    <div className="px-6 py-3 text-[20px] font-black font-mono min-w-[170px] text-right">RM {totalAmount.toFixed(2)}</div>
                 </div>
+            </div>
 
-                {/* Footer legalities */}
-                <div className="border-t border-gray-200 pt-1.5 mt-4">
-                    <div className="flex justify-between items-center text-[7px] text-gray-400 font-mono uppercase tracking-wider leading-none">
-                        <span>PRINTED SYSTEM-GENERATED NO SIGNATURE REQUIRED</span>
-                        <span>CONFIDENTIAL - FOR KIM LIAN KEE AUDIT RECORD</span>
-                        <span>PAGE 1 OF 1</span>
-                    </div>
+            {voucher.notes && <div className="mt-5 rounded-xl bg-[#F6F7FB] border border-[#E5E7EB] p-3 text-[9px] text-[#4b5563]"><strong className="text-[#111111]">备注：</strong> {voucher.notes.replace(/吉隆坡金莲记/g,'金莲记甲洞')}</div>}
+
+            <div className="mt-auto">
+                <p className="text-[9px] text-[#6b7280] mb-8">本凭单作为该笔付款的内部记录及收款证明。</p>
+                <div className="grid grid-cols-3 gap-7 text-center">
+                    <div><div className="h-12 border-b border-[#6b7280] flex items-end justify-center pb-1 text-[10px] font-semibold">{voucher.preparedBy || ''}</div><p className="text-[8px] font-bold mt-2">经手人 PREPARED BY</p></div>
+                    <div><div className="h-12 border-b border-[#6b7280]"></div><p className="text-[8px] font-bold mt-2">收款人签名 PAYEE</p></div>
+                    <div><div className="h-12 border-b border-[#6b7280] flex items-end justify-center pb-1 text-[10px] font-semibold">{voucher.approvedBy || ''}</div><p className="text-[8px] font-bold mt-2">批准人 APPROVED BY</p></div>
                 </div>
+                <div className="mt-8 pt-3 border-t border-[#E5E7EB] flex justify-between text-[7px] text-[#9ca3af] font-mono"><span>System record</span><span>{voucher.voucherNo}</span></div>
             </div>
         </div>
-    );
+   );
 };
-

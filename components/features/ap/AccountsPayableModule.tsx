@@ -2,9 +2,10 @@
 import * as React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle } from 'lucide-react';
+import { CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle, Archive, Sparkles } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+
 
 // UI & Constants
 import { ModuleGuideButton } from '../../ui/ModuleGuide';
@@ -45,6 +46,63 @@ interface AccountsPayableModuleProps {
     onClose: () => void;
     onNavigateToSelfVoucher?: (prefillData: { company: string; date: string; totalAmount: number; particulars: string; billRefId: string }) => void;
 }
+
+const AP_AI_API_URL = '/api/ap-ai';
+
+import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+
+const toMoneyCents = (value: unknown): number | null => {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+};
+
+const normalizeVendorForMatch = (value: unknown): string =>
+    String(value || '')
+        .toUpperCase()
+        .replace(/\b(SDN\.?\s*BHD\.?|ENTERPRISE|PLT|TRADING|COMPANY|CO\.?)\b/g, '')
+        .replace(/[^A-Z0-9]/g, '');
+
+const getBillMatchAmount = (bill: ExpenseItem): number | null =>
+    toMoneyCents(bill.totalBillAmount ?? bill.outstandingAmount ?? bill.amount);
+
+const getApiErrorMessage = (payload: any, fallback: string): string => {
+    let msg = payload?.error || payload?.message || fallback;
+    if (typeof msg === 'object') {
+        try {
+            msg = JSON.stringify(msg);
+        } catch(e) {
+            msg = String(msg);
+        }
+    }
+    return msg;
+};
+
+const requestApAi = async (path: string, init?: RequestInit) => {
+    if (!AP_AI_API_URL) throw new Error('AP AI 服务地址尚未配置（缺少 VITE_AP_AI_API_URL）');
+
+    const response = await fetch(`${AP_AI_API_URL}${path}`, {
+        cache: 'no-store',
+        ...init,
+        headers: {
+            Accept: 'application/json',
+            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            ...(init?.headers || {}),
+        },
+    });
+
+    const rawText = await response.text();
+    let payload: any;
+    try { payload = rawText ? JSON.parse(rawText) : {}; }
+    catch { throw new Error(`AP AI 服务返回了无效内容（HTTP ${response.status}）`); }
+
+    if (!response.ok || !payload?.success) {
+        const error = new Error(getApiErrorMessage(payload, `AP AI 请求失败（HTTP ${response.status}）`)) as Error & { status?: number; payload?: any };
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+    }
+    return { response, payload };
+};
 
 export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ onClose, onNavigateToSelfVoucher }) => {
     const [allBills, setAllBills] = useState<ExpenseItem[]>([]);
@@ -95,6 +153,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [billTypeFilter, setBillTypeFilter] = useState<'REGULAR' | 'SALARY' | 'PLATFORM' | 'FIXED' | 'ALL'>('REGULAR');
     const [mobileFilterStyle, setMobileFilterStyle] = useState<'PILL' | 'DROPDOWN'>('PILL');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [formGeneratePV, setFormGeneratePV] = useState<boolean>(false);
     const [formPVTitle, setFormPVTitle] = useState<string>('AUTO'); // 'AUTO', 'CASH VOUCHER', 'CASH BILL', 'PAYMENT VOUCHER'
     const [pvVoucherTitle, setPvVoucherTitle] = useState<string>('AUTO'); // For single backdate PV dialog
@@ -117,7 +176,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [aiScannedData, setAiScannedData] = useState<any>(null); // 暂存 AI 从暂存区盲抽出来的票据数据
     const [reconSearch, setReconSearch] = useState('');
     const [reconShowAll, setReconShowAll] = useState(false);
-    const [isDeletingFile, setIsDeletingFile] = useState(false); // 💡 新增：扔弃错误发票时的 Loading 状态
+    const [isDeletingFile, setIsDeletingFile] = useState(false);
+    const [isHoldingFile, setIsHoldingFile] = useState(false);
 
     const monthsList = useMemo(() => {
         const list = [];
@@ -155,66 +215,82 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     const handleAiScanPending = async () => {
         if (isAiScanning) return;
+        if (!AP_AI_API_URL) {
+            alert('AP AI 服务地址尚未配置，请设置 VITE_AP_AI_API_URL。');
+            return;
+        }
+
         setIsAiScanning(true);
         try {
-            const res = await fetch('https://culminate-carnival-affecting.ngrok-free.dev/api/scan-pending', {
-                headers: { 'ngrok-skip-browser-warning': 'true' }
-            });
-            const result = await res.json();
-
-            if (!result.success) {
-                alert("抓取失败: " + result.error);
+            console.info('[AP AI] Request URL:', `${AP_AI_API_URL}/api/scan-pending`);
+            const { payload } = await requestApAi('/api/scan-pending');
+            if (!Array.isArray(payload.data) || payload.data.length === 0) {
+                alert('暂存区目前没有可扫描的新账单。');
                 return;
             }
-
-            if (result.data.length === 0) {
-                alert("暂存区目前干干净净，没有新账单！🎉");
-                return;
-            }
-
-            const aiData = result.data[0];
-            setAiScannedData(aiData); // 暂存 AI 提取的单据要素
+            setAiScannedData(payload.data[0]);
             setReconSearch('');
             setReconShowAll(false);
-            setIsMatchModalOpen(true); // 唤醒智能中转站
-        } catch (error) {
-            console.error("AI Scan Error:", error);
-            alert("无法连接到本地 AI 引擎，请确保电脑里的 api-server.js 正在运行！");
+            setIsMatchModalOpen(true);
+        } catch (error: any) {
+            console.error('[AP AI] Scan failed:', error);
+            
+            let errMsg = error?.message || '未知错误';
+            if (errMsg.includes('high demand') || errMsg.includes('503')) {
+                errMsg = '云端 AI 识别模型当前处于访问高峰（High Demand），请稍等片刻后再试。';
+            } else if (errMsg.includes('{')) {
+                try {
+                    const parsed = JSON.parse(errMsg);
+                    if (parsed.error?.message) {
+                        errMsg = parsed.error.message;
+                        if (errMsg.includes('high demand') || errMsg.includes('503')) {
+                            errMsg = '云端 AI 识别模型当前处于访问高峰（High Demand），请稍等片刻后再试。';
+                        }
+                    }
+                } catch(e) {}
+            }
+            alert(`无法连接到云端 AP AI 服务：${errMsg}`);
         } finally {
             setIsAiScanning(false);
         }
     };
 
-    // 💡 新增：向后端发起废弃申请，直接把当前暂存发票扔进网盘回收站
     const handleDeletePendingFile = async (fileId: string) => {
-        if (!fileId) return;
-        if (!confirm("⚠️ 确定要废弃此文件并将它移入云端硬盘回收站吗？\n(这不会建立任何财务账目，适合处理传错的废图)")) return;
-        
+        if (!fileId || isDeletingFile || isHoldingFile) return;
+        if (!await (window as any).systemDialog.confirm('确定要废弃此文件并移入 _REJECTED_TRASH_BIN 吗？\n此操作不会建立任何财务账目。', '应付账款')) return;
         setIsDeletingFile(true);
         try {
-            const res = await fetch('https://culminate-carnival-affecting.ngrok-free.dev/api/delete-pending', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'ngrok-skip-browser-warning': 'true'
-                },
-                body: JSON.stringify({ fileId })
+            const { payload } = await requestApAi('/api/delete-pending', {
+                method: 'POST', body: JSON.stringify({ fileId })
             });
-            const result = await res.json();
-            if (result.success) {
-                alert("🗑️ 账单文件已成功扔入网盘回收站！");
-                setIsMatchModalOpen(false); // 物理关闭工作台
-                setAiScannedData(null);
-                await loadData(); // 重新洗牌本地视图
-            } else {
-                alert("物理废弃失败: " + result.error);
-            }
-        } catch (err: any) {
-            console.error("Delete pending file error:", err);
-            alert("无法连接到 API 服务: " + err.message);
-        } finally {
-            setIsDeletingFile(false);
-        }
+            alert(payload.message || '账单已移入废单隔离区。');
+            setIsMatchModalOpen(false);
+            setAiScannedData(null);
+            await loadData();
+        } catch (error: any) {
+            console.error('[AP AI] Delete pending failed:', error);
+            alert(`废弃账单失败：${error?.message || '未知错误'}`);
+        } finally { setIsDeletingFile(false); }
+    };
+
+    const handleHoldPendingFile = async (
+        fileId: string,
+        reason: 'MANUAL_REVIEW_REQUIRED' | 'NO_AP_MATCH' | 'UNCLEAR_AMOUNT' | 'UNCLEAR_DATE' | 'UNKNOWN_VENDOR' | 'POSSIBLE_DUPLICATE' | 'OTHER' = 'MANUAL_REVIEW_REQUIRED'
+    ) => {
+        if (!fileId || isHoldingFile || isDeletingFile) return;
+        if (!await (window as any).systemDialog.confirm('要把这张账单移入 _HOLDING_AREA，稍后再人工处理吗？', '应付账款')) return;
+        setIsHoldingFile(true);
+        try {
+            const { payload } = await requestApAi('/api/hold-pending', {
+                method: 'POST', body: JSON.stringify({ fileId, reason })
+            });
+            alert(payload.message || '账单已移入待确认保留区。');
+            setIsMatchModalOpen(false);
+            setAiScannedData(null);
+        } catch (error: any) {
+            console.error('[AP AI] Hold pending failed:', error);
+            alert(`移入保留区失败：${error?.message || '未知错误'}`);
+        } finally { setIsHoldingFile(false); }
     };
 
     const unCategorizedMarketingBills = useMemo(() =>
@@ -743,7 +819,30 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 particulars: bill.particulars || (bill.category ? getParticularsOptions(bill)[0]?.value : ''),
             });
         } else {
-            setEditingBill({ id: '', company: defaultCompany || '', category: 'SUPPLIES', amount: 0, totalBillAmount: 0, outstandingAmount: 0, creditNote: 0, paymentStatus: 'UNPAID', time: new Date().toISOString(), tags: [], linkUrl: '', note: '', paymentMethod: 'BANK_TRANSFER', paidBy: 'COMPANY', isAdvancePayment: false });
+            const defaultTime = new Date().toISOString();
+            const defaultDueDate = (() => {
+                const d = new Date();
+                d.setDate(d.getDate() + 15);
+                return d.toISOString().split('T')[0];
+            })();
+            setEditingBill({ 
+                id: '', 
+                company: defaultCompany || '', 
+                category: 'SUPPLIES', 
+                amount: 0, 
+                totalBillAmount: 0, 
+                outstandingAmount: 0, 
+                creditNote: 0, 
+                paymentStatus: 'UNPAID', 
+                time: defaultTime, 
+                dueDate: defaultDueDate, 
+                tags: [], 
+                linkUrl: '', 
+                note: '', 
+                paymentMethod: 'BANK_TRANSFER', 
+                paidBy: 'COMPANY', 
+                isAdvancePayment: false 
+            });
         }
         setIsFormOpen(true);
     };
@@ -767,40 +866,31 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             
             if ((editingBill as any).pendingFileId) {
                 try {
-                    const commitRes = await fetch('https://culminate-carnival-affecting.ngrok-free.dev/api/commit-bill', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'ngrok-skip-browser-warning': 'true' 
-                        },
-                        body: JSON.stringify({
-                            fileId: (editingBill as any).pendingFileId,
-                            originalName: (editingBill as any).pendingOriginalName,
-                            mimeType: (editingBill as any).pendingMimeType,
-                            verifiedVendor: editingBill.company,
-                            verifiedDate: editingBill.time,
-                            verifiedAmount: editingBill.totalBillAmount, 
-                            verifiedInvoiceNo: editingBill.invoiceRef || '',
-                            forceCommit: options?.forceCommit || false // 👈 传递强制覆盖信号
-                        })
-                    });
-
-                    // 🚨 核心去重拦截处理：如果后端触发了 409 历史同名防重拦截，弹出确认对话框
-                    if (commitRes.status === 409) {
-                        const errorData = await commitRes.json();
-                        setIsSaving(false);
-                        if (confirm(`⚠️ 历史账单重复警告：\n${errorData.message}\n\n点击【确定】将强行覆盖归档该单据，点击【取消】则中断入账。`)) {
-                            // 递归调用，带上强制覆盖暗号
-                            await handleSave({ forceCommit: true });
+                    try {
+                        const { payload: commitData } = await requestApAi('/api/commit-bill', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                fileId: (editingBill as any).pendingFileId,
+                                originalName: (editingBill as any).pendingOriginalName,
+                                mimeType: (editingBill as any).pendingMimeType,
+                                verifiedVendor: editingBill.company,
+                                verifiedDate: editingBill.time,
+                                verifiedAmount: editingBill.totalBillAmount,
+                                verifiedInvoiceNo: editingBill.invoiceRef || '',
+                                forceCommit: options?.forceCommit || false,
+                            }),
+                        });
+                        finalLinkUrl = commitData.finalDriveLink || finalLinkUrl;
+                    } catch (commitError: any) {
+                        if (commitError?.status === 409 && commitError?.payload?.code === 'DUPLICATE_ARCHIVE_DETECTED') {
+                            setIsSaving(false);
+                            const duplicateMessage = getApiErrorMessage(commitError.payload, '该账单疑似已经归档。');
+                            if (await (window as any).systemDialog.confirm(`⚠️ 历史账单重复警告：\n${duplicateMessage}\n\n点击【确定执行】仍然保存此重复账单；点击【取消】中断入账。`, '应付账款')) {
+                                await handleSave({ forceCommit: true });
+                            }
+                            return;
                         }
-                        return;
-                    }
-
-                    const commitData = await commitRes.json();
-                    if (commitData.success) {
-                        finalLinkUrl = commitData.finalDriveLink; 
-                    } else {
-                        throw new Error(commitData.error);
+                        throw commitError;
                     }
                 } catch (commitErr: any) {
                     alert("网盘归档失败: " + commitErr.message);
@@ -1039,7 +1129,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleUndoPayment = async (bill: ExpenseItem) => {
-        if (!confirm(`Are you sure you want to UNCANCEL payment status for ${bill.company}?`)) return;
+        if (!await (window as any).systemDialog.confirm(`您确定要撤销 ${bill.company} 的已付状态并重新标记为未付吗？`, '应付账款')) return;
         setIsSaving(true);
         try {
             const fullTotal = bill.totalBillAmount || bill.amount || 0;
@@ -1211,10 +1301,42 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const handleExportPDF = (bills: ExpenseItem[]) => {
         setPrintData(bills);
         setIsGeneratingPdf(true);
-        setTimeout(() => {
+        setTimeout(async () => {
             const input = actualPrintRef.current;
             if (!input) { setIsGeneratingPdf(false); return; }
-            html2canvas(input, { scale: 2, useCORS: true }).then((canvas) => {
+            try {
+                await new Promise<void>((resolve) => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => resolve());
+                    });
+                });
+                if (document.fonts?.ready) {
+                    await document.fonts.ready;
+                }
+                const canvas = await html2canvas(input, { 
+                    scale: 2, 
+                    useCORS: true,
+                    allowTaint: false,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 794,
+                    width: 794,
+                    height: input.scrollHeight,
+                    removeContainer: true,
+                    onclone: clonedDocument => {
+                        const clonedElement = clonedDocument.getElementById('accounts-payable-export-root');
+                        if (!clonedElement) {
+                            throw new Error('Unable to find cloned Accounts Payable export node');
+                        }
+                        applyResolvedStylesForPdf(input, clonedElement);
+                        clonedElement.style.display = 'block';
+                        clonedElement.style.width = '794px';
+                        clonedElement.style.minHeight = '1123px';
+                        clonedElement.style.height = 'auto';
+                    },
+                });
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const imgWidth = 210;
@@ -1224,15 +1346,19 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 let position = 0;
                 pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
-                while (heightLeft >= 0) {
+                while (heightLeft > 3) {
                     position = heightLeft - imgHeight;
                     pdf.addPage();
                     pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
                 }
                 pdf.save(`Accounts_Payable_Sheet_${new Date().toISOString().split('T')[0]}.pdf`);
+            } catch (e) {
+                console.error('[AP PDF Export error]', e);
+                alert('❌ PDF 生成失败 (PDF compile failed): ' + (e?.message || String(e)));
+            } finally {
                 setIsGeneratingPdf(false);
-            }).catch(e => { console.error(e); setIsGeneratingPdf(false); });
+            }
         }, 500);
     };
 
@@ -1245,10 +1371,42 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         setPrintMode('SUPPLIER_UNPAID');
         setPrintData(unpaidBills);
         setIsGeneratingPdf(true);
-        setTimeout(() => {
+        setTimeout(async () => {
             const input = actualPrintRef.current;
             if (!input) { setIsGeneratingPdf(false); setPrintMode('GENERAL'); return; }
-            html2canvas(input, { scale: 2, useCORS: true }).then((canvas) => {
+            try {
+                await new Promise<void>((resolve) => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => resolve());
+                    });
+                });
+                if (document.fonts?.ready) {
+                    await document.fonts.ready;
+                }
+                const canvas = await html2canvas(input, { 
+                    scale: 2, 
+                    useCORS: true,
+                    allowTaint: false,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 794,
+                    width: 794,
+                    height: input.scrollHeight,
+                    removeContainer: true,
+                    onclone: clonedDocument => {
+                        const clonedElement = clonedDocument.getElementById('accounts-payable-export-root');
+                        if (!clonedElement) {
+                            throw new Error('Unable to find cloned Accounts Payable export node');
+                        }
+                        applyResolvedStylesForPdf(input, clonedElement);
+                        clonedElement.style.display = 'block';
+                        clonedElement.style.width = '794px';
+                        clonedElement.style.minHeight = '1123px';
+                        clonedElement.style.height = 'auto';
+                    },
+                });
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const imgWidth = 210;
@@ -1258,20 +1416,20 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 let position = 0;
                 pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
-                while (heightLeft >= 0) {
+                while (heightLeft > 3) {
                     position = heightLeft - imgHeight;
                     pdf.addPage();
                     pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
                 }
                 pdf.save(`Supplier_Unpaid_Statement_${supplierName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+            } catch (e) {
+                console.error('[AP Supplier PDF Export error]', e);
+                alert('❌ PDF 生成失败 (PDF compile failed): ' + (e?.message || String(e)));
+            } finally {
                 setIsGeneratingPdf(false);
                 setPrintMode('GENERAL');
-            }).catch(e => { 
-                console.error(e); 
-                setIsGeneratingPdf(false); 
-                setPrintMode('GENERAL');
-            });
+            }
         }, 500);
     };
 
@@ -1562,79 +1720,176 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     const generateCombinedPV_PDF = async (vouchers: PaymentVoucher[]) => {
         if (vouchers.length === 0) return;
-        const firstIsA5 = vouchers[0].particulars.length <= 3;
-        const docPDF = firstIsA5 ? new jsPDF('l', 'mm', 'a5') : new jsPDF('p', 'mm', 'a4');
+        const docPDF = new jsPDF('p', 'mm', 'a4');
 
-        for (let i = 0; i < vouchers.length; i++) {
-            const pv = vouchers[i];
-            const isA5 = pv.particulars.length <= 3;
-            const sizeLabel = isA5 ? 'A5 (横向)' : 'A4 (纵向)';
-            setBatchPVProgress({ current: i + 1, total: vouchers.length, phase: `📄 正在绘制 ${sizeLabel} (${pv.pvNumber})` });
+        try {
+            for (let i = 0; i < vouchers.length; i++) {
+                const pv = vouchers[i];
+                setBatchPVProgress({ current: i + 1, total: vouchers.length, phase: `📄 正在绘制 A4 (纵向) (${pv.pvNumber})` });
 
-            await new Promise<void>((resolve, reject) => {
-                flushSync(() => {
-                    setPrintingVoucher(pv);
-                });
+                await new Promise<void>((resolve, reject) => {
+                    flushSync(() => {
+                        setPrintingVoucher(pv);
+                    });
 
-                setTimeout(() => {
-                    const element = voucherRef.current;
-                    if (!element) return reject('No element');
-                    html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then((canvas) => {
-                        const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                        if (i > 0) {
-                            docPDF.addPage(isA5 ? 'a5' : 'a4', isA5 ? 'l' : 'p');
+                    setTimeout(async () => {
+                        const element = voucherRef.current;
+                        if (!element) return reject(new Error('No element found'));
+                        try {
+                            await new Promise<void>((r) => {
+                                requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => r());
+                                });
+                            });
+                            if (document.fonts?.ready) {
+                                await document.fonts.ready;
+                            }
+                            
+                            const totalPages = Math.max(1, Math.ceil(pv.particulars.length / 8));
+                            for (let j = 0; j < totalPages; j++) {
+                                const pageElement = document.getElementById(`payment-voucher-export-page-${j}`);
+                                if (!pageElement) continue;
+
+                                const canvas = await html2canvas(pageElement, { 
+                                    scale: 2, 
+                                    useCORS: true, 
+                                    allowTaint: false,
+                                    backgroundColor: '#ffffff',
+                                    logging: false,
+                                    scrollX: 0,
+                                    scrollY: 0,
+                                    windowWidth: 794,
+                                    windowHeight: 1123,
+                                    width: 794,
+                                    height: 1123,
+                                    removeContainer: true,
+                                    onclone: clonedDocument => {
+                                        const clonedElement = clonedDocument.getElementById(`payment-voucher-export-page-${j}`);
+                                        if (clonedElement) {
+                                            applyResolvedStylesForPdf(pageElement, clonedElement);
+                                        }
+                                    },
+                                });
+                                const imgData = canvas.toDataURL('image/jpeg', 0.82);
+                                if (i > 0 || j > 0) {
+                                    docPDF.addPage('a4', 'p');
+                                }
+                                docPDF.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+                            }
+                            resolve();
+                        } catch (err) {
+                            reject(err);
                         }
-                        const drawHeight = isA5 ? 148 : 297;
-                        docPDF.addImage(imgData, 'JPEG', 0, 0, 210, drawHeight);
-                        resolve();
-                    }).catch(reject);
-                }, 100);
-            });
-        }
-
-        const today = new Date().toISOString().split('T')[0];
-        const seqKey = `batch_pv_seq_${today}`;
-        const seq = parseInt(localStorage.getItem(seqKey) || '0', 10) + 1;
-        localStorage.setItem(seqKey, seq.toString());
-        const seqStr = seq.toString().padStart(3, '0');
-        
-        if (vouchers.length === 1) {
-            const voucher = vouchers[0];
-            const cleanVendor = voucher.payeeName.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
-            const rangeStr = voucher.invoiceDateRange ? `_(${voucher.invoiceDateRange})` : '';
-            docPDF.save(`${voucher.pvNumber}_${cleanVendor}${rangeStr}.pdf`);
-        } else {
-            const uniquePayees = Array.from(new Set(vouchers.map(v => v.payeeName)));
-            if (uniquePayees.length === 1 && uniquePayees[0]) {
-                const cleanVendor = uniquePayees[0].replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
-                const allRanges = vouchers.map(v => v.invoiceDateRange).filter(Boolean);
-                const rangeSuffix = allRanges.length > 0 ? `_(${allRanges.join('_')})` : '';
-                docPDF.save(`Batch_PVs_${cleanVendor}${rangeSuffix}.pdf`);
-            } else {
-                docPDF.save(`Batch_Payment_Vouchers_${today}_${seqStr}.pdf`);
+                    }, 100);
+                });
             }
+
+            const today = new Date().toISOString().split('T')[0];
+            const seqKey = `batch_pv_seq_${today}`;
+            const seq = parseInt(localStorage.getItem(seqKey) || '0', 10) + 1;
+            localStorage.setItem(seqKey, seq.toString());
+            const seqStr = seq.toString().padStart(3, '0');
+            
+            if (vouchers.length === 1) {
+                const voucher = vouchers[0];
+                const cleanVendor = voucher.payeeName.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+                const rangeStr = voucher.invoiceDateRange ? `_(${voucher.invoiceDateRange})` : '';
+                docPDF.save(`${voucher.pvNumber}_${cleanVendor}${rangeStr}.pdf`);
+            } else {
+                const uniquePayees = Array.from(new Set(vouchers.map(v => v.payeeName)));
+                if (uniquePayees.length === 1 && uniquePayees[0]) {
+                    const cleanVendor = uniquePayees[0].replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+                    const allRanges = vouchers.map(v => v.invoiceDateRange).filter(Boolean);
+                    const rangeSuffix = allRanges.length > 0 ? `_(${allRanges.join('_')})` : '';
+                    docPDF.save(`Batch_PVs_${cleanVendor}${rangeSuffix}.pdf`);
+                } else {
+                    docPDF.save(`Batch_Payment_Vouchers_${today}_${seqStr}.pdf`);
+                }
+            }
+        } catch (error: unknown) {
+            console.error('[AP PDF Export error]', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            alert(`❌ 合并付款凭单 PDF 生成失败 (PV PDF compile failed): ${errorMessage}`);
+        } finally {
+            setBatchPVProgress(null);
+            setPrintingVoucher(null);
+            setSelectedBillIds(new Set());
         }
-        setBatchPVProgress(null);
-        setPrintingVoucher(null);
-        setSelectedBillIds(new Set());
     };
 
     const exportVoucherPDF = (voucher: PaymentVoucher) => {
-        setPrintingVoucher(voucher);
-        const isA5 = voucher.particulars.length <= 3;
-        setTimeout(() => {
+        setIsGeneratingPdf(true);
+        try {
+            flushSync(() => {
+                setPrintingVoucher(voucher);
+            });
+        } catch (err) {
+            console.warn('[AP] flushSync context warning, falling back to batch update:', err);
+            setPrintingVoucher(voucher);
+        }
+
+        setTimeout(async () => {
             const input = voucherRef.current;
-            if (!input) return;
-            html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then((canvas) => {
-                const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                const pdf = isA5 ? new jsPDF('l', 'mm', 'a5') : new jsPDF('p', 'mm', 'a4');
-                const drawHeight = isA5 ? 148 : 297;
-                pdf.addImage(imgData, 'JPEG', 0, 0, 210, drawHeight);
+            if (!input) {
+                alert('❌ 无法定位凭单渲染节点 (Could not find PV node). 请关闭历史/补开窗口后重试。');
+                setIsGeneratingPdf(false);
+                return;
+            }
+            try {
+                await new Promise<void>((resolve) => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => resolve());
+                    });
+                });
+                if (document.fonts?.ready) {
+                    await document.fonts.ready;
+                }
+                
+                const totalPages = Math.max(1, Math.ceil(voucher.particulars.length / 8));
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                
+                for (let j = 0; j < totalPages; j++) {
+                    const pageElement = document.getElementById(`payment-voucher-export-page-${j}`);
+                    if (!pageElement) continue;
+
+                    if (j > 0) {
+                        pdf.addPage('a4', 'p');
+                    }
+                    const canvas = await html2canvas(pageElement, { 
+                        scale: 2, 
+                        useCORS: true, 
+                        allowTaint: false,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        scrollX: 0,
+                        scrollY: 0,
+                        windowWidth: 794,
+                        windowHeight: 1123,
+                        width: 794,
+                        height: 1123,
+                        removeContainer: true,
+                        onclone: clonedDocument => {
+                            const clonedElement = clonedDocument.getElementById(`payment-voucher-export-page-${j}`);
+                            if (clonedElement) {
+                                applyResolvedStylesForPdf(pageElement, clonedElement);
+                            }
+                        },
+                    });
+                    const imgData = canvas.toDataURL('image/jpeg', 0.82);
+                    pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+                }
+                
                 const cleanVendor = voucher.payeeName.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
                 const rangeStr = voucher.invoiceDateRange ? `_(${voucher.invoiceDateRange})` : '';
                 pdf.save(`${voucher.pvNumber}_${cleanVendor}${rangeStr}.pdf`);
+            } catch (error: unknown) {
+                console.error('[AP PDF Export error]', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                alert(`❌ 付款凭单 PDF 生成失败 (PV PDF compile failed): ${errorMessage}`);
+            } finally {
                 setPrintingVoucher(null);
-            }).catch(e => console.error(e));
+                setIsGeneratingPdf(false);
+            }
         }, 150);
     };
 
@@ -1717,12 +1972,292 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         return targetList.reduce((acc, b) => acc + (b.outstandingAmount || 0), 0);
     }, [allBills, viewMode, selectedSupplierId, supplierById]);
 
+    const overdueBillsCount = useMemo(() => {
+        return allBills.filter(b => b.paymentStatus !== 'PAID' && new Date() > new Date(b.dueDate || '9999-12-31')).length;
+    }, [allBills]);
+
+    const thisMonthOutstanding = useMemo(() => {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const prefix = `${y}-${m}`;
+        return allBills.filter(b => (b.time || '').startsWith(prefix)).reduce((acc, b) => acc + (b.outstandingAmount || 0), 0);
+    }, [allBills]);
+
     const showFab = viewMode === 'LIST' && !isFormOpen;
 
     return (
         <div className="absolute inset-0 bg-[#F5F7FA] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
-            {/* === HEADER === */}
-            <div className="bg-[#1A1A1A] p-2.5 md:p-4 flex justify-between items-center shrink-0 shadow-lg border-b-4 border-[#FFD700] sticky top-0 z-40 safe-area-top">
+            {/* === MOBILE STICKY HEADER === */}
+            <div className="md:hidden bg-[#111111] border-b-[3px] border-[#FFD200] px-4 flex justify-between items-center shrink-0 shadow-lg sticky top-0 z-40 safe-area-top h-[56px]">
+                <div className="flex items-center gap-3 min-w-0">
+                    {viewMode === 'SUPPLIER_DETAIL' ? (
+                        <button onClick={() => { setViewMode('LIST'); setSelectedSupplierId(null); }} className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all shrink-0"><ArrowLeft size={20}/></button>
+                    ) : (
+                        <button onClick={onClose} className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all shrink-0"><ArrowLeft size={20}/></button>
+                    )}
+                    <h2 className="font-serif font-black text-sm text-white tracking-wide whitespace-nowrap truncate">
+                        {viewMode === 'SUPPLIER_DETAIL' ? `${supplierById.get(selectedSupplierId!)?.name || '商家'} 对账` : '应付账款 AP'}
+                    </h2>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <span className="bg-[#22C55E]/10 text-[#22C55E] text-[10px] px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 border border-[#22C55E]/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse"></span>
+                        ONLINE
+                    </span>
+                    {isBillingCapped && (
+                        <span className="bg-[#EF4444]/10 text-[#EF4444] text-[10px] px-2 py-0.5 rounded-full font-black border border-[#EF4444]/20">
+                            CAPPED
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* === MOBILE KPI SUMMARY STRIP === */}
+            <div className="flex md:hidden gap-2 px-4 py-3 bg-[#F6F7FB] border-b border-gray-200 overflow-x-auto scrollbar-hide shrink-0">
+                <div className="min-w-[140px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">未付款总额</p>
+                    <p className="text-sm font-black text-[#EF4444] mt-1">RM {totalInvoicesOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+                <div className="min-w-[110px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">逾期账单</p>
+                    <p className="text-sm font-black text-stone-900 mt-1">{overdueBillsCount} 笔</p>
+                </div>
+                <div className="min-w-[130px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">本月待付款</p>
+                    <p className="text-sm font-black text-stone-900 mt-1">RM {thisMonthOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+            </div>
+
+            {/* === MOBILE SEARCH + FILTER ROW === */}
+            <div className="flex md:hidden items-center gap-2 px-4 py-3 bg-white border-b border-gray-100 shrink-0">
+                <div className="relative flex-grow">
+                    <input 
+                        type="text" 
+                        className="w-full pl-9 pr-8 py-2.5 bg-[#F6F7FB] border border-gray-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-[#FFD200] transition-colors" 
+                        placeholder="搜索商家、备注、或金额..." 
+                        value={searchQuery} 
+                        onChange={e => { 
+                            setSearchQuery(e.target.value); 
+                            if(viewMode === 'SUPPLIER_DETAIL') { 
+                                setViewMode('LIST'); 
+                                setSelectedSupplierId(null); 
+                            } 
+                        }} 
+                        style={{ fontSize: 16 }} 
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <Search size={14}/>
+                    </div>
+                    {searchQuery && (
+                        <button 
+                            onClick={() => { setSearchQuery(''); }} 
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-1"
+                        >
+                            <X size={12}/>
+                        </button>
+                    )}
+                </div>
+                <button 
+                    onClick={() => setIsMobileFilterOpen(true)}
+                    className="flex items-center gap-1.5 bg-[#111111] hover:bg-black text-[#FFD200] text-xs font-black h-10 px-3.5 rounded-xl transition-all border border-stone-850 shrink-0 active:scale-95"
+                >
+                    <Filter size={14}/>
+                    <span>筛选</span>
+                </button>
+            </div>
+
+            {/* === MOBILE STATUS SEGMENTED CONTROL === */}
+            <div className="block md:hidden px-4 py-2 shrink-0 bg-white border-b border-gray-100">
+                <div className="bg-[#E5E7EB]/50 p-1 rounded-[14px] flex h-11 relative">
+                    {[
+                        { id: 'UNPAID', label: '未付' },
+                        { id: 'PAID', label: '已付' },
+                        { id: 'ALL', label: `全部 (${filteredBills.length})` }
+                    ].map(tab => {
+                        const isActive = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)}
+                                className={`flex-1 flex items-center justify-center text-xs font-black rounded-[11px] transition-all duration-200 z-15 ${isActive ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}
+                            >
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* === MOBILE FILTER BOTTOM SHEET === */}
+            {isMobileFilterOpen && (
+                <>
+                    {/* Backdrop */}
+                    <div 
+                        className="fixed inset-0 bg-black/60 z-[100] animate-in fade-in duration-200"
+                        onClick={() => setIsMobileFilterOpen(false)}
+                    ></div>
+                    
+                    {/* Slide Up Sheet */}
+                    <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[24px] max-h-[85vh] overflow-y-auto z-[101] shadow-2xl flex flex-col border-t border-gray-200 animate-in slide-in-from-bottom duration-300 pb-[calc(16px+env(safe-area-inset-bottom,0px))]">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+                            <h3 className="text-sm font-black text-stone-900">高级筛选 Command Center</h3>
+                            <button 
+                                onClick={() => setIsMobileFilterOpen(false)}
+                                className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-stone-500 rounded-full transition-all active:scale-95"
+                            >
+                                <X size={18}/>
+                            </button>
+                        </div>
+                        
+                        <div className="p-5 space-y-5 flex-1">
+                            {/* Company Input */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">选择商家 (Company)</label>
+                                <select 
+                                    value={searchId} 
+                                    onChange={e => {
+                                        setSearchId(e.target.value);
+                                        if(viewMode === 'SUPPLIER_DETAIL') {
+                                            setViewMode('LIST');
+                                            setSelectedSupplierId(null);
+                                        }
+                                    }}
+                                    className="w-full bg-[#F6F7FB] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200] transition-colors"
+                                    style={{ fontSize: 16 }}
+                                >
+                                    <option value="">全部商家 (All)</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.id} value={s.id}>{s.id} - {s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Select month */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">按月份筛选 (By Month)</label>
+                                <select 
+                                    value={currentMonthVal} 
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val) {
+                                            const [yStr, mStr] = val.split('-');
+                                            const year = Number(yStr);
+                                            const month = Number(mStr);
+                                            const startStr = `${yStr}-${mStr}-01`;
+                                            const lastDay = new Date(year, month, 0).getDate();
+                                            const endStr = `${yStr}-${mStr}-${String(lastDay).padStart(2, '0')}`;
+                                            setDateRange({ start: startStr, end: endStr });
+                                        } else {
+                                            setDateRange({ start: '', end: '' });
+                                        }
+                                    }}
+                                    className="w-full bg-[#F6F7FB] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200] transition-colors"
+                                    style={{ fontSize: 16 }}
+                                >
+                                    <option value="">快捷按月选择 Dropdown...</option>
+                                    {monthsList.map(m => (
+                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Custom Date Range */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">自定义日期范围 (Date Range)</label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="date" 
+                                        value={dateRange.start} 
+                                        onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                        className="flex-1 bg-[#F6F7FB] border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold"
+                                        style={{ fontSize: 16 }}
+                                    />
+                                    <span className="text-gray-400 font-bold">-</span>
+                                    <input 
+                                        type="date" 
+                                        value={dateRange.end} 
+                                        onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                        className="flex-1 bg-[#F6F7FB] border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold"
+                                        style={{ fontSize: 16 }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* View Filter */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">视图分类 (View Category)</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { label: '常规账单 🏢', value: 'REGULAR', count: billTypeCounts.regular },
+                                        { label: '固定支出 📌', value: 'FIXED', count: billTypeCounts.fixed },
+                                        { label: '薪资相关 🧠', value: 'SALARY', count: billTypeCounts.salary },
+                                        { label: '银行/平台 ⚙️', value: 'PLATFORM', count: billTypeCounts.platform },
+                                        { label: '显示全部 📊', value: 'ALL', count: billTypeCounts.total }
+                                    ].map(opt => (
+                                        <button 
+                                            key={opt.value}
+                                            onClick={() => setBillTypeFilter(opt.value as any)}
+                                            className={`py-3 px-3.5 rounded-xl text-xs font-black transition-all border text-left flex justify-between items-center ${billTypeFilter === opt.value ? 'bg-[#111111] text-white border-transparent shadow-xs' : 'bg-[#F6F7FB] text-stone-600 border-gray-200 hover:bg-gray-100'}`}
+                                        >
+                                            <span>{opt.label}</span>
+                                            <span className="text-[10px] opacity-80">{opt.count}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Tags Selection */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">选择标签 (Tag)</label>
+                                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-[#F6F7FB] rounded-xl border border-gray-200">
+                                    <button 
+                                        onClick={() => setSelectedTag('ALL')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedTag === 'ALL' ? 'bg-[#111111] text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
+                                    >
+                                        🔖 ALL
+                                    </button>
+                                    {availableTags.map(t => (
+                                        <button 
+                                            key={t}
+                                            onClick={() => setSelectedTag(t)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedTag === t ? 'bg-[#111111] text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
+                                        >
+                                            #{t}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Apply & Reset Buttons */}
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3 mt-4">
+                            <button 
+                                onClick={() => {
+                                    setSearchId('');
+                                    setDateRange({ start: '', end: '' });
+                                    setSelectedTag('ALL');
+                                    setBillTypeFilter('REGULAR');
+                                    setIsMobileFilterOpen(false);
+                                }}
+                                className="py-3 bg-gray-100 hover:bg-gray-200 text-stone-800 rounded-xl text-sm font-black transition-all active:scale-95"
+                            >
+                                重置
+                            </button>
+                            <button 
+                                onClick={() => setIsMobileFilterOpen(false)}
+                                className="py-3 bg-[#111111] text-[#FFD200] hover:bg-black rounded-xl text-sm font-black transition-all active:scale-95 shadow-md"
+                            >
+                                应用
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* === DESKTOP STICKY HEADER === */}
+            <div className="hidden md:flex bg-[#111111] px-5 py-4 justify-between items-center shrink-0 shadow-[0_8px_28px_rgba(17,17,17,0.18)] border-b border-[#FFD200] sticky top-0 z-40 safe-area-top">
                 <div className="flex items-center gap-2 md:gap-3 min-w-0">
                     {viewMode === 'SUPPLIER_DETAIL' ? (
                         <button onClick={() => { setViewMode('LIST'); setSelectedSupplierId(null); }} className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all shrink-0"><ArrowLeft size={20}/></button>
@@ -1750,16 +2285,16 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     </div>
                 </div>
                 
-                {/* Desktop Header Actions (Hidden on Mobile, handled by Sticky Bottom Bar!) */}
-                <div className="hidden md:flex items-center gap-1.5 md:gap-2">
+                {/* Desktop Header Actions */}
+                <div className="flex items-center gap-1.5 md:gap-2">
                     {/* ⚙️ AI 暂存区扫描器 */}
                     <button 
                         onClick={handleAiScanPending}
                         disabled={isAiScanning}
-                        className={`flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 active:scale-95 text-white text-[10px] md:text-xs font-black px-2 py-1.5 md:px-3.5 md:py-2.5 rounded-xl border border-blue-400 shadow-lg transition-all shrink-0 ${isAiScanning ? 'animate-pulse' : ''}`}
-                        title="扫描本地暂存区并利用 AI 解析 (Local AI Scanner)"
+                        className={`h-11 flex items-center gap-2 bg-[#FFD200] hover:bg-[#FFE14D] active:scale-[0.98] text-[#111111] text-xs font-black px-4 rounded-[14px] border border-[#FFD200] shadow-[0_6px_18px_rgba(255,210,0,0.22)] transition-all shrink-0 ${isAiScanning ? 'animate-pulse' : ''}`}
+                        title="扫描云端暂存区并利用 AI 解析 (Cloud AP AI Scanner)"
                     >
-                        {isAiScanning ? <Loader2 size={12} className="animate-spin"/> : <span>🤖</span>}
+                        {isAiScanning ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>}
                         <span className="hidden md:inline">AI 扫描</span>
                     </button>
 
@@ -1777,7 +2312,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
                     <button 
                         onClick={() => handleOpenForm()} 
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] md:text-xs px-2.5 py-1.5 md:px-3.5 md:py-2.5 rounded-xl shadow-lg border border-blue-500 transition-all flex items-center gap-1 active:scale-95 shrink-0 whitespace-nowrap animate-pulse-subtle"
+                        className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <Plus size={12}/> 
                         <span className="hidden sm:inline">新增账单</span>
@@ -1786,7 +2321,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
                     <button 
                         onClick={() => setShowBackdate(true)} 
-                        className="bg-orange-600 hover:bg-orange-500 text-white font-black text-[10px] md:text-xs px-2.5 py-1.5 md:px-3.5 md:py-2.5 rounded-xl shadow-lg border border-orange-500 transition-all flex items-center gap-1 active:scale-95 shrink-0 whitespace-nowrap"
+                        className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <Calendar size={12}/> 
                         <span className="hidden sm:inline">补开 PV</span>
@@ -1794,7 +2329,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     </button>
                     <button 
                         onClick={() => setShowPVHistory(true)} 
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] md:text-xs px-2.5 py-1.5 md:px-3.5 md:py-2.5 rounded-xl shadow-lg border border-emerald-500 transition-all flex items-center gap-1 active:scale-95 shrink-0 whitespace-nowrap"
+                        className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <FileText size={12}/> 
                         <span className="hidden sm:inline">PV 历史</span>
@@ -1804,8 +2339,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 </div>
             </div>
 
-            {/* === UPPER SEARCH FILTER TOOLBAR === */}
-            <div className="bg-white border-b border-gray-200 p-3 md:p-4 shrink-0 flex flex-col gap-3">
+            {/* === DESKTOP UPPER SEARCH FILTER TOOLBAR === */}
+            <div className="hidden md:flex bg-white border-b border-gray-200 p-3 md:p-4 shrink-0 flex-col gap-3">
                 <div className="flex flex-col md:flex-row justify-between gap-3 items-stretch md:items-center">
                     {/* Search grids: Two slots */}
                     <div className="flex flex-row gap-2 flex-grow max-w-2xl">
@@ -1889,10 +2424,6 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             />
                         </div>
 
-                        <button onClick={() => setDateRange(getQuickDateRange('TODAY'))} className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg text-[10px] font-black shrink-0">今日</button>
-                        <button onClick={() => setDateRange(getQuickDateRange('YESTERDAY'))} className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg text-[10px] font-black shrink-0">昨日</button>
-                        <button onClick={() => setDateRange(getQuickDateRange('THIS_MONTH'))} className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg text-[10px] font-black shrink-0">本月</button>
-                        <button onClick={() => setDateRange(getQuickDateRange('LAST_MONTH'))} className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg text-[10px] font-black shrink-0">上月</button>
 
                         {/* 📅 快捷按月选择 Dropdown */}
                         <div className="relative shrink-0 flex items-center bg-amber-50 hover:bg-amber-100/80 border border-amber-200 rounded-lg px-2 py-0.5 transition-colors h-[28px] md:h-[32px] cursor-pointer">
@@ -1948,200 +2479,6 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 
                 {/* Row 3: Tabs + Select All */}
                 <div className="flex flex-col gap-3">
-                    {/* 📱 Mobile View - iOS Minimalist Collapsible Dropdown Selector (Option 2 conforming to Apple HIG) */}
-                    <div className="block md:hidden">
-                        <div className="relative">
-                            <button 
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className="w-full bg-white border border-stone-200 hover:bg-stone-50 active:bg-stone-100 rounded-xl px-4 py-2.5 flex items-center justify-between min-h-[48px] shadow-2xs transition-all"
-                            >
-                                <div className="flex items-center gap-2">
-                                    {billTypeFilter === 'REGULAR' && (
-                                        <>
-                                            <span className="text-base">🏢</span>
-                                            <span className="text-xs font-black text-stone-800">当前视图：常规账单</span>
-                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-stone-100 text-stone-600">{billTypeCounts.regular} 笔</span>
-                                        </>
-                                    )}
-                                    {billTypeFilter === 'FIXED' && (
-                                        <>
-                                            <span className="text-base">📌</span>
-                                            <span className="text-xs font-black text-teal-800">当前视图：固定支出</span>
-                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 text-teal-700">{billTypeCounts.fixed} 笔</span>
-                                        </>
-                                    )}
-                                    {billTypeFilter === 'SALARY' && (
-                                        <>
-                                            <span className="text-base">🧠</span>
-                                            <span className="text-xs font-black text-indigo-800">当前视图：薪资相关</span>
-                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700">{billTypeCounts.salary} 笔</span>
-                                        </>
-                                    )}
-                                    {billTypeFilter === 'PLATFORM' && (
-                                        <>
-                                            <span className="text-base">⚙️</span>
-                                            <span className="text-xs font-black text-amber-800">当前视图：银行/平台</span>
-                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700">{billTypeCounts.platform} 笔</span>
-                                        </>
-                                    )}
-                                    {billTypeFilter === 'ALL' && (
-                                        <>
-                                            <span className="text-base">📊</span>
-                                            <span className="text-xs font-black text-stone-900">当前视图：显示全部</span>
-                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-stone-950 text-[#FFD700]">{billTypeCounts.total} 笔</span>
-                                        </>
-                                    )}
-                                </div>
-                                <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {isDropdownOpen && (
-                                <>
-                                    {/* Backdrop to close */}
-                                    <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)}></div>
-                                    
-                                    {/* Popover options list */}
-                                    <div className="absolute left-0 right-0 mt-1.5 bg-white border border-stone-200 rounded-2xl shadow-lg py-2 px-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                                        <button 
-                                            onClick={() => { setBillTypeFilter('REGULAR'); setIsDropdownOpen(false); }}
-                                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all min-h-[48px] ${billTypeFilter === 'REGULAR' ? 'bg-stone-50' : 'hover:bg-stone-50 active:bg-stone-100'}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-base">🏢</span>
-                                                <span className="text-xs font-bold text-stone-800">常规账单</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-stone-400 font-bold">{billTypeCounts.regular} 笔</span>
-                                                {billTypeFilter === 'REGULAR' && <span className="text-stone-900 font-black text-sm">✓</span>}
-                                            </div>
-                                        </button>
-
-                                        <button 
-                                            onClick={() => { setBillTypeFilter('FIXED'); setIsDropdownOpen(false); }}
-                                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all min-h-[48px] ${billTypeFilter === 'FIXED' ? 'bg-stone-50' : 'hover:bg-stone-50 active:bg-stone-100'}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-base">📌</span>
-                                                <span className="text-xs font-bold text-stone-800">固定支出</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-stone-400 font-bold">{billTypeCounts.fixed} 笔</span>
-                                                {billTypeFilter === 'FIXED' && <span className="text-teal-600 font-black text-sm">✓</span>}
-                                            </div>
-                                        </button>
-
-                                        <button 
-                                            onClick={() => { setBillTypeFilter('SALARY'); setIsDropdownOpen(false); }}
-                                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all min-h-[48px] ${billTypeFilter === 'SALARY' ? 'bg-stone-50' : 'hover:bg-stone-50 active:bg-stone-100'}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-base">🧠</span>
-                                                <span className="text-xs font-bold text-stone-800">薪资相关</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-stone-400 font-bold">{billTypeCounts.salary} 笔</span>
-                                                {billTypeFilter === 'SALARY' && <span className="text-indigo-600 font-black text-sm">✓</span>}
-                                            </div>
-                                        </button>
-
-                                        <button 
-                                            onClick={() => { setBillTypeFilter('PLATFORM'); setIsDropdownOpen(false); }}
-                                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all min-h-[48px] ${billTypeFilter === 'PLATFORM' ? 'bg-stone-50' : 'hover:bg-stone-50 active:bg-stone-100'}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-base">⚙️</span>
-                                                <span className="text-xs font-bold text-stone-800">银行/平台 费用</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-stone-400 font-bold">{billTypeCounts.platform} 笔</span>
-                                                {billTypeFilter === 'PLATFORM' && <span className="text-amber-600 font-black text-sm">✓</span>}
-                                            </div>
-                                        </button>
-
-                                        <div className="h-px bg-stone-100 my-1"></div>
-
-                                        <button 
-                                            onClick={() => { setBillTypeFilter('ALL'); setIsDropdownOpen(false); }}
-                                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all min-h-[48px] ${billTypeFilter === 'ALL' ? 'bg-stone-50' : 'hover:bg-stone-50 active:bg-stone-100'}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-base">📊</span>
-                                                <span className="text-xs font-bold text-stone-900">显示全部</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-stone-400 font-bold">{billTypeCounts.total} 笔</span>
-                                                {billTypeFilter === 'ALL' && <span className="text-stone-950 font-black text-sm">✓</span>}
-                                            </div>
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 🖥️ Desktop View - Keep full-width balanced 5-grid selector */}
-                    <div className="hidden md:grid md:grid-cols-5 gap-2 w-full self-center p-1.5 bg-stone-100/70 rounded-2xl border border-stone-200/50 shadow-2xs">
-                        {/* 🏢 常规账单 */}
-                        <button 
-                            onClick={() => setBillTypeFilter('REGULAR')}
-                            className={`py-2 px-3 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-between min-h-[48px] border ${billTypeFilter === 'REGULAR' ? 'bg-stone-900 text-white border-transparent shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border-stone-200/50 hover:bg-stone-50 active:bg-stone-100'}`}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-sm">🏢</span>
-                                <span>常规账单</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${billTypeFilter === 'REGULAR' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{billTypeCounts.regular}</span>
-                        </button>
-
-                        {/* 📌 固定支出 */}
-                        <button 
-                            onClick={() => setBillTypeFilter('FIXED')}
-                            className={`py-2 px-3 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-between min-h-[48px] border ${billTypeFilter === 'FIXED' ? 'bg-teal-700 text-white border-transparent shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border-stone-200/50 hover:bg-stone-50 active:bg-stone-100'}`}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-sm">📌</span>
-                                <span>固定支出</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${billTypeFilter === 'FIXED' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{billTypeCounts.fixed}</span>
-                        </button>
-
-                        {/* 🧠 薪资相关 */}
-                        <button 
-                            onClick={() => setBillTypeFilter('SALARY')}
-                            className={`py-2 px-3 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-between min-h-[48px] border ${billTypeFilter === 'SALARY' ? 'bg-indigo-600 text-white border-transparent shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border-stone-200/50 hover:bg-stone-50 active:bg-stone-100'}`}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-sm">🧠</span>
-                                <span>薪资相关</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${billTypeFilter === 'SALARY' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{billTypeCounts.salary}</span>
-                        </button>
-
-                        {/* ⚙️ 银行/平台 */}
-                        <button 
-                            onClick={() => setBillTypeFilter('PLATFORM')}
-                            className={`py-2 px-3 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-between min-h-[48px] border ${billTypeFilter === 'PLATFORM' ? 'bg-amber-600 text-white border-transparent shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border-stone-200/50 hover:bg-stone-50 active:bg-stone-100'}`}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-sm">⚙️</span>
-                                <span>银行/平台</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${billTypeFilter === 'PLATFORM' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{billTypeCounts.platform}</span>
-                        </button>
-
-                        {/* 📊 显示全部 */}
-                        <button 
-                            onClick={() => setBillTypeFilter('ALL')}
-                            className={`col-span-2 md:col-span-1 py-2 px-3 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-between min-h-[48px] border ${billTypeFilter === 'ALL' ? 'bg-stone-950 text-[#FFD700] border-transparent shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border-stone-200/50 hover:bg-stone-50 active:bg-stone-100'}`}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-sm">📊</span>
-                                <span>显示全部</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${billTypeFilter === 'ALL' ? 'bg-stone-800 text-[#FFD700]' : 'bg-stone-100 text-stone-500'}`}>{billTypeCounts.total}</span>
-                        </button>
-                    </div>
-
                     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap">
                         {TABS.map(tab => (
                             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black border-b-2 md:border-b-4 transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id ? tab.color : 'bg-white text-gray-400 border-transparent hover:bg-gray-50'}`}>{tab.label.split(' ')[0]}<span className="hidden md:inline"> {tab.label.split(' ').slice(1).join(' ')}</span>{activeTab === tab.id && <span className="bg-white/20 px-1 rounded text-[9px] ml-1">{filteredBills.length}</span>}</button>
@@ -2155,7 +2492,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             </div>
 
             {/* === MAIN CONTENT === */}
-            <div ref={mainScrollRef} className="flex-grow overflow-y-auto p-4 md:p-6 bg-[#F5F7FA] pb-32">
+            <div ref={mainScrollRef} className="mobile-fixed-actions-space flex-grow overflow-y-auto p-4 md:p-6 bg-[#F5F7FA] md:pb-32">
                 {/* 📊 智能信息导览条 (Dynamic Filter Information Banner) */}
                 {!loading && (
                     <>
@@ -2349,19 +2686,29 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         </div>
                                     </div>
                                     {/* Action buttons */}
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 mt-2">
                                         {!isPaid ? (
-                                            <button onClick={() => { setPayModalData(bill); setPayAmount(bill.outstandingAmount || 0); setPayMethod(''); }} className="flex-1 bg-[#1A1A1A] text-[#FFD700] py-2 rounded-lg text-xs font-black shadow-md hover:bg-black transition-all active:scale-95">Pay Now</button>
+                                            <button 
+                                                onClick={() => { setPayModalData(bill); setPayAmount(bill.outstandingAmount || 0); setPayMethod(''); }} 
+                                                className="flex-grow bg-[#1A1A1A] text-[#FFD200] py-2.5 px-4 rounded-xl text-xs font-black border border-[#FFD200]/20 shadow-sm hover:bg-black transition-all active:scale-95"
+                                            >
+                                                Pay Now
+                                            </button>
                                         ) : (
-                                            <button onClick={() => handleUndoPayment(bill)} className="flex-1 bg-yellow-50 text-yellow-600 border border-yellow-250 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-100 flex items-center justify-center gap-1"><RotateCcw size={12}/> Undo</button>
+                                            <button 
+                                                onClick={() => handleUndoPayment(bill)} 
+                                                className="flex-grow bg-emerald-50 text-emerald-700 border border-emerald-200 py-2.5 px-4 rounded-xl text-[10px] md:text-xs font-black hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                                            >
+                                                <RotateCcw size={12}/> Undo
+                                            </button>
                                         )}
                                         
                                         <button 
                                             onClick={() => handleOpenForm(bill)} 
-                                            className="p-3 bg-gray-200 hover:bg-[#1A1A1A] hover:text-[#FFD700] text-gray-700 rounded-xl transition-all shadow-sm active:scale-95"
+                                            className="h-10 w-10 flex items-center justify-center bg-gray-100 hover:bg-[#1A1A1A] hover:text-[#FFD200] text-gray-600 rounded-xl transition-all border border-gray-200 shrink-0 active:scale-95"
                                             title="编辑账单"
                                         >
-                                            <Edit3 size={18}/>
+                                            <Edit3 size={15}/>
                                         </button>
                                     </div>
                                 </div>
@@ -2516,8 +2863,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             />
 
             {/* HIDDEN PRINT TEMPLATE */}
-            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                <div ref={actualPrintRef} className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative">
+            <div style={{ position: 'fixed', top: '0px', left: '0px', zIndex: -9999, pointerEvents: 'none' }}>
+                <div id="accounts-payable-export-root" ref={actualPrintRef} className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative">
                     {printMode === 'SUPPLIER_UNPAID' ? (
                         /* 🧾 供应商未付对账单专属模板 (Supplier Unpaid Statement Template) */
                         <>
@@ -2654,11 +3001,23 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             </div>
             
             {/* 👑 HIDDEN VOUCHER TEMPLATE (PV 系统) */}
-            {printingVoucher && (
-                <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                    <PaymentVoucherTemplate ref={voucherRef} voucher={printingVoucher} />
-                </div>
-            )}
+            {printingVoucher && (() => {
+                return (
+                    <div style={{ 
+                        position: 'fixed', 
+                        top: '0px', 
+                        left: '0px', 
+                        width: '794px', 
+                        height: 'auto', 
+                        overflow: 'visible', 
+                        pointerEvents: 'none',
+                        background: '#ffffff',
+                        zIndex: -9999
+                    }}>
+                        <PaymentVoucherTemplate ref={voucherRef} voucher={printingVoucher} />
+                    </div>
+                );
+            })()}
 
             {/* 👑 PV 历史 modal */}
             {showPVHistory && (
@@ -3019,11 +3378,28 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
             {/* 🤖 智能对账中转站 Modal (全新物理解析加固形态) */}
             {isMatchModalOpen && aiScannedData && (() => {
-                const matchedExistingBills = allBills.filter(b => 
-                    b.company.toLowerCase().includes(aiScannedData.vendor.toLowerCase()) && 
-                    b.paymentStatus !== 'PAID'
-                );
+                const scannedVendorKey = normalizeVendorForMatch(aiScannedData.vendor);
+                const scannedAmountCents = toMoneyCents(aiScannedData.amount);
+                const scannedInvoiceNo = String(aiScannedData.invoice_no || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
                 const allPendingBills = allBills.filter(b => b.paymentStatus !== 'PAID');
+                const matchedExistingBills = allPendingBills
+                    .map(bill => {
+                        const billVendorKey = normalizeVendorForMatch(bill.company);
+                        const billAmountCents = getBillMatchAmount(bill);
+                        const billInvoiceNo = String(bill.invoiceRef || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        const vendorMatches = Boolean(scannedVendorKey && billVendorKey) && (
+                            billVendorKey.includes(scannedVendorKey) || scannedVendorKey.includes(billVendorKey)
+                        );
+                        const amountDifferenceCents = scannedAmountCents !== null && billAmountCents !== null
+                            ? Math.abs(scannedAmountCents - billAmountCents) : Number.POSITIVE_INFINITY;
+                        const amountMatches = amountDifferenceCents <= 2;
+                        const invoiceMatches = Boolean(scannedInvoiceNo && billInvoiceNo && scannedInvoiceNo === billInvoiceNo);
+                        const score = (vendorMatches ? 50 : 0) + (amountMatches ? 40 : 0) + (invoiceMatches ? 100 : 0);
+                        return { bill, score, vendorMatches, amountMatches, invoiceMatches, amountDifferenceCents };
+                    })
+                    .filter(match => match.invoiceMatches || (match.vendorMatches && match.amountMatches))
+                    .sort((a, b) => b.score - a.score || a.amountDifferenceCents - b.amountDifferenceCents)
+                    .map(match => match.bill);
                 const searchedPendingBills = allPendingBills.filter(b => {
                     if (!reconSearch.trim()) return true;
                     const query = reconSearch.toLowerCase();
@@ -3033,13 +3409,14 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 
                 return (
                     <div className="fixed inset-0 bg-black/80 z-[180] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                        <div className="bg-white w-full max-w-5xl h-[87vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl border border-gray-200">
+                        <div className="bg-white w-full max-w-6xl h-[88vh] rounded-[24px] overflow-hidden flex flex-col shadow-[0_28px_90px_rgba(0,0,0,0.35)] border border-white/70">
                             
                             {/* Header 顶栏 */}
-                            <div className="bg-[#1A1A1A] text-white p-4 flex justify-between items-center shrink-0 border-b-4 border-amber-400">
+                            <div className="bg-[#111111] text-white px-5 py-4 flex justify-between items-center shrink-0 border-b-[3px] border-[#FFD200]">
                                 <div>
                                     <h3 className="font-serif font-black text-sm md:text-lg flex items-center gap-2">🤖 AP 智能对账中转站</h3>
                                     <p className="text-[10px] text-gray-400 font-mono">AI 提取预览：{aiScannedData.vendor} · 金额: RM {Number(aiScannedData.amount).toFixed(2)}</p>
+                                    <p className="text-[9px] text-[#FFD200]/90 font-bold mt-0.5">智能配对条件：供应商名称 + 金额（允许 ±RM0.02）或 Invoice No. 完全一致</p>
                                 </div>
                                 <button onClick={() => setIsMatchModalOpen(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white"><X size={18}/></button>
                             </div>
@@ -3072,16 +3449,32 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         allow="autoplay"
                                     />
 
-                                    {/* 🗑️ 左下角物理废弃红键 */}
-                                    <div className="p-3 bg-gray-900/90 border-t border-gray-800 flex items-center shrink-0">
+                                    {/* 待确认保留 / 废单隔离 */}
+                                    <div className="p-3 bg-[#111111] border-t border-white/10 grid grid-cols-2 gap-3 shrink-0">
                                         <button
                                             type="button"
-                                            disabled={isDeletingFile}
+                                            disabled={isHoldingFile || isDeletingFile}
+                                            onClick={() => handleHoldPendingFile(
+                                                aiScannedData.fileId,
+                                                aiScannedData.isDuplicate
+                                                    ? 'POSSIBLE_DUPLICATE'
+                                                    : aiScannedData.needsReview
+                                                    ? (aiScannedData.reviewReason === 'INVALID_OR_MISSING_DATE' ? 'UNCLEAR_DATE' : 'MANUAL_REVIEW_REQUIRED')
+                                                    : 'NO_AP_MATCH'
+                                            )}
+                                            className="min-h-[48px] bg-[#FFD200] hover:bg-[#FFE14D] border border-[#FFD200] text-[#111111] py-3 px-4 rounded-[14px] font-black text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 shadow-[0_6px_18px_rgba(255,210,0,0.18)]"
+                                        >
+                                            {isHoldingFile ? <Loader2 size={15} className="animate-spin"/> : <Archive size={15}/>}
+                                            <span>{isHoldingFile ? '正在移入保留区...' : '移入保留区'}</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={isDeletingFile || isHoldingFile}
                                             onClick={() => handleDeletePendingFile(aiScannedData.fileId)}
-                                            className="w-full bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-400 hover:text-white py-2.5 px-4 rounded-xl font-black text-xs transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                                            className="min-h-[48px] bg-white/5 hover:bg-[#EF4444] border border-[#EF4444]/45 text-[#FF7A7A] hover:text-white py-3 px-4 rounded-[14px] font-black text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
                                         >
                                             {isDeletingFile ? <Loader2 size={14} className="animate-spin"/> : <Trash2 size={14}/>}
-                                            <span>{isDeletingFile ? '正在移入网盘回收站...' : '🗑️ 这是垃圾图，直接废弃删除'}</span>
+                                            <span>{isDeletingFile ? '正在废弃...' : '废弃账单'}</span>
                                         </button>
                                     </div>
                                 </div>
@@ -3089,11 +3482,11 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 {/* 对账路向选择 */}
                                 <div className="lg:col-span-7 p-6 flex flex-col gap-6 overflow-y-auto h-full">
                                     <div className="space-y-2">
-                                        <h4 className="text-xs font-black text-blue-900 uppercase tracking-widest flex items-center gap-1">⬆️ 关联系统内已有账单 (PO单盘点存根)</h4>
+                                        <h4 className="text-xs font-black text-[#111111] uppercase tracking-widest flex items-center gap-1">⬆️ 关联系统内已有账单 (PO单盘点存根)</h4>
                                         <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm space-y-2 max-h-[350px] overflow-y-auto">
                                             <div className="flex border-b border-gray-100 pb-2 mb-2 gap-2">
-                                                <button type="button" onClick={() => setReconShowAll(false)} className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-lg transition-all ${!reconShowAll ? 'bg-blue-50 text-blue-700 border border-blue-150' : 'text-gray-400'}`}>✨ 智能相似商户 ({matchedExistingBills.length})</button>
-                                                <button type="button" onClick={() => setReconShowAll(true)} className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-lg transition-all ${reconShowAll ? 'bg-amber-50 text-amber-700 border border-amber-150' : 'text-gray-400'}`}>🔎 我来自主寻找全部待付 ({allPendingBills.length})</button>
+                                                <button type="button" onClick={() => setReconShowAll(false)} className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-lg transition-all ${!reconShowAll ? 'bg-[#111111] text-[#FFD200] border border-[#111111] shadow-sm'  : 'text-gray-400'}`}>✨ 智能相似商户 ({matchedExistingBills.length})</button>
+                                                <button type="button" onClick={() => setReconShowAll(true)} className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-lg transition-all ${reconShowAll ? 'bg-[#111111] text-[#FFD200] border border-[#111111] shadow-sm'  : 'text-gray-400'}`}>🔎 我来自主寻找全部待付 ({allPendingBills.length})</button>
                                             </div>
 
                                             {reconShowAll && (
@@ -3104,28 +3497,48 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
                                             {displayedBills.length > 0 ? (
                                                 displayedBills.map(bill => (
-                                                    <div key={bill.id} className="flex justify-between items-center p-3 bg-gray-50 hover:bg-blue-50/60 rounded-xl border border-gray-200/60 transition-colors">
+                                                    <div key={bill.id} className="flex justify-between items-center p-3 bg-gray-50 hover:bg-[#FFF9D9] rounded-xl border border-gray-200/60 transition-colors">
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-1.5">
-                                                                <span className="text-xs font-black text-blue-950 truncate">{bill.company}</span>
+                                                                <span className="text-xs font-black text-[#111111] truncate">{bill.company}</span>
                                                                 {bill.invoiceRef && <span className="text-[9px] bg-gray-200/70 text-gray-600 px-1 py-0.5 rounded font-mono font-black">#{bill.invoiceRef}</span>}
                                                             </div>
                                                             <p className="text-[10px] text-gray-400 font-bold mt-0.5">时间: {bill.time?.split('T')[0]} · 待付欠额: <span className="text-red-600 font-mono font-black">RM {Number(bill.outstandingAmount).toFixed(2)}</span></p>
                                                         </div>
                                                         <button 
-                                                            onClick={() => {
+                                                            onClick={async () => {
+                                                                const aiDate = aiScannedData.date?.length === 8
+                                                                    ? `${aiScannedData.date.slice(0,4)}-${aiScannedData.date.slice(4,6)}-${aiScannedData.date.slice(6,8)}`
+                                                                    : '';
+                                                                const existingDate = String(bill.time || '').split('T')[0];
+                                                                const aiAmount = Number(aiScannedData.amount || 0);
+                                                                const existingAmount = Number(bill.totalBillAmount ?? bill.outstandingAmount ?? bill.amount ?? 0);
+                                                                let finalDate = existingDate;
+
+                                                                if (aiDate && aiDate !== existingDate) {
+                                                                    const useInvoiceDate = await (window as any).systemDialog.confirm(
+                                                                        `账单日期不一致\n\n系统日期：${existingDate || '无'}\n发票日期：${aiDate}\n\n按【确定执行】使用发票日期；按【取消】保留系统日期。`,
+                                                                        '应付账款'
+                                                                    );
+                                                                    if (useInvoiceDate) finalDate = aiDate;
+                                                                }
+                                                                if (Math.abs(Math.round(aiAmount * 100) - Math.round(existingAmount * 100)) > 2) {
+                                                                    alert(`金额不一致，请在编辑页核对：\n系统金额 RM ${existingAmount.toFixed(2)}\n发票金额 RM ${aiAmount.toFixed(2)}`);
+                                                                }
+
                                                                 setIsMatchModalOpen(false);
                                                                 setEditingBill({
                                                                     ...bill,
+                                                                    time: finalDate || bill.time,
                                                                     invoiceRef: aiScannedData.invoice_no !== 'UNKNOWN' ? aiScannedData.invoice_no : (bill.invoiceRef || ''),
-                                                                    linkUrl: aiScannedData.tempLink, 
+                                                                    linkUrl: aiScannedData.tempLink,
                                                                     pendingFileId: aiScannedData.fileId,
                                                                     pendingOriginalName: aiScannedData.originalName,
                                                                     pendingMimeType: aiScannedData.mimeType
                                                                 } as any);
-                                                                setIsFormOpen(true); 
+                                                                setIsFormOpen(true);
                                                             }}
-                                                            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black hover:bg-blue-700 active:scale-95 shrink-0 ml-3"
+                                                            className="px-3.5 py-2.5 bg-[#111111] text-[#FFD200] rounded-xl text-[10px] font-black hover:bg-black active:scale-95 shrink-0 ml-3 shadow-sm"
                                                         >
                                                             🔘 选择此单对账补全
                                                         </button>
@@ -3144,9 +3557,9 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     </div>
 
                                     <div className="space-y-2 shrink-0">
-                                        <h4 className="text-xs font-black text-amber-700 uppercase tracking-widest">⬇️ 录入一笔全新的独立账单 (新消费盲录)</h4>
-                                        <div className="bg-amber-50/40 rounded-2xl p-4 border-2 border-dashed border-amber-200 text-center">
-                                            <p className="text-[11px] text-amber-800 font-bold mb-4">如果是无 PO 单的新增消费（如零散维修），点击下方按钮由 AI 自动填单。</p>
+                                        <h4 className="text-xs font-black text-[#111111] uppercase tracking-widest">⬇️ 录入一笔全新的独立账单 (新消费盲录)</h4>
+                                        <div className="bg-[#FFF9D9] rounded-2xl p-4 border border-[#FFD200]/70 text-center">
+                                            <p className="text-[11px] text-[#5C4B00] font-bold mb-4">如果是无 PO 单的新增消费（如零散维修），点击下方按钮由 AI 自动填单。</p>
                                             <button 
                                                 onClick={() => {
                                                     setIsMatchModalOpen(false);
@@ -3175,7 +3588,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                     } as any);
                                                     setIsFormOpen(true); 
                                                 }}
-                                                className="px-6 py-3 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-black shadow-md border border-amber-500/20"
+                                                className="px-6 py-3 bg-[#FFD200] hover:bg-[#FFE14D] text-[#111111] rounded-xl text-xs font-black shadow-[0_6px_18px_rgba(255,210,0,0.22)] border border-[#FFD200]"
                                             >
                                                 ⚡ 一键生成全新独立账单
                                             </button>
@@ -3190,7 +3603,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
             {/* 📱 手机端底栏固定操作栏 (Sticky Bottom Actions Bar) - 适配 iOS、PWA & Apple HIG */}
             {!isFormOpen && !showBackdate && !showPVHistory && !showMigrationTool && !isBatchPayModalOpen && !isBatchDeleteModalOpen && !payModalData && (
-                <div id="ap-sticky-bottom-actions-bar" className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] transition-colors duration-200">
+                <div id="ap-sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans transition-colors duration-200">
                     {/* Main List Mode */}
                     {viewMode === 'LIST' ? (
                         <div className="flex items-center justify-between w-full gap-2 font-sans">

@@ -209,7 +209,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                                     <button
                                         style={noTap}
                                         onClick={() => toggleRoleExpand(role.id)}
-                                        className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center text-gray-400 hover:text-black active:text-black rounded select-none"
+                                        className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-black active:text-black rounded select-none"
                                     >
                                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                     </button>
@@ -440,7 +440,7 @@ const SopSection: React.FC<SopSectionProps> = ({ label, color, Icon, tasks, onAd
                 <h3 className={`text-[10px] font-black uppercase flex items-center gap-2 tracking-widest ${title}`}>
                     <Icon size={14} /> {label}
                 </h3>
-                <button style={noTapLocal} onClick={onAdd} className={`p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full transition-colors select-none ${addBtn}`}>
+                <button style={noTapLocal} onClick={onAdd} className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors select-none ${addBtn}`}>
                     <Plus size={16} />
                 </button>
             </div>

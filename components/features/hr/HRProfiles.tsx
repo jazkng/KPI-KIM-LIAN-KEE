@@ -1,15 +1,20 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, Settings2, Syringe, GraduationCap, Shirt, Ruler, Weight, History, Hash, HardDrive, LogOut, FileDown, Loader2, X, MapPin, Mail, Phone, Calendar, Briefcase, CreditCard, Eye, EyeOff, Activity, AlertTriangle, Zap, ClipboardList, Stethoscope, BookOpen, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Image as ImageIcon, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet } from 'lucide-react';
-import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, AttendanceRecord, ReviewRecord, EmployeeRank, LoanRecord, AssessmentRecordV2 } from '../../../types';
+import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Settings2, Syringe, GraduationCap, Shirt, Ruler, Weight, History, Hash, HardDrive, LogOut, FileDown, Loader2, X, MapPin, Mail, Phone, Calendar, Briefcase, CreditCard, Eye, EyeOff, Activity, AlertTriangle, Zap, ClipboardList, Stethoscope, BookOpen, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Image as ImageIcon, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet } from 'lucide-react';
+import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, AttendanceRecord, ReviewRecord, LoanRecord, AssessmentRecordV2, InventoryAccessConfig, PortalRole } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { uploadToCloudinary } from '../../utils';
 import { DEFAULT_ROLES, NATIONALITY_OPTS, BANK_OPTIONS, MODULE_DEFINITIONS } from '../../constants';
 import { AssessmentHistoryPanel } from '../AssessmentHistoryPanel';
-import { getEmployeeLevel } from '../assessmentUtils';
 import { JOB_METRICS, EMPLOYEE_DIMENSIONS, MANAGEMENT_DIMENSIONS, classifyJob } from '../assessmentConfig';
+import { DepartmentMigrationBanner, DEPARTMENTS, getRecommendedDept } from './DepartmentMigrationBanner';
+import { getOrgLevel, getOrgLevelLabel, getPortalRole, ORG_LEVEL_OPTIONS, PORTAL_ROLE_OPTIONS } from '../../../utils/orgAccess';
+import { INVENTORY_PERMISSION_LABELS, INVENTORY_PERMISSIONS, INVENTORY_SCOPE_LABELS, resolveInventoryAccess } from '../../../utils/inventoryAccess';
+import { InventoryAccessModal } from './InventoryAccessModal';
 
 import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+
 
 // --- SHARED HELPERS (SYNCED WITH ASSESSMENT MODULE) ---
 const getAverageScore = (attrs?: EmployeeAttributes) => {
@@ -181,7 +186,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
         },
         {
             title: '日常运营 (Daily Operations)',
-            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER'] as AppModule[],
+            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'KITCHEN_ALERT'] as AppModule[],
             color: 'bg-blue-50 text-blue-700 border-blue-100'
         },
         {
@@ -374,6 +379,7 @@ interface HRProfilesProps {
     onSave: (employees: Employee[]) => void;
     currentBossId?: string;
     currentEmployee?: Employee | null;  // ⭐ 用于评分系统 (决定是否能覆盖)
+    isSuperAdminMode?: boolean;
     initialSelectedEmployeeId?: string | null;
     clearInitialSelectedEmployeeId?: () => void;
 }
@@ -383,6 +389,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     onSave, 
     currentBossId, 
     currentEmployee,
+    isSuperAdminMode = false,
     initialSelectedEmployeeId,
     clearInitialSelectedEmployeeId
 }) => {
@@ -401,6 +408,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [isSalaryExpanded, setIsSalaryExpanded] = useState(false);
     const [showAbilityModal, setShowAbilityModal] = useState(false);
     const [showAccessModal, setShowAccessModal] = useState(false);
+    const [showInventoryAccessModal, setShowInventoryAccessModal] = useState(false);
     const [showWarningInput, setShowWarningInput] = useState(false);
     const [warnType, setWarnType] = useState('VERBAL');
     const [warnReason, setWarnReason] = useState('');
@@ -422,6 +430,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 setShowPin(false);
                 
                 const copy = JSON.parse(JSON.stringify(emp));
+                copy.orgLevel = getOrgLevel(copy);
                 if (!copy.salaryMode) copy.salaryMode = copy.role.includes('Part-Time') || copy.role.includes('兼职') ? 'HOURLY' : 'MONTHLY';
                 if (!copy.salaryHistory) copy.salaryHistory = [];
                 if (!copy.warningHistory) copy.warningHistory = [];
@@ -460,20 +469,28 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         return metrics.map((m) => {
             let score = 0;
             if (latestV2Assessment) {
+                // 1. 获取管理层初评得分
+                const initialScore = latestV2Assessment.initialRating?.metrics?.find(s => s.metricKey === m.key)?.score;
+                const hasInitial = initialScore !== undefined;
+
+                // 2. 获取所有非跳过的老板评分
                 const activeBosses = Object.values(latestV2Assessment.bossRatings || {}).filter(b => !b.skipped);
-                if (activeBosses.length > 0) {
-                    const scores = activeBosses
-                        .map(b => b.metrics.find(s => s.metricKey === m.key)?.score)
-                        .filter((v): v is number => v !== undefined);
-                    if (scores.length > 0) {
-                        score = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
-                    }
+                const bossScores = activeBosses
+                    .map(b => b.metrics?.find(s => s.metricKey === m.key)?.score)
+                    .filter((v): v is number => v !== undefined);
+                const bossesCount = bossScores.length;
+                const bossesAverage = bossesCount > 0 ? Math.round(bossScores.reduce((sum, s) => sum + s, 0) / bossesCount) : 0;
+
+                // 3. 按照 50% 初评 + 50% 老板平均分 进行综合加权，与 calculateMultiRaterTotals 逻辑保持 100% 物理同步
+                if (hasInitial && bossesCount > 0) {
+                    score = Math.round(initialScore * 0.5 + bossesAverage * 0.5);
+                } else if (hasInitial) {
+                    score = initialScore;
+                } else if (bossesCount > 0) {
+                    score = bossesAverage;
                 } else if (latestV2Assessment.ownerOverride) {
-                    const override = latestV2Assessment.ownerOverride.metrics.find(s => s.metricKey === m.key);
+                    const override = latestV2Assessment.ownerOverride.metrics?.find(s => s.metricKey === m.key);
                     if (override) score = override.score;
-                } else if (latestV2Assessment.initialRating) {
-                    const initial = latestV2Assessment.initialRating.metrics.find(s => s.metricKey === m.key);
-                    if (initial) score = initial.score;
                 }
             } else {
                 const legacy = (form.attributes || {}) as any;
@@ -517,33 +534,45 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const filteredEmployees = useMemo(() => {
         return employees.filter(e => {
             const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.includes(searchTerm);
-            const isOwner = e.role.includes('Owner');
-            if (isOwner) return false;
             const archiveMatch = showResigned ? e.isArchived : !e.isArchived;
             return matchesSearch && archiveMatch;
         });
     }, [employees, searchTerm, showResigned]);
 
     const groupedEmployees = useMemo(() => {
-        const groups: Record<string, Employee[]> = { 'KITCHEN': [], 'BAR': [], 'FLOOR': [], 'CLEANER': [], 'OTHERS': [] };
+        const groups: Record<string, Employee[]> = { 
+            'OWNER': [],
+            'KITCHEN': [], 
+            'FLOOR': [], 
+            'BAR': [], 
+            'DISHWASH': [], 
+            'BACK_OFFICE': [], 
+            'OTHER': [] 
+        };
         filteredEmployees.forEach(emp => {
-            const r = emp.role.toUpperCase();
-            if (r.includes('CLEANER') || r.includes('DISH') || r.includes('清洁') || r.includes('洗碗')) groups['CLEANER'].push(emp);
-            else if (r.includes('BAR') || r.includes('水吧')) groups['BAR'].push(emp);
-            else if (r.includes('CHEF') || r.includes('COOK') || r.includes('CUTTER') || r.includes('FRYER') || r.includes('COMMIS') || r.includes('RUNNER') || r.includes('HELPER') || r.includes('APPRENTICE') || r.includes('头手') || r.includes('帮锅') || r.includes('占板') || r.includes('马王') || r.includes('厨房')) groups['KITCHEN'].push(emp);
-            else if (r.includes('MANAGER') || r.includes('SUPERVISOR') || r.includes('COUNTER') || r.includes('CAPTAIN') || r.includes('WAITER') || r.includes('PART') || r.includes('经理') || r.includes('主管') || r.includes('柜台') || r.includes('写单') || r.includes('服务') || r.includes('兼职')) groups['FLOOR'].push(emp);
-            else groups['OTHERS'].push(emp);
+            let dept = emp.department;
+            if (!dept) {
+                if (emp.role && (emp.role.includes('Owner') || emp.role.includes('老板') || emp.id === '002')) {
+                    dept = 'OWNER';
+                } else {
+                    dept = getRecommendedDept(emp.role || '');
+                }
+            }
+            const groupKey = groups[dept] ? dept : 'OTHER';
+            groups[groupKey].push(emp);
         });
         Object.keys(groups).forEach(key => groups[key].sort((a, b) => parseInt(a.id) - parseInt(b.id)));
         return groups;
     }, [filteredEmployees]);
 
     const SECTIONS = [
+        { id: 'OWNER', label: '👑 老板级别 (Owner)', bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-100' },
         { id: 'KITCHEN', label: '🍳 厨房 (Kitchen)', bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-100' },
-        { id: 'BAR', label: '🥤 水吧 (Bar)', bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-100' },
         { id: 'FLOOR', label: '🛎️ 楼面 (Floor)', bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-100' },
-        { id: 'CLEANER', label: '🧹 清洁 (Cleaning)', bg: 'bg-green-50', text: 'text-green-800', border: 'border-green-100' },
-        { id: 'OTHERS', label: '💼 老板职务 (Management/Boss)', bg: 'bg-gray-50', text: 'text-gray-800', border: 'border-gray-100' },
+        { id: 'BAR', label: '🥤 吧台 (Bar)', bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-100' },
+        { id: 'DISHWASH', label: '🧹 洗碗 (Dishwash)', bg: 'bg-teal-50', text: 'text-teal-800', border: 'border-teal-100' },
+        { id: 'BACK_OFFICE', label: '💼 后勤 (Back Office)', bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-100' },
+        { id: 'OTHER', label: '🛡️ 其他 (Other)', bg: 'bg-gray-50', text: 'text-gray-800', border: 'border-gray-100' },
     ];
 
     useEffect(() => {
@@ -604,7 +633,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
     // 👑 iOS 优化：任何 modal 打开时，锁定 body 滚动
     useEffect(() => {
-        const anyModalOpen = showAbilityModal || showAccessModal || showTerminateModal || showDeleteModal || showLoanModal || showReviewModal || !!viewImage;
+        const anyModalOpen = showAbilityModal || showAccessModal || showInventoryAccessModal || showTerminateModal || showDeleteModal || showLoanModal || showReviewModal || !!viewImage;
         if (anyModalOpen) {
             const scrollY = window.scrollY;
             document.body.style.position = 'fixed';
@@ -618,11 +647,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 window.scrollTo(0, parseInt(savedY || '0') * -1);
             };
         }
-    }, [showAbilityModal, showAccessModal, showTerminateModal, showDeleteModal, showLoanModal, showReviewModal, viewImage]);
+    }, [showAbilityModal, showAccessModal, showInventoryAccessModal, showTerminateModal, showDeleteModal, showLoanModal, showReviewModal, viewImage]);
 
     const handleSelect = (emp: Employee) => {
         setSelectedEmpId(emp.id);
         const copy = JSON.parse(JSON.stringify(emp));
+                copy.orgLevel = getOrgLevel(copy);
         if (!copy.salaryMode) copy.salaryMode = copy.role.includes('Part-Time') || copy.role.includes('兼职') ? 'HOURLY' : 'MONTHLY';
         if (!copy.salaryHistory) copy.salaryHistory = [];
         if (!copy.warningHistory) copy.warningHistory = [];
@@ -647,6 +677,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             name: '', 
             role: 'Part-Time (兼职)', 
             status: 'PROBATION', 
+            orgLevel: 'CREW',
             rank: 'CREW', 
             level: 'Probation', 
             phone: '', 
@@ -662,7 +693,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             warningHistory: [], 
             reviews: [], 
             monthlyRestDays: 4, 
-            hasHostel: false 
+            hasHostel: false,
+            preferredLanguage: 'zh_en'
         };
         setForm(newEmp);
         setSelectedEmpId(newId);
@@ -754,17 +786,75 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const addSalaryRecord = () => { const amountStr = prompt("输入新薪资 (New Amount):", form.basicSalary?.toString()); const reason = prompt("调整原因 (Reason):", "Annual Increment"); if(amountStr && reason) { const amount = parseFloat(amountStr); const newRecord: SalaryRecord = { date: new Date().toISOString().split('T')[0], amount: amount, adjustment: amount - (form.basicSalary || 0), percentage: 0, reason: reason }; setForm({ ...form, basicSalary: amount, salaryHistory: [newRecord, ...(form.salaryHistory || [])] }); } };
     const deleteSalaryRecord = (index: number) => { if(!form.salaryHistory) return; if(!confirm("确定删除此薪资记录? (Confirm Delete?)")) return; const newHistory = [...form.salaryHistory]; newHistory.splice(index, 1); setForm({...form, salaryHistory: newHistory}); };
     const confirmAddWarning = () => { if(!warnReason) return alert("请填写原因"); const newWarning: WarningRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: warnType as any, reason: warnReason, issuer: currentBossId || 'Admin' }; setForm({ ...form, warningHistory: [newWarning, ...(form.warningHistory || [])] }); setShowWarningInput(false); setWarnReason(''); };
-    const handleToggleModule = (mod: AppModule) => { const current = form.allowedModules || []; if(current.includes(mod)) { setForm({...form, allowedModules: current.filter(m => m !== mod)}); } else { setForm({...form, allowedModules: [...current, mod]}); } };
+    const handleToggleModule = (mod: AppModule) => {
+        const current = form.allowedModules || [];
+        let nextModules;
+        if(current.includes(mod)) {
+            nextModules = current.filter(m => m !== mod);
+        } else {
+            nextModules = [...current, mod];
+        }
+        setForm({
+            ...form,
+            allowedModules: nextModules,
+            hasKitchenAlertPermission: nextModules.includes('KITCHEN_ALERT')
+        });
+    };
     const handleUpdateAssessmentTargets = (targets: string[]) => { setForm({ ...form, assessmentTargets: targets }); };
+    const handleApplyInventoryAccess = (inventoryAccess: InventoryAccessConfig) => { setForm({ ...form, inventoryAccess }); };
+
+    const canConfigureInventoryAccess = isSuperAdminMode || Boolean(
+        currentEmployee && getPortalRole(currentEmployee) === PortalRole.BOSS
+    );
+    const resolvedInventoryAccess = resolveInventoryAccess(form as Employee);
+    const enabledInventoryPermissions = INVENTORY_PERMISSIONS.filter(permission => resolvedInventoryAccess.permissions[permission]);
     
     const getTenure = (dateStr: string) => { if(!dateStr) return '-'; const start = new Date(dateStr); const now = new Date(); const diffTime = Math.abs(now.getTime() - start.getTime()); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if(diffDays < 30) return `${diffDays} Days`; if(diffDays < 365) return `${Math.floor(diffDays/30)} Months`; return `${(diffDays/365).toFixed(1)} Years`; };
-    const handleExportPDF = async () => { if (!printRef.current) return; setIsGeneratingPdf(true); try { await new Promise(resolve => setTimeout(resolve, 100)); const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }); const imgData = canvas.toDataURL('image/jpeg', 1.0); const pdf = new jsPDF('p', 'mm', 'a4'); const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = (canvas.height * pdfWidth) / canvas.width; pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight); pdf.save(`Staff_Directory_${new Date().toISOString().split('T')[0]}.pdf`); } catch (err) { console.error("PDF Gen Error:", err); alert("PDF 生成失败，请重试。"); } finally { setIsGeneratingPdf(false); } };
+    const handleExportPDF = async () => { 
+        if (!printRef.current) return; 
+        setIsGeneratingPdf(true); 
+        try { 
+            await new Promise(resolve => setTimeout(resolve, 100)); 
+            const canvas = await html2canvas(printRef.current, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('hr-profiles-all-export-root');
+                    if (printRef.current && clonedEl) {
+                        applyResolvedStylesForPdf(printRef.current as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
+            }); 
+            const imgData = canvas.toDataURL('image/jpeg', 1.0); 
+            const pdf = new jsPDF('p', 'mm', 'a4'); 
+            const pdfWidth = pdf.internal.pageSize.getWidth(); 
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width; 
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight); 
+            pdf.save(`Staff_Directory_${new Date().toISOString().split('T')[0]}.pdf`); 
+        } catch (err) { 
+            console.error("PDF Gen Error:", err); 
+            alert("PDF 生成失败，请重试。"); 
+        } finally { 
+            setIsGeneratingPdf(false); 
+        } 
+    };
     const handleExportSinglePDF = async () => {
         if (!singleProfileRef.current || !form.id) return;
         setIsGeneratingSinglePdf(true);
         try {
             await new Promise(resolve => setTimeout(resolve, 100));
-            const canvas = await html2canvas(singleProfileRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const canvas = await html2canvas(singleProfileRef.current, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('hr-profile-single-export-root');
+                    if (singleProfileRef.current && clonedEl) {
+                        applyResolvedStylesForPdf(singleProfileRef.current as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
+            });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -823,6 +913,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                 {/* 员工列表区 */}
                 <div className="flex-grow overflow-y-auto p-3 space-y-6 pb-safe mb-8 custom-scrollbar">
+                    <DepartmentMigrationBanner
+                        employees={employees}
+                        onMigrationComplete={() => {
+                            DataManager.getEmployees().then(updatedList => {
+                                onSave(updatedList);
+                            });
+                        }}
+                    />
                     {filteredEmployees.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-40 text-gray-400">
                             <Search size={32} className="mb-2 opacity-20" />
@@ -916,12 +1014,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                                         {/* 第三行：状态与职级 (Soft Badges) */}
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {emp.rank && emp.rank !== 'CREW' && (
+                                                            {getOrgLevel(emp) !== 'CREW' && (
                                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
-                                                                    emp.rank === 'TOP' ? 'bg-[#FFD700] text-black' : 
+                                                                    getOrgLevel(emp) === 'OWNER' ? 'bg-[#FFD700] text-black' : 
                                                                     isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
                                                                 }`}>
-                                                                    {emp.rank}
+                                                                    {getOrgLevelLabel(emp)}
                                                                 </span>
                                                             )}
                                                             <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
@@ -1110,9 +1208,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {form.status === 'CONFIRMED' ? <CheckCircle2 size={12}/> : form.status === 'TERMINATED' ? <LogOut size={12}/> : <Clock size={12}/>}
                                                 {form.status}
                                             </div>
-                                            {form.rank && (
-                                                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shrink-0 ${form.rank === 'TOP' ? 'bg-gray-800 text-[#FFD700] border-gray-800' : form.rank === 'MANAGEMENT' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : form.rank === 'HEAD' ? 'bg-red-100 text-red-700 border-red-200' : form.rank === 'PIC' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                                                    <Medal size={12}/> {form.rank}
+                                            {form.orgLevel && (
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shrink-0 ${getOrgLevel(form as Employee) === 'OWNER' ? 'bg-gray-800 text-[#FFD700] border-gray-800' : getOrgLevel(form as Employee) === 'BRANCH_MANAGER' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : getOrgLevel(form as Employee) === 'DEPARTMENT_HEAD' ? 'bg-red-100 text-red-700 border-red-200' : getOrgLevel(form as Employee) === 'TEAM_LEAD' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                                    <Medal size={12}/> {getOrgLevelLabel(form as Employee)}
                                                 </div>
                                             )}
                                             <div className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-blue-50 text-blue-700 shrink-0">{form.nationality}</div>
@@ -1203,6 +1301,27 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     </div>
                                                 </div>
 
+                                                {/* 👑 Payroll Eligibility Toggle */}
+                                                <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between mb-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">薪资结算资格 (Payroll Eligibility)</label>
+                                                        <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
+                                                            <Wallet size={14} className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}/> 
+                                                            <span className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}>
+                                                                {(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? '参与月度薪资结算 (Eligible)' : '豁免/不参与薪资结算 (Exempt)'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {isEditing && (
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')} 
+                                                            onChange={e => setForm({...form, isPayrollEligible: e.target.checked})} 
+                                                            className="w-5 h-5 accent-green-500 cursor-pointer animate-pulse" 
+                                                        />
+                                                    )}
+                                                </div>
+
                                                 <div className="flex flex-wrap items-end justify-between gap-3 mb-4 bg-white/5 p-3 rounded-xl">
                                                     <div className="flex-1 w-full sm:w-auto">
                                                          <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">Basic Salary / Mode</label>
@@ -1284,10 +1403,19 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="性别 (Gender)" value={form.gender} onChange={(e: any) => setForm({...form, gender: e.target.value})} options={['Male', 'Female']} isEditing={isEditing} />
                                             <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
                                             <SelectField label="雇佣状态 (Status)" value={form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, {label:'离职 (Terminated)', value:'TERMINATED'}]} isEditing={isEditing} />
-                                            <SelectField label="组织职级 (Org Rank)" value={form.rank || 'CREW'} onChange={(e: any) => setForm({...form, rank: e.target.value})} options={[{label:'最高指挥 (Top Command)', value:'TOP'}, {label:'管理层 (Management)', value:'MANAGEMENT'}, {label:'部门主管 (Head/Leader)', value:'HEAD'}, {label:'负责人 (PIC)', value:'PIC'}, {label:'普通员工 (Crew)', value:'CREW'}]} isEditing={isEditing} />
+                                            <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
+                                            <SelectField label={isSuperAdminMode ? "系统入口特殊覆盖 (Portal Override)" : "系统入口 (自动)"} value={isSuperAdminMode ? (form.portalRoleOverride || "") : getPortalRole(form as Employee)} onChange={(e: any) => setForm({...form, portalRoleOverride: e.target.value || undefined})} options={isSuperAdminMode ? [{label: `跟随职级（自动：${getPortalRole(form as Employee)}）`, value: ""}, ...PORTAL_ROLE_OPTIONS] : PORTAL_ROLE_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
+                                            <SelectField 
+                                                label="工作部门 (Department)" 
+                                                value={form.department || getRecommendedDept(form.role || '')} 
+                                                onChange={(e: any) => setForm({...form, department: e.target.value})} 
+                                                options={DEPARTMENTS.map(d => ({ label: d.label, value: d.value }))} 
+                                                isEditing={isEditing} 
+                                            />
                                             <div className="grid grid-cols-2 gap-2"><InputField label="身高 (cm)" type="number" value={form.height} onChange={(e: any) => setForm({...form, height: parseInt(e.target.value)})} placeholder="cm" isEditing={isEditing} /><InputField label="体重 (kg)" type="number" value={form.weight} onChange={(e: any) => setForm({...form, weight: parseInt(e.target.value)})} placeholder="kg" isEditing={isEditing} /></div>
                                             <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
                                             <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
+                                            <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英文 (ZH / EN)', value:'zh_en'}, {label:'缅甸文 (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-gray-50"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
                                     </div>
@@ -1312,25 +1440,93 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 items-start ${mobileDetailTab === 'records' ? 'grid' : 'hidden md:grid'}`}>
-                                        {!(currentEmployee && getEmployeeLevel(currentEmployee) === 2 && form && getEmployeeLevel(form as Employee) !== 3) ? (
-                                            <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                                <div className="flex justify-between items-center mb-4">
-                                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                                        <Trophy size={14}/> 季度评分 (Assessment)
-                                                    </h4>
-                                                    <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">V2</span>
-                                                </div>
-                                                {selectedEmpId && (
-                                                    <AssessmentHistoryPanel 
-                                                        employee={form as Employee}
-                                                        currentEmployee={currentEmployee}
-                                                    />
-                                                )}
+                                        <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                                    <Trophy size={14}/> 季度评分 (Assessment)
+                                                </h4>
+                                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">V2</span>
                                             </div>
-                                        ) : null}
-                                        <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${(currentEmployee && getEmployeeLevel(currentEmployee) === 2 && form && getEmployeeLevel(form as Employee) !== 3) ? 'md:col-span-2' : ''}`}>
+                                            {selectedEmpId && (
+                                                <AssessmentHistoryPanel 
+                                                    employee={form as Employee}
+                                                    currentEmployee={currentEmployee}
+                                                    onAssessmentUpdated={(record) => {
+                                                        setLatestV2Assessment(record);
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
                                             <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95">Config</button>}</div>
-                                            <div className="flex flex-wrap gap-2">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{form.allowedModules?.map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
+                                            <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{form.allowedModules?.map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
+                                            
+                                            {/* 🟢 新增：通知厨房专属快捷权限配置 */}
+                                            <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                                                <div className="min-w-0 pr-2">
+                                                    <span className="text-xs font-black text-gray-700 block">通知厨房功能权限 (Kitchen Alert)</span>
+                                                    <span className="text-[10px] font-bold text-gray-400 block truncate">允许该员工发送和处理厨房紧急通知</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={!isEditing}
+                                                    onClick={() => {
+                                                        const current = form.allowedModules || [];
+                                                        const hasAlert = current.includes('KITCHEN_ALERT');
+                                                        let nextModules;
+                                                        if (hasAlert) {
+                                                            nextModules = current.filter(m => m !== 'KITCHEN_ALERT');
+                                                        } else {
+                                                            nextModules = [...current, 'KITCHEN_ALERT'];
+                                                        }
+                                                        setForm({
+                                                            ...form,
+                                                            allowedModules: nextModules,
+                                                            hasKitchenAlertPermission: !hasAlert
+                                                        });
+                                                    }}
+                                                    className={`h-8 px-3 rounded-xl text-[10px] font-black transition-colors ${
+                                                        (form.allowedModules || []).includes('KITCHEN_ALERT')
+                                                            ? 'bg-[#FFD200] text-[#111111]'
+                                                            : 'bg-gray-100 text-gray-400'
+                                                    } ${!isEditing ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}`}
+                                                >
+                                                    {(form.allowedModules || []).includes('KITCHEN_ALERT') ? '已开启 / Enabled' : '未开启 / Disabled'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
+                                        <div className="flex items-start justify-between gap-3 mb-4">
+                                            <div>
+                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> 库存权限 (Inventory Access)</h4>
+                                                <p className="mt-1 text-[10px] font-bold text-gray-400">控制库存范围与具体操作，不改变员工看到的其他模块</p>
+                                            </div>
+                                            {isEditing && canConfigureInventoryAccess && (
+                                                <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#1A1A1A] px-3 text-[10px] font-black text-[#FFD700] active:scale-95">设置</button>
+                                            )}
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="mb-1.5 text-[10px] font-black text-gray-400">管理范围</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {resolvedInventoryAccess.scopes.length === 0 && <span className="text-xs italic text-gray-400">未设置范围</span>}
+                                                    {resolvedInventoryAccess.scopes.map(scope => (
+                                                        <span key={scope} className="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-black text-emerald-700">{INVENTORY_SCOPE_LABELS[scope]}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="mb-1.5 text-[10px] font-black text-gray-400">已开启操作 · {enabledInventoryPermissions.length}/{INVENTORY_PERMISSIONS.length}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {enabledInventoryPermissions.length === 0 && <span className="text-xs italic text-gray-400">未开启操作权限</span>}
+                                                    {enabledInventoryPermissions.map(permission => (
+                                                        <span key={permission} className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">{INVENTORY_PERMISSION_LABELS[permission]}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {isEditing && !canConfigureInventoryAccess && <p className="rounded-xl bg-gray-50 p-3 text-[10px] font-bold text-gray-400">只有老板或超级管理员可以修改库存权限。</p>}
                                         </div>
                                     </div>
  
@@ -1479,6 +1675,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 onUpdateTargets={handleUpdateAssessmentTargets}
                 allEmployees={employees}
             />
+
+            {form.id && form.name && (
+                <InventoryAccessModal
+                    isOpen={showInventoryAccessModal}
+                    employee={form as Employee}
+                    onClose={() => setShowInventoryAccessModal(false)}
+                    onApply={handleApplyInventoryAccess}
+                />
+            )}
 
             {/* Terminate Modal */}
             {showTerminateModal && (
@@ -1633,7 +1838,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             
             {/* 🟢 HIDDEN PRINT SECTION (ALL LIST) */}
             <div style={{ position: 'absolute', top: 0, left: '-9999px' }}>
-                <div ref={printRef} className="w-[794px] bg-white p-10 font-sans text-black min-h-[1123px] relative">
+                <div ref={printRef} id="hr-profiles-all-export-root" className="w-[794px] bg-white p-10 font-sans text-black min-h-[1123px] relative">
                     <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
                         <div>
                             <h1 className="text-3xl font-black uppercase tracking-widest mb-1">Kim Lian Kee</h1>
@@ -1676,7 +1881,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             
             {/* 🟢 HIDDEN PRINT SECTION (SINGLE PROFILE PDF) */}
             <div style={{ position: 'absolute', top: 0, left: '-9999px' }}>
-                <div ref={singleProfileRef} className="w-[794px] h-[1123px] bg-white p-10 font-sans text-black relative flex flex-col justify-between overflow-hidden">
+                <div ref={singleProfileRef} id="hr-profile-single-export-root" className="w-[794px] h-[1123px] bg-white p-10 font-sans text-black relative flex flex-col justify-between overflow-hidden">
                     <div className="flex justify-between items-start border-b-4 border-[#8B0000] pb-4 mb-5">
                         <div>
                             <h1 className="text-3xl font-black uppercase tracking-wider text-[#1A1A1A] mb-1">{form.name || 'EMPLOYEE NAME'}</h1>
@@ -1701,6 +1906,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Nationality</span><span className="font-bold text-xs">{form.nationality || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Gender</span><span className="font-bold text-xs">{form.gender || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Shirt Size</span><span className="font-bold text-xs">{form.shirtSize || '-'}</span></div>
+                                <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Preferred Lang</span><span className="font-bold text-xs">{form.preferredLanguage === 'my' ? '缅甸文优先 (Burmese)' : '中英文混合 (Chinese/English)'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Tenure</span><span className="font-bold text-xs">{getTenure(form.joinDate || '')}</span></div>
                                 <div className="col-span-3"><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Address</span><span className="font-bold text-xs">{form.address || '-'}</span></div>
                             </div>
@@ -1749,13 +1955,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <div className="grid grid-cols-12 gap-4 items-center">
                                 {/* SVG Radar Chart */}
                                 <div className="col-span-5 flex justify-center items-center">
-                                    <div className="relative w-[140px] h-[140px]">
-                                        <svg className="w-full h-full" viewBox="0 0 200 200">
+                                    <div className="relative w-[280px] h-[200px]">
+                                        <svg className="w-full h-full" viewBox="-40 0 280 200">
                                             {/* Grid Levels */}
                                             {[20, 40, 60, 80, 100].map((level) => {
                                                 const levelPoints = activeDimensions.map((_, idx) => {
                                                     const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                    const radius = (level / 100) * 60;
+                                                    const radius = (level / 100) * 55;
                                                     return `${100 + radius * Math.cos(angle)},${100 + radius * Math.sin(angle)}`;
                                                 });
                                                 return (
@@ -1769,7 +1975,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         />
                                                         <text
                                                             x="100"
-                                                            y={100 - (level / 100) * 60 - 2}
+                                                            y={100 - (level / 100) * 55 - 2}
                                                             textAnchor="middle"
                                                             className="text-[6px] font-bold fill-gray-400 font-mono"
                                                         >
@@ -1782,8 +1988,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             {/* Axes */}
                                             {activeDimensions.map((_, idx) => {
                                                 const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                const outerX = 100 + 60 * Math.cos(angle);
-                                                const outerY = 100 + 60 * Math.sin(angle);
+                                                const outerX = 100 + 55 * Math.cos(angle);
+                                                const outerY = 100 + 55 * Math.sin(angle);
                                                 return (
                                                     <line
                                                         key={idx}
@@ -1797,39 +2003,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 );
                                             })}
 
-                                            {/* Dimension Text Labels */}
-                                            {activeDimensions.map((d, idx) => {
-                                                const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                const labelRadius = 60 + 12;
-                                                const x = 100 + labelRadius * Math.cos(angle);
-                                                const y = 100 + labelRadius * Math.sin(angle);
-
-                                                let textAnchor: 'start' | 'end' | 'middle' = "middle";
-                                                if (Math.cos(angle) > 0.1) textAnchor = "start";
-                                                else if (Math.cos(angle) < -0.1) textAnchor = "end";
-
-                                                const cleanLabel = d.label.split('(')[0];
-
-                                                return (
-                                                    <text
-                                                        key={d.key}
-                                                        x={x}
-                                                        y={y + 2}
-                                                        textAnchor={textAnchor}
-                                                        className="text-[8px] font-black fill-gray-700 tracking-tight"
-                                                    >
-                                                        {cleanLabel}
-                                                    </text>
-                                                );
-                                            })}
-
                                             {/* Filled Radar Area */}
                                             {activeDimensions.length > 0 && (
                                                 <>
                                                     <polygon
                                                         points={activeDimensions.map((d, idx) => {
                                                             const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                            const radius = (d.score / 100) * 60;
+                                                            const radius = (d.score / 100) * 55;
                                                             return `${100 + radius * Math.cos(angle)},${100 + radius * Math.sin(angle)}`;
                                                         }).join(' ')}
                                                         fill="rgba(139, 0, 0, 0.12)"
@@ -1838,7 +2018,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     />
                                                     {activeDimensions.map((d, idx) => {
                                                         const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                        const radius = (d.score / 100) * 60;
+                                                        const radius = (d.score / 100) * 55;
                                                         const cx = 100 + radius * Math.cos(angle);
                                                         const cy = 100 + radius * Math.sin(angle);
                                                         return (
@@ -1853,6 +2033,82 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     })}
                                                 </>
                                             )}
+
+                                            {/* Dimension Text Labels */}
+                                            {activeDimensions.map((d, idx) => {
+                                                const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
+                                                const labelRadius = 55 + 20; // 75 radius, clear of the 55px grid
+                                                const x = 100 + labelRadius * Math.cos(angle);
+                                                const y = 100 + labelRadius * Math.sin(angle);
+
+                                                let textAnchor: 'start' | 'end' | 'middle' = "middle";
+                                                if (Math.cos(angle) > 0.1) textAnchor = "start";
+                                                else if (Math.cos(angle) < -0.1) textAnchor = "end";
+
+                                                const cleanLabel = d.label.split('(')[0];
+                                                const dimensionEnglishLabels: Record<string, string> = {
+                                                    loyalty: "Loyalty & Execution",
+                                                    adaptability: "Adaptability",
+                                                    teamwork: "Teamwork",
+                                                    personal_grooming: "Grooming & Ethics",
+                                                    job_capability: "Job Capability",
+                                                    mentorship: "Mentorship",
+                                                    stress_handling: "Stress Handling",
+                                                };
+                                                const engLabel = dimensionEnglishLabels[d.key] || "";
+
+                                                return (
+                                                    <g key={d.key}>
+                                                        {/* White outline/halo for Chinese */}
+                                                        <text
+                                                            x={x}
+                                                            y={y - 1}
+                                                            textAnchor={textAnchor}
+                                                            className="text-[7.5px] font-black tracking-tight"
+                                                            stroke="#ffffff"
+                                                            strokeWidth="3.5"
+                                                            strokeLinejoin="round"
+                                                            paintOrder="stroke"
+                                                            opacity="0.95"
+                                                        >
+                                                            {cleanLabel}
+                                                        </text>
+                                                        {/* Crisp main Chinese text */}
+                                                        <text
+                                                            x={x}
+                                                            y={y - 1}
+                                                            textAnchor={textAnchor}
+                                                            className="text-[7.5px] font-black fill-gray-700 tracking-tight"
+                                                        >
+                                                            {cleanLabel}
+                                                        </text>
+
+                                                        {/* White outline/halo for English */}
+                                                        <text
+                                                            x={x}
+                                                            y={y + 6}
+                                                            textAnchor={textAnchor}
+                                                            className="text-[5.5px] font-bold tracking-tight font-sans"
+                                                            stroke="#ffffff"
+                                                            strokeWidth="3"
+                                                            strokeLinejoin="round"
+                                                            paintOrder="stroke"
+                                                            opacity="0.95"
+                                                        >
+                                                            {engLabel}
+                                                        </text>
+                                                        {/* Crisp main English text */}
+                                                        <text
+                                                            x={x}
+                                                            y={y + 6}
+                                                            textAnchor={textAnchor}
+                                                            className="text-[5.5px] font-bold fill-gray-400 font-sans tracking-tight"
+                                                        >
+                                                            {engLabel}
+                                                        </text>
+                                                    </g>
+                                                );
+                                            })}
                                         </svg>
                                     </div>
                                 </div>
@@ -1864,12 +2120,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         return (
                                             <div key={d.key} className="flex items-center justify-between bg-gray-50 p-1.5 rounded-lg border border-gray-100">
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1 leading-normal mb-1">
                                                         <span className="text-[9px] font-black text-gray-800">{d.label.split('(')[0]}</span>
-                                                        <span className="text-[7px] text-gray-400 font-bold">{d.label.split('(')[1]?.replace(')', '')}</span>
+                                                        {d.label.includes('(') && (
+                                                            <span className="text-[7px] text-gray-400 font-bold">{d.label.split('(')[1]?.replace(')', '')}</span>
+                                                        )}
                                                     </div>
                                                     {/* Progress bar */}
-                                                    <div className="w-full bg-gray-200 h-1 rounded-full mt-0.5 overflow-hidden">
+                                                    <div className="w-full bg-gray-200 h-1 rounded-full overflow-hidden mt-1.5">
                                                         <div 
                                                             className="h-full bg-[#8B0000] rounded-full" 
                                                             style={{ width: `${d.score}%` }}

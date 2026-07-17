@@ -5,7 +5,7 @@ import {
     HelpCircle, Check, MessageSquare, Flame, BookOpen, Users,
     Zap, Sparkles, Target, Star
 } from 'lucide-react';
-import { Employee, QuarterKey, AssessmentRecordV2, MetricScoreV2 } from '../../types';
+import { Employee, EmployeeRank, QuarterKey, AssessmentRecordV2, MetricScoreV2 } from '../../types';
 import { 
     JOB_METRICS, GRADE_TIERS, MetricDef, 
     MANAGEMENT_DIMENSIONS, EMPLOYEE_DIMENSIONS,
@@ -24,6 +24,7 @@ import {
     getFinalScoreFromRecord
 } from './assessmentUtils';
 import { DataManager } from '../../utils/dataManager';
+import { getOrgLevel } from '../../utils/orgAccess';
 
 interface AssessmentFormProps {
     employee: Employee;
@@ -38,6 +39,18 @@ type FormMode = 'VIEW' | 'EDIT';
 // 💡 统一档位类型
 type GradeLabel = 'SSS' | 'SS' | 'S' | 'A' | 'B' | 'C' | 'D';
 
+// AssessmentRecordV2 still stores the legacy rank snapshot for historical compatibility.
+const getAssessmentRankSnapshot = (employee: Employee): EmployeeRank => {
+    switch (getOrgLevel(employee)) {
+        case 'OWNER': return 'TOP';
+        case 'BRANCH_MANAGER': return 'MANAGEMENT';
+        case 'DEPARTMENT_HEAD': return 'HEAD';
+        case 'TEAM_LEAD': return 'PIC';
+        case 'CREW':
+        default: return 'CREW';
+    }
+};
+
 // ============================================================================
 // 主组件
 // ============================================================================
@@ -50,14 +63,21 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     const isManagement = category === 'KITCHEN_HEAD' || category === 'FLOOR_MANAGER';
     const metrics: MetricDef[] = isManagement ? MANAGEMENT_DIMENSIONS : EMPLOYEE_DIMENSIONS;
 
-    // ============================================================================
-    // Mode: 已有记录 → 先只读, 无记录 → 直接编辑
-    // ============================================================================
-    const [mode, setMode] = useState<FormMode>(existingRecord ? 'VIEW' : 'EDIT');
-    
     // 判断当前登录者是不是初评人本人 (本人可编辑自己的初评)
     const isInitialRater = existingRecord?.initialRating?.raterId === currentEmployee.id;
-    const isOwnerRater = currentEmployee.rank === 'TOP' || currentEmployee.role.includes('Owner') || currentEmployee.role.includes('老板');
+    const isOwnerRater = getOrgLevel(currentEmployee) === 'OWNER';
+
+    // ============================================================================
+    // Mode: 已有记录 → 先只读, 无记录 → 直接编辑。对于老板：若尚未评分，直接进入 EDIT
+    // ============================================================================
+    const [mode, setMode] = useState<FormMode>(() => {
+        if (!existingRecord) return 'EDIT';
+        if (isOwnerRater) {
+            const myRating = existingRecord.bossRatings?.[currentEmployee.id];
+            if (!myRating) return 'EDIT';
+        }
+        return 'VIEW';
+    });
     
     // ⭐ 新增：老板是否选择跳过评分 (默认为 false, 如果之前保存过 skipped 则加载)
     const [isSkipped, setIsSkipped] = useState<boolean>(() => {
@@ -107,6 +127,73 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         });
         return initial;
     });
+
+    // ============================================================================
+    // ⭐ 新增：懒加载所有员工以动态生成 BOSSES，以及多老板独立打分的加载逻辑
+    // ============================================================================
+    const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+    const [allBossRatings, setAllBossRatings] = useState<any[]>([]);
+    const [loadingAllBossRatings, setLoadingAllBossRatings] = useState(false);
+
+    useEffect(() => {
+        DataManager.getEmployees().then(setAllEmployees);
+    }, []);
+
+    useEffect(() => {
+        if (mode === 'VIEW' && existingRecord) {
+            setLoadingAllBossRatings(true);
+            DataManager.getAllBossAssessmentRatings(employee.id, quarter)
+                .then(ratings => {
+                    setAllBossRatings(ratings);
+                })
+                .finally(() => {
+                    setLoadingAllBossRatings(false);
+                });
+        }
+    }, [employee.id, quarter, mode, existingRecord]);
+
+    const BOSSES = useMemo(() => {
+        const bossList = allEmployees.filter(e => getOrgLevel(e) === 'OWNER');
+        if (bossList.length === 0) {
+            return [
+                { id: '001', name: 'BEN' },
+                { id: '002', name: 'JAKE' },
+                { id: '003', name: 'JEFFREY' },
+                { id: '004', name: 'EVELYN' }
+            ];
+        }
+        return bossList.map(b => ({
+            id: b.id,
+            name: b.name.toUpperCase()
+        }));
+    }, [allEmployees]);
+
+    const viewRecord = useMemo(() => {
+        if (!existingRecord) return null;
+        
+        const bossRatingsRecord: Record<string, any> = {};
+        allBossRatings.forEach(r => {
+            const isSelf = r.ownerId === currentEmployee.id;
+            const isFinalized = existingRecord?.status === 'FINALIZED';
+            // 如果是本人，或者是已归档最终状态，或者登录者不是老板本人（普通HR/管理员，为防止信息遗失），则可以揭示完整评分和意见
+            const revealDetails = isSelf || isFinalized || !isOwnerRater;
+            
+            bossRatingsRecord[r.ownerId] = {
+                ownerId: r.ownerId,
+                ownerName: r.ownerName,
+                date: r.date,
+                skipped: r.skipped,
+                metrics: revealDetails ? r.metrics : undefined,
+                overallScore: revealDetails ? r.overallScore : undefined,
+                comment: revealDetails ? r.comment : undefined
+            };
+        });
+        
+        return {
+            ...existingRecord,
+            bossRatings: bossRatingsRecord
+        };
+    }, [existingRecord, allBossRatings, currentEmployee.id, isOwnerRater]);
     
     const [saving, setSaving] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
@@ -466,7 +553,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         setErrorMsg('');
         
         try {
-            const raterRank = currentEmployee.rank || 'CREW';
+            const raterRank = getAssessmentRankSnapshot(currentEmployee);
             const now = new Date().toISOString();
             
             const metricsArray: MetricScoreV2[] = metrics.map(m => {
@@ -484,7 +571,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
             let record: AssessmentRecordV2;
             
             if (isOwnerRater) {
-                // ⭐ 老板（TOP）独立评分/跳过场景
+                // ⭐ L1 老板独立评分/跳过场景
                 const bossRatingDetail = {
                     ownerId: currentEmployee.id,
                     ownerName: currentEmployee.name,
@@ -495,16 +582,14 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                     comment: bossComment.trim() || ""
                 };
                 
-                const existingBossRatings = existingRecord?.bossRatings || {};
-                const updatedBossRatings = {
-                    ...existingBossRatings,
-                    [currentEmployee.id]: bossRatingDetail
-                };
+                // 1. 先保存隔离的 Boss 评分到独立集合 assessment_boss_ratings
+                await DataManager.saveBossAssessmentRating(employee.id, quarter, currentEmployee.id, bossRatingDetail);
                 
+                // 2. 更新或新建主记录 (主记录本身不直接保存任何 bossRatings，防止其它老板通过主记录泄露数据)
                 if (existingRecord) {
                     record = {
                         ...existingRecord,
-                        bossRatings: updatedBossRatings
+                        bossRatings: {} // 严格清空主记录中的嵌套打分
                     };
                 } else {
                     record = {
@@ -513,18 +598,37 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                         employeeId: employee.id,
                         employeeName: employee.name,
                         jobCategory: category,
-                        bossRatings: updatedBossRatings,
-                        finalScore: 0, // 稍后通过 calculateMultiRaterTotals 重新计算
-                        finalGrade: 'B', // 稍后重新计算
-                        status: 'OVERRIDDEN'
+                        bossRatings: {},
+                        finalScore: 0,
+                        finalGrade: 'B',
+                        status: 'SUBMITTED'
                     };
                 }
                 
-                // 重新计算最终综合成绩与等级
-                const totals = calculateMultiRaterTotals(record);
-                record.finalScore = totals.finalScore;
-                record.finalGrade = getGradeFromScore(totals.finalScore).label as GradeLabel;
-                record.status = 'OVERRIDDEN';
+                // 如果季度已锁定 (FINALIZED)，汇总计算平均分并持久化。
+                if (record.status === 'FINALIZED') {
+                    const allRatings = await DataManager.getAllBossAssessmentRatings(employee.id, quarter);
+                    const transientBossRatingsMap: Record<string, any> = {};
+                    allRatings.forEach(r => {
+                        transientBossRatingsMap[r.ownerId] = r;
+                    });
+                    const totals = calculateMultiRaterTotals({ ...record, bossRatings: transientBossRatingsMap });
+                    record.finalScore = totals.finalScore;
+                    record.finalGrade = getGradeFromScore(totals.finalScore).label as GradeLabel;
+                } else {
+                    record.status = 'SUBMITTED';
+                }
+                
+                await DataManager.saveAssessmentRecord(record);
+                
+                // 3. 构建包含最新个人打分的瞬时合并记录返回给父组件状态，以维持无刷新 UI 状态转换
+                const localUpdatedRecord = {
+                    ...record,
+                    bossRatings: {
+                        [currentEmployee.id]: bossRatingDetail
+                    }
+                };
+                onSaved(localUpdatedRecord);
                 
             } else {
                 // ⭐ 管理层初评场景
@@ -540,7 +644,8 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                 if (existingRecord) {
                     record = {
                         ...existingRecord,
-                        initialRating: initialRatingDetail
+                        initialRating: initialRatingDetail,
+                        bossRatings: {} // 清理主记录中的 bossRatings 嵌套
                     };
                 } else {
                     record = {
@@ -552,23 +657,14 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                         initialRating: initialRatingDetail,
                         finalScore: overallScore,
                         finalGrade: getGradeFromScore(overallScore).label as GradeLabel,
-                        status: 'SUBMITTED'
+                        status: 'SUBMITTED',
+                        bossRatings: {}
                     };
                 }
                 
-                // 重新计算最终综合成绩与等级 (合并已有的老板评分)
-                const totals = calculateMultiRaterTotals(record);
-                record.finalScore = totals.finalScore;
-                record.finalGrade = getGradeFromScore(totals.finalScore).label as GradeLabel;
-                if (record.bossRatings && Object.keys(record.bossRatings).length > 0) {
-                    record.status = 'OVERRIDDEN';
-                } else {
-                    record.status = 'SUBMITTED';
-                }
+                await DataManager.saveAssessmentRecord(record);
+                onSaved(record);
             }
-            
-            await DataManager.saveAssessmentRecord(record);
-            onSaved(record);
         } catch (e: any) {
             console.error('Save failed:', e);
             setErrorMsg(`保存失败: ${e.message || '网络错误，请重试'}`);
@@ -674,19 +770,32 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                     </div>
                     
                     {/* 季度信息 */}
-                    <div className="px-4 md:px-5 pb-3 flex items-center gap-2 text-[10px] md:text-xs font-bold text-white/60">
-                        <Award size={12} className="text-[#FFD700]"/>
-                        <span>{formatQuarter(quarter)} · 评测 {getQuarterMonthRange(quarter)} 表现</span>
+                    <div className="px-4 md:px-5 pb-3 flex items-center justify-between text-[10px] md:text-xs font-bold text-white/60">
+                        <div className="flex items-center gap-2">
+                            <Award size={12} className="text-[#FFD700]"/>
+                            <span>{formatQuarter(quarter)} · 评测 {getQuarterMonthRange(quarter)} 表现</span>
+                        </div>
                     </div>
                 </div>
 
+                {/* 🔒 隔离提示 Notice: UI-level Workspace Isolation */}
+                {isOwnerRater && (
+                    <div className="bg-amber-50 border-y border-amber-100 px-4 py-2 flex flex-col md:flex-row md:items-center justify-between text-[11px] text-amber-700 font-semibold shrink-0 gap-1 md:gap-0">
+                        <div className="flex items-center gap-1.5">
+                            <span>🔒 独立打分工作区 (隔离安全锁已启用)</span>
+                        </div>
+                        <span className="text-[10px] text-amber-500 italic font-medium">前端隔离并不等于完全安全隔离 · 权限策略已就绪</span>
+                    </div>
+                )}
+
                 {/* ========== Content ========== */}
-                {mode === 'VIEW' && existingRecord ? (
+                {mode === 'VIEW' && viewRecord ? (
                     <ViewModeContent 
-                        record={existingRecord}
+                        record={viewRecord}
                         metrics={metrics}
                         isTranslationActive={isTranslationActive}
                         translatedBundle={translatedBundle}
+                        bosses={BOSSES}
                     />
                 ) : (
                     <EditModeContent 
@@ -1022,34 +1131,6 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, record }) => {
                         );
                     })}
 
-                    {/* 指标轴文字标签 */}
-                    {metrics.map((m, idx) => {
-                        const angle = (2 * Math.PI / N) * idx - Math.PI / 2;
-                        // 把文字往外推 16 像素
-                        const labelRadius = r + 16;
-                        const x = center + labelRadius * Math.cos(angle);
-                        const y = center + labelRadius * Math.sin(angle);
-
-                        let textAnchor: 'start' | 'end' | 'middle' = "middle";
-                        if (Math.cos(angle) > 0.1) textAnchor = "start";
-                        else if (Math.cos(angle) < -0.1) textAnchor = "end";
-
-                        // 切割过长的文字
-                        const shortLabel = m.label.length > 6 ? m.label.substring(0, 6) + '..' : m.label;
-
-                        return (
-                            <text
-                                key={m.key}
-                                x={x}
-                                y={y + 3}
-                                textAnchor={textAnchor}
-                                className="text-[9px] font-black fill-gray-600 tracking-tight"
-                            >
-                                {shortLabel}
-                            </text>
-                        );
-                    })}
-
                     {/* 1. 管理层评分覆盖面 (蓝色) */}
                     {record.initialRating && (
                         <>
@@ -1093,6 +1174,50 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, record }) => {
                             ))}
                         </>
                     )}
+
+                    {/* 指标轴文字标签 */}
+                    {metrics.map((m, idx) => {
+                        const angle = (2 * Math.PI / N) * idx - Math.PI / 2;
+                        // 把文字往外推 16 像素
+                        const labelRadius = r + 16;
+                        const x = center + labelRadius * Math.cos(angle);
+                        const y = center + labelRadius * Math.sin(angle);
+
+                        let textAnchor: 'start' | 'end' | 'middle' = "middle";
+                        if (Math.cos(angle) > 0.1) textAnchor = "start";
+                        else if (Math.cos(angle) < -0.1) textAnchor = "end";
+
+                        // 切割过长的文字
+                        const shortLabel = m.label.length > 6 ? m.label.substring(0, 6) + '..' : m.label;
+
+                        return (
+                            <g key={m.key}>
+                                {/* White outline/halo behind text */}
+                                <text
+                                    x={x}
+                                    y={y + 3}
+                                    textAnchor={textAnchor}
+                                    className="text-[9px] font-black tracking-tight"
+                                    stroke="#ffffff"
+                                    strokeWidth="3.5"
+                                    strokeLinejoin="round"
+                                    paintOrder="stroke"
+                                    opacity="0.95"
+                                >
+                                    {shortLabel}
+                                </text>
+                                {/* Clear main text label */}
+                                <text
+                                    x={x}
+                                    y={y + 3}
+                                    textAnchor={textAnchor}
+                                    className="text-[9px] font-black fill-gray-600 tracking-tight"
+                                >
+                                    {shortLabel}
+                                </text>
+                            </g>
+                        );
+                    })}
                 </svg>
             </div>
 
@@ -1120,9 +1245,44 @@ interface ViewModeContentProps {
     metrics: MetricDef[]; // 💡 使用标准类型
     isTranslationActive: boolean;
     translatedBundle: Record<string, string> | null;
+    bosses: { id: string; name: string }[];
 }
 
-const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTranslationActive, translatedBundle }) => {
+const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTranslationActive, translatedBundle, bosses }) => {
+    const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
+    const [translatingKeys, setTranslatingKeys] = useState<Record<string, boolean>>({});
+
+    const handleTranslateToChinese = async (key: string, text: string) => {
+        if (!text.trim()) return;
+        if (translatedTexts[key]) {
+            const updated = { ...translatedTexts };
+            delete updated[key];
+            setTranslatedTexts(updated);
+            return;
+        }
+        
+        setTranslatingKeys(prev => ({ ...prev, [key]: true }));
+        try {
+            const res = await fetch('/api/gemini/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text,
+                    targetLang: 'zh'
+                })
+            });
+            if (!res.ok) throw new Error('Translation failed');
+            const data = await res.json();
+            if (data && data.text) {
+                setTranslatedTexts(prev => ({ ...prev, [key]: data.text }));
+            }
+        } catch (e) {
+            console.error('Inline translation error:', e);
+        } finally {
+            setTranslatingKeys(prev => ({ ...prev, [key]: false }));
+        }
+    };
+
     const t = (originalText: string, key: string) => {
         if (isTranslationActive && translatedBundle && translatedBundle[key]) {
             return `${originalText} | ${translatedBundle[key]}`;
@@ -1139,13 +1299,8 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
     const totals = calculateMultiRaterTotals(record);
     const bossRatingsMap = record.bossRatings || {};
     
-    // 定义 4 位老板的基础信息
-    const BOSSES = [
-        { id: '001', name: 'BEN' },
-        { id: '002', name: 'JAKE' },
-        { id: '003', name: 'JEFFREY' },
-        { id: '004', name: 'EVELYN' }
-    ];
+    // 💡 优化：优先使用动态加载的 bosses 列表， fallback 为基础四位老板
+    const BOSSES = bosses;
     
     return (
         <div 
@@ -1317,9 +1472,26 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                 </div>
                                 
                                 {comment ? (
-                                    <p className="text-xs text-gray-700 font-bold bg-white p-3 rounded-xl border border-gray-100 leading-relaxed whitespace-pre-line">
-                                        💬 {comment}
-                                    </p>
+                                    <div className="space-y-1.5">
+                                        <p className="text-xs text-gray-700 font-bold bg-white p-3 rounded-xl border border-gray-100 leading-relaxed whitespace-pre-line">
+                                            💬 {comment}
+                                        </p>
+                                        <div className="flex justify-end">
+                                            <button
+                                                onClick={() => handleTranslateToChinese(`boss-summary-${boss.id}`, comment)}
+                                                disabled={translatingKeys[`boss-summary-${boss.id}`]}
+                                                className="text-[10px] text-purple-600 font-black hover:text-purple-800 flex items-center gap-1 bg-purple-50/50 hover:bg-purple-100/50 px-2.5 py-1.5 rounded-lg border border-purple-100"
+                                            >
+                                                🌐 {translatingKeys[`boss-summary-${boss.id}`] ? '翻译中...' : (translatedTexts[`boss-summary-${boss.id}`] ? '取消翻译' : '翻译成中文 / Translate to Chinese')}
+                                            </button>
+                                        </div>
+                                        {translatedTexts[`boss-summary-${boss.id}`] && (
+                                            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 font-bold leading-relaxed whitespace-pre-line animate-fade-in">
+                                                <span className="font-black text-emerald-700">🇨🇳 中文译文：</span>
+                                                {translatedTexts[`boss-summary-${boss.id}`]}
+                                            </div>
+                                        )}
+                                    </div>
                                 ) : (
                                     <p className="text-xs text-gray-400 font-bold italic bg-white p-2.5 rounded-xl border border-gray-100/50">
                                         暂无综合评语意见
@@ -1371,11 +1543,32 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                                 {initialMetricScore.grade} 档 ({initialMetricScore.score}分)
                                             </span>
                                         </div>
-                                        {initialMetricScore.note && (
-                                            <p className="text-xs text-gray-600 font-bold bg-white p-2 rounded border border-gray-100/80 leading-relaxed whitespace-pre-line mt-1">
-                                                💬 {getCommentFromNote(initialMetricScore.note)}
-                                            </p>
-                                        )}
+                                        {initialMetricScore.note && (() => {
+                                            const rawNote = getCommentFromNote(initialMetricScore.note);
+                                            const cacheKey = `initial-metric-${metric.key}`;
+                                            return (
+                                                <div className="space-y-1 mt-1">
+                                                    <p className="text-xs text-gray-600 font-bold bg-white p-2 rounded border border-gray-100/80 leading-relaxed whitespace-pre-line">
+                                                        💬 {rawNote}
+                                                    </p>
+                                                    <div className="flex justify-end">
+                                                        <button
+                                                            onClick={() => handleTranslateToChinese(cacheKey, rawNote)}
+                                                            disabled={translatingKeys[cacheKey]}
+                                                            className="text-[10px] text-blue-600 font-black hover:text-blue-800 flex items-center gap-1 bg-blue-50/50 hover:bg-blue-100/50 px-2.5 py-1.5 rounded-lg border border-blue-100"
+                                                        >
+                                                            🌐 {translatingKeys[cacheKey] ? '翻译中...' : (translatedTexts[cacheKey] ? '取消翻译' : '翻译成中文 / Translate to Chinese')}
+                                                        </button>
+                                                    </div>
+                                                    {translatedTexts[cacheKey] && (
+                                                        <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 font-bold leading-relaxed whitespace-pre-line animate-fade-in">
+                                                            <span className="font-black text-emerald-700">🇨🇳 中文译文：</span>
+                                                            {translatedTexts[cacheKey]}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 
@@ -1408,11 +1601,31 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                                         {scoreText}
                                                     </span>
                                                 </div>
-                                                {noteText && (
-                                                    <p className="text-xs text-gray-600 font-bold bg-white p-2 rounded border border-purple-100/30 leading-relaxed whitespace-pre-line mt-1">
-                                                        💬 {noteText}
-                                                    </p>
-                                                )}
+                                                {noteText && (() => {
+                                                    const cacheKey = `boss-metric-${boss.id}-${metric.key}`;
+                                                    return (
+                                                        <div className="space-y-1 mt-1">
+                                                            <p className="text-xs text-gray-600 font-bold bg-white p-2 rounded border border-purple-100/30 leading-relaxed whitespace-pre-line">
+                                                                💬 {noteText}
+                                                            </p>
+                                                            <div className="flex justify-end">
+                                                                <button
+                                                                    onClick={() => handleTranslateToChinese(cacheKey, noteText)}
+                                                                    disabled={translatingKeys[cacheKey]}
+                                                                    className="text-[10px] text-purple-600 font-black hover:text-purple-800 flex items-center gap-1 bg-purple-50/50 hover:bg-purple-100/50 px-2 py-1 rounded-lg border border-purple-100/30"
+                                                                >
+                                                                    🌐 {translatingKeys[cacheKey] ? '翻译中...' : (translatedTexts[cacheKey] ? '取消翻译' : '翻译成中文 / Translate to Chinese')}
+                                                                </button>
+                                                            </div>
+                                                            {translatedTexts[cacheKey] && (
+                                                                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 font-bold leading-relaxed whitespace-pre-line animate-fade-in">
+                                                                    <span className="font-black text-emerald-700">🇨🇳 中文译文：</span>
+                                                                    {translatedTexts[cacheKey]}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         );
                                     })}

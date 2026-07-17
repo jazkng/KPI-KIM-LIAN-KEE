@@ -8,10 +8,20 @@ import {
     ShoppingBag, Star, CalendarOff 
 } from 'lucide-react';
 import { Supplier, CatalogItem, PurchaseOrder, StockItem, PurchaseOrderItem, UomOption, ExpenseItem } from '../../../types';
+import { normalizeCatalogItem } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
 import { SUPPLIER_TAG_OPTIONS } from '../../../constants/suppliers';
 import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+import {
+    calculateWeightedAverageCost,
+    getCostPerBaseUnit,
+    getCurrentQtyBase,
+    roundQuantity,
+    toPositiveNumber
+} from '../../../utils/unitConversion';
+
 import { collection, getDocs, query, where, limit, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from '../../../firebaseConfig';
 import { ModuleGuideButton } from '../../ui/ModuleGuide';
@@ -335,8 +345,37 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         if (!validUoms.find(u => u.value === 'BASE' || u.ratio === 1)) {
             validUoms = [{ label: `1 ${baseUnit} (Base)`, value: 'BASE', ratio: 1 }, ...validUoms];
         }
-        const rawItem: CatalogItem = { id: productForm.id || `cat_${Date.now()}`, name: productForm.name, unit: baseUnit, price: Number(productForm.price), category: productForm.category || 'GENERAL', uomOptions: productUoms, linkedStockId: productForm.linkedStockId, supplierCode: productForm.supplierCode };
-        const newItem = JSON.parse(JSON.stringify(rawItem));
+        
+        const rawItem: CatalogItem = { 
+            id: productForm.id || `cat_${Date.now()}`, 
+            name: productForm.name, 
+            unit: baseUnit, 
+            price: Number(productForm.price), 
+            category: productForm.category || 'GENERAL', 
+            uomOptions: productUoms, 
+            linkedStockId: productForm.linkedStockId, 
+            supplierCode: productForm.supplierCode,
+            linkedPurchaseUnitId: productForm.linkedPurchaseUnitId,
+            purchaseUnitName: productForm.purchaseUnitName,
+            toBaseRatio: productForm.toBaseRatio,
+            baseUnit: productForm.baseUnit,
+            displayUnit: productForm.displayUnit,
+            displayToBaseRatio: productForm.displayToBaseRatio,
+            pricePerPurchaseUnit: productForm.pricePerPurchaseUnit !== undefined ? Number(productForm.pricePerPurchaseUnit) : Number(productForm.price),
+            costPerBaseUnit: productForm.costPerBaseUnit,
+            pricingMode: productForm.pricingMode,
+            orderUnit: productForm.orderUnit,
+            billingUnit: productForm.billingUnit,
+            pricePerBillingUnit: productForm.pricePerBillingUnit,
+            estimatedWeightPerUnit: productForm.estimatedWeightPerUnit,
+            conversionMode: productForm.conversionMode,
+            purchaseUnit: productForm.purchaseUnit,
+            pricingUnit: productForm.pricingUnit,
+            pricePerPricingUnit: productForm.pricePerPricingUnit
+        };
+
+        const normalized = normalizeCatalogItem(rawItem, allStockList);
+        const newItem = JSON.parse(JSON.stringify(normalized));
         const updatedCatalog = selectedSupplier.catalog ? [...selectedSupplier.catalog] : [];
         const existIdx = updatedCatalog.findIndex(i => i.id === newItem.id);
         if (existIdx >= 0) updatedCatalog[existIdx] = newItem; else updatedCatalog.push(newItem);
@@ -347,7 +386,53 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             const targetStock = allStockList.find(s => s.id === newItem.linkedStockId);
             if (targetStock) {
                 const type = (CATEGORY_MAP[targetStock.category] || 'KITCHEN') as 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
-                await DataManager.saveStockItem(type, { ...targetStock, uomOptions: newItem.uomOptions, cost: newItem.price });
+                const isWeightBased = newItem.pricingMode === 'WEIGHT_BASED' || newItem.conversionMode === 'ACTUAL_WEIGHT';
+
+                if (isWeightBased) {
+                    // 供应商报价属于采购资料；库存移动平均成本只能在实际收货时改变。
+                    await DataManager.saveStockItem(type, {
+                        ...targetStock,
+                        uomOptions: newItem.uomOptions,
+                        conversionMode: 'ACTUAL_WEIGHT',
+                        requiresActualWeightOnReceive: true,
+                        purchaseUnit: newItem.orderUnit || newItem.purchaseUnit || newItem.unit,
+                        pricingUnit: newItem.billingUnit || newItem.pricingUnit || targetStock.baseUnit || targetStock.unit,
+                        pricePerPricingUnit: Math.max(0, Number(newItem.pricePerBillingUnit ?? newItem.pricePerPricingUnit ?? newItem.price) || 0)
+                    });
+                } else {
+                    const purchaseUnitName = newItem.purchaseUnitName || newItem.unit || targetStock.baseUnit || targetStock.unit;
+                    const requestedPurchaseUnitId = newItem.linkedPurchaseUnitId || `supplier_${newItem.id}`;
+                    const purchasePrice = Math.max(0, Number(newItem.pricePerPurchaseUnit ?? newItem.price) || 0);
+                    const purchaseRatio = toPositiveNumber(newItem.toBaseRatio, 1);
+                    const purchaseUnits = [...(targetStock.purchaseUnits || [])];
+                    const matchingIndex = purchaseUnits.findIndex(unit =>
+                        unit.id === requestedPurchaseUnitId || unit.unitName.toLowerCase() === purchaseUnitName.toLowerCase()
+                    );
+                    const purchaseUnitId = matchingIndex >= 0
+                        ? purchaseUnits[matchingIndex].id
+                        : requestedPurchaseUnitId;
+                    const purchaseRule = {
+                        ...(matchingIndex >= 0 ? purchaseUnits[matchingIndex] : {}),
+                        id: purchaseUnitId,
+                        unitName: purchaseUnitName,
+                        unitType: 'PURCHASE' as const,
+                        toBaseRatio: purchaseRatio,
+                        pricePerUnit: purchasePrice,
+                        isDefaultPurchase: matchingIndex >= 0
+                            ? purchaseUnits[matchingIndex].isDefaultPurchase
+                            : purchaseUnits.length === 0
+                    };
+
+                    if (matchingIndex >= 0) purchaseUnits[matchingIndex] = purchaseRule;
+                    else purchaseUnits.push(purchaseRule);
+
+                    await DataManager.saveStockItem(type, {
+                        ...targetStock,
+                        uomOptions: newItem.uomOptions,
+                        purchaseUnits,
+                        defaultPurchaseUnitId: targetStock.defaultPurchaseUnitId || purchaseRule.id
+                    });
+                }
             }
         }
         setSelectedSupplier(updatedSupplier);
@@ -369,14 +454,35 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     // ============================================================
     // Cart & PO
     // ============================================================
-    const addToCart = (item: CatalogItem, selectedUom?: UomOption) => {
-        const orderUnit = selectedUom ? selectedUom.value : item.unit;
-        const orderRatio = selectedUom ? selectedUom.ratio : 1;
-        const orderCost = selectedUom?.price ? selectedUom.price : item.price * orderRatio;
+    const addToCart = (rawItem: CatalogItem, selectedUom?: UomOption) => {
+        const item = normalizeCatalogItem(rawItem, allStockList);
+        const orderUnit = selectedUom ? selectedUom.value : (item.purchaseUnitName || item.unit);
+        const orderRatio = selectedUom ? selectedUom.ratio : (item.toBaseRatio || 1);
+        const orderCost = selectedUom?.price 
+            ? selectedUom.price 
+            : (item.pricePerPurchaseUnit !== undefined ? item.pricePerPurchaseUnit : item.price);
+
+        const purchaseUnitId = selectedUom ? undefined : item.linkedPurchaseUnitId;
+        const purchaseUnitName = selectedUom ? selectedUom.value : item.purchaseUnitName;
+        const toBaseRatio = selectedUom ? selectedUom.ratio : item.toBaseRatio;
+        const costPerBaseUnitAtReceive = selectedUom ? (orderCost / orderRatio) : item.costPerBaseUnit;
+
         setCart(prev => {
             const existing = prev.find(p => p.stockId === item.id && p.unit === orderUnit);
             if (existing) return prev.map(p => (p.stockId === item.id && p.unit === orderUnit) ? { ...p, orderQty: p.orderQty + 1 } : p);
-            return [...prev, { stockId: item.id, name: item.name, orderQty: 1, unit: orderUnit, ratio: orderRatio, cost: orderCost, supplierCode: item.supplierCode }];
+            return [...prev, { 
+                stockId: item.id, 
+                name: item.name, 
+                orderQty: 1, 
+                unit: orderUnit, 
+                ratio: orderRatio, 
+                cost: orderCost, 
+                supplierCode: item.supplierCode,
+                purchaseUnitId,
+                purchaseUnitName,
+                toBaseRatio,
+                costPerBaseUnitAtReceive
+            }];
         });
         setIsCreatingPO(true);
         if (cart.length === 0) setIsCartExpanded(true);
@@ -414,7 +520,18 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     // ============================================================
     const initiateReceivePO = (po: PurchaseOrder) => {
         setReceivingPO(po);
-        setReceivedItems(po.items.map(i => ({ ...i, receivedQty: i.orderQty, finalCost: i.cost, billByWeight: false, receivedWeight: 0 })));
+        setReceivedItems(po.items.map(i => {
+            const isWeightBased = i.pricingMode === 'WEIGHT_BASED' || i.conversionMode === 'ACTUAL_WEIGHT';
+            return {
+                ...i,
+                receivedQty: i.orderQty,
+                finalCost: isWeightBased ? (i.billingUnitPrice ?? i.cost ?? 0) : (i.cost ?? 0),
+                billByWeight: isWeightBased,
+                receivedWeight: isWeightBased
+                    ? (i.estimatedBaseQty || (i.orderQty * (i.estimatedWeightPerUnit || 1)))
+                    : 0
+            };
+        }));
         setIsReceiveModalOpen(true);
     };
 
@@ -426,8 +543,26 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         if (!receivingPO) return;
         setIsProcessingReceive(true);
         try {
+            for (const item of receivedItems) {
+                const receivedQty = Number(item.receivedQty);
+                const receivedWeight = Number(item.receivedWeight) || 0;
+                const finalCost = Number(item.finalCost);
+                if (!Number.isFinite(receivedQty) || receivedQty < 0) {
+                    alert(`❌ 实际收货数量不能为负数：${item.name}`);
+                    return;
+                }
+                if (item.billByWeight && receivedWeight < 0) {
+                    alert(`❌ 实际重量不能为负数：${item.name}`);
+                    return;
+                }
+                if (!Number.isFinite(finalCost) || finalCost < 0) {
+                    alert(`❌ 最终价格不能为负数：${item.name}`);
+                    return;
+                }
+            }
+
             const finalTotal = receivedItems.reduce((sum, item) => sum + ((item.billByWeight && item.receivedWeight ? item.receivedWeight : item.receivedQty) * item.finalCost), 0);
-            const stockUpdates = new Map<string, { qtyDelta: number, newCost: number }>();
+            const stockUpdates = new Map<string, { qtyDelta: number, receivedTotalCost: number }>();
             const supplier = suppliers.find(s => s.id === receivingPO.supplierId);
             const billCategory = supplier?.category || 'SUPPLIER';
 
@@ -435,20 +570,44 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 const catalogItem = supplier?.catalog?.find(c => c.id === item.stockId);
                 if (catalogItem && catalogItem.linkedStockId) {
                     const inventoryId = catalogItem.linkedStockId;
-                    const baseQtyDelta = item.receivedQty * item.ratio;
-                    let baseUnitCost = 0;
-                    if (item.billByWeight && item.receivedWeight && item.receivedQty > 0) {
-                        baseUnitCost = ((item.receivedWeight * item.finalCost) / item.receivedQty) / item.ratio;
-                    } else { baseUnitCost = item.finalCost / item.ratio; }
-                    const existing = stockUpdates.get(inventoryId) || { qtyDelta: 0, newCost: 0 };
-                    stockUpdates.set(inventoryId, { qtyDelta: existing.qtyDelta + baseQtyDelta, newCost: baseUnitCost });
+                    const receivedQty = Math.max(0, Number(item.receivedQty) || 0);
+                    const ratio = toPositiveNumber(item.ratio ?? item.toBaseRatio, 1);
+                    const isWeightBased = (item.pricingMode === 'WEIGHT_BASED' || item.conversionMode === 'ACTUAL_WEIGHT') && item.billByWeight;
+                    const baseQtyDelta = roundQuantity(isWeightBased
+                        ? Math.max(0, Number(item.receivedWeight) || 0)
+                        : receivedQty * ratio);
+                    const pricingQty = item.billByWeight
+                        ? Math.max(0, Number(item.receivedWeight) || 0)
+                        : receivedQty;
+                    const finalUnitCost = Math.max(0, Number(item.finalCost) || 0);
+                    const receivedTotalCost = roundQuantity(pricingQty * finalUnitCost, 2);
+                    const existing = stockUpdates.get(inventoryId) || { qtyDelta: 0, receivedTotalCost: 0 };
+                    stockUpdates.set(inventoryId, {
+                        qtyDelta: roundQuantity(existing.qtyDelta + baseQtyDelta),
+                        receivedTotalCost: roundQuantity(existing.receivedTotalCost + receivedTotalCost, 2)
+                    });
                 }
             });
 
             const changedItems: StockItem[] = [];
             allStockList.forEach(stockItem => {
                 const update = stockUpdates.get(stockItem.id);
-                if (update) { changedItems.push({ ...stockItem, currentQty: (stockItem.currentQty || 0) + update.qtyDelta, cost: update.newCost, diff: update.qtyDelta } as any); }
+                if (update && update.qtyDelta > 0) {
+                    const weighted = calculateWeightedAverageCost({
+                        oldQtyBase: getCurrentQtyBase(stockItem),
+                        oldCostPerBaseUnit: getCostPerBaseUnit(stockItem),
+                        receivedQtyBase: update.qtyDelta,
+                        receivedTotalCost: update.receivedTotalCost
+                    });
+                    changedItems.push({
+                        ...stockItem,
+                        currentQtyBase: weighted.newQtyBase,
+                        currentQty: weighted.newQtyBase,
+                        costPerBaseUnit: weighted.newCostPerBaseUnit,
+                        cost: weighted.newCostPerBaseUnit,
+                        diff: update.qtyDelta
+                    } as StockItem & { diff: number });
+                }
             });
 
             const changedByCategory: Record<string, StockItem[]> = {};
@@ -456,18 +615,65 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             const updatePromises = Object.entries(changedByCategory).filter(([_, items]) => items.length > 0).map(([cat, items]) => DataManager.batchUpdateStock(cat as any, items));
             await Promise.all(updatePromises);
 
-            await DataManager.savePurchaseOrder({ ...receivingPO, status: 'RECEIVED' as const });
+            const receivedPOItems = receivedItems.map(item => {
+                const receivedQty = Math.max(0, Number(item.receivedQty) || 0);
+                const receivedWeight = Math.max(0, Number(item.receivedWeight) || 0);
+                const ratio = toPositiveNumber(item.ratio ?? item.toBaseRatio, 1);
+                const isWeightBased = (item.pricingMode === 'WEIGHT_BASED' || item.conversionMode === 'ACTUAL_WEIGHT') && item.billByWeight;
+                const receivedBaseQty = roundQuantity(isWeightBased ? receivedWeight : receivedQty * ratio);
+                const finalLineTotal = roundQuantity(
+                    (item.billByWeight ? receivedWeight : receivedQty) * Math.max(0, Number(item.finalCost) || 0),
+                    2
+                );
+                return {
+                    ...item,
+                    receivedQty,
+                    receivedWeight,
+                    finalUnitPrice: Math.max(0, Number(item.finalCost) || 0),
+                    finalLineTotal,
+                    receivedBaseQty,
+                    costPerBaseUnitAtReceive: receivedBaseQty > 0
+                        ? roundQuantity(finalLineTotal / receivedBaseQty)
+                        : 0
+                };
+            });
+
+            await DataManager.savePurchaseOrder({
+                ...receivingPO,
+                status: 'RECEIVED' as const,
+                items: receivedPOItems
+            });
             await DataManager.saveStandaloneExpense({ id: `exp_${Date.now()}`, category: billCategory, expenseType: 'GENERAL', company: receivingPO.supplierName, amount: 0, totalBillAmount: finalTotal, outstandingAmount: finalTotal, paymentStatus: 'UNPAID', time: new Date().toISOString(), note: `PO: ${receivingPO.id} (Auto-generated)`, paymentMethod: 'BANK_TRANSFER', paidBy: 'COMPANY' });
 
             alert(`✅ 入库成功！应付: RM ${finalTotal.toFixed(2)}\n分类: ${billCategory}`);
             setIsReceiveModalOpen(false); setReceivingPO(null);
 
-            setAllStockList(prev => prev.map(s => { const update = stockUpdates.get(s.id); return update ? { ...s, currentQty: (s.currentQty || 0) + update.qtyDelta, cost: update.newCost } : s; }));
+            setAllStockList(prev => prev.map(stockItem => {
+                const update = stockUpdates.get(stockItem.id);
+                if (!update || update.qtyDelta <= 0) return stockItem;
+                const weighted = calculateWeightedAverageCost({
+                    oldQtyBase: getCurrentQtyBase(stockItem),
+                    oldCostPerBaseUnit: getCostPerBaseUnit(stockItem),
+                    receivedQtyBase: update.qtyDelta,
+                    receivedTotalCost: update.receivedTotalCost
+                });
+                return {
+                    ...stockItem,
+                    currentQtyBase: weighted.newQtyBase,
+                    currentQty: weighted.newQtyBase,
+                    costPerBaseUnit: weighted.newCostPerBaseUnit,
+                    cost: weighted.newCostPerBaseUnit
+                };
+            }));
             const poData = await DataManager.getPurchaseOrders();
             setPurchaseOrders(poData.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 35));
             if (selectedSupplier) await loadExpenses(selectedSupplier.name);
             stockCacheRef.current = null;
-        } catch (error) { console.error("Receive Error:", error); alert("入库失败，请重试"); }
+        } catch (error: any) {
+            console.error("Receive Error:", error);
+            const detailedMsg = error?.message || String(error);
+            alert(`入库失败，请重试。\n\n详细错误: ${detailedMsg}`);
+        }
         finally { setIsProcessingReceive(false); }
     };
 
@@ -485,7 +691,19 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     const pageElement = document.getElementById(`po-print-page-${i}`);
                     if (!pageElement) continue;
                     if (i > 0) pdf.addPage();
-                    const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 });
+                    const canvas = await html2canvas(pageElement, { 
+                        scale: 2, 
+                        useCORS: true, 
+                        backgroundColor: '#ffffff', 
+                        windowWidth: 794,
+                        onclone: (clonedDoc) => {
+                            const clonedEl = clonedDoc.getElementById(`po-print-page-${i}`);
+                            const originalEl = document.getElementById(`po-print-page-${i}`);
+                            if (originalEl && clonedEl) {
+                                applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
+                            }
+                        }
+                    });
                     const imgData = canvas.toDataURL('image/jpeg', 1.0);
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, (canvas.height * pdfWidth) / canvas.width);
@@ -508,7 +726,16 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         setTimeout(() => {
             const input = supplierPrintRef.current;
             if (!input) { setIsExportingUnpaidBills(false); return; }
-            html2canvas(input, { scale: 2, useCORS: true }).then((canvas) => {
+            html2canvas(input, { 
+                scale: 2, 
+                useCORS: true,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('supplier-print-export-root');
+                    if (supplierPrintRef.current && clonedEl) {
+                        applyResolvedStylesForPdf(supplierPrintRef.current as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
+            }).then((canvas) => {
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const imgWidth = 210;
@@ -545,7 +772,16 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         setTimeout(() => {
             const input = supplierPrintRef.current;
             if (!input) { setIsExportingAllBills(false); return; }
-            html2canvas(input, { scale: 2, useCORS: true }).then((canvas) => {
+            html2canvas(input, { 
+                scale: 2, 
+                useCORS: true,
+                onclone: (clonedDoc) => {
+                    const clonedEl = clonedDoc.getElementById('supplier-print-export-root');
+                    if (supplierPrintRef.current && clonedEl) {
+                        applyResolvedStylesForPdf(supplierPrintRef.current as HTMLElement, clonedEl as HTMLElement);
+                    }
+                }
+            }).then((canvas) => {
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const imgWidth = 210;
@@ -898,19 +1134,38 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     // RENDER
     // ============================================================
     const MainContent = (
-        <div className={`flex flex-col bg-[#F5F7FA] h-full ${isModal ? 'md:max-h-[92vh] md:rounded-[2rem] overflow-hidden shadow-2xl border border-gray-100' : ''} font-sans relative`}>
+        <div className={`flex flex-col bg-[#F6F7FB] h-full ${isModal ? 'md:max-h-[92vh] md:rounded-[2rem] overflow-hidden shadow-2xl border border-gray-100' : ''} font-sans relative`}>
             
             {/* 顶部导航栏 */}
-            <div className="bg-[#1A1A1A]/95 backdrop-blur-md text-white shrink-0 border-b border-[#FFD700]/50 px-4 py-3 md:px-6 md:py-4 flex justify-between items-center z-20 sticky top-0 shadow-lg">
-                <div className="flex items-center gap-3 md:gap-4">
-                    {view !== 'LIST' && (
-                        <button onClick={() => { setView('LIST'); setSelectedSupplier(null); setIsCreatingPO(false); }} className="p-2 bg-white/10 hover:bg-[#FFD700] hover:text-black rounded-xl transition-all shadow-sm"><ArrowLeft size={18}/></button>
+            <div className="mobile-safe-header bg-[#111111] text-white shrink-0 border-b-4 border-[#FFD200] px-4 pb-3 md:px-6 md:py-0 min-h-[56px] md:h-16 flex justify-between items-center z-20 sticky top-0 shadow-md">
+                <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                    {view !== 'LIST' ? (
+                        <button 
+                            onClick={() => { setView('LIST'); setSelectedSupplier(null); setIsCreatingPO(false); }} 
+                            className="w-11 h-11 md:w-auto md:h-auto md:p-2 bg-white/10 hover:bg-[#FFD200] hover:text-black rounded-xl flex items-center justify-center transition-all shadow-sm shrink-0 active:scale-95"
+                            id="mobile-back-btn"
+                        >
+                            <ArrowLeft size={18}/>
+                        </button>
+                    ) : (
+                        onClose && (
+                            <button 
+                                onClick={onClose} 
+                                className="md:hidden w-11 h-11 bg-white/10 hover:bg-red-500 hover:text-white rounded-xl flex items-center justify-center transition-colors text-gray-300 shrink-0"
+                                id="mobile-close-btn"
+                            >
+                                <X size={18}/>
+                            </button>
+                        )
                     )}
-                    <div className="flex items-center gap-3">
-                        <div className="bg-[#FFD700] text-black p-2 rounded-lg shadow-sm hidden md:block"><Truck size={20}/></div>
-                        <div>
-                            <h3 className="font-serif font-black text-sm md:text-lg tracking-wide text-white flex items-center gap-2"><Truck size={16} className="md:hidden text-[#FFD700]"/> 供应商与采购</h3>
-                            <p className="text-[9px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">Supplier Management</p>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="bg-[#FFD200] text-black p-2 rounded-lg shadow-sm hidden md:block shrink-0"><Truck size={20}/></div>
+                        <span className="text-xl md:hidden shrink-0">🚚</span>
+                        <div className="min-w-0">
+                            <h3 className="font-serif font-black text-sm md:text-lg tracking-wide text-white truncate flex items-center gap-1.5">
+                                供应商与采购
+                            </h3>
+                            <p className="text-[8px] md:text-[9px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 truncate">Supplier Management</p>
                         </div>
                     </div>
                 </div>
@@ -923,25 +1178,45 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     <ModuleGuideButton module="SUPPLIER" />
                     {onClose && <button onClick={onClose} className="p-2 hover:bg-red-500 hover:text-white rounded-xl transition-colors text-gray-300"><X size={20}/></button>}
                 </div>
-                <div className="md:hidden flex items-center gap-2">
+                <div className="md:hidden flex items-center gap-2 shrink-0">
                     <ModuleGuideButton module="SUPPLIER" />
-                    {onClose && <button onClick={onClose} className="p-1.5 hover:bg-red-500 hover:text-white rounded-lg transition-colors text-gray-300"><X size={18}/></button>}
+                    {onClose && view !== 'LIST' && (
+                        <button onClick={onClose} className="w-11 h-11 flex items-center justify-center bg-white/5 hover:bg-red-500 hover:text-white rounded-xl transition-colors text-gray-300"><X size={18}/></button>
+                    )}
                 </div>
             </div>
 
             {/* 手机端标签 */}
-            <div className="md:hidden bg-white border-b border-gray-200 p-2 flex gap-2 shrink-0 z-10 shadow-sm relative">
-                <button onClick={() => { setMainTab('SUPPLIERS'); setView('LIST'); }} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${mainTab === 'SUPPLIERS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'bg-gray-50 text-gray-500'}`}><UserCircle size={14}/> 供应商列表</button>
-                <button onClick={() => { setMainTab('POS'); setView('LIST'); }} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${mainTab === 'POS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'bg-gray-50 text-gray-500'}`}><FileText size={14}/> 采购单记录</button>
+            <div className="md:hidden bg-[#F6F7FB] px-4 pt-4 pb-2 shrink-0 z-10 relative">
+                <div className="bg-white p-1 rounded-2xl border border-[#E5E7EB] flex shadow-sm">
+                    <button onClick={() => { setMainTab('SUPPLIERS'); setView('LIST'); }} className={`flex-1 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${mainTab === 'SUPPLIERS' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-transparent text-gray-500'}`}><UserCircle size={14}/> 供应商列表</button>
+                    <button onClick={() => { setMainTab('POS'); setView('LIST'); }} className={`flex-1 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${mainTab === 'POS' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-transparent text-gray-500'}`}><FileText size={14}/> 采购单记录</button>
+                </div>
             </div>
 
+            {/* 手机端搜索框 */}
+            {view === 'LIST' && (
+                <div className="md:hidden bg-[#F6F7FB] px-4 pb-2 shrink-0">
+                    <div className="relative w-full">
+                        <Search className="absolute left-3.5 top-3.5 text-gray-400" size={16}/>
+                        <input 
+                            type="text" 
+                            placeholder={mainTab === 'SUPPLIERS' ? "搜索供应商名称 / 编号 / 标签..." : "搜索采购单号 / 商家..."} 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            className="w-full pl-10 pr-4 py-3 bg-white border border-[#E5E7EB] rounded-2xl text-xs font-bold shadow-sm focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px]"
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* 主内容区 */}
-            <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-24 md:pb-8 scroll-smooth relative z-0">
+            <div className="mobile-fixed-actions-space flex-grow overflow-y-auto p-4 md:p-6 md:pb-8 scroll-smooth relative z-0">
                 
                 {/* 供应商列表 */}
                 {mainTab === 'SUPPLIERS' && view === 'LIST' && (
                     <div className="max-w-7xl mx-auto space-y-5 animate-in fade-in slide-in-from-bottom-4">
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+                        <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
                             <div className="relative w-full md:w-96">
                                 <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
                                 <input type="text" placeholder="搜索供应商名称 / 编号 / 标签..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-gray-50/80 border border-gray-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#FFD700] focus:ring-4 focus:ring-[#FFD700]/10 transition-all outline-none"/>
@@ -981,30 +1256,32 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {filteredSuppliers.map(sup => (
-                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className="relative bg-white rounded-[1.5rem] p-4 border border-gray-100 shadow-sm hover:shadow-[0_8px_30px_rgba(255,215,0,0.15)] hover:border-[#FFD700]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full overflow-hidden">
+                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className="relative bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-sm hover:shadow-[0_8px_30px_rgba(255,215,0,0.15)] hover:border-[#FFD700]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full overflow-hidden">
                                     <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
                                     <div className="absolute top-2 right-2 p-2 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"><Truck size={48}/></div>
                                     <div className="flex items-start justify-between gap-2 mb-3 relative z-10">
                                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#1A1A1A] to-gray-800 text-[#FFD700] flex items-center justify-center font-black text-[10px] shadow-md shrink-0">{sup.id}</div>
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-[10px] shadow-md shrink-0">{sup.id}</div>
                                             <div className="min-w-0 flex-1">
-                                                <h4 className="font-black text-sm text-[#1A1A1A] leading-snug line-clamp-2 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
+                                                <h4 className="font-black text-sm text-[#111111] leading-snug line-clamp-2 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest mt-1 ${sup.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${sup.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{sup.status}</span>
                                             </div>
                                         </div>
-                                        <button onClick={(e) => handleToggleFavorite(e, sup)} className="p-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:bg-gray-50 transition-all hover:scale-110 active:scale-95 shrink-0 mt-0.5"><Star size={14} className={sup.isFavorite ? "fill-[#FFD700] text-[#FFD700]" : "text-gray-200"} /></button>
+                                        <button onClick={(e) => handleToggleFavorite(e, sup)} className="p-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:bg-gray-50 transition-all hover:scale-110 active:scale-95 shrink-0 mt-0.5"><Star size={14} className={sup.isFavorite ? "fill-[#FFD200] text-[#FFD200]" : "text-gray-200"} /></button>
                                     </div>
                                     {sup.restDayNote && (<div className="mb-3 bg-orange-50/80 border border-orange-100/50 rounded-lg px-2 py-1.5 flex items-start gap-1.5 relative z-10"><CalendarOff size={12} className="text-orange-500 mt-px shrink-0"/><p className="text-[10px] font-bold text-orange-800 leading-tight line-clamp-1">{sup.restDayNote}</p></div>)}
                                     <div className="space-y-2 mt-auto relative z-10">
                                         <p className="text-[11px] text-gray-500 font-medium flex items-center gap-1.5 truncate"><User size={12} className="text-gray-400 shrink-0"/> {sup.contactPerson || sup.name.slice(0, 12)}</p>
                                         {sup.contact && (<button onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${sup.contact.replace(/\D/g, '')}`, '_blank'); }} className="text-[10px] text-green-600 font-bold flex items-center gap-1 hover:text-green-700"><Phone size={10}/> {sup.contact.slice(-8)}</button>)}
                                         <div className="flex gap-1.5 flex-wrap">
-                                            {sup.category && <span className="text-[9px] font-bold bg-[#1A1A1A]/5 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200/50 truncate max-w-full">{sup.category}</span>}
+                                            {sup.category && <span className="text-[9px] font-bold bg-[#111111]/5 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200/50 truncate max-w-full">{sup.category}</span>}
                                             {sup.tags?.slice(0, 2).map(t => <span key={t} className="text-[9px] font-bold bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md border border-gray-100 truncate">#{t}</span>)}
                                         </div>
-                                        <div className="pt-3 mt-1 border-t border-gray-100/80 flex justify-between items-center text-[10px] font-bold text-gray-400">
-                                            <span>{sup.catalog?.length || 0} Products</span>
-                                            <div className="flex items-center gap-0.5 text-[#1A1A1A] group-hover:translate-x-1 transition-transform">Details <ArrowLeft size={10} className="rotate-180"/></div>
+                                        <div className="pt-3 mt-1 border-t border-gray-100/80 flex justify-between items-center text-[11px] font-black text-gray-500">
+                                            <span>📦 {sup.catalog?.length || 0} 品项</span>
+                                            <div className="flex items-center gap-1 bg-[#111111] text-[#FFD200] px-3 py-1.5 rounded-lg text-[10px] shadow-sm font-black active:scale-95 transition-all">
+                                                详情 <ArrowLeft size={10} className="rotate-180 text-[#FFD200]"/>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1218,25 +1495,54 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         <div className="py-16 text-center border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50/50"><Package size={40} className="mx-auto text-gray-300 mb-3"/><p className="text-gray-400 font-bold text-sm">目录为空</p></div>
                                     ) : (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                            {selectedSupplier.catalog.map(item => (
-                                                <div key={item.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-[#FFD700] hover:shadow-md transition-all flex flex-col group relative">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div className="text-[10px] text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{item.supplierCode || 'NO-CODE'}</div>
-                                                        <div className="flex items-center gap-1">
-                                                            <button onClick={() => { setProductForm(item); setProductUoms(item.uomOptions || DEFAULT_UOMS); setIsEditingProduct(true); }} className="text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 p-1.5 rounded-lg"><Edit3 size={12}/></button>
-                                                            <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
+                                            {selectedSupplier.catalog.map(rawItem => {
+                                                const item = normalizeCatalogItem(rawItem, allStockList);
+                                                const linkedStock = item.linkedStockId ? allStockList.find(s => s.id === item.linkedStockId) : undefined;
+                                                return (
+                                                    <div key={item.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-[#FFD700] hover:shadow-md transition-all flex flex-col group relative">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div className="text-[10px] text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{item.supplierCode || 'NO-CODE'}</div>
+                                                            <div className="flex items-center gap-1">
+                                                                <button onClick={() => { setProductForm(item); setProductUoms(item.uomOptions || DEFAULT_UOMS); setIsEditingProduct(true); }} className="text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 p-1.5 rounded-lg"><Edit3 size={12}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
+                                                            </div>
+                                                        </div>
+                                                        <h4 className="font-bold text-sm text-[#1A1A1A] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
+                                                        
+                                                        {linkedStock && (
+                                                            <div className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1 mb-2 inline-flex items-center gap-1">
+                                                                <Box size={10} />
+                                                                <span className="truncate">已关联: {linkedStock.name}</span>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        <div className="font-mono text-base font-black text-[#1A1A1A] mb-1">
+                                                            RM {(item.pricePerPurchaseUnit ?? item.price).toFixed(2)}
+                                                            <span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.purchaseUnitName || item.unit}</span>
+                                                        </div>
+
+                                                        {linkedStock && (
+                                                            <div className="bg-gray-50 rounded-xl p-2.5 mb-4 text-[10px] text-gray-500 font-bold space-y-1 border border-gray-100">
+                                                                <div className="flex justify-between">
+                                                                    <span>换算关系:</span>
+                                                                    <span className="text-gray-700">1 {item.purchaseUnitName || item.unit} = {item.toBaseRatio || 1} {item.baseUnit || 'pcs'}</span>
+                                                                </div>
+                                                                <div className="flex justify-between border-t border-gray-200/50 pt-1 mt-1">
+                                                                    <span>基础单位成本:</span>
+                                                                    <span className="text-amber-700 font-extrabold font-mono">RM {(item.costPerBaseUnit || (item.price / (item.toBaseRatio || 1))).toFixed(4)} / {item.baseUnit || 'pcs'}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="mt-auto pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
+                                                            <button onClick={() => addToCart(item)} className="flex-1 bg-[#1A1A1A] text-white py-2 rounded-xl text-xs font-bold hover:bg-[#FFD700] hover:text-black active:scale-95 flex items-center justify-center gap-1 shadow-sm min-h-[36px]"><Plus size={12}/> 1 {item.purchaseUnitName || item.unit}</button>
+                                                            {item.uomOptions?.filter(u => u.ratio > 1).map((uom, idx) => (
+                                                                <button key={idx} onClick={() => addToCart(item, uom)} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 rounded-xl text-[10px] font-bold hover:bg-gray-50 active:scale-95 min-h-[36px]">+ 1 {uom.value}</button>
+                                                            ))}
                                                         </div>
                                                     </div>
-                                                    <h4 className="font-bold text-sm text-[#1A1A1A] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
-                                                    <div className="font-mono text-base font-black text-[#1A1A1A] mb-4">RM {item.price.toFixed(2)}<span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.unit}</span></div>
-                                                    <div className="mt-auto pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
-                                                        <button onClick={() => addToCart(item)} className="flex-1 bg-[#1A1A1A] text-white py-2 rounded-xl text-xs font-bold hover:bg-[#FFD700] hover:text-black active:scale-95 flex items-center justify-center gap-1 shadow-sm min-h-[36px]"><Plus size={12}/> 1 {item.unit}</button>
-                                                        {item.uomOptions?.filter(u => u.ratio > 1).map((uom, idx) => (
-                                                            <button key={idx} onClick={() => addToCart(item, uom)} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 rounded-xl text-[10px] font-bold hover:bg-gray-50 active:scale-95 min-h-[36px]">+ 1 {uom.value}</button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -1395,9 +1701,118 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 )}
             </div>
 
+            {/* HIDDEN PRINT TEMPLATE FOR PURCHASE ORDERS */}
+            {printingPO && (
+                <div style={{ position: 'fixed', top: '0px', left: '0px', zIndex: -9999, pointerEvents: 'none' }}>
+                    <div ref={printRef}>
+                        {Array.from({ length: Math.ceil(printingPO.items.length / ITEMS_PER_PAGE) }).map((_, i) => {
+                            const pageItems = printingPO.items.slice(i * ITEMS_PER_PAGE, (i + 1) * ITEMS_PER_PAGE);
+                            return (
+                                <div
+                                    key={i}
+                                    id={`po-print-page-${i}`}
+                                    className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative flex flex-col justify-between"
+                                >
+                                    <div>
+                                        {/* Header */}
+                                        <div className="flex justify-between items-start border-b-4 border-[#1A1A1A] pb-5 mb-8">
+                                            <div>
+                                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#1A1A1A] mb-1">采购订单</h1>
+                                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Purchase Order</p>
+                                                <p className="text-[9px] text-gray-400 font-bold mt-2 font-mono">
+                                                    订单日期 Date: {printingPO.date.split('T')[0]}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xl font-black text-[#1A1A1A]">KIM LIAN KEE (KEPONG)</p>
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1">金莲记（甲洞）</p>
+                                                <p className="text-[9px] text-gray-400 font-mono">PO No: {printingPO.id}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Info Block */}
+                                        <div className="grid grid-cols-2 gap-8 mb-8">
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">供应商 Supplier</p>
+                                                <p className="text-sm font-black text-[#1A1A1A]">{printingPO.supplierName}</p>
+                                                <p className="text-[10px] text-gray-500 font-mono mt-1">ID: {printingPO.supplierId}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">收货方 Deliver To</p>
+                                                <p className="text-sm font-black text-[#1A1A1A]">KIM LIAN KEE (KEPONG) SDN BHD</p>
+                                                <p className="text-[10px] text-gray-500 mt-1">No. 52, Jalan Metro Perdana Barat 13, Kepong, KL</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Items Table */}
+                                        <table className="w-full text-left text-[10px] border-collapse mb-8">
+                                            <thead>
+                                                <tr className="bg-[#1A1A1A] text-white font-black text-[9px]">
+                                                    <th className="p-2 text-left rounded-l-lg">序号 No.</th>
+                                                    <th className="p-2 text-left">商品名称 Item Description</th>
+                                                    <th className="p-2 text-right">数量 Qty</th>
+                                                    <th className="p-2 text-center">单位 Unit</th>
+                                                    <th className="p-2 text-right">单价 Price (RM)</th>
+                                                    <th className="p-2 text-right rounded-r-lg">预估小计 Subtotal (RM)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {pageItems.map((item, idx) => {
+                                                    const itemNo = i * ITEMS_PER_PAGE + idx + 1;
+                                                    const subtotal = item.totalCost || item.estimatedTotal || (item.orderQty * item.cost) || 0;
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-gray-50/50">
+                                                            <td className="p-2 text-left font-mono font-bold text-gray-500">{itemNo}</td>
+                                                            <td className="p-2">
+                                                                <div className="font-bold text-[#1A1A1A]">{item.name}</div>
+                                                                {item.supplierCode && <span className="text-[8px] font-mono bg-gray-100 text-gray-600 px-1 py-0.5 rounded">Code: {item.supplierCode}</span>}
+                                                            </td>
+                                                            <td className="p-2 text-right font-mono font-bold">{item.orderQty}</td>
+                                                            <td className="p-2 text-center font-bold text-gray-600">{item.unit}</td>
+                                                            <td className="p-2 text-right font-mono font-bold">{(item.cost || 0).toFixed(2)}</td>
+                                                            <td className="p-2 text-right font-mono font-black text-[#1A1A1A]">{subtotal.toFixed(2)}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Footer (Legend / Signature) */}
+                                    <div>
+                                        {i === Math.ceil(printingPO.items.length / ITEMS_PER_PAGE) - 1 && (
+                                            <div className="border-t border-gray-150 pt-4 mb-8 flex justify-between items-end">
+                                                <div>
+                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Estimated Amount</p>
+                                                    <p className="text-xl font-mono font-black text-blue-700">RM {printingPO.totalEstimated.toFixed(2)}</p>
+                                                </div>
+                                                <div className="flex gap-12 text-center text-[9px] text-gray-500">
+                                                    <div>
+                                                        <p>采购人 (Prepared By)</p>
+                                                        <div className="w-28 border-b border-dashed border-gray-300 mt-8"></div>
+                                                    </div>
+                                                    <div>
+                                                        <p>批准人 (Approved By)</p>
+                                                        <div className="w-28 border-b border-dashed border-gray-300 mt-8"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between text-[8px] text-gray-400 font-mono">
+                                            <span>KIM LIAN KEE ERP SYSTEM • PO GENERATION</span>
+                                            <span>Page {i + 1} of {Math.ceil(printingPO.items.length / ITEMS_PER_PAGE)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* HIDDEN PRINT TEMPLATE FOR SUPPLIER UNPAID BILLS */}
-            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                <div ref={supplierPrintRef} className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative">
+            <div style={{ position: 'fixed', top: '0px', left: '0px', zIndex: -9999, pointerEvents: 'none' }}>
+                <div ref={supplierPrintRef} id="supplier-print-export-root" className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative">
                     <div className="flex justify-between items-start border-b-4 border-rose-950 pb-5 mb-8">
                         <div>
                             <h1 className="text-2xl font-black uppercase tracking-wider text-rose-950 mb-1">未付款账单对账单</h1>
@@ -1904,7 +2319,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
             {/* 📱 手机端底栏固定操作栏 (Sticky Bottom Actions Bar) - 适配 iOS & HIG & Safe Areas */}
             {!isCleanModalOpen && !isExportModalOpen && !isEditingSupplier && !isEditingProduct && !isBillFormOpen && !isReceiveModalOpen && (
-                <div id="sticky-bottom-actions-bar" className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+                <div id="sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans">
                     {view === 'LIST' && mainTab === 'SUPPLIERS' && (
                         <div className="flex items-center justify-between w-full gap-2 font-sans">
                             {/* 洗数规范 */}

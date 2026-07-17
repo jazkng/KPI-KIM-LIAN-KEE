@@ -14,6 +14,8 @@ import {
 } from "../types";
 import { APP_VERSION } from "../constants/versionHistory";
 import { PaymentVoucher } from "./paymentVoucherUtils";
+import { normalizeInventoryItem } from "./unitConversion";
+import { normalizeEmployeeOrgFields } from "./orgAccess";
 
 export class DataManager {
 
@@ -108,15 +110,25 @@ export class DataManager {
     static async getEmployees(): Promise<Employee[]> {
         return DataManager.runWithCache('employees', async () => {
             const snap = await getDocs(collection(db, 'employees'));
-            return snap.docs.map(d => d.data() as Employee);
+            return snap.docs.map(d => normalizeEmployeeOrgFields(d.data() as Employee));
         });
     }
     static async saveEmployee(employee: Employee): Promise<void> {
-        await setDoc(doc(db, 'employees', employee.id), employee);
+        await setDoc(doc(db, 'employees', employee.id), normalizeEmployeeOrgFields(employee));
         DataManager.clearCacheKeys(['employees']);
     }
     static async deleteEmployee(id: string): Promise<void> {
         await deleteDoc(doc(db, 'employees', id));
+        DataManager.clearCacheKeys(['employees']);
+    }
+
+    static async updateEmployeePreferredLanguage(
+        employeeId: string,
+        preferredLanguage: 'zh_en' | 'my'
+    ): Promise<void> {
+        await updateDoc(doc(db, 'employees', employeeId), {
+            preferredLanguage
+        });
         DataManager.clearCacheKeys(['employees']);
     }
 
@@ -270,11 +282,81 @@ export class DataManager {
     }
     static async saveWarranty(record: WarrantyRecord): Promise<void> { await setDoc(doc(db, 'warranties', record.id), record); }
     static async deleteWarranty(id: string): Promise<void> { await deleteDoc(doc(db, 'warranties', id)); }
-    static async saveStandaloneExpense(expense: ExpenseItem): Promise<void> { await setDoc(doc(db, 'standalone_expenses', expense.id), expense); }
+    static async saveStandaloneExpense(expense: ExpenseItem): Promise<void> { await setDoc(doc(db, 'standalone_expenses', expense.id), DataManager.removeUndefined(expense)); }
 
     // ==========================================
     // 🟢 进销存 与 缓存优化区
     // ==========================================
+    static async getStockItemsByIds(stockIds: string[]): Promise<StockItem[]> {
+        const colNames = ['stock_kitchen', 'stock_bar', 'stock_general', 'stock_fuel'] as const;
+        const results: StockItem[] = [];
+        const uniqueIds = Array.from(new Set(stockIds)).filter(Boolean);
+        if (uniqueIds.length === 0) return [];
+
+        await Promise.all(uniqueIds.map(async (stockId) => {
+            const cacheKey = `stock_item_${stockId}`;
+            const cached = DataManager.getCachedData<StockItem>(cacheKey);
+            if (cached) {
+                results.push(cached);
+                return;
+            }
+
+            for (const col of colNames) {
+                const d = await getDoc(doc(db, col, stockId));
+                if (d.exists()) {
+                    const item = d.data() as StockItem;
+                    // Apply backward compatibility fallback
+                    if (!item.baseUnit) {
+                        item.baseUnit = item.unit || '';
+                        item.currentQtyBase = item.currentQty ?? 0;
+                        item.minLevelBase = item.minLevel ?? 0;
+                        item.maxQtyBase = item.maxQty ?? 0;
+                        item.costPerBaseUnit = item.cost ?? 0;
+                        item.yieldPercent = item.yieldPercent ?? 100;
+                        item.overheadPercent = item.overheadPercent ?? 0;
+                    }
+                    if (!item.displayUnit) {
+                        item.displayUnit = item.baseUnit;
+                    }
+                    if (item.displayToBaseRatio === undefined || item.displayToBaseRatio === null || isNaN(item.displayToBaseRatio) || item.displayToBaseRatio <= 0) {
+                        item.displayToBaseRatio = 1;
+                    }
+                    if (!item.preferredStockViewUnit) {
+                        item.preferredStockViewUnit = 'BASE';
+                    }
+                    DataManager.setCachedData(cacheKey, item);
+                    results.push(item);
+                    break;
+                }
+            }
+        }));
+
+        return results;
+    }
+
+    static async searchStockByName(keyword: string): Promise<StockItem[]> {
+        const key = `search_stock_by_name_${keyword}`;
+        const cached = DataManager.getCachedData<StockItem[]>(key, 120 * 1000);
+        if (cached) return cached;
+
+        const [k, b, g, f] = await Promise.all([
+            DataManager.getStock('KITCHEN'),
+            DataManager.getStock('BAR'),
+            DataManager.getStock('GENERAL'),
+            DataManager.getStock('FUEL')
+        ]);
+        const all = [...k, ...b, ...g, ...f];
+        
+        const normKeyword = keyword.trim().toLowerCase().replace(/[\s\(\)\-\_\\\/（）［］［］【】\[\]\{\}]/g, '');
+        const results = all.filter(item => {
+            const name = (item.name || '').trim().toLowerCase().replace(/[\s\(\)\-\_\\\/（）［］［］【】\[\]\{\}]/g, '');
+            return name.includes(normKeyword);
+        });
+
+        DataManager.setCachedData(key, results);
+        return results;
+    }
+
     static async getStock(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL'): Promise<StockItem[]> {
         let colName = 'stock_general';
         if (type === 'KITCHEN') colName = 'stock_kitchen';
@@ -282,7 +364,15 @@ export class DataManager {
         if (type === 'FUEL') colName = 'stock_fuel';
         return DataManager.runWithCache(`stock_${colName}`, async () => {
             const snap = await getDocs(collection(db, colName));
-            return snap.docs.map(d => d.data() as StockItem);
+            return snap.docs.map(d => {
+                const item = d.data() as StockItem;
+                // Add the id from the document reference if not already on the item
+                if (!item.id) {
+                    item.id = d.id;
+                }
+                const normalized = normalizeInventoryItem(item);
+                return normalized as unknown as StockItem;
+            });
         });
     }
     static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem): Promise<void> {
@@ -290,11 +380,35 @@ export class DataManager {
         if (type === 'KITCHEN') colName = 'stock_kitchen';
         if (type === 'BAR') colName = 'stock_bar';
         if (type === 'FUEL') colName = 'stock_fuel';
-        const docRef = doc(db, colName, item.id);
+        
+        // Ensure legacy fields are synced for backward compatibility
+        const baseUnit = item.baseUnit || item.unit || '';
+        const currentQtyBase = item.currentQtyBase ?? item.currentQty ?? 0;
+        const minLevelBase = item.minLevelBase ?? item.minLevel ?? 0;
+        const maxQtyBase = item.maxQtyBase ?? item.maxQty ?? 0;
+        const costPerBaseUnit = item.costPerBaseUnit ?? item.cost ?? 0;
+        
+        const syncedItem: StockItem = {
+            ...item,
+            unit: baseUnit,
+            currentQty: currentQtyBase,
+            minLevel: minLevelBase,
+            maxQty: maxQtyBase,
+            cost: costPerBaseUnit,
+            // Sync purchaseUnits to legacy uomOptions
+            uomOptions: item.purchaseUnits ? item.purchaseUnits.map(pu => ({
+                label: pu.unitName,
+                value: pu.unitName,
+                ratio: pu.toBaseRatio,
+                price: pu.pricePerUnit
+            })) : item.uomOptions
+        };
+
+        const docRef = doc(db, colName, syncedItem.id);
         await runTransaction(db, async (transaction) => {
             const snap = await transaction.get(docRef);
             const existingData = snap.exists() ? snap.data() : {};
-            transaction.set(docRef, { ...existingData, ...item });
+            transaction.set(docRef, { ...existingData, ...syncedItem });
         });
         DataManager.clearCacheKeys(['stock_']);
     }
@@ -315,14 +429,32 @@ export class DataManager {
             const reads = await Promise.all(items.map(item => transaction.get(doc(db, colName, item.id))));
             items.forEach((item, idx) => {
                 const ref = doc(db, colName, item.id);
-                const currentDBData = reads[idx].exists() ? reads[idx].data() : { currentQty: 0 };
-                let finalQty = item.currentQty;
+                const currentDBData = reads[idx].exists() ? reads[idx].data() : {};
+                
+                let finalQty = item.currentQtyBase !== undefined ? item.currentQtyBase : (item.currentQty ?? 0);
                 if (item.diff !== undefined) {
-                    const latestQty = typeof currentDBData.currentQty === 'number' ? currentDBData.currentQty : 0;
+                    const latestQty = typeof currentDBData.currentQtyBase === 'number' 
+                        ? currentDBData.currentQtyBase 
+                        : (typeof currentDBData.currentQty === 'number' ? currentDBData.currentQty : 0);
                     finalQty = latestQty + item.diff;
                 }
+                
+                const finalQtyVal = Math.max(0, finalQty);
                 const { diff, ...cleanItem } = item;
-                transaction.set(ref, { ...currentDBData, ...cleanItem, currentQty: Math.max(0, finalQty) });
+                
+                const baseUnitVal = cleanItem.baseUnit || cleanItem.unit || 'pcs';
+                const costVal = cleanItem.costPerBaseUnit ?? cleanItem.cost ?? 0;
+
+                transaction.set(ref, { 
+                    ...currentDBData, 
+                    ...cleanItem, 
+                    currentQty: finalQtyVal,
+                    currentQtyBase: finalQtyVal,
+                    unit: baseUnitVal,
+                    baseUnit: baseUnitVal,
+                    cost: costVal,
+                    costPerBaseUnit: costVal
+                });
             });
         });
         DataManager.clearCacheKeys(['stock_']);
@@ -860,7 +992,7 @@ export class DataManager {
         const snap = await getDocs(q);
         return snap.docs.map(d => d.data() as PurchaseOrder);
     }
-    static async savePurchaseOrder(po: PurchaseOrder): Promise<void> { await setDoc(doc(db, 'purchase_orders', po.id), po); }
+    static async savePurchaseOrder(po: PurchaseOrder): Promise<void> { await setDoc(doc(db, 'purchase_orders', po.id), DataManager.removeUndefined(po)); }
     static async deletePurchaseOrder(id: string): Promise<void> { await deleteDoc(doc(db, 'purchase_orders', id)); }
 
     // ==========================================
@@ -926,13 +1058,50 @@ export class DataManager {
     static async saveActiveShift(data: any): Promise<void> { await setDoc(doc(db, 'config', 'active_shift'), data); }
     static async clearActiveShift(): Promise<void> { await deleteDoc(doc(db, 'config', 'active_shift')); }
 
-    static async getRosterData(monthKey?: string): Promise<{ roster: any, notes: any }> {
+    static async getRosterConfig(): Promise<any | null> {
+        try {
+            const d = await getDoc(doc(db, 'config', 'roster'));
+            return d.exists() ? d.data() : null;
+        } catch (e) {
+            console.error('[RosterConfig] failed to fetch:', e);
+            return null;
+        }
+    }
+    static async saveRosterConfig(config: any): Promise<void> {
+        await setDoc(doc(db, 'config', 'roster'), config, { merge: true });
+    }
+
+    static async getRosterData(monthKey?: string): Promise<{
+        roster: any;
+        notes: any;
+        monthKey?: string;
+        rosterVersion?: number;
+        status?: 'DRAFT' | 'PUBLISHED';
+        publishedAt?: string | null;
+        publishedBy?: string | null;
+        lastSavedAt?: string | null;
+        lastSavedBy?: string | null;
+        revision?: number;
+        shiftMode?: 'SINGLE' | 'MULTI';
+    }> {
         if (monthKey) {
             try {
                 const monthDoc = await getDoc(doc(db, 'roster_months', monthKey));
                 if (monthDoc.exists()) {
                     const data = monthDoc.data();
-                    return { roster: data.roster || {}, notes: data.notes || {} };
+                    return {
+                        roster: data.roster || {},
+                        notes: data.notes || {},
+                        monthKey: data.monthKey || monthKey,
+                        rosterVersion: data.rosterVersion || 1, // legacy month = version 1
+                        status: data.status || 'PUBLISHED', // legacy saved data considered published
+                        publishedAt: data.publishedAt || null,
+                        publishedBy: data.publishedBy || null,
+                        lastSavedAt: data.lastSavedAt || null,
+                        lastSavedBy: data.lastSavedBy || null,
+                        revision: data.revision || 1,
+                        shiftMode: data.shiftMode || 'SINGLE'
+                    };
                 }
                 const legacyRoster = await getDoc(doc(db, 'roster', 'main'));
                 const legacyNotes = await getDoc(doc(db, 'roster', 'notes'));
@@ -944,43 +1113,108 @@ export class DataManager {
                     Object.keys(allRoster).forEach(dateStr => { if (dateStr.startsWith(monthKey)) monthRoster[dateStr] = allRoster[dateStr]; });
                     Object.keys(allNotes).forEach(key => { if (key.startsWith(monthKey)) monthNotes[key] = allNotes[key]; });
                     if (Object.keys(monthRoster).length > 0) {
-                        await setDoc(doc(db, 'roster_months', monthKey), { roster: monthRoster, notes: monthNotes, migratedAt: new Date().toISOString() });
+                        const initData = {
+                            roster: monthRoster,
+                            notes: monthNotes,
+                            monthKey,
+                            rosterVersion: 1, // mark as legacy migrated
+                            status: 'PUBLISHED' as const,
+                            lastSavedAt: new Date().toISOString(),
+                            revision: 1,
+                            shiftMode: 'SINGLE' as const
+                        };
+                        await setDoc(doc(db, 'roster_months', monthKey), initData);
+                        return initData;
                     }
-                    return { roster: monthRoster, notes: monthNotes };
                 }
-                return { roster: {}, notes: {} };
+                return {
+                    roster: {},
+                    notes: {},
+                    monthKey,
+                    rosterVersion: 2, // new months default to version 2
+                    status: 'DRAFT',
+                    publishedAt: null,
+                    publishedBy: null,
+                    lastSavedAt: null,
+                    lastSavedBy: null,
+                    revision: 0,
+                    shiftMode: 'SINGLE'
+                };
             } catch (error) {
                 console.error(`[Roster] Failed to load month ${monthKey}:`, error);
-                return { roster: {}, notes: {} };
+                return { roster: {}, notes: {}, monthKey, rosterVersion: 2, status: 'DRAFT', revision: 0, shiftMode: 'SINGLE' };
             }
         }
         const r = await getDoc(doc(db, 'roster', 'main'));
         const n = await getDoc(doc(db, 'roster', 'notes'));
         return { roster: r.exists() ? r.data() : {}, notes: n.exists() ? n.data() : {} };
     }
-    static async saveRosterData(roster: any, notes: any, monthKey?: string): Promise<void> {
+
+    static async saveRosterData(
+        roster: any,
+        notes: any,
+        monthKey?: string,
+        meta?: {
+            status?: 'DRAFT' | 'PUBLISHED';
+            publishedAt?: string | null;
+            publishedBy?: string | null;
+            lastSavedBy?: string | null;
+            rosterVersion?: number;
+            shiftMode?: 'SINGLE' | 'MULTI';
+        },
+        expectedRevision?: number
+    ): Promise<any> {
         if (monthKey) {
             const monthRoster: Record<string, any> = {};
             const monthNotes: Record<string, any> = {};
             Object.keys(roster).forEach(dateStr => { if (dateStr.startsWith(monthKey)) monthRoster[dateStr] = roster[dateStr]; });
             Object.keys(notes).forEach(key => { if (key.startsWith(monthKey)) monthNotes[key] = notes[key]; });
             const monthRef = doc(db, 'roster_months', monthKey);
-            await runTransaction(db, async (transaction) => {
+            
+            const result = await runTransaction(db, async (transaction) => {
                 const current = await transaction.get(monthRef);
                 const currentData = current.exists() ? current.data() : {};
-                transaction.set(monthRef, {
+                
+                // Concurrency clash checking
+                if (expectedRevision !== undefined && currentData.revision !== undefined && currentData.revision !== expectedRevision) {
+                    throw new Error('CONCURRENCY_CONFLICT');
+                }
+                
+                const nextRevision = (currentData.revision || 0) + 1;
+                const newStatus = meta?.status ?? currentData.status ?? 'DRAFT';
+                
+                const finalDoc = {
+                    monthKey,
                     roster: { ...(currentData.roster || {}), ...monthRoster },
                     notes: { ...(currentData.notes || {}), ...monthNotes },
-                    lastSavedAt: new Date().toISOString()
-                });
+                    rosterVersion: meta?.rosterVersion ?? currentData.rosterVersion ?? 2,
+                    status: newStatus,
+                    publishedAt: meta?.publishedAt !== undefined ? meta.publishedAt : (currentData.publishedAt ?? null),
+                    publishedBy: meta?.publishedBy !== undefined ? meta.publishedBy : (currentData.publishedBy ?? null),
+                    lastSavedAt: new Date().toISOString(),
+                    lastSavedBy: meta?.lastSavedBy ?? currentData.lastSavedBy ?? null,
+                    revision: nextRevision,
+                    shiftMode: meta?.shiftMode ?? currentData.shiftMode ?? 'SINGLE'
+                };
+                
+                transaction.set(monthRef, finalDoc);
+                return finalDoc;
             });
-            try {
-                await setDoc(doc(db, 'roster', 'main'), roster, { merge: true });
-                await setDoc(doc(db, 'roster', 'notes'), notes, { merge: true });
-            } catch (e) { console.warn('[Roster] Legacy sync failed:', e); }
+
+            // If the status is PUBLISHED, we sync it to the legacy global documents (so other dashboards see it)
+            if (result.status === 'PUBLISHED') {
+                try {
+                    await setDoc(doc(db, 'roster', 'main'), roster, { merge: true });
+                    await setDoc(doc(db, 'roster', 'notes'), notes, { merge: true });
+                } catch (e) {
+                    console.warn('[Roster] Legacy sync failed:', e);
+                }
+            }
+            return result;
         } else {
             await setDoc(doc(db, 'roster', 'main'), roster, { merge: true });
             await setDoc(doc(db, 'roster', 'notes'), notes, { merge: true });
+            return { roster, notes };
         }
     }
 
@@ -1112,6 +1346,67 @@ export class DataManager {
     // ==========================================
     // 🟢 Assessment V2
     // ==========================================
+    // 🟢 Boss Ratings Collection V2 (Data Isolation)
+    static async getBossAssessmentRating(employeeId: string, quarter: string, bossId: string): Promise<any | null> {
+        try {
+            const docId = `${employeeId}_${quarter}_${bossId}`;
+            const d = await getDoc(doc(db, 'assessment_boss_ratings', docId));
+            return d.exists() ? d.data() : null;
+        } catch (e) {
+            console.error('getBossAssessmentRating failed:', e);
+            return null;
+        }
+    }
+
+    static async saveBossAssessmentRating(employeeId: string, quarter: string, bossId: string, rating: any): Promise<void> {
+        try {
+            const docId = `${employeeId}_${quarter}_${bossId}`;
+            const rawRecord = { 
+                ...rating, 
+                id: docId, 
+                employeeId, 
+                quarter, 
+                ownerId: bossId, // critical for security rules
+                updatedAt: new Date().toISOString() 
+            };
+            const finalRecord = DataManager.removeUndefined(rawRecord);
+            await setDoc(doc(db, 'assessment_boss_ratings', docId), finalRecord);
+        } catch (e) {
+            console.error('saveBossAssessmentRating failed:', e);
+            throw e;
+        }
+    }
+
+    static async getAllBossAssessmentRatings(employeeId: string, quarter: string): Promise<any[]> {
+        try {
+            const q = query(
+                collection(db, 'assessment_boss_ratings'), 
+                where('employeeId', '==', employeeId),
+                where('quarter', '==', quarter)
+            );
+            const snap = await getDocs(q);
+            return snap.docs.map(d => d.data());
+        } catch (e) {
+            console.error('getAllBossAssessmentRatings failed:', e);
+            return [];
+        }
+    }
+
+    static async getBossRatingsForOwner(bossId: string, quarter: string): Promise<any[]> {
+        try {
+            const q = query(
+                collection(db, 'assessment_boss_ratings'),
+                where('ownerId', '==', bossId),
+                where('quarter', '==', quarter)
+            );
+            const snap = await getDocs(q);
+            return snap.docs.map(d => d.data());
+        } catch (e) {
+            console.error('getBossRatingsForOwner failed:', e);
+            return [];
+        }
+    }
+
     static async getAssessmentRecord(employeeId: string, quarter: string): Promise<any | null> {
         try {
             const docId = `${employeeId}_${quarter}`;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Wallet,
   Landmark,
@@ -73,7 +74,9 @@ import {
 import { db } from "../../firebaseConfig";
 import { ModuleGuideButton } from "../ui/ModuleGuide";
 import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
+import { applyResolvedStylesForPdf } from "../../utils/pdfStyleResolver";
+
 
 export interface MonthlyClosing {
   id: string; // YYYY-MM
@@ -500,7 +503,7 @@ const LedgerModal = ({
           </div>
         </div>
 
-        <div className="flex-grow overflow-y-auto bg-[#F5F7FA] p-3 md:p-4 pb-[calc(env(safe-area-inset-bottom)+24px)] custom-scrollbar">
+        <div className="flex-grow overflow-y-auto touch-pan-y overscroll-contain bg-[#F5F7FA] p-3 md:p-4 pb-[calc(env(safe-area-inset-bottom)+24px)] custom-scrollbar">
           {groupedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
               <ScrollText size={48} className="opacity-20 mb-4" />
@@ -2032,6 +2035,12 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
           scale: 2,
           useCORS: true,
           backgroundColor: "#ffffff",
+          onclone: (clonedDoc) => {
+            const clonedEl = clonedDoc.getElementById('treasury-receipt-export-root');
+            if (printRef.current && clonedEl) {
+              applyResolvedStylesForPdf(printRef.current as HTMLElement, clonedEl as HTMLElement);
+            }
+          }
         });
         const imgData = canvas.toDataURL("image/jpeg", 1.0);
         const pdf = new jsPDF("p", "mm", "a5");
@@ -2161,8 +2170,8 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     }
   };
 
-  // �                {/* Header 注入 Safe Area */}
-  return (
+  // 使用 Portal，避免父层 transform / overflow / sidebar 布局影响 fixed 全屏遮罩
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
       <div className="bg-white w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
         {/* Header 注入 Safe Area */}
@@ -2193,7 +2202,10 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
 
         {/* Tabs：外快 → 额外收入 */}
         <div className="px-2.5 md:px-6 pt-3 md:pt-4 pb-2 bg-[#F5F7FA] shrink-0 border-b border-gray-100/50">
-          <div className="flex p-1 bg-white md:bg-gray-200/60 rounded-2xl overflow-x-auto scrollbar-hide shadow-sm md:shadow-inner gap-0.5 md:gap-2">
+          <div 
+            className="flex p-1 bg-white md:bg-gray-200/60 rounded-2xl overflow-x-auto scrollbar-hide shadow-sm md:shadow-inner gap-1 md:gap-2"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             {[
               { id: "OVERVIEW", label: "总览", icon: Landmark },
               { id: "TRANSFERS", label: "转账", icon: ArrowRightLeft },
@@ -2204,7 +2216,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`relative flex-1 min-w-[58px] md:min-w-[110px] py-1.5 md:py-2.5 rounded-xl text-[9px] md:text-xs font-black transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 whitespace-nowrap ${
+                className={`relative flex-grow shrink-0 md:flex-initial min-w-[76px] md:min-w-[110px] py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 whitespace-nowrap ${
                   activeTab === tab.id
                     ? "bg-gray-100 md:bg-white text-[#1A1A1A] shadow-none md:shadow-sm transform scale-[1.01]"
                     : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:scale-95"
@@ -2216,7 +2228,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                 />
                 <span className="opacity-95 md:opacity-100">{tab.label}</span>
                 {activeTab === tab.id && (
-                  <div className="absolute bottom-[-1px] md:bottom-0 left-1/2 -translate-x-1/2 w-4 h-[2px] bg-[#FFD700] rounded-t-sm md:hidden"></div>
+                  <div className="absolute bottom-[-1px] md:bottom-0 left-1/2 -translate-x-1/2 w-6 h-[3px] bg-[#FFD700] rounded-t-sm md:hidden"></div>
                 )}
               </button>
             ))}
@@ -2224,7 +2236,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-grow overflow-y-auto p-4 md:p-8 pb-[calc(env(safe-area-inset-bottom)+32px)] md:pb-8 custom-scrollbar">
+        <div className="flex-grow overflow-y-auto touch-pan-y overscroll-contain p-4 md:p-8 pb-[calc(env(safe-area-inset-bottom)+32px)] md:pb-8 custom-scrollbar">
           {/* ==================== OVERVIEW TAB ==================== */}
           {activeTab === "OVERVIEW" && (
             <div className="space-y-4 md:space-y-6 max-w-4xl mx-auto">
@@ -2933,8 +2945,11 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2 mt-3">
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center">
+                          <div 
+                            className="flex overflow-x-auto scrollbar-hide gap-2 mt-3 w-full"
+                            style={{ WebkitOverflowScrolling: "touch" }}
+                          >
+                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
                               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                                 股本 (Capital)
                               </div>
@@ -2945,7 +2960,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                                 {s.equityPercentage}%
                               </div>
                             </div>
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center">
+                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
                               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                                 净垫资 (Net Inj.)
                               </div>
@@ -2955,7 +2970,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                                 {formatMoney(netInjection)}
                               </div>
                             </div>
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center">
+                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
                               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                                 已分红 (Dividends)
                               </div>
@@ -4455,95 +4470,159 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* HIDDEN PRINT TEMPLATE */}
-        <div style={{ position: "absolute", top: "-9999px", left: "-9999px" }}>
+        {/* HIDDEN PRINT TEMPLATE
+            只有生成 PDF 时才挂载，平时完全不出现在 DOM，避免桌面端露出 OFFICIAL RECEIPT */}
+        {printingRecord && (
           <div
-            ref={printRef}
-            className="w-[148mm] min-h-[210mm] bg-white p-8 font-sans text-black relative border"
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              top: "0px",
+              left: "-100000px",
+              width: "148mm",
+              height: "210mm",
+              overflow: "hidden",
+              zIndex: 0,
+              pointerEvents: "none",
+            }}
           >
-            <div className="flex justify-between items-start border-b-4 border-black pb-4 mb-6">
+            <div
+              ref={printRef}
+              id="treasury-receipt-export-root"
+              className="w-[148mm] min-h-[210mm] bg-white p-10 font-sans text-black relative border-8 border-[#1A1A1A] flex flex-col justify-between"
+              style={{ boxSizing: "border-box" }}
+            >
+              {/* Top Decorative Gold Bar */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-[#FFD700]" />
+              
               <div>
-                <h1 className="text-3xl font-black uppercase tracking-widest mb-1">
-                  OFFICIAL RECEIPT
-                </h1>
-                <p className="text-xs font-bold text-gray-500">
-                  KIM LIAN KEE (KEPONG)
-                </p>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  No. 52, Jalan Metro Perdana Barat 13
-                  <br />
-                  Kepong, 52100 Kuala Lumpur
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xl font-mono font-black">
-                  {printingRecord?.id.slice(-6)}
-                </p>
-                <p className="text-sm font-bold text-gray-500">
-                  {printingRecord?.date}
-                </p>
-              </div>
-            </div>
-            {printingRecord &&
-              (() => {
-                const cleanNote =
-                  printingRecord.note?.replace("[代收] ", "") || "";
-                const dashIndex = cleanNote.indexOf(" - ");
-                const sourceName =
-                  dashIndex > -1
-                    ? cleanNote.substring(0, dashIndex)
-                    : cleanNote || "N/A";
-                const description =
-                  dashIndex > -1
-                    ? cleanNote.substring(dashIndex + 3)
-                    : "Payment";
-                return (
-                  <div className="space-y-6">
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
-                        Received From (收到):
-                      </p>
-                      <h2 className="text-xl font-bold">{sourceName}</h2>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
-                        Payment For (款项用途):
-                      </p>
-                      <h2 className="text-lg font-bold">{description}</h2>
-                    </div>
-                    <div className="flex justify-between items-center bg-black text-white p-6 rounded-xl">
-                      <p className="text-sm font-bold uppercase tracking-widest">
-                        Amount Received
-                      </p>
-                      <p className="text-3xl font-mono font-black">
-                        RM {printingRecord.amount.toFixed(2)}
+                {/* Header */}
+                <div className="flex justify-between items-start border-b-2 border-gray-200 pb-6 mb-8">
+                  <div>
+                    <h1 className="text-2xl font-black uppercase tracking-widest text-[#1A1A1A] mb-1">
+                      OFFICIAL RECEIPT
+                    </h1>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="w-2 h-2 rounded-full bg-[#FFD700]" />
+                      <p className="text-xs font-black text-gray-700 tracking-wider">
+                        KIM LIAN KEE (KEPONG)
                       </p>
                     </div>
-                    <div className="flex justify-between text-xs font-bold text-gray-500 mt-4 px-2">
-                      <span>Payment Mode: {printingRecord.toAccount}</span>
-                      <span>Status: PAID</span>
+                    <p className="text-[10px] text-gray-500 leading-relaxed font-semibold">
+                      No. 52, Jalan Metro Perdana Barat 13
+                      <br />
+                      Kepong, 52100 Kuala Lumpur
+                    </p>
+                  </div>
+                  <div className="text-right flex flex-col justify-between">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
+                        Receipt No
+                      </p>
+                      <p className="text-lg font-mono font-black text-[#1A1A1A] bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 inline-block">
+                        #{printingRecord?.id.slice(-6).toUpperCase()}
+                      </p>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
+                        Date Issued
+                      </p>
+                      <p className="text-xs font-bold text-gray-700">
+                        {printingRecord?.date}
+                      </p>
                     </div>
                   </div>
-                );
-              })()}
-            <div className="absolute bottom-8 left-8 right-8">
-              <div className="grid grid-cols-2 gap-12">
-                <div className="border-t border-black pt-2">
-                  <p className="text-[10px] font-bold uppercase">Received By</p>
-                  <p className="text-xs">Kim Lian Kee</p>
                 </div>
-                <div className="border-t border-black pt-2">
-                  <p className="text-[10px] font-bold uppercase">
-                    Authorized Signature
-                  </p>
-                </div>
+
+                {/* Content */}
+                {printingRecord &&
+                  (() => {
+                    const cleanNote =
+                      printingRecord.note?.replace("[代收] ", "") || "";
+                    const dashIndex = cleanNote.indexOf(" - ");
+                    const sourceName =
+                      dashIndex > -1
+                        ? cleanNote.substring(0, dashIndex)
+                        : cleanNote || "N/A";
+                    const description =
+                      dashIndex > -1
+                        ? cleanNote.substring(dashIndex + 3)
+                        : "Payment";
+                    return (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Received From (付款人):
+                            </p>
+                            <h2 className="text-sm font-black text-[#1A1A1A]">{sourceName}</h2>
+                          </div>
+                          <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Payment For (款项用途):
+                            </p>
+                            <h2 className="text-sm font-black text-[#1A1A1A]">{description}</h2>
+                          </div>
+                        </div>
+
+                        {/* Amount Banner */}
+                        <div className="bg-[#1A1A1A] text-white p-6 rounded-2xl border-b-4 border-[#FFD700] shadow-xl relative overflow-hidden flex items-center justify-between">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFD700]/10 rounded-full blur-2xl pointer-events-none" />
+                          <div className="relative z-10">
+                            <p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">
+                              TOTAL AMOUNT RECEIVED
+                            </p>
+                            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+                              实收金额 (MYR)
+                            </p>
+                          </div>
+                          <div className="relative z-10 text-right">
+                            <p className="text-3xl font-mono font-black text-[#FFD700]">
+                              RM {printingRecord.amount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Payment metadata */}
+                        <div className="bg-stone-50 p-4 rounded-xl border border-stone-100 flex justify-between items-center text-xs font-bold text-stone-600">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] bg-stone-200 text-stone-700 px-2 py-0.5 rounded-md font-black">METHOD</span>
+                            <span className="font-mono uppercase text-stone-900">{printingRecord.toAccount}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-black">STATUS</span>
+                            <span className="text-emerald-600 uppercase font-black">PAID (已付)</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
               </div>
-              <p className="text-[8px] text-center text-gray-400 mt-8 uppercase tracking-widest">
-                System Generated Receipt • No Signature Required
-              </p>
+
+              {/* Footer */}
+              <div>
+                <div className="grid grid-cols-2 gap-16">
+                  <div className="border-t-2 border-gray-200 pt-3">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                      Received By (收款方)
+                    </p>
+                    <p className="text-xs font-black text-gray-800">KIM LIAN KEE</p>
+                  </div>
+                  <div className="border-t-2 border-[#FFD700] pt-3 relative">
+                    <p className="text-[9px] font-black text-[#D4AF37] uppercase tracking-widest mb-1">
+                      Authorized Signature (授权签章)
+                    </p>
+                    <div className="h-6" />
+                  </div>
+                </div>
+                
+                <p className="text-[8px] text-center text-gray-400 mt-10 uppercase tracking-widest font-bold border-t border-gray-100 pt-4">
+                  This is a computer-generated official receipt • No physical signature is required
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* === HISTORY ARCHIVE MODAL === */}
         {isHistoryModalOpen && (
@@ -4695,7 +4774,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
               )}
 
               <div
-                className="flex-grow overflow-y-auto p-3 md:p-4 bg-gray-100"
+                className="flex-grow overflow-y-auto touch-pan-y overscroll-contain p-3 md:p-4 bg-gray-100"
                 style={{
                   paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
                 }}
@@ -4863,6 +4942,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

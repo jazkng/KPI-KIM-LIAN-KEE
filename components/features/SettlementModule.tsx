@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     Trash2, Check, AlertTriangle, Calculator, Play, Power, History, 
     Wallet, Banknote, CreditCard, X, Calendar, Truck, CheckCircle2, 
     RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
 import { SettlementRecord, StoreConfig, ExpenseItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
+
 
 interface SettlementModuleProps {
     storeConfig: StoreConfig;
@@ -184,28 +187,116 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     const reconStatus = (localRecord as any).reconStatus || {};
 
     const handleDownloadPDF = async () => {
-        if (!printRef.current) return;
+        const originalElement = printRef.current;
+        if (!originalElement) return;
         setIsGenerating(true);
-        setTimeout(async () => {
-            try {
-                const canvas = await html2canvas(printRef.current!, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
-                const imgData = canvas.toDataURL('image/jpeg', 1.0);
-                
-                // Calculate dynamic PDF height based on aspect ratio of the generated canvas to prevent bottom cropping
-                const pdfWidth = 148; // Base width of A5 in mm
-                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                
-                // Initialize jsPDF with the customized size [width, height]
-                const pdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]); 
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`Settlement_${localRecord.date}.pdf`);
-            } catch (error) {
-                console.error('PDF Generation Failed:', error);
-                alert("生成 PDF 失败，请重试。");
-            } finally {
-                setIsGenerating(false);
+        try {
+            // Wait for web fonts and two completed layout frames. A fixed timeout
+            // can still capture the hidden report while its styles are settling.
+            if (document.fonts?.ready) {
+                await document.fonts.ready;
             }
-        }, 300);
+            await new Promise<void>(resolve => {
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+            });
+
+            const canvas = await html2canvas(originalElement, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: "#ffffff",
+                logging: false,
+                removeContainer: true,
+                windowWidth: 794,
+                scrollX: 0,
+                scrollY: 0,
+                onclone: clonedDocument => {
+                    const clonedElement = clonedDocument.getElementById("pdf-print-root-content");
+                    const clonedWrapper = clonedDocument.getElementById("pdf-print-root");
+
+                    if (clonedWrapper) {
+                        clonedWrapper.style.opacity = "1";
+                        clonedWrapper.style.visibility = "visible";
+                        clonedWrapper.style.zIndex = "0";
+                    }
+
+                    if (clonedElement) {
+                        applyResolvedStylesForPdf(originalElement, clonedElement);
+                        clonedElement.style.visibility = "visible";
+                        clonedElement.style.opacity = "1";
+                        clonedElement.style.backgroundColor = "#ffffff";
+                    }
+                }
+            });
+            // Render a standard A4 report. If a future report has many expense
+            // rows, split it into additional A4 pages instead of producing one
+            // very long non-standard page.
+            const A4_WIDTH_MM = 210;
+            const A4_HEIGHT_MM = 297;
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+            });
+            const sourcePageHeight = Math.floor((canvas.width * A4_HEIGHT_MM) / A4_WIDTH_MM);
+            let sourceY = 0;
+            let pageNumber = 0;
+
+            // html2canvas may leave a 1–2 px white remainder after an otherwise
+            // complete A4 page. Do not turn that rounding remainder into a blank PDF page.
+            const hasVisibleContent = (page: HTMLCanvasElement) => {
+                const pageContext = page.getContext('2d', { willReadFrequently: true });
+                if (!pageContext || page.width === 0 || page.height === 0) return false;
+
+                const pixels = pageContext.getImageData(0, 0, page.width, page.height).data;
+                const pixelCount = pixels.length / 4;
+                const step = Math.max(1, Math.floor(pixelCount / 25000));
+                for (let pixel = 0; pixel < pixelCount; pixel += step) {
+                    const offset = pixel * 4;
+                    const red = pixels[offset];
+                    const green = pixels[offset + 1];
+                    const blue = pixels[offset + 2];
+                    const alpha = pixels[offset + 3];
+                    // The report background is pure white. Very light borders/cards
+                    // still fall below this threshold and count as actual content.
+                    if (alpha > 0 && (red < 250 || green < 250 || blue < 250)) return true;
+                }
+                return false;
+            };
+
+            while (sourceY < canvas.height) {
+                const sliceHeight = Math.min(sourcePageHeight, canvas.height - sourceY);
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = sliceHeight;
+                const context = pageCanvas.getContext('2d');
+                if (!context) throw new Error('Unable to prepare PDF page');
+
+                context.fillStyle = '#FFFFFF';
+                context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+                context.drawImage(
+                    canvas,
+                    0, sourceY, canvas.width, sliceHeight,
+                    0, 0, pageCanvas.width, pageCanvas.height
+                );
+
+                sourceY += sliceHeight;
+                if (!hasVisibleContent(pageCanvas)) continue;
+
+                if (pageNumber > 0) pdf.addPage('a4', 'portrait');
+                const renderedHeight = (sliceHeight * A4_WIDTH_MM) / canvas.width;
+                pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH_MM, renderedHeight);
+
+                pageNumber += 1;
+            }
+            pdf.save(`Settlement_${localRecord.date}.pdf`);
+        } catch (error) {
+            console.error('PDF Generation Failed:', error);
+            alert("生成 PDF 失败，请重试。");
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const executeReconciliation = async (perfectMatch: boolean = false) => {
@@ -406,174 +497,138 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                 {/* ========================================================= */}
                 {/* 🌟 升级版：高颜值、呼吸感、高质感 P&L Slip 报表模板 🌟 */}
                 {/* ========================================================= */}
-                <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                    <div ref={printRef} className="w-[148mm] min-h-[210mm] bg-white p-8 font-sans text-gray-900 border box-border flex flex-col leading-relaxed">
+                {createPortal(
+                    <div
+                        id="pdf-print-root"
+                        aria-hidden="true"
+                        style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "210mm",
+                            pointerEvents: "none",
+                            opacity: 0,
+                            zIndex: -9999
+                        }}
+                    >
+                    <div ref={printRef} id="pdf-print-root-content" className="w-[210mm] min-h-[297mm] bg-[#FFFFFF] px-[14mm] py-[12mm] font-sans text-[#111111] box-border flex flex-col leading-relaxed">
                         
-                        {/* 头部区域：拉开间距，规范流水号 */}
-                        <div className="text-center border-b-2 border-gray-900 pb-5 mb-6 shrink-0">
-                            <h1 className="text-2xl font-black tracking-widest uppercase text-gray-900 mb-1.5">KIM LIAN KEE</h1>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-100 inline-block px-3 py-1 rounded">Daily Settlement P&L Slip</p>
-                            
-                            <div className="mt-4 space-y-1 text-xs text-gray-600 font-mono">
-                                <p className="font-bold">DATE/TIME: {localRecord.date} {new Date(localRecord.timestamp).toLocaleTimeString()}</p>
-                                {/* 🌟 优化一：顺位顺序风格的流水号 (年月日-时分秒末尾) */}
-                                <p className="text-gray-400">REF: {localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                        {/* A4 头部：将报告身份、结算日期与编号分开，避免旧版流水号挤在一起。 */}
+                        <div className="border-b-2 border-[#111111] pb-3 mb-4 shrink-0">
+                            <div className="h-1.5 w-12 bg-[#FFD200] rounded-full mb-2.5" />
+                            <div className="flex items-start justify-between gap-6">
+                                <div>
+                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111]">KIM LIAN KEE GROUP</h1>
+                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280]">Kepong Branch</p>
+                                    <p className="text-[9px] leading-3.5 font-semibold text-[#6B7280]">甲洞分行</p>
+                                </div>
+                                <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
+                                    <p className="font-black tracking-[0.1em] uppercase text-[#111111]">Daily Settlement Report</p>
+                                    <p className="font-medium">每日结算报告</p>
+                                    <p><span className="font-black text-[#111111]">Business date</span> · {localRecord.date}</p>
+                                    <p><span className="font-black text-[#111111]">Report no.</span> · SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* 主体区块：加大 mb-6 间距，提升字里行间的呼吸感 */}
-                        <div className="space-y-6 flex-grow text-xs">
-                            
-                            {/* 1. REVENUE SECTION (营业额板块) */}
-                            <div className="space-y-3">
-                                <h3 className="font-black border-b border-gray-900 pb-1.5 uppercase tracking-widest text-gray-900 text-xs">1. Revenue (营业额汇总)</h3>
-                                
-                                {/* 店内总收 */}
-                                <div className="flex justify-between items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg">
-                                    <span className="font-black text-gray-800 uppercase tracking-wide">In-Store Total (店内总收)</span>
-                                    <span className="font-mono font-black text-sm">RM {localRecord.sales.storeHubTotal.toFixed(2)}</span>
-                                </div>
-                                
-                                {/* 店内明细：加大 py-1 间距，避免缩在一起 */}
-                                <div className="pl-4 pr-2 space-y-1 text-gray-600 font-medium border-l border-gray-200 ml-1">
-                                    <div className="flex justify-between items-center py-0.5"><span>• Cash (现金)</span><span className="font-mono font-bold">RM {localRecord.sales.cash.toFixed(2)}</span></div>
-                                    <div className="flex justify-between items-center py-0.5"><span>• TNG eWallet</span><span className="font-mono">RM {(localRecord.sales.tng || 0).toFixed(2)}</span></div>
-                                    <div className="flex justify-between items-center py-0.5"><span>• Debit Card</span><span className="font-mono">RM {totalDebit.toFixed(2)}</span></div>
-                                    <div className="flex justify-between items-center py-0.5"><span>• Credit Card</span><span className="font-mono">RM {totalCard.toFixed(2)}</span></div>
-                                    {localRecord.sales.amex > 0 && <div className="flex justify-between items-center py-0.5"><span>• Amex</span><span className="font-mono">RM {(localRecord.sales.amex || 0).toFixed(2)}</span></div>}
-                                </div>
-
-                                {/* 外卖总计 */}
-                                {totalDelivery > 0 && (
-                                    <div className="space-y-2 mt-4">
-                                        <div className="flex justify-between items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg">
-                                            <span className="font-black text-gray-800 uppercase tracking-wide">Delivery Platforms (外卖实收)</span>
-                                            <span className="font-mono font-black text-sm">RM {totalDelivery.toFixed(2)}</span>
-                                        </div>
-                                        <div className="pl-4 pr-2 space-y-1.5 text-gray-600 font-medium border-l border-gray-200 ml-1">
-                                            {grabGross > 0 && (
-                                                <div className="flex justify-between items-center py-0.5">
-                                                    <span>• GrabFood <span className="text-[10px] text-gray-400 font-normal">(Net: {grabNet.toFixed(1)} Ads: -{grabAds.toFixed(1)})</span></span>
-                                                    <span className="font-mono font-bold">RM {grabExpected.toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                            {pandaGross > 0 && (
-                                                <div className="flex justify-between items-center py-0.5">
-                                                    <span>• FoodPanda <span className="text-[10px] text-gray-400 font-normal">(Gross)</span></span>
-                                                    <span className="font-mono font-bold">RM {pandaGross.toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                            {shopeeGross > 0 && (
-                                                <div className="flex justify-between items-center py-0.5">
-                                                    <span>• ShopeeFood <span className="text-[10px] text-gray-400 font-normal">(Net: {shopeeNet.toFixed(1)} Ads: -{shopeeAds.toFixed(1)})</span></span>
-                                                    <span className="font-mono font-bold">RM {shopeeExpected.toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                            {Number(deliveryBreakdown.lalamove) > 0 && (
-                                                <div className="flex justify-between items-center py-0.5">
-                                                    <span>• Lalamove</span>
-                                                    <span className="font-mono font-bold">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* 挤干水分的总营业额：加大内边距 py-3 */}
-                                <div className="flex justify-between items-center bg-gray-900 text-white px-4 py-3 rounded-xl shadow-sm mt-4">
-                                    <span className="font-black uppercase tracking-wider text-xs">Total Net Revenue (挤干水分总计)</span>
-                                    <span className="font-mono font-black text-base">RM {localRecord.sales.total.toFixed(2)}</span>
-                                </div>
+                        {/* 核心摘要：先让老板/主管看到最重要的数字，而不是先阅读付款细目。 */}
+                        <div className="grid grid-cols-4 border border-[#E5E7EB] rounded-xl overflow-hidden mb-5 shrink-0">
+                            <div className="px-4 py-3 border-r border-[#E5E7EB] bg-[#FFFBE6]">
+                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Net Revenue</p>
+                                <p className="mt-1 font-mono text-base font-black text-[#111111]">RM {localRecord.sales.total.toFixed(2)}</p>
+                                <p className="text-[9px] text-[#6B7280]">挤干水分总营业额</p>
                             </div>
-
-                            {/* 2. CASH EXPENSES & WITHDRAWALS SECTION (临时支出与老板抽款) */}
-                            <div className="space-y-3">
-                                <h3 className="font-black border-b border-gray-900 pb-1.5 uppercase tracking-widest text-gray-900 text-xs">2. Cash Deductions (临时现金扣除)</h3>
-                                
-                                {recordWithdrawal > 0 && (
-                                    <div className="flex justify-between items-center bg-orange-50 border border-orange-100 px-3 py-2 rounded-lg text-orange-950 font-bold">
-                                        <span className="flex items-center gap-1">业主提支 (Owner's Drawings)</span>
-                                        <span className="font-mono text-sm">- RM {recordWithdrawal.toFixed(2)}</span>
-                                    </div>
-                                )}
-
-                                {totalRecordExpenses > 0 && (
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center bg-cyan-50 border border-cyan-100 px-3 py-2 rounded-lg text-cyan-950 font-bold">
-                                            <span>当日钱箱现金支出 (Expenses)</span>
-                                            <span className="font-mono text-sm">- RM {totalRecordExpenses.toFixed(2)}</span>
-                                        </div>
-                                        <div className="pl-4 pr-2 space-y-1.5 text-gray-500 font-mono bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                                            {recordExpenses.map((e: any, idx: number) => (
-                                                <div key={e.id || idx} className="flex justify-between items-center py-0.5 border-b border-gray-200/50 last:border-0">
-                                                    <span>• {e.company || '未知商户'} — <span className="text-gray-400 font-sans">{e.item || '杂物'}</span></span>
-                                                    <span className="font-bold text-gray-700">RM {Number(e.amount).toFixed(2)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {recordWithdrawal === 0 && totalRecordExpenses === 0 && (
-                                    <p className="text-xs text-gray-400 italic pl-1 py-1">今日无任何临时现金支出或业主提支</p>
-                                )}
+                            <div className="px-4 py-3 border-r border-[#BBF7D0] bg-[#F0FDF4]">
+                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Cash Sales</p>
+                                <p className="mt-1 font-mono text-base font-black text-[#15803D]">RM {localRecord.sales.cash.toFixed(2)}</p>
+                                <p className="text-[9px] text-[#6B7280]">今日现金收入</p>
                             </div>
-
-                            {/* 3. LIQUIDITY & EXPECTED BALANCE SECTION (最终钱箱应余) */}
-                            <div className="space-y-3 pt-3 border-t-2 border-gray-900">
-                                <h3 className="font-black border-b border-gray-300 pb-1.5 uppercase tracking-widest text-gray-400 text-[10px]">3. Cash Counter Balance (钱箱结余审计)</h3>
-                                
-                                <div className="space-y-2 text-gray-700 px-1 font-medium">
-                                    <div className="flex justify-between items-center">
-                                        <span>Opening Float (开班备用金)</span>
-                                        <span className="font-mono font-bold">RM {localRecord.openingCash.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span>+ Cash Sales (今日现金收入)</span>
-                                        <span className="font-mono text-green-700 font-bold">+ RM {localRecord.sales.cash.toFixed(2)}</span>
-                                    </div>
-                                    {(recordWithdrawal > 0 || totalRecordExpenses > 0) && (
-                                        <div className="flex justify-between items-center text-red-600">
-                                            <span>- Total Cash Deductions (总扣除额)</span>
-                                            <span className="font-mono font-bold">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex justify-between items-center bg-gray-100 border border-gray-300 px-3 py-2.5 rounded-lg text-gray-900 font-black">
-                                    <span>Expected Cash Balance (系统理论应余)</span>
-                                    <span className="font-mono text-sm">
-                                        RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}
-                                    </span>
-                                </div>
-
-                                <div className="flex justify-between items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-bold text-gray-800">
-                                    <span>Actual Closing Cash (钱箱实际点算)</span>
-                                    <span className="font-mono text-sm text-gray-900">RM {localRecord.closingCash.toFixed(2)}</span>
-                                </div>
-
-                                <div className="flex justify-between items-center mt-4 pt-3 border-t-2 border-dashed border-gray-900 bg-gray-50 p-3 rounded-xl">
-                                    <span className="font-black uppercase tracking-widest text-xs text-gray-950">Cash Variance (对账差异)</span>
-                                    <span className={`font-mono font-black text-base ${localRecord.variance === 0 ? 'text-gray-900' : localRecord.variance > 0 ? 'text-green-700' : 'text-red-600'}`}>
-                                        {localRecord.variance > 0 ? '+' : ''}{localRecord.variance.toFixed(2)}
-                                    </span>
-                                </div>
-                                {localRecord.varianceReason && (
-                                    <div className="bg-red-50 border border-red-100 rounded-lg p-2.5 mt-2">
-                                        <p className="text-[11px] text-red-700 leading-normal font-medium"><span className="font-black uppercase">Reason:</span> {localRecord.varianceReason}</p>
-                                    </div>
-                                )}
+                            <div className="px-4 py-3 border-r border-[#BFDBFE] bg-[#EFF6FF]">
+                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Closing Cash</p>
+                                <p className="mt-1 font-mono text-base font-black text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p>
+                                <p className="text-[9px] text-[#6B7280]">实际点算现金</p>
                             </div>
-
+                            <div className={`px-4 py-3 ${localRecord.variance === 0 ? 'bg-[#F6F7FB]' : localRecord.variance > 0 ? 'bg-[#F0FDF4]' : 'bg-[#FEF2F2]'}`}>
+                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Cash Variance</p>
+                                <p className={`mt-1 font-mono text-base font-black ${localRecord.variance === 0 ? 'text-[#111111]' : localRecord.variance > 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>{localRecord.variance > 0 ? '+' : ''}RM {localRecord.variance.toFixed(2)}</p>
+                                <p className="text-[9px] text-[#6B7280]">对账差异</p>
+                            </div>
                         </div>
 
-                        {/* 页脚区域：略微增加上边距 */}
-                        <div className="mt-8 pt-4 text-center border-t border-gray-200 shrink-0">
-                            <p className="text-[9px] font-bold text-gray-700 uppercase tracking-widest mb-0.5">System Generated Report</p>
-                            <p className="text-[8px] text-gray-400 font-mono">ERP System • Internal Audit Document</p>
+                        {/* 一页式 A4 结算：左边看收入来源，右边完成现金结算。 */}
+                        <div className="grid grid-cols-2 gap-6 text-[10px]">
+                            <section className="space-y-3">
+                                <div className="border-b border-[#111111] pb-1.5">
+                                    <h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#FFD200]" />1. Revenue</h3>
+                                    <p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">营业收入明细</p>
+                                </div>
+                                <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] overflow-hidden">
+                                    <div className="flex justify-between items-center px-3 py-2.5">
+                                        <span><span className="block font-black uppercase tracking-wide text-[#111111]">In-Store Revenue</span><span className="block mt-0.5 text-[9px] text-[#6B7280]">店内实收</span></span>
+                                        <span className="font-mono font-black text-sm whitespace-nowrap">RM {localRecord.sales.storeHubTotal.toFixed(2)}</span>
+                                    </div>
+                                    <div className="mx-3 border-t border-[#FDE68A] py-2 space-y-1.5 text-[#6B7280]">
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash · 现金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>TNG eWallet</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.tng || 0).toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Debit Card</span><span className="font-mono whitespace-nowrap">RM {totalDebit.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Credit Card</span><span className="font-mono whitespace-nowrap">RM {totalCard.toFixed(2)}</span></div>
+                                        {localRecord.sales.amex > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Amex</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.amex || 0).toFixed(2)}</span></div>}
+                                    </div>
+                                </div>
+                                {totalDelivery > 0 && <div className="rounded-xl border border-[#BFDBFE] bg-white overflow-hidden">
+                                    <div className="flex justify-between items-center px-3 py-2.5 bg-[#EFF6FF]">
+                                        <span><span className="block font-black uppercase tracking-wide text-[#111111]">Delivery Revenue</span><span className="block mt-0.5 text-[9px] text-[#6B7280]">外卖实收</span></span>
+                                        <span className="font-mono font-black text-sm whitespace-nowrap">RM {totalDelivery.toFixed(2)}</span>
+                                    </div>
+                                    <div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">
+                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabExpected.toFixed(2)}</span></div>}
+                                        {pandaGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda <span className="text-[9px] text-[#9CA3AF]">Gross</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaGross.toFixed(2)}</span></div>}
+                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeExpected.toFixed(2)}</span></div>}
+                                        {Number(deliveryBreakdown.lalamove) > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Lalamove</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span></div>}
+                                    </div>
+                                </div>}
+                            </section>
+
+                            <section className="space-y-4">
+                                <div className="space-y-2.5">
+                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
+                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407]">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412]">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
+                                    {totalRecordExpenses > 0 && <div className="rounded-lg border border-[#FECACA] overflow-hidden"><div className="flex justify-between items-center bg-[#FEF2F2] px-3 py-2"><span><span className="block font-black text-[#991B1B]">Cash Expenses</span><span className="block text-[9px] text-[#B91C1C]">当日钱箱现金支出</span></span><span className="font-mono font-black text-[#B91C1C] whitespace-nowrap">- RM {totalRecordExpenses.toFixed(2)}</span></div><div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">{recordExpenses.map((e: any, idx: number) => <div key={e.id || idx} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span className="truncate">{e.company || '未知商户'} · {e.item || '杂物'}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(e.amount).toFixed(2)}</span></div>)}</div></div>}
+                                    {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="rounded-lg bg-[#F6F7FB] px-3 py-2 text-[#6B7280]">今日无任何临时现金支出或业主提支</p>}
+                                </div>
+                                <div className="space-y-2.5 pt-1">
+                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
+                                    <div className="space-y-1.5 px-1 text-[#6B7280]">
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float · 开班备用金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales · 今日现金收入</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions · 现金扣除</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-2.5"><p className="font-black text-[#111111]">Expected Cash</p><p className="text-[9px] text-[#6B7280]">系统理论应余</p><p className="mt-1 font-mono font-black text-sm">RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}</p></div><div className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] p-2.5"><p className="font-black text-[#1E40AF]">Actual Cash</p><p className="text-[9px] text-[#3B82F6]">钱箱实际点算</p><p className="mt-1 font-mono font-black text-sm text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p></div></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <div className={`mt-5 flex items-center justify-between rounded-xl border-2 px-4 py-3 ${localRecord.variance === 0 ? 'border-[#111111] bg-[#111111] text-white' : localRecord.variance > 0 ? 'border-[#86EFAC] bg-[#F0FDF4]' : 'border-[#FCA5A5] bg-[#FEF2F2]'}`}>
+                            <span><span className={`block font-black uppercase tracking-widest text-xs ${localRecord.variance === 0 ? 'text-white' : 'text-[#111111]'}`}>Cash Variance</span><span className={`block mt-0.5 text-[9px] ${localRecord.variance === 0 ? 'text-white/70' : 'text-[#6B7280]'}`}>对账差异 {localRecord.varianceReason ? `· ${localRecord.varianceReason}` : ''}</span></span>
+                            <span className={`font-mono font-black text-lg whitespace-nowrap ${localRecord.variance === 0 ? 'text-white' : localRecord.variance > 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>{localRecord.variance > 0 ? '+ ' : localRecord.variance < 0 ? '- ' : ''}RM {Math.abs(localRecord.variance).toFixed(2)}</span>
+                        </div>
+
+                        {/* 审计页脚：保留系统留痕，也预留了每日关账的人工确认位置。 */}
+                        <div className="mt-5 pt-3 border-t border-[#E5E7EB] shrink-0">
+                            <div className="grid grid-cols-3 gap-8 text-center text-[9px] text-[#6B7280]">
+                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Prepared by</p><p>收银员</p></div>
+                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Verified by</p><p>主管</p></div>
+                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Approved by</p><p>管理层</p></div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between text-[8px] text-[#9CA3AF]">
+                                <span>System-generated internal audit document</span>
+                                <span>Kepong Branch · 甲洞分行</span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
+            )}
                 {/* ========================================================= */}
             </div>
         </div>

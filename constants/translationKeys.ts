@@ -1,0 +1,20 @@
+export const UI_TRANSLATION_KEYS = {
+  save: '保存',
+  submit: '提交',
+  cancel: '取消',
+  search: '搜索',
+  inventory_check: '库存盘点',
+  current_stock: '当前库存',
+  low_stock: '低库存',
+  out_of_stock: '缺货',
+  completed: '已完成',
+  pending: '待处理',
+  quantity: '数量',
+  unit: '单位',
+  remark: '备注',
+  confirm: '确认',
+  success: '成功',
+  error: '错误',
+  loading: '加载中',
+  no_data: '暂无数据'
+};
