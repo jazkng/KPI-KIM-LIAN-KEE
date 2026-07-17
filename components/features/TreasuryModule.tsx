@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Wallet,
-  Landmark,
-  ArrowRightLeft,
   History,
   Settings,
   X,
@@ -21,7 +18,6 @@ import {
   ArrowRight,
   UserPlus,
   Users,
-  Briefcase,
   Wrench,
   PiggyBank,
   FileText,
@@ -60,7 +56,10 @@ import {
   ExpenseItem,
   BillPaymentRecord,
   Shareholder,
-} from "../../types";
+  LedgerItem,
+  MonthlyClosing,
+  TreasuryTab,
+} from "./treasury/treasuryTypes";
 import { DataManager } from "../../utils/dataManager";
 import {
   collection,
@@ -72,74 +71,51 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
-import { ModuleGuideButton } from "../ui/ModuleGuide";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
 import { applyResolvedStylesForPdf } from "../../utils/pdfStyleResolver";
 
+import {
+  SETTINGS_PASSWORD,
+  SHAREHOLDER_OWNER_MAP,
+  DEFAULT_INCOME_SOURCES,
+} from "./treasury/treasuryConstants";
+import {
+  generateMonthsRange,
+  formatMoney,
+  formatDate,
+  getMonthLabel,
+  getPreviousMonth,
+  getNextMonth,
+  normalizeShareholderName,
+  cleanTransactionNote,
+  calculatePercentage,
+} from "./treasury/treasuryUtils";
+import { TreasuryShell } from "./treasury/TreasuryShell";
+import { TreasuryHeader } from "./treasury/components/TreasuryHeader";
+import { TreasuryMobileTabs } from "./treasury/components/TreasuryMobileTabs";
+import { TreasuryMonthSelector } from "./treasury/components/TreasuryMonthSelector";
+import { TreasuryBalanceHero } from "./treasury/components/TreasuryBalanceHero";
+import { TreasuryAccountCard } from "./treasury/components/TreasuryAccountCard";
+import { TreasuryQuickActions } from "./treasury/components/TreasuryQuickActions";
+import { TreasurySectionHeader } from "./treasury/components/TreasurySectionHeader";
 
-export interface MonthlyClosing {
-  id: string; // YYYY-MM
-  month: string; // YYYY-MM
-  cashStart: number;
-  cashIn: number;
-  cashOut: number;
-  cashEnd: number;
-  bankStart: number;
-  bankIn: number;
-  bankOut: number;
-  bankEnd: number;
-  status: "CLOSED" | "DRAFT";
-  closedAt?: string;
-  closedBy?: string;
-}
-
-const generateMonthsRange = (
-  startMonth: string,
-  endMonth: string,
-): string[] => {
-  const list: string[] = [];
-  let [sY, sM] = startMonth.split("-").map(Number);
-  const [eY, eM] = endMonth.split("-").map(Number);
-
-  while (sY < eY || (sY === eY && sM <= eM)) {
-    list.push(`${sY}-${String(sM).padStart(2, "0")}`);
-    sM++;
-    if (sM > 12) {
-      sM = 1;
-      sY++;
-    }
-  }
-  return list;
-};
+// Import modular components for modals & tabs
+import { TreasuryTransferModal } from "./treasury/modals/TreasuryTransferModal";
+import { TreasuryIncomeModal } from "./treasury/modals/TreasuryIncomeModal";
+import { TreasuryShareholderModal } from "./treasury/modals/TreasuryShareholderModal";
+import { TreasuryInjectionModal } from "./treasury/modals/TreasuryInjectionModal";
+import { TreasuryRepaymentModal } from "./treasury/modals/TreasuryRepaymentModal";
+import { TreasuryDividendModal } from "./treasury/modals/TreasuryDividendModal";
+import { TreasuryExpenseModal } from "./treasury/modals/TreasuryExpenseModal";
+import { TreasuryLedgerModal } from "./treasury/modals/TreasuryLedgerModal";
+import { TreasuryTransfersTab } from "./treasury/tabs/TreasuryTransfersTab";
+import { TreasuryExtraIncomeTab } from "./treasury/tabs/TreasuryExtraIncomeTab";
+import { TreasuryEquityTab } from "./treasury/tabs/TreasuryEquityTab";
+import { TreasurySettingsTab } from "./treasury/tabs/TreasurySettingsTab";
 
 interface TreasuryModuleProps {
   onClose: () => void;
-}
-
-// --- HELPER ---
-const formatMoney = (n: number) =>
-  `RM ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const DEFAULT_INCOME_SOURCES = [
-  "隔壁店铺 (Neighbor)",
-  "废品回收 (Recycle)",
-  "租金分摊 (Sub-rent)",
-];
-
-// --- LEDGER INTERFACES ---
-interface LedgerItem {
-  id: string;
-  date: string;
-  desc: string;
-  amount: number;
-  type: "IN" | "OUT";
-  category: string;
-  tag?: string;
-  balance?: number;
-  sortTime?: number;
-  linkUrl?: string;
-  account?: "CASH" | "BANK";
 }
 
 // 🌟 新增：智能折叠列表项组件 (在手机端适配单行极简高密风格，防止视觉杂乱)
@@ -324,330 +300,11 @@ const GroupedLedgerItem = ({ group }: { group: any }) => {
   );
 };
 
-const LedgerModal = ({
-  isOpen,
-  type,
-  onClose,
-  items,
-}: {
-  isOpen: boolean;
-  type: "CASH" | "BANK";
-  onClose: () => void;
-  items: LedgerItem[] | undefined;
-}) => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFlow, setActiveFlow] = useState<"ALL" | "IN" | "OUT">("ALL");
-
-  const filteredItems = useMemo(() => {
-    if (!items) return [];
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase().trim();
-    return items.filter((item) => {
-      const descMatch =
-        item.desc?.toLowerCase().includes(q) ||
-        item.category?.toLowerCase().includes(q);
-      const amountMatch =
-        item.amount?.toString().includes(q) ||
-        item.amount?.toFixed(2).includes(q);
-      return descMatch || amountMatch;
-    });
-  }, [items, searchQuery]);
-
-  const { totalIn, totalOut } = useMemo(() => {
-    let tin = 0;
-    let tout = 0;
-    filteredItems.forEach((item) => {
-      if (item.type === "IN") tin += item.amount;
-      else tout += item.amount;
-    });
-    return { totalIn: tin, totalOut: tout };
-  }, [filteredItems]);
-
-  const groupedItems = useMemo(() => {
-    const list = filteredItems;
-    const groups: any[] = [];
-    list.forEach((item) => {
-      let baseDesc = item.desc;
-      if (baseDesc.includes(" - ")) baseDesc = baseDesc.split(" - ")[0].trim();
-      baseDesc = baseDesc.replace(/ \[账期.*/, "").trim();
-
-      const groupKey = `${item.date}_${item.type}_${baseDesc}`;
-      const existingGroup = groups.find((g) => g.key === groupKey);
-
-      if (existingGroup) {
-        existingGroup.items.push(item);
-        existingGroup.totalAmount += item.amount;
-      } else {
-        groups.push({
-          key: groupKey,
-          date: item.date,
-          type: item.type,
-          baseDesc,
-          items: [item],
-          totalAmount: item.amount,
-          category: item.category,
-          tag: item.tag,
-          balance: item.balance,
-        });
-      }
-    });
-    return groups;
-  }, [filteredItems]);
-
-  const inGroups = useMemo(() => {
-    return groupedItems.filter((g) => g.type === "IN");
-  }, [groupedItems]);
-
-  const outGroups = useMemo(() => {
-    return groupedItems.filter((g) => g.type === "OUT");
-  }, [groupedItems]);
-
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-      <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
-        <div
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}
-          className="bg-[#1A1A1A] px-4 pb-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] z-10 shadow-md"
-        >
-          <div className="flex items-center gap-3">
-            <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg">
-              <ScrollText size={20} />
-            </div>
-            <div>
-              <h3 className="font-serif font-black text-lg tracking-wide">
-                {type} LEDGER (流水账)
-              </h3>
-              <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">
-                Transaction History
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* 🔍 Search Input Row */}
-        <div className="bg-stone-50 border-b border-stone-200 p-2.5 md:p-3 flex flex-col md:flex-row gap-2 md:gap-4 items-center shrink-0">
-          <div className="flex items-center bg-white border border-stone-300 rounded-xl px-3 py-2 flex-grow shadow-inner w-full md:w-auto">
-            <Search size={15} className="text-stone-400 mr-2 shrink-0" />
-            <input
-              type="text"
-              placeholder="查询特定摘要、品牌商(公司)名称、项目分类或支付金额..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent flex-grow font-bold text-xs md:text-sm text-stone-850 outline-none placeholder:text-stone-400 w-full"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="p-0.5 hover:bg-stone-100 rounded-full text-stone-400 hover:text-stone-600 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* IN/OUT Sub-tab Swivel Switcher */}
-          <div className="flex bg-gray-200 border border-gray-300 rounded-xl p-0.5 shadow-sm shrink-0 w-full md:w-auto">
-            <button
-              onClick={() => setActiveFlow("ALL")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFlow === "ALL" ? "bg-[#1A1A1A] text-white shadow-sm font-bold" : "text-stone-600 hover:text-[#1A1A1A]"}`}
-            >
-              全部
-            </button>
-            <button
-              onClick={() => setActiveFlow("IN")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFlow === "IN" ? "bg-green-600 text-white shadow-sm font-bold" : "text-stone-600 hover:text-[#1A1A1A]"}`}
-            >
-              🟢 收入 (IN)
-            </button>
-            <button
-              onClick={() => setActiveFlow("OUT")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFlow === "OUT" ? "bg-red-600 text-white shadow-sm font-bold" : "text-stone-600 hover:text-[#1A1A1A]"}`}
-            >
-              🔴 支出 (OUT)
-            </button>
-          </div>
-        </div>
-
-        {/* 💳 Filter Stats Subtotals Row */}
-        <div className="grid grid-cols-2 gap-2.5 p-2.5 bg-stone-100 border-b border-gray-200 shrink-0">
-          <div className="bg-green-50 border border-green-100 rounded-xl p-2 md:p-3 flex items-center justify-between shadow-sm">
-            <div>
-              <p className="text-[9px] md:text-[10px] text-green-700 font-extrabold uppercase tracking-widest">
-                总流入 (TOTAL IN)
-              </p>
-              <p className="text-xs md:text-sm font-black text-green-600 mt-0.5 font-mono">
-                +RM{" "}
-                {totalIn.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <span className="text-sm md:text-base">📈</span>
-          </div>
-          <div className="bg-red-50 border border-red-100 rounded-xl p-2 md:p-3 flex items-center justify-between shadow-sm">
-            <div>
-              <p className="text-[9px] md:text-[10px] text-red-700 font-extrabold uppercase tracking-widest">
-                总流出 (TOTAL OUT)
-              </p>
-              <p className="text-xs md:text-sm font-black text-red-600 mt-0.5 font-mono">
-                -RM{" "}
-                {totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <span className="text-sm md:text-base">📉</span>
-          </div>
-        </div>
-
-        <div className="flex-grow overflow-y-auto touch-pan-y overscroll-contain bg-[#F5F7FA] p-3 md:p-4 pb-[calc(env(safe-area-inset-bottom)+24px)] custom-scrollbar">
-          {groupedItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <ScrollText size={48} className="opacity-20 mb-4" />
-              <p className="text-sm font-bold">
-                {searchQuery
-                  ? "没有找到符合特定条件的项目"
-                  : "暂无交易明细记录"}
-              </p>
-            </div>
-          ) : (
-            <div>
-              {/* === DESKTOP VIEW: TWO COLS === */}
-              <div
-                className={`hidden md:grid ${activeFlow === "ALL" ? "grid-cols-2" : "grid-cols-1"} gap-4 items-start`}
-              >
-                {/* INFLOWS */}
-                {(activeFlow === "ALL" || activeFlow === "IN") && (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden min-h-[300px]">
-                    <div className="bg-green-50/60 border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shrink-0">
-                      <h4 className="text-xs font-black text-green-700 tracking-wider flex items-center gap-1.5 uppercase">
-                        <span>📥</span> 收入流水 (INFLOWS)
-                      </h4>
-                      <span className="text-xs font-black text-green-600 font-mono">
-                        共 {inGroups.length} 笔 • +RM{" "}
-                        {totalIn.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-gray-100 p-2 space-y-1.5 bg-stone-50/40">
-                      {inGroups.length === 0 ? (
-                        <div className="p-12 text-center text-stone-400 text-xs font-medium">
-                          无符合的收入记录
-                        </div>
-                      ) : (
-                        inGroups.map((group) => (
-                          <GroupedLedgerItem key={group.key} group={group} />
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* OUTFLOWS */}
-                {(activeFlow === "ALL" || activeFlow === "OUT") && (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden min-h-[300px]">
-                    <div className="bg-red-50/60 border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shrink-0">
-                      <h4 className="text-xs font-black text-red-700 tracking-wider flex items-center gap-1.5 uppercase">
-                        <span>📤</span> 支出流水 (OUTFLOWS)
-                      </h4>
-                      <span className="text-xs font-black text-red-600 font-mono">
-                        共 {outGroups.length} 笔 • -RM{" "}
-                        {totalOut.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-gray-100 p-2 space-y-1.5 bg-stone-50/40">
-                      {outGroups.length === 0 ? (
-                        <div className="p-12 text-center text-stone-400 text-xs font-medium">
-                          无符合的支出记录
-                        </div>
-                      ) : (
-                        outGroups.map((group) => (
-                          <GroupedLedgerItem key={group.key} group={group} />
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* === MOBILE VIEW: TIMELINE FLUID === */}
-              <div className="block md:hidden space-y-3">
-                {activeFlow === "ALL" ? (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-150 overflow-hidden shadow-sm">
-                    <div className="bg-stone-50 border-b border-gray-100 px-3 py-2.5 flex items-center justify-between sticky top-0 z-10">
-                      <h4 className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
-                        <span>📋</span> 统一交易明细时间流
-                      </h4>
-                      <span className="text-[10px] bg-stone-200 text-stone-800 font-black px-1.5 py-0.5 rounded">
-                        共 {groupedItems.length} 笔
-                      </span>
-                    </div>
-                    <div className="p-1 gap-1.5 flex flex-col bg-gray-50/50">
-                      {[...groupedItems]
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((group) => (
-                          <GroupedLedgerItem key={group.key} group={group} />
-                        ))}
-                    </div>
-                  </div>
-                ) : activeFlow === "IN" ? (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-150 overflow-hidden shadow-sm">
-                    <div className="bg-green-50/60 border-b border-[#E6F4EA] px-3 py-2.5 flex items-center justify-between sticky top-0 z-10">
-                      <h4 className="text-xs font-bold text-green-800 flex items-center gap-1.5">
-                        <span>📥</span> 收入明细时间流
-                      </h4>
-                      <span className="text-[10px] bg-green-100 text-green-800 font-bold px-1.5 py-0.5 rounded">
-                        {inGroups.length} 笔 • +RM{" "}
-                        {totalIn.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="p-1 gap-1.5 flex flex-col bg-gray-50/50">
-                      {inGroups.map((group) => (
-                        <GroupedLedgerItem key={group.key} group={group} />
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-155 overflow-hidden shadow-sm">
-                    <div className="bg-red-50/60 border-b border-[#FCE8E6] px-3 py-2.5 flex items-center justify-between sticky top-0 z-10">
-                      <h4 className="text-xs font-bold text-red-800 flex items-center gap-1.5">
-                        <span>📤</span> 支出明细时间流
-                      </h4>
-                      <span className="text-[10px] bg-red-100 text-red-800 font-bold px-1.5 py-0.5 rounded">
-                        {outGroups.length} 笔 • -RM{" "}
-                        {totalOut.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="p-1 gap-1.5 flex flex-col bg-gray-50/50">
-                      {outGroups.map((group) => (
-                        <GroupedLedgerItem key={group.key} group={group} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+const LedgerModal = () => null;
+const DeletedLedgerModalBody = "";
 
 export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<
-    "OVERVIEW" | "TRANSFERS" | "EXTRA_INCOME" | "EQUITY" | "SETTINGS"
-  >("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<TreasuryTab>("OVERVIEW");
   const [config, setConfig] = useState<TreasuryConfig>({
     initialDate: new Date().toISOString().split("T")[0],
     initialCash: 0,
@@ -729,7 +386,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [isSettingsUnlocked, setIsSettingsUnlocked] = useState(false);
   const [settingsPasswordInput, setSettingsPasswordInput] = useState("");
   const [settingsPasswordError, setSettingsPasswordError] = useState(false);
-  const SETTINGS_PASSWORD = "9394";
 
   const handleSettingsUnlock = () => {
     if (settingsPasswordInput === SETTINGS_PASSWORD) {
@@ -738,12 +394,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     } else {
       setSettingsPasswordError(true);
     }
-  };
-
-  const getMonthLabel = (monthStr: string) => {
-    if (!monthStr || monthStr.length < 7) return "";
-    const [year, month] = monthStr.split("-");
-    return `${year}年${month}月`;
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -772,6 +422,44 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [incomeFilterMonth, setIncomeFilterMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
+
+  // 📅 自动切换到有记录的最新月份（如果当前月份没有记录）
+  useEffect(() => {
+    const allRecords = transfers.filter((t) => t.fromAccount === ("OTHER" as any));
+    if (allRecords.length > 0) {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const hasCurrentMonth = allRecords.some((t) => {
+        if (!t.date) return false;
+        try {
+          const d = new Date(t.date);
+          if (isNaN(d.getTime())) return t.date.startsWith(currentMonth);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          return `${y}-${m}` === currentMonth;
+        } catch {
+          return t.date.startsWith(currentMonth);
+        }
+      });
+      if (!hasCurrentMonth) {
+        // 按日期降序排列以找到最新记录
+        const sorted = [...allRecords].sort((a, b) => {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+        const latestDate = sorted[0].date;
+        try {
+          const d = new Date(latestDate);
+          if (!isNaN(d.getTime())) {
+            const latestMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            setIncomeFilterMonth(latestMonth);
+          } else {
+            setIncomeFilterMonth(latestDate.slice(0, 7).replace(/\//g, "-"));
+          }
+        } catch {
+          setIncomeFilterMonth(latestDate.slice(0, 7).replace(/\//g, "-"));
+        }
+      }
+    }
+  }, [transfers]);
 
   // ✏️ 编辑收入记录 State
   const [editingIncomeRecord, setEditingIncomeRecord] =
@@ -1576,7 +1264,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   }, [expenses]);
 
   const incomeSourceHistory = useMemo(() => {
-    const historySet = new Set(DEFAULT_INCOME_SOURCES);
+    const historySet = new Set<string>(DEFAULT_INCOME_SOURCES);
     transfers.forEach((t) => {
       if (t.fromAccount === ("OTHER" as any) && t.note?.startsWith("[代收]")) {
         const withoutPrefix = t.note.substring(5);
@@ -1595,17 +1283,41 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     );
     const total = allRecords.reduce((sum, t) => sum + t.amount, 0);
 
-    // 按选中月份过滤
-    const filteredRecords = allRecords.filter((t) =>
-      t.date.startsWith(incomeFilterMonth),
-    );
+    // 按选中月份过滤 (支持各类日期格式)
+    const filteredRecords = allRecords.filter((t) => {
+      if (!t.date) return false;
+      try {
+        const d = new Date(t.date);
+        if (isNaN(d.getTime())) {
+          return t.date.replace(/\//g, "-").startsWith(incomeFilterMonth);
+        }
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        return `${y}-${m}` === incomeFilterMonth;
+      } catch (err) {
+        return t.date.replace(/\//g, "-").startsWith(incomeFilterMonth);
+      }
+    });
     const filteredTotal = filteredRecords.reduce((sum, t) => sum + t.amount, 0);
 
-    // 本月统计
+    // 本月统计 (支持各类日期格式)
     const now = new Date();
     const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const thisMonthTotal = allRecords
-      .filter((t) => t.date.startsWith(currentMonthPrefix))
+      .filter((t) => {
+        if (!t.date) return false;
+        try {
+          const d = new Date(t.date);
+          if (isNaN(d.getTime())) {
+            return t.date.replace(/\//g, "-").startsWith(currentMonthPrefix);
+          }
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          return `${y}-${m}` === currentMonthPrefix;
+        } catch (err) {
+          return t.date.replace(/\//g, "-").startsWith(currentMonthPrefix);
+        }
+      })
       .reduce((sum, t) => sum + t.amount, 0);
 
     const breakdown = {
@@ -1633,11 +1345,24 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
         .reduce((s, t) => s + t.amount, 0),
     };
 
-    // 获取所有存在记录的月份列表（用于快速导航）
+    // 获取所有存在记录的月份列表（用于快速导航） (支持各类日期格式)
     const monthsSet = new Set<string>();
     allRecords.forEach((t) => {
-      const m = t.date.slice(0, 7);
-      if (m) monthsSet.add(m);
+      if (!t.date) return;
+      try {
+        const d = new Date(t.date);
+        if (isNaN(d.getTime())) {
+          const m = t.date.slice(0, 7).replace(/\//g, "-");
+          if (m && m.length === 7) monthsSet.add(m);
+        } else {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          monthsSet.add(`${y}-${m}`);
+        }
+      } catch (e) {
+        const m = t.date.slice(0, 7).replace(/\//g, "-");
+        if (m && m.length === 7) monthsSet.add(m);
+      }
     });
     const availableMonths = Array.from(monthsSet).sort().reverse();
 
@@ -2172,340 +1897,204 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
 
   // 使用 Portal，避免父层 transform / overflow / sidebar 布局影响 fixed 全屏遮罩
   return createPortal(
-    <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-      <div className="bg-white w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
-        {/* Header 注入 Safe Area */}
-        <div className="bg-[#1A1A1A] px-4 pb-3 md:px-5 md:pb-4 flex justify-between items-center text-white shrink-0 border-b-2 md:border-b-4 border-[#FFD700] shadow-md z-50 relative safe-area-top">
-          <div className="flex items-center gap-2 md:gap-4 flex-1">
-            <div className="bg-[#FFD700] text-black p-1.5 md:p-2.5 rounded-xl shadow-lg shrink-0">
-              <Wallet className="w-5 h-5 md:w-6 md:h-6" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-serif font-black text-sm md:text-xl tracking-wide truncate">
-                资金管理 (Treasury)
-              </h3>
-              <p className="hidden md:block text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">
-                CASH FLOW & ASSETS
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ModuleGuideButton module="TREASURY" />
-            <button
-              onClick={onClose}
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-red-600 rounded-xl transition-colors text-white select-none"
-            >
-              <X size={18} className="md:w-5 md:h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs：外快 → 额外收入 */}
-        <div className="px-2.5 md:px-6 pt-3 md:pt-4 pb-2 bg-[#F5F7FA] shrink-0 border-b border-gray-100/50">
-          <div 
-            className="flex p-1 bg-white md:bg-gray-200/60 rounded-2xl overflow-x-auto scrollbar-hide shadow-sm md:shadow-inner gap-1 md:gap-2"
-            style={{ WebkitOverflowScrolling: "touch" }}
-          >
-            {[
-              { id: "OVERVIEW", label: "总览", icon: Landmark },
-              { id: "TRANSFERS", label: "转账", icon: ArrowRightLeft },
-              { id: "EXTRA_INCOME", label: "额外收入", icon: TrendingUp },
-              { id: "EQUITY", label: "股权", icon: Briefcase },
-              { id: "SETTINGS", label: "设置", icon: Settings },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`relative flex-grow shrink-0 md:flex-initial min-w-[76px] md:min-w-[110px] py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "bg-gray-100 md:bg-white text-[#1A1A1A] shadow-none md:shadow-sm transform scale-[1.01]"
-                    : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:scale-95"
-                }`}
-              >
-                <tab.icon
-                  size={15}
-                  className={`w-3.5 h-3.5 md:w-4 md:h-4 transition-colors ${activeTab === tab.id ? "text-[#C70000]" : "text-gray-400"}`}
-                />
-                <span className="opacity-95 md:opacity-100">{tab.label}</span>
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-[-1px] md:bottom-0 left-1/2 -translate-x-1/2 w-6 h-[3px] bg-[#FFD700] rounded-t-sm md:hidden"></div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-grow overflow-y-auto touch-pan-y overscroll-contain p-4 md:p-8 pb-[calc(env(safe-area-inset-bottom)+32px)] md:pb-8 custom-scrollbar">
+    <TreasuryShell
+      header={<TreasuryHeader onClose={onClose} />}
+      navigation={
+        <TreasuryMobileTabs
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+      }
+    >
+      <div className="p-4 pb-6 md:p-8 md:pb-8">
           {/* ==================== OVERVIEW TAB ==================== */}
           {activeTab === "OVERVIEW" && (
             <div className="space-y-4 md:space-y-6 max-w-4xl mx-auto">
-              {/* Month Selector Switcher */}
-              <div className="flex items-center justify-between bg-stone-100 p-3 rounded-2xl border border-stone-200">
-                <button
-                  onClick={() => handleMonthShift(-1)}
-                  className="p-2 hover:bg-stone-200 rounded-xl transition-all"
-                >
-                  <ChevronLeft size={18} className="text-stone-700" />
-                </button>
-                <div className="flex items-center gap-2">
-                  <Calendar size={16} className="text-[#C70000]" />
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="bg-transparent font-black text-stone-900 text-sm md:text-base outline-none cursor-pointer"
-                  />
-                  {selectedMonthClosing ? (
-                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                      🟢 已结账
-                    </span>
-                  ) : (
-                    <span className="bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 animate-pulse">
-                      🟡 待结账
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleMonthShift(1)}
-                  className="p-2 hover:bg-stone-200 rounded-xl transition-all"
-                >
-                  <ChevronRight size={18} className="text-stone-700" />
-                </button>
-              </div>
+              {/* 1. Month Selector Switcher */}
+              <TreasuryMonthSelector
+                selectedMonth={selectedMonth}
+                setSelectedMonth={setSelectedMonth}
+                onMonthShift={handleMonthShift}
+                isClosed={!!selectedMonthClosing}
+              />
 
-              {/* Total Assets Overview Header Card */}
-              <div className="bg-[#1A1A1A] rounded-3xl p-5 md:p-8 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#FFD700] opacity-10 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative z-10 text-center md:text-left">
-                  <p className="text-[10px] md:text-xs font-bold text-[#FFD700] uppercase tracking-[0.2em] mb-1 md:mb-2 flex items-center justify-center md:justify-start gap-1">
-                    <span>💰</span> {getMonthLabel(selectedMonth)} 期末总资金
-                    (Ending Assets)
-                  </p>
-                  <h2 className="text-3xl md:text-6xl font-black text-[#FFD700] font-mono tracking-tight">
-                    {isSelectedMonthLoading ? (
-                      <span className="animate-pulse text-stone-400">
-                        计算中...
-                      </span>
-                    ) : (
-                      formatMoney(activeBalances.total)
-                    )}
-                  </h2>
-                  <p className="text-[9px] md:text-[10px] text-gray-500 mt-1 md:mt-2 italic">
-                    {activeBalances.startMonthLabel}
-                  </p>
-                </div>
-                <div className="relative z-10 flex flex-col gap-2 w-full md:w-auto shrink-0">
-                  {selectedMonthClosing ? (
-                    <button
-                      onClick={handleUnlockMonth}
-                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 font-black text-xs md:text-sm transition-transform active:scale-95 justify-center"
-                    >
-                      🔓 解锁本月账目 (Unlock Month)
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleCloseMonth}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 font-black text-xs md:text-sm transition-transform active:scale-95 border border-emerald-500 justify-center"
-                    >
-                      🔒 结算并锁定本月 (Close & Lock)
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setIsExpenseModalOpen(true)}
-                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 font-black text-xs md:text-sm transition-transform active:scale-95 border border-red-500 justify-center"
-                  >
-                    <MinusCircle size={16} /> 补录支出 (Expense)
-                  </button>
-                  <button
-                    onClick={() => setIsHistoryModalOpen(true)}
-                    className="bg-transparent hover:bg-white/10 text-gray-300 px-6 py-2 rounded-2xl flex items-center gap-2 font-bold text-xs transition-colors border border-dashed border-gray-600 justify-center"
-                  >
-                    <Archive size={14} /> 查阅历史账本 (History)
-                  </button>
-                </div>
-              </div>
+              {/* 2. Total Assets Overview Header Card */}
+              <TreasuryBalanceHero
+                totalAmount={activeBalances.total}
+                isLoading={isSelectedMonthLoading}
+                startMonthLabel={activeBalances.startMonthLabel}
+                formatMoney={formatMoney}
+              />
 
-              {/* CASH AND BANK DETAIL CARDS WITH IN/OUT/BAL */}
+              {/* 3. CASH AND BANK DETAIL CARDS WITH IN/OUT/BAL */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                {/* CASH CARD */}
-                <div
-                  onClick={() => setViewLedger("CASH")}
-                  className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden group cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
-                >
-                  <div className="absolute right-0 top-0 p-4 md:p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <Banknote
-                      size={80}
-                      className="text-green-600 md:w-[120px] md:h-[120px]"
-                    />
-                  </div>
-                  <div className="flex justify-between items-start mb-3 md:mb-4">
-                    <div className="p-2 md:p-3 bg-green-50 rounded-2xl text-green-600 inline-block">
-                      <Banknote size={20} className="md:w-6 md:h-6" />
+                <TreasuryAccountCard
+                  account="CASH"
+                  label="现金账户"
+                  opening={activeBalances.cashStart}
+                  totalIn={activeBalances.cashIn}
+                  totalOut={activeBalances.cashOut}
+                  ending={activeBalances.cashEnd}
+                  isLoading={isSelectedMonthLoading}
+                  onOpenLedger={() => setViewLedger("CASH")}
+                  onActionClick={(e) => {
+                    e.stopPropagation();
+                    setTransferForm({
+                      type: "DEPOSIT",
+                      fromAccount: "CASH",
+                      toAccount: "BANK",
+                      date: new Date().toISOString().split("T")[0],
+                    });
+                    setIsTransferModalOpen(true);
+                  }}
+                  actionLabel="存入 (Bank In)"
+                  formatMoney={formatMoney}
+                />
+
+                <TreasuryAccountCard
+                  account="BANK"
+                  label="银行账户"
+                  opening={activeBalances.bankStart}
+                  totalIn={activeBalances.bankIn}
+                  totalOut={activeBalances.bankOut}
+                  ending={activeBalances.bankEnd}
+                  isLoading={isSelectedMonthLoading}
+                  onOpenLedger={() => setViewLedger("BANK")}
+                  onActionClick={(e) => {
+                    e.stopPropagation();
+                    setTransferForm({
+                      type: "WITHDRAWAL",
+                      fromAccount: "BANK",
+                      toAccount: "CASH",
+                      date: new Date().toISOString().split("T")[0],
+                    });
+                    setIsTransferModalOpen(true);
+                  }}
+                  actionLabel="提款 (Withdraw)"
+                  formatMoney={formatMoney}
+                />
+              </div>
+
+              {/* 4. Quick Actions */}
+              <TreasuryQuickActions
+                onTransferClick={() => {
+                  setTransferForm({
+                    type: "DEPOSIT",
+                    fromAccount: "CASH",
+                    toAccount: "BANK",
+                    date: new Date().toISOString().split("T")[0],
+                  });
+                  setIsTransferModalOpen(true);
+                }}
+                onIncomeClick={() => {
+                  setActiveTab("EXTRA_INCOME");
+                }}
+                onHistoryClick={() => {
+                  setIsHistoryModalOpen(true);
+                }}
+              />
+
+              {/* 5. Monthly Status / Closing Controls */}
+              <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-sm space-y-4">
+                <TreasurySectionHeader
+                  title="月度结账与状态 (Monthly Closing & Status)"
+                  subtitle="CLOSING OPERATIONS"
+                  emoji="🔒"
+                />
+                
+                <div className="flex flex-col gap-3">
+                  {selectedMonthClosing ? (
+                    <div className="space-y-3">
+                      <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl text-xs font-bold space-y-2 border border-emerald-100">
+                        <div className="flex justify-between">
+                          <span>本月状态:</span>
+                          <span className="text-emerald-700 font-extrabold">🟢 已结账并锁定</span>
+                        </div>
+                        {selectedMonthClosing.closedAt && (
+                          <div className="flex justify-between">
+                            <span>结账时间:</span>
+                            <span className="text-stone-600 font-mono">
+                              {new Date(selectedMonthClosing.closedAt).toLocaleString("zh-CN", { hour12: false })}
+                            </span>
+                          </div>
+                        )}
+                        {selectedMonthClosing.closedBy && (
+                          <div className="flex justify-between">
+                            <span>操作人员:</span>
+                            <span className="text-stone-600 font-mono">{selectedMonthClosing.closedBy}</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleUnlockMonth}
+                        type="button"
+                        className="w-full bg-[#EF4444] hover:bg-red-700 active:scale-[0.98] text-white px-6 py-3 rounded-xl shadow-sm flex items-center justify-center gap-2 font-black text-xs md:text-sm transition-all touch-manipulation"
+                      >
+                        🔓 解锁本月账目 (Unlock Month)
+                      </button>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTransferForm({
-                          type: "DEPOSIT",
-                          fromAccount: "CASH",
-                          toAccount: "BANK",
-                          date: new Date().toISOString().split("T")[0],
-                        });
-                        setIsTransferModalOpen(true);
-                      }}
-                      className="text-[10px] bg-black text-white px-3 py-1.5 rounded-lg font-bold hover:bg-gray-800 transition-colors shadow-lg whitespace-nowrap"
-                    >
-                      存入 (Bank In)
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 relative z-10">
-                    <p className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest">
-                      Cash on Hand (现金账户)
-                    </p>
-
-                    {/* IN/OUT/BAL breakdown */}
-                    <div className="grid grid-cols-3 border-t border-b border-gray-100 py-2 my-2 text-[11px] font-bold">
-                      <div>
-                        <div className="text-gray-400 text-[9px] uppercase">
-                          期初 Bal
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="bg-amber-50 text-amber-800 p-4 rounded-xl text-xs font-bold space-y-2 border border-amber-100">
+                        <div className="flex justify-between">
+                          <span>本月状态:</span>
+                          <span className="text-amber-700 font-extrabold">🟡 待结账/未锁定</span>
                         </div>
-                        <div className="text-stone-700">
-                          {formatMoney(activeBalances.cashStart)}
-                        </div>
+                        <p className="text-[10px] text-amber-600 leading-relaxed font-medium">
+                          请在所有交易记录完整、每日对账无误后，进行月结锁定。锁定后将无法修改本月账目。
+                        </p>
                       </div>
-                      <div>
-                        <div className="text-green-500 text-[9px] uppercase">
-                          本月 In
-                        </div>
-                        <div className="text-green-600 font-mono">
-                          +{formatMoney(activeBalances.cashIn)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-red-500 text-[9px] uppercase">
-                          本月 Out
-                        </div>
-                        <div className="text-red-600 font-mono">
-                          -{formatMoney(activeBalances.cashOut)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-baseline pt-1">
-                      <span className="text-gray-500 text-[10px]">
-                        期末结余 Balance
-                      </span>
-                      <h3 className="text-xl md:text-3xl font-black text-stone-900 font-mono">
-                        {isSelectedMonthLoading
-                          ? "计算中..."
-                          : formatMoney(activeBalances.cashEnd)}
-                      </h3>
-                    </div>
-                  </div>
-                </div>
-
-                {/* BANK CARD */}
-                <div
-                  onClick={() => setViewLedger("BANK")}
-                  className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden group cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
-                >
-                  <div className="absolute right-0 top-0 p-4 md:p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <Landmark
-                      size={80}
-                      className="text-blue-600 md:w-[120px] md:h-[120px]"
-                    />
-                  </div>
-                  <div className="flex justify-between items-start mb-3 md:mb-4">
-                    <div className="p-2 md:p-3 bg-blue-50 rounded-2xl text-blue-600 inline-block">
-                      <Landmark size={20} className="md:w-6 md:h-6" />
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTransferForm({
-                          type: "WITHDRAWAL",
-                          fromAccount: "BANK",
-                          toAccount: "CASH",
-                          date: new Date().toISOString().split("T")[0],
-                        });
-                        setIsTransferModalOpen(true);
-                      }}
-                      className="text-[10px] bg-black text-white px-3 py-1.5 rounded-lg font-bold hover:bg-gray-800 transition-colors shadow-lg whitespace-nowrap"
-                    >
-                      提款 (Withdraw)
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 relative z-10">
-                    <p className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest">
-                      Bank & Digital (银行账户)
-                    </p>
-
-                    {/* IN/OUT/BAL breakdown */}
-                    <div className="grid grid-cols-3 border-t border-b border-gray-100 py-2 my-2 text-[11px] font-bold">
-                      <div>
-                        <div className="text-gray-400 text-[9px] uppercase">
-                          期初 Bal
-                        </div>
-                        <div className="text-stone-700">
-                          {formatMoney(activeBalances.bankStart)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-green-500 text-[9px] uppercase">
-                          本月 In
-                        </div>
-                        <div className="text-green-600 font-mono">
-                          +{formatMoney(activeBalances.bankIn)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-red-500 text-[9px] uppercase">
-                          本月 Out
-                        </div>
-                        <div className="text-red-600 font-mono">
-                          -{formatMoney(activeBalances.bankOut)}
-                        </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <button
+                          onClick={handleCloseMonth}
+                          type="button"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white px-6 py-3 rounded-xl shadow-sm flex items-center justify-center gap-2 font-black text-xs md:text-sm transition-all border border-emerald-500 touch-manipulation"
+                        >
+                          🔒 结算并锁定本月 (Close & Lock)
+                        </button>
+                        
+                        <button
+                          onClick={() => setIsExpenseModalOpen(true)}
+                          type="button"
+                          className="w-full bg-[#EF4444] hover:bg-red-700 active:scale-[0.98] text-white px-6 py-3 rounded-xl shadow-sm flex items-center justify-center gap-2 font-black text-xs md:text-sm transition-all border border-red-500 touch-manipulation"
+                        >
+                          <MinusCircle size={16} /> 补录支出 (Expense)
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex justify-between items-baseline pt-1">
-                      <span className="text-gray-500 text-[10px]">
-                        期末结余 Balance
-                      </span>
-                      <h3 className="text-xl md:text-3xl font-black text-stone-900 font-mono">
-                        {isSelectedMonthLoading
-                          ? "计算中..."
-                          : formatMoney(activeBalances.bankEnd)}
-                      </h3>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              {/* Month Closings Timeline List */}
-              <div className="bg-white rounded-3xl p-5 md:p-6 border border-gray-150 shadow-sm space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                  <div>
-                    <h3 className="font-black text-sm md:text-base text-stone-900 flex items-center gap-1.5">
-                      <span>📅</span> 历史月度大盘汇总 (Monthly Treasury
-                      Timeline)
-                    </h3>
-                    <p className="text-[9px] text-stone-400 uppercase tracking-wider font-bold">
-                      Historical Closings & Balance Tracking
-                    </p>
-                  </div>
-                  <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded font-bold">
-                    起自{" "}
-                    {config.initialDate
-                      ? config.initialDate.substring(0, 7)
-                      : "2025-11"}
-                  </span>
-                </div>
+              {/* 6. Month Closings Timeline List */}
+              <div className="bg-white rounded-2xl p-5 md:p-6 border border-[#E5E7EB] shadow-sm space-y-4">
+                <TreasurySectionHeader
+                  title="历史月度大盘汇总 (Monthly Treasury Timeline)"
+                  subtitle="Historical Closings & Balance Tracking"
+                  emoji="📅"
+                  action={
+                    <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-1 rounded-lg font-bold">
+                      起自{" "}
+                      {config.initialDate
+                        ? config.initialDate.substring(0, 7)
+                        : "2025-11"}
+                    </span>
+                  }
+                />
 
-                <div className="divide-y divide-gray-150 max-h-80 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                <div
+                  className="
+                    divide-y divide-gray-150
+                    space-y-1
+                    pr-1
+                    max-h-none
+                    overflow-visible
+                    md:max-h-80
+                    md:overflow-y-auto
+                    md:custom-scrollbar
+                  "
+                >
                   {generateMonthsRange(
                     config.initialDate
                       ? config.initialDate.substring(0, 7)
@@ -2556,18 +2145,18 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                               {getMonthLabel(monthStr)}
                             </span>
                             {closing ? (
-                              <span className="bg-green-100 text-green-850 text-[8px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                              <span className="bg-green-100 text-green-850 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
                                 已结账
                               </span>
                             ) : (
-                              <span className="bg-amber-100 text-amber-850 text-[8px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                              <span className="bg-amber-100 text-amber-850 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
                                 待结算
                               </span>
                             )}
 
                             {unpaidCount > 0 && (
                               <span
-                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${isSelected ? "bg-red-900/50 text-red-200" : "bg-red-50 text-red-600 border border-red-100"}`}
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${isSelected ? "bg-red-900/50 text-red-200" : "bg-red-50 text-red-600 border border-red-100"}`}
                               >
                                 应付: {formatMoney(unpaidAmount)} ({unpaidCount}
                                 笔)
@@ -2594,7 +2183,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                                 </div>
                                 <div>
                                   <span
-                                    className={`font-black ${isSelected ? "text-[#FFD700]" : "text-[#1A1A1A]"}`}
+                                    className={`font-black ${isSelected ? "text-[#FFD200]" : "text-[#111111]"}`}
                                   >
                                     {formatMoney(
                                       closing.cashEnd + closing.bankEnd,
@@ -2603,7 +2192,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                                 </div>
                               </>
                             ) : (
-                              <div className="text-stone-400 italic">
+                              <div className="text-stone-400 italic text-[11px]">
                                 {isSelected
                                   ? "⏳ 计算中..."
                                   : "🔍 点击查看与结算"}
@@ -2618,1857 +2207,179 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
             </div>
           )}
 
-          {/* ==================== EXTRA INCOME TAB (额外收入) ==================== */}
+          {/* ==================== EXTRA_INCOME TAB ==================== */}
           {activeTab === "EXTRA_INCOME" && (
-            <div className="max-w-5xl mx-auto space-y-4 md:space-y-8 animate-in fade-in slide-in-from-right-4">
-              {/* Hero Card - 手机适配 */}
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-2xl md:rounded-[2.5rem] p-4 md:p-10 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-4 md:gap-8 border border-emerald-500/30">
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative z-10 text-center md:text-left space-y-1 md:space-y-2 w-full">
-                  <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-emerald-100 text-[10px] font-black uppercase tracking-widest border border-white/10">
-                    <TrendingUp size={12} /> 额外收入 Extra Revenue
-                  </div>
-                  <h2 className="text-2xl md:text-6xl font-black text-white font-mono tracking-tighter drop-shadow-sm">
-                    {formatMoney(extraIncomeStats.total)}
-                  </h2>
-                  <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-2 md:gap-4 text-emerald-100 text-xs font-bold">
-                    <span className="flex items-center gap-1">
-                      <Calendar size={14} /> 本月:{" "}
-                      {formatMoney(extraIncomeStats.thisMonthTotal)}
-                    </span>
-                    <span className="bg-yellow-400/20 text-yellow-200 px-2 py-0.5 rounded border border-yellow-400/30 text-[10px]">
-                      ⚠️ 非营业额
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingIncomeRecord(null);
-                    setIncomeForm({
-                      source: "",
-                      category: "ELECTRICITY",
-                      amount: "",
-                      toAccount: "CASH",
-                      date: new Date().toISOString().split("T")[0],
-                      note: "",
-                    });
-                    setIsIncomeModalOpen(true);
-                  }}
-                  className="relative z-10 bg-white text-emerald-800 px-5 md:px-8 py-3 md:py-4 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] flex items-center gap-2 md:gap-3 font-black text-xs md:text-sm transition-all hover:scale-105 active:scale-95 hover:bg-emerald-50 w-full md:w-auto justify-center"
-                >
-                  <div className="bg-emerald-100 p-1.5 rounded-full">
-                    <Plus size={16} className="text-emerald-700" />
-                  </div>
-                  <span>记录新收入</span>
-                </button>
-              </div>
-
-              {/* Breakdown Cards - 手机 2x2 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                {[
-                  {
-                    l: "Electricity",
-                    v: extraIncomeStats.breakdown.electricity,
-                    c: "text-yellow-600",
-                    b: "bg-yellow-50",
-                    i: Zap,
-                  },
-                  {
-                    l: "Water",
-                    v: extraIncomeStats.breakdown.water,
-                    c: "text-cyan-600",
-                    b: "bg-cyan-50",
-                    i: Droplets,
-                  },
-                  {
-                    l: "Rent",
-                    v: extraIncomeStats.breakdown.rent,
-                    c: "text-indigo-600",
-                    b: "bg-indigo-50",
-                    i: Home,
-                  },
-                  {
-                    l: "Other",
-                    v: extraIncomeStats.breakdown.other,
-                    c: "text-emerald-600",
-                    b: "bg-emerald-50",
-                    i: Coins,
-                  },
-                ].map((card) => (
-                  <div
-                    key={card.l}
-                    className="bg-white p-3 md:p-5 rounded-2xl md:rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between h-24 md:h-32 relative group overflow-hidden"
-                  >
-                    <div className="absolute right-0 top-0 p-3 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <card.i size={48} className="md:w-16 md:h-16" />
-                    </div>
-                    <div className="relative z-10">
-                      <div
-                        className={`w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl ${card.b} ${card.c} flex items-center justify-center mb-2 md:mb-3 shadow-inner`}
-                      >
-                        <card.i
-                          size={16}
-                          className="md:w-5 md:h-5"
-                          fill="currentColor"
-                        />
-                      </div>
-                      <p className="text-[9px] md:text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                        {card.l}
-                      </p>
-                      <p className="text-sm md:text-lg font-black text-[#1A1A1A]">
-                        {formatMoney(card.v)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* History with Month Filter */}
-              <div className="bg-white rounded-2xl md:rounded-[2.5rem] border border-gray-200 shadow-sm overflow-hidden">
-                {/* Header with Month Navigator */}
-                <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                  <h3 className="font-black text-base md:text-lg text-[#1A1A1A] flex items-center gap-2">
-                    <History
-                      size={18}
-                      className="md:w-5 md:h-5 text-gray-400"
-                    />{" "}
-                    收入记录
-                  </h3>
-                  {/* 月份导航器 */}
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                    <button
-                      onClick={() => navigateMonth("prev")}
-                      className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 active:scale-95 transition-all shadow-sm"
-                    >
-                      <ChevronLeft size={16} className="text-gray-500" />
-                    </button>
-                    <div className="flex-1 md:flex-none text-center bg-white border border-gray-200 px-4 py-2 rounded-lg font-black text-xs md:text-sm text-[#1A1A1A] shadow-sm min-w-[140px]">
-                      {getMonthLabel(incomeFilterMonth)}
-                    </div>
-                    <button
-                      onClick={() => navigateMonth("next")}
-                      className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 active:scale-95 transition-all shadow-sm"
-                    >
-                      <ChevronRight size={16} className="text-gray-500" />
-                    </button>
-                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full border border-gray-200 whitespace-nowrap">
-                      {extraIncomeStats.records.length} 笔
-                    </span>
-                  </div>
-                </div>
-
-                {/* 当月小计 */}
-                {extraIncomeStats.records.length > 0 && (
-                  <div className="px-4 md:px-6 py-2 bg-emerald-50/50 border-b border-emerald-100 flex justify-between items-center">
-                    <span className="text-[10px] md:text-xs font-bold text-emerald-600">
-                      当月小计
-                    </span>
-                    <span className="font-mono font-black text-sm md:text-base text-emerald-700">
-                      {formatMoney(extraIncomeStats.filteredTotal)}
-                    </span>
-                  </div>
-                )}
-
-                <div className="divide-y divide-gray-100">
-                  {extraIncomeStats.records.length === 0 ? (
-                    <div className="p-8 md:p-12 text-center text-gray-400 text-sm font-bold flex flex-col items-center">
-                      <div className="bg-gray-100 p-4 rounded-full mb-3">
-                        <Archive size={24} className="opacity-50" />
-                      </div>
-                      本月暂无收入记录
-                    </div>
-                  ) : (
-                    extraIncomeStats.records
-                      .sort(
-                        (a, b) =>
-                          new Date(b.date).getTime() -
-                          new Date(a.date).getTime(),
-                      )
-                      .map((t) => (
-                        <div
-                          key={t.id}
-                          className="p-3 md:p-5 flex items-center justify-between hover:bg-gray-50 transition-colors group"
-                        >
-                          <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
-                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center bg-gray-100 text-gray-600 shrink-0">
-                              <Recycle
-                                size={16}
-                                className="md:w-5 md:h-5 opacity-80"
-                                fill="currentColor"
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-bold text-xs md:text-sm text-[#1A1A1A] truncate">
-                                {t.note?.replace("[代收] ", "") || "Income"}
-                              </div>
-                              <div className="text-[10px] text-gray-400 font-bold mt-0.5 flex items-center gap-1 md:gap-2 flex-wrap">
-                                <span className="bg-gray-100 px-1.5 py-0.5 rounded">
-                                  {t.date}
-                                </span>
-                                <span>•</span>
-                                <span className="uppercase">{t.toAccount}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 md:gap-4 shrink-0 ml-1.5 md:ml-2">
-                            <span className="font-mono font-black text-[11px] md:text-base text-emerald-600 bg-emerald-50 px-1.5 md:px-3 py-1 rounded-lg whitespace-nowrap">
-                              +{formatMoney(t.amount)}
-                            </span>
-                            <div className="flex gap-0.5 md:gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
-                              <button
-                                onClick={() => handleEditIncome(t)}
-                                className="p-1 md:p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-90 active:bg-gray-100"
-                                title="编辑 (Edit)"
-                              >
-                                <Edit3
-                                  size={12}
-                                  className="w-[13px] h-[13px] md:w-[14px] md:h-[14px]"
-                                />
-                              </button>
-                              <button
-                                onClick={() => handleGenerateReceipt(t)}
-                                disabled={isGeneratingPdf}
-                                className="p-1 md:p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-90 active:bg-gray-100"
-                                title="打印收据"
-                              >
-                                {isGeneratingPdf &&
-                                printingRecord?.id === t.id ? (
-                                  <Loader2 size={12} className="animate-spin" />
-                                ) : (
-                                  <Printer
-                                    size={12}
-                                    className="w-[13px] h-[13px] md:w-[14px] md:h-[14px]"
-                                  />
-                                )}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTransfer(t.id)}
-                                className="p-1 md:p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all shadow-sm active:scale-90 active:bg-gray-100"
-                              >
-                                <Trash2
-                                  size={12}
-                                  className="w-[13px] h-[13px] md:w-[14px] md:h-[14px]"
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
+            <TreasuryExtraIncomeTab
+              extraIncomeStats={extraIncomeStats}
+              incomeFilterMonth={incomeFilterMonth}
+              onAddIncome={() => {
+                setEditingIncomeRecord(null);
+                setIncomeForm({
+                  source: "",
+                  category: "ELECTRICITY",
+                  amount: "",
+                  toAccount: "CASH",
+                  date: new Date().toISOString().split("T")[0],
+                  note: "",
+                });
+                setIsIncomeModalOpen(true);
+              }}
+              onEditIncome={handleEditIncome}
+              onDeleteIncome={handleDeleteTransfer}
+              onPrevMonth={() => navigateMonth("prev")}
+              onNextMonth={() => navigateMonth("next")}
+              onGenerateReceipt={handleGenerateReceipt}
+              isGeneratingPdf={isGeneratingPdf}
+              printingRecord={printingRecord}
+              getMonthLabel={getMonthLabel}
+              formatMoney={formatMoney}
+            />
           )}
 
           {/* ==================== EQUITY TAB ==================== */}
           {activeTab === "EQUITY" && (
-            <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-right-4">
-              <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-gray-200">
-                <div className="flex justify-between items-center mb-4 md:mb-6">
-                  <div>
-                    <h3 className="font-black text-base md:text-lg text-[#1A1A1A] flex items-center gap-2">
-                      <Users size={18} className="md:w-5 md:h-5" /> 股东与股本
-                    </h3>
-                    <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1">
-                      Paid-up Capital: {formatMoney(totalCapital)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShareholderForm({
-                        name: "",
-                        investmentAmount: 0,
-                        equityPercentage: 0,
-                      });
-                      setIsShareholderFormOpen(true);
-                    }}
-                    className="bg-[#1A1A1A] text-[#FFD700] px-3 md:px-4 py-2 rounded-xl text-xs font-bold shadow-lg hover:bg-black flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <UserPlus size={14} /> 添加股东
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                  {(config.shareholders || []).map((s) => {
-                    const shareholderTransfers = transfers.filter(
-                      (t) =>
-                        (t.fromAccount === "SHAREHOLDER" &&
-                          t.note?.includes(s.name)) ||
-                        (t.toAccount === "SHAREHOLDER" &&
-                          t.note?.includes(s.name)),
-                    );
-                    const totalInject = shareholderTransfers
-                      .filter((t) => t.fromAccount === "SHAREHOLDER")
-                      .reduce((sum, t) => sum + t.amount, 0);
-                    const totalRepay = shareholderTransfers
-                      .filter((t) => t.toAccount === "SHAREHOLDER")
-                      .reduce((sum, t) => sum + t.amount, 0);
-                    const netInjection = totalInject - totalRepay;
-
-                    const shareholderDividends = dividendHistory.filter(
-                      (t) => t.company === s.name,
-                    );
-                    const totalDividend = shareholderDividends.reduce(
-                      (sum, t) => sum + t.amount,
-                      0,
-                    );
-
-                    return (
-                      <div
-                        key={s.id}
-                        className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex justify-between items-center group relative hover:border-gray-300 transition-colors"
-                      >
-                        <div className="w-full">
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-black text-sm text-[#1A1A1A]">
-                              {s.name}{" "}
-                              <span className="text-[10px] text-gray-400 font-normal">
-                                ({s.role || "Investor"})
-                              </span>
-                            </h4>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => {
-                                  setShareholderForm(s);
-                                  setIsShareholderFormOpen(true);
-                                }}
-                                className="p-1.5 bg-white rounded-lg text-gray-400 hover:text-black shadow-sm"
-                              >
-                                <Settings size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteShareholder(s.id)}
-                                className="p-1.5 bg-white rounded-lg text-gray-400 hover:text-red-600 shadow-sm"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div 
-                            className="flex overflow-x-auto scrollbar-hide gap-2 mt-3 w-full"
-                            style={{ WebkitOverflowScrolling: "touch" }}
-                          >
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
-                              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                                股本 (Capital)
-                              </div>
-                              <div className="text-xs font-mono font-black text-blue-600">
-                                {formatMoney(s.investmentAmount)}
-                              </div>
-                              <div className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full inline-block mt-0.5 font-bold">
-                                {s.equityPercentage}%
-                              </div>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
-                              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                                净垫资 (Net Inj.)
-                              </div>
-                              <div
-                                className={`text-xs font-mono font-black ${netInjection >= 0 ? "text-green-600" : "text-red-500"}`}
-                              >
-                                {formatMoney(netInjection)}
-                              </div>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl border border-gray-100 text-center flex-grow shrink-0 min-w-[92px] md:min-w-0 md:flex-1 md:shrink">
-                              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                                已分红 (Dividends)
-                              </div>
-                              <div className="text-xs font-mono font-black text-red-500">
-                                {formatMoney(totalDividend)}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-gray-200">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h3 className="font-black text-base md:text-lg text-[#1A1A1A] flex items-center gap-2">
-                      <PiggyBank size={18} className="md:w-5 md:h-5" />{" "}
-                      股东注资/垫资
-                    </h3>
-                    <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1">
-                      Capital Injection
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsRepaymentModalOpen(true)}
-                      className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 md:px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 flex items-center gap-2 whitespace-nowrap"
-                    >
-                      <ArrowDownLeft size={14} /> 还钱给股东
-                    </button>
-                    <button
-                      onClick={() => setIsInjectionModalOpen(true)}
-                      className="bg-green-50 text-green-700 border border-green-100 px-3 md:px-4 py-2 rounded-xl text-xs font-bold hover:bg-green-100 flex items-center gap-2 whitespace-nowrap"
-                    >
-                      <Plus size={14} /> 股东注资
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {(() => {
-                    const shareholderTransfers = transfers.filter(
-                      (t) =>
-                        t.fromAccount === ("SHAREHOLDER" as any) ||
-                        t.toAccount === ("SHAREHOLDER" as any),
-                    );
-                    if (shareholderTransfers.length === 0) {
-                      return (
-                        <div className="text-center py-6 text-gray-400 text-xs italic">
-                          暂无记录
-                        </div>
-                      );
-                    }
-
-                    const grouped = shareholderTransfers.reduce(
-                      (acc, t) => {
-                        let name = "Unknown";
-                        if (t.toAccount === ("SHAREHOLDER" as any)) {
-                          const match = t.note?.match(/\[还钱给股东\](.*?):/);
-                          name = match ? match[1].trim() : "Unknown";
-                        } else {
-                          const match = t.note?.match(/\[股东注资\](.*?):/);
-                          if (match) {
-                            name = match[1].trim();
-                          } else {
-                            name =
-                              t.note
-                                ?.replace(/\[股东注资\]|\[垫资\]/g, "")
-                                .split(":")[0]
-                                ?.trim() || "Unknown";
-                          }
-                        }
-                        if (!acc[name]) acc[name] = [];
-                        acc[name].push(t);
-                        return acc;
-                      },
-                      {} as Record<string, typeof shareholderTransfers>,
-                    );
-
-                    return Object.entries(grouped).map(([name, items]) => {
-                      const isExpanded = expandedInjections[name];
-                      const toggleExpand = () =>
-                        setExpandedInjections((prev) => ({
-                          ...prev,
-                          [name]: !prev[name],
-                        }));
-                      const totalInject = items
-                        .filter((t) => t.fromAccount === ("SHAREHOLDER" as any))
-                        .reduce((sum, t) => sum + t.amount, 0);
-                      const totalRepay = items
-                        .filter((t) => t.toAccount === ("SHAREHOLDER" as any))
-                        .reduce((sum, t) => sum + t.amount, 0);
-                      const netTotal = totalInject - totalRepay;
-
-                      return (
-                        <div
-                          key={name}
-                          className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm transition-all duration-200"
-                        >
-                          <div
-                            onClick={toggleExpand}
-                            className="cursor-pointer bg-gray-50 p-3.5 flex justify-between items-center border-b border-gray-100 hover:bg-gray-100 transition-colors"
-                          >
-                            <div className="font-black text-sm text-gray-900 flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
-                                {name ? name.charAt(0).toUpperCase() : "?"}
-                              </div>
-                              <div>
-                                <div>{name}</div>
-                                <div className="text-[10px] text-gray-500 font-normal">
-                                  净垫资:{" "}
-                                  <span
-                                    className={
-                                      netTotal >= 0
-                                        ? "text-green-600 font-bold"
-                                        : "text-red-500 font-bold"
-                                    }
-                                  >
-                                    {formatMoney(netTotal)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <div className="text-[10px] text-gray-400 font-bold">
-                                  总注资:{" "}
-                                  <span className="text-green-600">
-                                    +{formatMoney(totalInject)}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-gray-400 font-bold">
-                                  已还款:{" "}
-                                  <span className="text-indigo-500">
-                                    -{formatMoney(totalRepay)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-gray-400 bg-white p-1 rounded-full shadow-sm border border-gray-100">
-                                {isExpanded ? (
-                                  <ChevronUp size={14} />
-                                ) : (
-                                  <ChevronDown size={14} />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {isExpanded && (
-                            <div className="p-2 space-y-1 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
-                              {items
-                                .sort(
-                                  (a, b) =>
-                                    new Date(b.date).getTime() -
-                                    new Date(a.date).getTime(),
-                                )
-                                .map((t) => {
-                                  const isRepay =
-                                    t.toAccount === ("SHAREHOLDER" as any);
-                                  return (
-                                    <div
-                                      key={t.id}
-                                      className="flex justify-between items-center p-2.5 hover:bg-gray-50 rounded-xl transition-colors border border-transparent hover:border-gray-100"
-                                    >
-                                      <div>
-                                        <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                                          {isRepay ? (
-                                            <ArrowDownLeft
-                                              size={12}
-                                              className="text-indigo-500"
-                                            />
-                                          ) : (
-                                            <ArrowUpRight
-                                              size={12}
-                                              className="text-green-500"
-                                            />
-                                          )}
-                                          {t.note
-                                            ?.split(":")
-                                            .slice(1)
-                                            .join(":")
-                                            .trim() ||
-                                            (isRepay
-                                              ? "Repayment"
-                                              : "Injection")}
-                                        </div>
-                                        <div className="text-[10px] text-gray-400 font-medium mt-0.5">
-                                          {t.date} •{" "}
-                                          {isRepay
-                                            ? `From ${t.fromAccount}`
-                                            : `Into ${t.toAccount}`}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <span
-                                          className={`font-mono font-bold text-xs ${isRepay ? "text-indigo-600" : "text-green-600"}`}
-                                        >
-                                          {isRepay ? "-" : "+"}
-                                          {formatMoney(t.amount)}
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            handleDeleteTransfer(t.id)
-                                          }
-                                          className="text-gray-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-lg"
-                                        >
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-gray-200">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h3 className="font-black text-base md:text-lg text-[#1A1A1A] flex items-center gap-2">
-                      <Gem size={18} className="md:w-5 md:h-5" /> 股东分红 /
-                      提款
-                    </h3>
-                    <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1">
-                      Dividend Payouts (Wages)
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsDividendModalOpen(true)}
-                    className="bg-red-50 text-red-700 border border-red-100 px-3 md:px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-100 flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <MinusCircle size={14} /> 分发分红
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {(() => {
-                    if (dividendHistory.length === 0) {
-                      return (
-                        <div className="text-center py-6 text-gray-400 text-xs italic">
-                          暂无分红记录
-                        </div>
-                      );
-                    }
-
-                    const grouped = dividendHistory.reduce(
-                      (acc, t) => {
-                        const name = t.company || "Unknown";
-                        if (!acc[name]) acc[name] = [];
-                        acc[name].push(t);
-                        return acc;
-                      },
-                      {} as Record<string, typeof dividendHistory>,
-                    );
-
-                    return Object.entries(grouped).map(([name, items]) => {
-                      const isExpanded = expandedDividends[name];
-                      const toggleExpand = () =>
-                        setExpandedDividends((prev) => ({
-                          ...prev,
-                          [name]: !prev[name],
-                        }));
-                      const totalDividend = items.reduce(
-                        (sum, t) => sum + t.amount,
-                        0,
-                      );
-
-                      return (
-                        <div
-                          key={name}
-                          className="border border-red-100 rounded-2xl overflow-hidden bg-white shadow-sm transition-all duration-200"
-                        >
-                          <div
-                            onClick={toggleExpand}
-                            className="cursor-pointer bg-red-50/50 p-3.5 flex justify-between items-center border-b border-red-50 hover:bg-red-50 transition-colors"
-                          >
-                            <div className="font-black text-sm text-gray-900 flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
-                                {name ? name.charAt(0).toUpperCase() : "?"}
-                              </div>
-                              <div>
-                                <div>{name}</div>
-                                <div className="text-[10px] text-gray-500 font-normal">
-                                  累计分红:{" "}
-                                  <span className="text-red-500 font-bold">
-                                    {formatMoney(totalDividend)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <div className="text-[10px] text-gray-400 font-bold">
-                                  已付:{" "}
-                                  <span className="text-red-500">
-                                    {formatMoney(totalDividend)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-gray-400 bg-white p-1 rounded-full shadow-sm border border-gray-100">
-                                {isExpanded ? (
-                                  <ChevronUp size={14} />
-                                ) : (
-                                  <ChevronDown size={14} />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {isExpanded && (
-                            <div className="p-2 space-y-1 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
-                              {items
-                                .sort(
-                                  (a, b) =>
-                                    new Date(b.time).getTime() -
-                                    new Date(a.time).getTime(),
-                                )
-                                .map((t) => {
-                                  return (
-                                    <div
-                                      key={t.id}
-                                      className="flex justify-between items-center p-2.5 hover:bg-gray-50 rounded-xl transition-colors border border-transparent hover:border-gray-100"
-                                    >
-                                      <div>
-                                        <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                                          <ArrowDownLeft
-                                            size={12}
-                                            className="text-red-500"
-                                          />
-                                          {t.note || "Dividend"}
-                                        </div>
-                                        <div className="text-[10px] text-gray-400 font-medium mt-0.5">
-                                          {t.time.split("T")[0]} • Via{" "}
-                                          {t.paymentMethod}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <span className="font-mono font-bold text-xs text-red-600">
-                                          -{formatMoney(t.amount)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            </div>
+            <TreasuryEquityTab
+              shareholders={config.shareholders || []}
+              totalCapital={totalCapital}
+              transfers={transfers}
+              dividendHistory={dividendHistory}
+              expandedInjections={expandedInjections}
+              onToggleExpand={(name) =>
+                setExpandedInjections((prev) => ({
+                  ...prev,
+                  [name]: !prev[name],
+                }))
+              }
+              onAddShareholder={() => {
+                setShareholderForm({
+                  name: "",
+                  investmentAmount: 0,
+                  equityPercentage: 0,
+                });
+                setIsShareholderFormOpen(true);
+              }}
+              onEditShareholder={(s) => {
+                setShareholderForm(s);
+                setIsShareholderFormOpen(true);
+              }}
+              onDeleteShareholder={handleDeleteShareholder}
+              onAddInjection={() => setIsInjectionModalOpen(true)}
+              onAddRepayment={() => setIsRepaymentModalOpen(true)}
+              onAddDividend={() => setIsDividendModalOpen(true)}
+              onDeleteTransfer={handleDeleteTransfer}
+              formatMoney={formatMoney}
+            />
           )}
 
           {/* ==================== TRANSFERS TAB (手机适配) ==================== */}
           {activeTab === "TRANSFERS" && (
-            <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-              <div className="flex justify-between items-center bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-200">
-                <h3 className="font-black text-sm md:text-lg text-[#1A1A1A] flex items-center gap-2">
-                  <History size={18} className="md:w-5 md:h-5" /> 转账记录
-                </h3>
-                <button
-                  onClick={() => {
-                    setTransferForm({
-                      type: "DEPOSIT",
-                      fromAccount: "CASH",
-                      toAccount: "BANK",
-                      date: new Date().toISOString().split("T")[0],
-                    });
-                    setIsTransferModalOpen(true);
-                  }}
-                  className="bg-[#1A1A1A] text-[#FFD700] px-3 md:px-4 py-2 rounded-xl font-bold text-xs shadow-lg hover:bg-black flex items-center gap-2"
-                >
-                  <Plus size={14} className="md:w-4 md:h-4" /> 新增记录
-                </button>
-              </div>
-              <div className="space-y-3">
-                {transfers.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400 font-bold text-sm">
-                    暂无转账记录
-                  </div>
-                ) : (
-                  transfers.map((t) => {
-                    if (
-                      t.fromAccount === ("OTHER" as any) ||
-                      t.fromAccount === ("SHAREHOLDER" as any)
-                    )
-                      return null;
-                    return (
-                      <div
-                        key={t.id}
-                        className="bg-white p-3 md:p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm gap-3"
-                      >
-                        <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
-                          <div
-                            className={`p-2 md:p-3 rounded-xl shrink-0 ${t.type === "DEPOSIT" ? "bg-green-50 text-green-600" : "bg-orange-50 text-orange-600"}`}
-                          >
-                            {t.type === "DEPOSIT" ? (
-                              <ArrowUpRight
-                                size={16}
-                                className="md:w-5 md:h-5"
-                              />
-                            ) : (
-                              <ArrowDownLeft
-                                size={16}
-                                className="md:w-5 md:h-5"
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-black text-xs md:text-sm text-[#1A1A1A]">
-                              {t.type === "DEPOSIT"
-                                ? "Cash Bank In (存入)"
-                                : "Withdrawal (提款)"}
-                            </h4>
-                            <div className="text-[10px] md:text-xs text-gray-500 font-mono mt-0.5">
-                              {t.date.split("T")[0]} • {t.fromAccount} ➔{" "}
-                              {t.toAccount}
-                            </div>
-                            {t.note && (
-                              <div className="text-[9px] md:text-[10px] text-gray-400 mt-1 italic truncate">
-                                "{t.note}"
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 md:gap-4 shrink-0">
-                          <span className="font-mono font-black text-sm md:text-lg whitespace-nowrap">
-                            RM {t.amount.toLocaleString()}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteTransfer(t.id)}
-                            className="p-1.5 md:p-2 text-gray-300 hover:text-red-500 rounded-full transition-colors"
-                          >
-                            <Trash2 size={14} className="md:w-4 md:h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+            <TreasuryTransfersTab
+              transfers={transfers}
+              onAddTransfer={() => {
+                setTransferForm({
+                  type: "DEPOSIT",
+                  fromAccount: "CASH",
+                  toAccount: "BANK",
+                  date: new Date().toISOString().split("T")[0],
+                });
+                setIsTransferModalOpen(true);
+              }}
+              onDeleteTransfer={handleDeleteTransfer}
+            />
           )}
 
           {/* ==================== SETTINGS TAB (密码锁) ==================== */}
           {activeTab === "SETTINGS" && (
-            <div className="max-w-2xl mx-auto">
-              {!isSettingsUnlocked ? (
-                /* 🔐 密码锁界面 */
-                <div className="bg-white p-6 md:p-10 rounded-[2rem] shadow-lg border border-gray-200 text-center space-y-6">
-                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
-                    <Lock size={36} className="text-gray-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-xl text-[#1A1A1A]">
-                      设置已锁定
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-2 font-bold">
-                      请输入密码以解锁初始资金设置
-                    </p>
-                  </div>
-                  <div className="max-w-xs mx-auto">
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={settingsPasswordInput}
-                      onChange={(e) => {
-                        setSettingsPasswordInput(e.target.value);
-                        setSettingsPasswordError(false);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSettingsUnlock();
-                      }}
-                      placeholder="输入密码..."
-                      className={`w-full p-4 bg-gray-50 rounded-xl font-mono font-black text-2xl text-center outline-none border-2 tracking-[0.5em] transition-colors ${
-                        settingsPasswordError
-                          ? "border-red-400 bg-red-50 animate-shake"
-                          : "border-transparent focus:border-[#FFD700]"
-                      }`}
-                    />
-                    {settingsPasswordError && (
-                      <p className="text-red-500 text-xs font-bold mt-2 animate-in fade-in">
-                        ❌ 密码错误，请重试
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={handleSettingsUnlock}
-                    className="bg-[#1A1A1A] text-[#FFD700] px-8 py-3 rounded-xl font-black shadow-lg hover:bg-black transition-colors flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <Lock size={16} /> 解锁 (Unlock)
-                  </button>
-                </div>
-              ) : (
-                /* 🔓 已解锁的设置界面 */
-                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-lg border border-gray-200">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-black text-xl text-[#1A1A1A] flex items-center gap-2">
-                      <Settings size={24} /> 初始资金设置
-                    </h3>
-                    <button
-                      onClick={() => {
-                        setIsSettingsUnlocked(false);
-                        setSettingsPasswordInput("");
-                      }}
-                      className="text-xs text-gray-400 hover:text-red-500 font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-red-200 transition-colors"
-                    >
-                      <Lock size={12} /> 重新锁定
-                    </button>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-xs text-yellow-800 font-bold flex items-start gap-2">
-                      <Info size={16} className="mt-0.5 shrink-0" />
-                      <div>
-                        ⚠️ 注意：修改此设置会重置资金计算的起点。
-                        <br />
-                        请确保输入的金额是 <strong>
-                          {config.initialDate}
-                        </strong>{" "}
-                        当天的实际结余。
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-black text-gray-400 uppercase mb-2 block">
-                        生效日期 (Start Date)
-                      </label>
-                      <input
-                        type="date"
-                        value={config.initialDate}
-                        onChange={(e) =>
-                          setConfig({ ...config, initialDate: e.target.value })
-                        }
-                        className="w-full p-4 bg-gray-50 rounded-xl font-bold border-2 border-transparent focus:border-[#FFD700] outline-none"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                      <div>
-                        <label className="text-xs font-black text-gray-400 uppercase mb-2 block">
-                          Initial Cash (现金)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
-                            RM
-                          </span>
-                          <input
-                            type="number"
-                            value={config.initialCash}
-                            onChange={(e) =>
-                              setConfig({
-                                ...config,
-                                initialCash: parseFloat(e.target.value),
-                              })
-                            }
-                            className="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-xl font-mono font-black text-lg border-2 border-transparent focus:border-[#FFD700] outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-black text-gray-400 uppercase mb-2 block">
-                          Initial Bank (银行)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
-                            RM
-                          </span>
-                          <input
-                            type="number"
-                            value={config.initialBank}
-                            onChange={(e) =>
-                              setConfig({
-                                ...config,
-                                initialBank: parseFloat(e.target.value),
-                              })
-                            }
-                            className="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-xl font-mono font-black text-lg border-2 border-transparent focus:border-[#FFD700] outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleSaveConfig}
-                      className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-lg hover:bg-black transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Save size={18} /> 保存并重新计算
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <TreasurySettingsTab
+              isSettingsUnlocked={isSettingsUnlocked}
+              settingsPasswordInput={settingsPasswordInput}
+              setSettingsPasswordInput={setSettingsPasswordInput}
+              settingsPasswordError={settingsPasswordError}
+              setSettingsPasswordError={setSettingsPasswordError}
+              config={config}
+              setConfig={setConfig}
+              onUnlock={handleSettingsUnlock}
+              onLock={() => {
+                setIsSettingsUnlocked(false);
+                setSettingsPasswordInput("");
+              }}
+              onSaveConfig={handleSaveConfig}
+            />
           )}
         </div>
 
         {/* ==================== MODALS ==================== */}
 
         {/* Transfer Modal - 手机 safe area 适配 */}
-        {isTransferModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-md md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-6">
-                新增资金记录
-              </h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
-                  <button
-                    onClick={() =>
-                      setTransferForm({
-                        ...transferForm,
-                        type: "DEPOSIT",
-                        fromAccount: "CASH",
-                        toAccount: "BANK",
-                      })
-                    }
-                    className={`py-2.5 rounded-lg text-xs font-bold transition-all ${transferForm.type === "DEPOSIT" ? "bg-white shadow-sm text-green-700" : "text-gray-400"}`}
-                  >
-                    存入 (Bank In)
-                  </button>
-                  <button
-                    onClick={() =>
-                      setTransferForm({
-                        ...transferForm,
-                        type: "WITHDRAWAL",
-                        fromAccount: "BANK",
-                        toAccount: "CASH",
-                      })
-                    }
-                    className={`py-2.5 rounded-lg text-xs font-bold transition-all ${transferForm.type === "WITHDRAWAL" ? "bg-white shadow-sm text-blue-700" : "text-gray-400"}`}
-                  >
-                    提款 (Withdraw)
-                  </button>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={transferForm.date}
-                    onChange={(e) =>
-                      setTransferForm({ ...transferForm, date: e.target.value })
-                    }
-                    className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">
-                    Amount (RM)
-                  </label>
-                  <input
-                    type="number"
-                    value={transferForm.amount}
-                    onChange={(e) =>
-                      setTransferForm({
-                        ...transferForm,
-                        amount: parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full p-4 bg-gray-50 rounded-xl font-mono font-black text-xl outline-none focus:border-[#FFD700] border-2 border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">
-                    Note
-                  </label>
-                  <input
-                    type="text"
-                    value={transferForm.note || ""}
-                    onChange={(e) =>
-                      setTransferForm({ ...transferForm, note: e.target.value })
-                    }
-                    className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none"
-                    placeholder="e.g. ATM Deposit"
-                  />
-                </div>
-                <div className="flex gap-3 mt-4">
-                  <button
-                    onClick={() => setIsTransferModalOpen(false)}
-                    className="flex-1 py-3 bg-white border border-gray-200 text-gray-500 font-bold rounded-xl text-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveTransfer}
-                    className="flex-[2] py-3 bg-[#1A1A1A] text-[#FFD700] font-bold rounded-xl text-sm shadow-lg hover:bg-black"
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryTransferModal
+          open={isTransferModalOpen}
+          onClose={() => setIsTransferModalOpen(false)}
+          form={transferForm}
+          setForm={setTransferForm}
+          onSave={handleSaveTransfer}
+        />
 
         {/* Shareholder Modal - 手机 safe area 适配 */}
-        {isShareholderFormOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-4">
-                股东资料 (Shareholder)
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Name
-                  </label>
-                  <input
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={shareholderForm.name}
-                    onChange={(e) =>
-                      setShareholderForm({
-                        ...shareholderForm,
-                        name: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Role (Title)
-                  </label>
-                  <input
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={shareholderForm.role || ""}
-                    onChange={(e) =>
-                      setShareholderForm({
-                        ...shareholderForm,
-                        role: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                      Capital (RM)
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                      value={shareholderForm.investmentAmount}
-                      onChange={(e) =>
-                        setShareholderForm({
-                          ...shareholderForm,
-                          investmentAmount: parseFloat(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                      Equity (%)
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                      value={shareholderForm.equityPercentage}
-                      onChange={(e) =>
-                        setShareholderForm({
-                          ...shareholderForm,
-                          equityPercentage: parseFloat(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleSaveShareholder}
-                  className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-bold mt-2"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setIsShareholderFormOpen(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryShareholderModal
+          open={isShareholderFormOpen}
+          onClose={() => setIsShareholderFormOpen(false)}
+          form={shareholderForm}
+          setForm={setShareholderForm}
+          onSave={handleSaveShareholder}
+        />
 
         {/* Injection Modal - 手机 safe area 适配 */}
-        {isInjectionModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 max-h-[90vh] overflow-y-auto"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-4">
-                股东注资 (Injection)
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Shareholder (股东)
-                  </label>
-                  <select
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={injectionForm.shareholderName}
-                    onChange={(e) =>
-                      setInjectionForm({
-                        ...injectionForm,
-                        shareholderName: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">Select Shareholder...</option>
-                    {config.shareholders?.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Amount (金额)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none border-2 border-transparent focus:border-[#FFD700]"
-                    value={injectionForm.amount}
-                    onChange={(e) =>
-                      setInjectionForm({
-                        ...injectionForm,
-                        amount: e.target.value,
-                      })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Into Account (存入账户)
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setInjectionForm({
-                          ...injectionForm,
-                          toAccount: "BANK",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${injectionForm.toAccount === "BANK" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      BANK
-                    </button>
-                    <button
-                      onClick={() =>
-                        setInjectionForm({
-                          ...injectionForm,
-                          toAccount: "CASH",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${injectionForm.toAccount === "CASH" ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      CASH
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Date (日期)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={injectionForm.date}
-                    onChange={(e) =>
-                      setInjectionForm({
-                        ...injectionForm,
-                        date: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Note (备注)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={injectionForm.note}
-                    onChange={(e) =>
-                      setInjectionForm({
-                        ...injectionForm,
-                        note: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. Working Capital"
-                  />
-                </div>
-                <button
-                  onClick={handleSaveInjection}
-                  className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-bold mt-2 shadow-lg"
-                >
-                  确认注资 (Confirm)
-                </button>
-                <button
-                  onClick={() => setIsInjectionModalOpen(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryInjectionModal
+          open={isInjectionModalOpen}
+          onClose={() => setIsInjectionModalOpen(false)}
+          form={injectionForm}
+          setForm={setInjectionForm}
+          onSave={handleSaveInjection}
+          shareholders={config.shareholders}
+        />
 
         {/* Income Modal - 支持新增 + 编辑模式，手机 safe area 适配 */}
-        {isIncomeModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 max-h-[90vh] overflow-y-auto"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-4">
-                {editingIncomeRecord
-                  ? "✏️ 编辑收入记录"
-                  : "代收/杂项收入 (Extra Income)"}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Source (来源)
-                  </label>
-                  <input
-                    list="income_sources"
-                    type="text"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={incomeForm.source}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, source: e.target.value })
-                    }
-                    placeholder="e.g. 隔壁店铺"
-                  />
-                  <datalist id="income_sources">
-                    {incomeSourceHistory.map((src, idx) => (
-                      <option key={idx} value={src} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Category (类别)
-                  </label>
-                  <select
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={incomeForm.category}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, category: e.target.value })
-                    }
-                  >
-                    <option value="UTILITIES_ELECTRIC">
-                      电费 (Electricity)
-                    </option>
-                    <option value="UTILITIES_WATER">水费 (Water)</option>
-                    <option value="RENT">租金 (Rent)</option>
-                    <option value="OTHER">其他 (Other)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Amount (金额)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none border-2 border-transparent focus:border-[#FFD700]"
-                    value={incomeForm.amount}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, amount: e.target.value })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Into Account (存入账户)
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setIncomeForm({ ...incomeForm, toAccount: "CASH" })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${incomeForm.toAccount === "CASH" ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      CASH
-                    </button>
-                    <button
-                      onClick={() =>
-                        setIncomeForm({ ...incomeForm, toAccount: "BANK" })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${incomeForm.toAccount === "BANK" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      BANK
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Date (日期)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={incomeForm.date}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, date: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Note (备注)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={incomeForm.note}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, note: e.target.value })
-                    }
-                    placeholder="Optional..."
-                  />
-                </div>
-                <button
-                  onClick={handleSaveIncome}
-                  className={`w-full py-3 rounded-xl font-bold mt-2 shadow-lg ${editingIncomeRecord ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-green-600 text-white hover:bg-green-700"}`}
-                >
-                  {editingIncomeRecord
-                    ? "✅ 确认更新 (Update)"
-                    : "确认收入 (Confirm)"}
-                </button>
-                <button
-                  onClick={() => {
-                    setIsIncomeModalOpen(false);
-                    setEditingIncomeRecord(null);
-                  }}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryIncomeModal
+          open={isIncomeModalOpen}
+          onClose={() => {
+            setIsIncomeModalOpen(false);
+            setEditingIncomeRecord(null);
+          }}
+          form={incomeForm}
+          setForm={setIncomeForm}
+          onSave={handleSaveIncome}
+          isEditing={!!editingIncomeRecord}
+          incomeSourceHistory={incomeSourceHistory}
+        />
 
         {/* Expense Modal - 手机 safe area 适配 */}
-        {isExpenseModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 max-h-[90vh] overflow-y-auto"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-2">
-                补录/记录支出
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Category
-                  </label>
-                  <select
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={expenseForm.category}
-                    onChange={(e) =>
-                      setExpenseForm({
-                        ...expenseForm,
-                        category: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="RENOVATION">装修工程 (Renovation)</option>
-                    <option value="EQUIPMENT">设备采购 (Equipment)</option>
-                    <option value="RENT">租金 (Rent)</option>
-                    <option value="UTILITIES_ELECTRIC">
-                      电费 (Electricity)
-                    </option>
-                    <option value="UTILITIES_WATER">水费 (Water)</option>
-                    <option value="CLEANING_SUPPLY">
-                      清洁药水 (Cleaning Supply)
-                    </option>
-                    <option value="MAINTENANCE">
-                      维修/保养/清洁 (Maintenance)
-                    </option>
-                    <option value="SUPPLIES">消耗杂品 (Supplies)</option>
-                    <option value="SUPPLIER">一般进货 (General)</option>
-                    <option value="SALARY">薪资预支 (Salary)</option>
-                    <option value="LICENSE">执照 (License)</option>
-                    <option value="ADVERTISING">
-                      广告与推广 (Advertising & Promotion)
-                    </option>
-                    <option value="IT_SOFTWARE">
-                      软件与信息技术 (IT & Software)
-                    </option>
-                    <option value="BANK_FEE">银行手续费 (Bank Fees)</option>
-                    <option value="OTHER">其他 (Other)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Description / Item
-                  </label>
-                  <input
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={expenseForm.company}
-                    onChange={(e) =>
-                      setExpenseForm({
-                        ...expenseForm,
-                        company: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. Public Bank MDR"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Amount (RM)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={expenseForm.amount}
-                    onChange={(e) =>
-                      setExpenseForm({
-                        ...expenseForm,
-                        amount: parseFloat(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Payment Source
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setExpenseForm({
-                          ...expenseForm,
-                          paymentMethod: "BANK_TRANSFER",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${expenseForm.paymentMethod === "BANK_TRANSFER" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      BANK
-                    </button>
-                    <button
-                      onClick={() =>
-                        setExpenseForm({
-                          ...expenseForm,
-                          paymentMethod: "CASH",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${expenseForm.paymentMethod === "CASH" ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      CASH
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Date (Backdate Allowed)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={expenseForm.time?.split("T")[0]}
-                    onChange={(e) =>
-                      setExpenseForm({ ...expenseForm, time: e.target.value })
-                    }
-                  />
-                </div>
-                <button
-                  onClick={handleSaveExpense}
-                  className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-bold mt-2 shadow-lg"
-                >
-                  确认支出 (Confirm)
-                </button>
-                <button
-                  onClick={() => setIsExpenseModalOpen(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryExpenseModal
+          open={isExpenseModalOpen}
+          onClose={() => setIsExpenseModalOpen(false)}
+          form={expenseForm}
+          setForm={setExpenseForm}
+          onSave={handleSaveExpense}
+        />
 
         {/* Dividend Modal - 手机 safe area 适配 */}
-        {isDividendModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 border-t-8 border-red-500 max-h-[90vh] overflow-y-auto"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-4">
-                分发分红 (Payout)
-              </h3>
-              <p className="text-xs text-gray-500 mb-4 font-bold">
-                当作工钱发放，将从公司资金中扣除。
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Shareholder (股东)
-                  </label>
-                  <select
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={dividendForm.shareholderId}
-                    onChange={(e) =>
-                      setDividendForm({
-                        ...dividendForm,
-                        shareholderId: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">Select Shareholder...</option>
-                    {config.shareholders?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Amount (金额)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none border-2 border-transparent focus:border-[#FFD700]"
-                    value={dividendForm.amount}
-                    onChange={(e) =>
-                      setDividendForm({
-                        ...dividendForm,
-                        amount: e.target.value,
-                      })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Payment Method (资金来源)
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setDividendForm({
-                          ...dividendForm,
-                          paymentMethod: "BANK_TRANSFER",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${dividendForm.paymentMethod === "BANK_TRANSFER" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      BANK
-                    </button>
-                    <button
-                      onClick={() =>
-                        setDividendForm({
-                          ...dividendForm,
-                          paymentMethod: "CASH",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${dividendForm.paymentMethod === "CASH" ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      CASH
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Dividend Month (分红月份)
-                  </label>
-                  <input
-                    type="month"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={dividendForm.dividendMonth}
-                    onChange={(e) =>
-                      setDividendForm({
-                        ...dividendForm,
-                        dividendMonth: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Date (日期)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={dividendForm.date}
-                    onChange={(e) =>
-                      setDividendForm({ ...dividendForm, date: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Note (备注)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={dividendForm.note}
-                    onChange={(e) =>
-                      setDividendForm({ ...dividendForm, note: e.target.value })
-                    }
-                    placeholder="e.g. 盈利分红"
-                  />
-                </div>
-                <button
-                  onClick={handleSaveDividend}
-                  className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-bold mt-2 shadow-lg hover:bg-black"
-                >
-                  确认分发 (Confirm)
-                </button>
-                <button
-                  onClick={() => setIsDividendModalOpen(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryDividendModal
+          open={isDividendModalOpen}
+          onClose={() => setIsDividendModalOpen(false)}
+          form={dividendForm}
+          setForm={setDividendForm}
+          onSave={handleSaveDividend}
+          shareholders={config.shareholders}
+        />
 
         {/* Repayment Modal - 还钱给股东 */}
-        {isRepaymentModalOpen && (
-          <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div
-              className="bg-white w-full md:max-w-sm md:rounded-3xl rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 border-t-8 border-indigo-500 max-h-[90vh] overflow-y-auto"
-              style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
-              }}
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4 md:hidden" />
-              <h3 className="font-black text-xl text-[#1A1A1A] mb-4">
-                还钱给股东 (Repayment)
-              </h3>
-              <p className="text-xs text-gray-500 mb-4 font-bold">
-                偿还股东之前的注资/垫资，将作为支出从资金池扣除。
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Shareholder (股东)
-                  </label>
-                  <select
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={repaymentForm.shareholderId}
-                    onChange={(e) =>
-                      setRepaymentForm({
-                        ...repaymentForm,
-                        shareholderId: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">Select Shareholder...</option>
-                    {config.shareholders?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Amount (金额)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none border-2 border-transparent focus:border-[#FFD700]"
-                    value={repaymentForm.amount}
-                    onChange={(e) =>
-                      setRepaymentForm({
-                        ...repaymentForm,
-                        amount: e.target.value,
-                      })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Funds From (资金来源)
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setRepaymentForm({
-                          ...repaymentForm,
-                          fromAccount: "BANK",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${repaymentForm.fromAccount === "BANK" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      BANK
-                    </button>
-                    <button
-                      onClick={() =>
-                        setRepaymentForm({
-                          ...repaymentForm,
-                          fromAccount: "CASH",
-                        })
-                      }
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold border transition-all ${repaymentForm.fromAccount === "CASH" ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
-                    >
-                      CASH
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Date (日期)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={repaymentForm.date}
-                    onChange={(e) =>
-                      setRepaymentForm({
-                        ...repaymentForm,
-                        date: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">
-                    Note (备注)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none"
-                    value={repaymentForm.note}
-                    onChange={(e) =>
-                      setRepaymentForm({
-                        ...repaymentForm,
-                        note: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. 还清垫资"
-                  />
-                </div>
-                <button
-                  onClick={handleSaveRepayment}
-                  className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold mt-2 shadow-lg hover:bg-indigo-700"
-                >
-                  确认还款 (Confirm)
-                </button>
-                <button
-                  onClick={() => setIsRepaymentModalOpen(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TreasuryRepaymentModal
+          open={isRepaymentModalOpen}
+          onClose={() => setIsRepaymentModalOpen(false)}
+          form={repaymentForm}
+          setForm={setRepaymentForm}
+          onSave={handleSaveRepayment}
+          shareholders={config.shareholders}
+        />
 
         {/* HIDDEN PRINT TEMPLATE
             只有生成 PDF 时才挂载，平时完全不出现在 DOM，避免桌面端露出 OFFICIAL RECEIPT */}
@@ -4932,17 +2843,17 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* Ledger Modal */}
-        {viewLedger && (
-          <LedgerModal
-            isOpen={!!viewLedger}
-            type={viewLedger}
-            onClose={() => setViewLedger(null)}
-            items={getLedgerData(viewLedger)}
-          />
-        )}
-      </div>
-    </div>,
+
+      {/* Ledger Modal */}
+      {viewLedger && (
+        <TreasuryLedgerModal
+          isOpen={!!viewLedger}
+          type={viewLedger}
+          onClose={() => setViewLedger(null)}
+          items={getLedgerData(viewLedger)}
+        />
+      )}
+    </TreasuryShell>,
     document.body
   );
 };
