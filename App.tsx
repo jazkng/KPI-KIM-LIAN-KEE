@@ -501,27 +501,12 @@ export default function App() {
             {/* Mobile Bottom Navigation Bar (仅手机端 md:hidden 且登录后且在主页时显示) */}
             {currentUser && currentUser !== PortalRole.MANAGEMENT && currentUser !== PortalRole.STAFF && (currentUser !== PortalRole.BOSS || (!bossTab && bossActiveModal === 'NONE')) && !isAiOpen && !isConfigOpen && (
                 <div className="md:hidden fixed bottom-[max(12px,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[390px]
-                                bg-white/70 backdrop-blur-3xl border border-white/50 
-                                shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-[110]
+                                bg-white/70 backdrop-blur-3xl border border-[#FFD200]/60 
+                                shadow-[0_8px_30px_rgba(255,210,0,0.15)] z-[110]
                                 rounded-[1.25rem] py-1 px-1.5 flex items-center">
                     <div className="w-full">
                         {/* Cozy Navigation Buttons (Human-friendly warm colors, elegant typography, high touch targets) */}
-                        <div className="flex justify-between items-center w-full">
-                            {/* 账户名字模块 (放在最左端，LOGO和Online都去掉了，避免极其狭窄手机端挤压导致显示不全) */}
-                            <div className="hidden min-[375px]:flex items-center gap-1 py-0.5 px-1 border-r border-stone-200/50 pr-2 select-none shrink-0">
-                                <div className="w-5.5 h-5.5 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 border border-stone-200">
-                                    <User size={11} />
-                                </div>
-                                <div className="flex flex-col items-start leading-[1.1]">
-                                    <span className="text-[9px] text-stone-800 font-extrabold truncate max-w-[40px]">
-                                        {currentUser === PortalRole.BOSS ? 'JAKE' : (currentEmployee?.name || '员工')}
-                                    </span>
-                                    <span className="text-[7.5px] text-stone-400 font-bold">
-                                        {currentUser === PortalRole.BOSS ? '老板' : getRoleName(currentUser)}
-                                    </span>
-                                </div>
-                            </div>
-
+                        <div className="flex justify-between items-center w-full px-2">
                             {currentUser === PortalRole.BOSS ? (
                                 <>
                                     {/* 重点 */}

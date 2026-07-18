@@ -785,6 +785,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         setIsLoading(true);
         try {
             await DataManager.deleteSettlement(selectedRecord.id);
+            window.dispatchEvent(new Event('klk-settlements-updated'));
             const records = await DataManager.getSettlements(filterMonth);
             setHistoryRecords(records);
             setShowDeleteConfirm(false);
@@ -798,6 +799,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         setIsLoading(true);
         try {
             await DataManager.deleteSettlement(record.id);
+            window.dispatchEvent(new Event('klk-settlements-updated'));
             setBusinessDate(record.date);
             setOpeningTotal(record.openingCash); 
             
@@ -879,6 +881,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         
         try {
             await DataManager.executeSettlementTransaction(record);
+            window.dispatchEvent(new Event('klk-settlements-updated'));
             setBusinessDate(getBusinessDateStr(storeConfig.businessDayCutoff || 4));
             setOpeningTotal(0);
             setSalesData({ storeHubTotal: 0, refundTotal: 0, cash: 0, tng: 0, duitnow: 0, card: 0, amex: 0, grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0, grab: 0, panda: 0, shopee: 0 });

@@ -27,7 +27,10 @@ export const TreasuryMobileTabs: React.FC<TreasuryMobileTabsProps> = ({
   setActiveTab,
 }) => {
   return (
-    <div className="px-3 md:px-6 py-2 bg-white md:bg-[#F6F7FB] shrink-0 border-b border-[#E5E7EB]">
+    <div
+      className="px-3 md:px-6 py-2 bg-white md:bg-[#F6F7FB] shrink-0 border-b border-[#E5E7EB]"
+      style={{ touchAction: "pan-y" }}
+    >
       {/* Mobile Grid View (cols-5, no horizontal scroll) */}
       <nav className="grid grid-cols-5 gap-1 rounded-2xl bg-[#F6F7FB] md:hidden p-1">
         {TABS.map((tab) => {

@@ -14,11 +14,29 @@ export const TreasuryShell: React.FC<TreasuryShellProps> = ({
   footer,
 }) => {
   return (
-    <div className="fixed inset-0 z-[120] h-[100dvh] overflow-hidden bg-[#F6F7FB] text-[#111111]">
-      <div className="flex h-full min-h-0 flex-col">
-        {/* Fixed Header */}
+    <div
+      id="treasury-page"
+      className="
+        fixed
+        inset-0
+        z-[120]
+        w-full
+        max-w-full
+        overflow-y-auto
+        overflow-x-hidden
+        bg-[#F6F7FB]
+        text-[#111111]
+      "
+      style={{
+        height: "100dvh",
+        minHeight: "-webkit-fill-available",
+        WebkitOverflowScrolling: "touch",
+        touchAction: "pan-y",
+        overscrollBehaviorY: "contain",
+      }}
+    >
+      <div className="sticky top-0 z-50 bg-white shadow-sm">
         <div
-          className="shrink-0 bg-white"
           style={{
             paddingTop: "env(safe-area-inset-top, 0px)",
           }}
@@ -26,23 +44,24 @@ export const TreasuryShell: React.FC<TreasuryShellProps> = ({
           {header}
         </div>
 
-        {/* Optional Fixed Navigation */}
-        {navigation ? <div className="shrink-0">{navigation}</div> : null}
-
-        {/* Independent Scroll Content with Hardware Touch Acceleration */}
-        <main
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#F6F7FB]"
-          style={{
-            WebkitOverflowScrolling: "touch",
-            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-          }}
-        >
-          {children}
-        </main>
-
-        {/* Fixed Footer */}
-        {footer ? <div className="shrink-0">{footer}</div> : null}
+        {navigation && (
+          <div className="bg-white">
+            {navigation}
+          </div>
+        )}
       </div>
+
+      <main
+        className="bg-[#F6F7FB]"
+        style={{
+          paddingBottom:
+            "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+        }}
+      >
+        {children}
+      </main>
+
+      {footer && <div>{footer}</div>}
     </div>
   );
 };

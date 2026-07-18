@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { google } = require('googleapis');
 // Set global options for googleapis, including connection timeouts to prevent infinite hangs
 google.options({
@@ -108,6 +109,50 @@ async function checkFileExistsInFolder(folderId, fileName) {
     return res.data.files && res.data.files.length > 0;
 }
 
+function normalizeVendorKey(value) {
+    return String(value || '')
+        .toUpperCase()
+        .replace(/\b(SDN\.?\s*BHD\.?|ENTERPRISE|PLT|TRADING|COMPANY|CO\.?)\b/g, '')
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeInvoiceNo(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw || raw.includes('UNKNOWN') || raw === 'N/A' || raw === 'NA') return '';
+    return raw.replace(/[^A-Z0-9]/g, '');
+}
+
+function buildInvoiceFingerprint(vendor, amount, invoiceNo, date) {
+    const vendorKey = normalizeVendorKey(vendor) || 'UNKNOWN_VENDOR';
+    const normalizedAmount = normalizeMoney(amount);
+    const amountKey = normalizedAmount !== null ? normalizedAmount.toFixed(2) : 'UNKNOWN_AMOUNT';
+    const referenceKey = normalizeInvoiceNo(invoiceNo) || String(date || '').replace(/[^0-9]/g, '') || 'NO_REFERENCE';
+    const rawFingerprint = `${vendorKey}|${amountKey}|${referenceKey}`;
+    return `AP1_${crypto.createHash('sha256').update(rawFingerprint).digest('hex')}`;
+}
+
+function isValidDateKey(value) {
+    const dateStr = String(value || '');
+    if (!/^\d{8}$/.test(dateStr)) return false;
+    const year = parseInt(dateStr.substring(0, 4), 10);
+    const month = parseInt(dateStr.substring(4, 6), 10);
+    const day = parseInt(dateStr.substring(6, 8), 10);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return year >= 2020 && year <= 2035
+        && parsed.getUTCFullYear() === year
+        && parsed.getUTCMonth() === month - 1
+        && parsed.getUTCDate() === day;
+}
+
+async function findArchivedFingerprint(fingerprint, excludeFileId) {
+    const response = await drive.files.list({
+        q: `appProperties has { key='apFingerprint' and value='${fingerprint}' } and trashed = false`,
+        fields: 'files(id, name, webViewLink)',
+        pageSize: 10,
+    });
+    return (response.data.files || []).find(file => file.id !== excludeFileId) || null;
+}
+
 function normalizeMoney(value) {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return null;
@@ -184,20 +229,53 @@ async function analyzeInvoiceWithFallback({ fileData, mimeType, prompt, response
     throw new Error(`主模型与备用模型均无法完成扫描。${errors.join(' | ')}`);
 }
 
-function validateAndFixDate(aiData) {
+function validateInvoiceExtraction(aiData) {
+    const reviewReasons = [];
     let dateStr = String(aiData.date || '').trim();
-    if (!/^\d{8}$/.test(dateStr)) {
-        return { ...aiData, date: '', year_month: '', needsReview: true, reviewReason: 'INVALID_OR_MISSING_DATE' };
+    let yearMonth = '';
+
+    if (/^\d{8}$/.test(dateStr)) {
+        const year = parseInt(dateStr.substring(0, 4), 10);
+        const month = parseInt(dateStr.substring(4, 6), 10);
+
+        if (isValidDateKey(dateStr)) {
+            yearMonth = `${year}_${String(month).padStart(2, '0')}`;
+        } else {
+            dateStr = '';
+            reviewReasons.push('INVALID_OR_MISSING_DATE');
+        }
+    } else {
+        dateStr = '';
+        reviewReasons.push('INVALID_OR_MISSING_DATE');
     }
 
-    let year = parseInt(dateStr.substring(0, 4), 10);
-    let month = parseInt(dateStr.substring(4, 6), 10);
-    let day = parseInt(dateStr.substring(6, 8), 10);
+    const vendor = String(aiData.vendor || '').trim();
+    const normalizedVendor = vendor && !vendor.toUpperCase().includes('UNKNOWN')
+        ? vendor
+        : 'UNKNOWN_VENDOR';
+    if (normalizedVendor === 'UNKNOWN_VENDOR') reviewReasons.push('UNKNOWN_VENDOR');
 
-    if (year < 2020 || year > 2030 || month < 1 || month > 12 || day < 1 || day > 31) {
-        return { ...aiData, date: '', year_month: '', needsReview: true, reviewReason: 'INVALID_OR_MISSING_DATE' };
-    }
-    return aiData;
+    const amount = normalizeMoney(aiData.amount);
+    const normalizedAmount = amount !== null && amount > 0 ? amount : 0;
+    if (normalizedAmount <= 0) reviewReasons.push('UNCLEAR_AMOUNT');
+
+    const rawCurrency = String(aiData.currency || '').trim().toUpperCase();
+    const currency = rawCurrency === 'RM' ? 'MYR' : rawCurrency;
+    if (!currency || currency === 'UNKNOWN') reviewReasons.push('UNKNOWN_CURRENCY');
+    else if (currency !== 'MYR') reviewReasons.push('UNSUPPORTED_CURRENCY');
+
+    return {
+        ...aiData,
+        vendor: normalizedVendor,
+        date: dateStr,
+        year_month: yearMonth,
+        amount: normalizedAmount,
+        currency: currency || 'UNKNOWN',
+        invoice_no: normalizeInvoiceNo(aiData.invoice_no),
+        needsReview: reviewReasons.length > 0,
+        reviewReason: reviewReasons[0],
+        reviewReasons,
+    };
 }
 
 // ==========================================================================
@@ -221,26 +299,29 @@ app.get('/health', (req, res) => {
 app.get('/api/scan-pending', async (req, res) => {
     try {
         console.log("🕵️ 前端请求抓取单据...");
-        const response = await drive.files.list({ 
-            q: `'${currentStagingFolderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`, 
-            fields: 'files(id, name, mimeType, webViewLink)',
-            orderBy: 'createdTime asc',
-            pageSize: 10
-        });
-        
-        let items = response.data.files || [];
-        const targetFiles = items.filter(f => f.mimeType === 'application/pdf' || f.mimeType.startsWith('image/'));
-        
-        if (targetFiles.length === 0) {
-            return res.json({ success: true, message: "暂存区为空", data: [] });
-        }
-
         let fileToScan = null;
-        for (const f of targetFiles) {
-            if (!scanningLocks.has(f.id)) {
-                fileToScan = f;
-                break;
-            }
+        let pageToken;
+        let supportedFileFound = false;
+
+        do {
+            const response = await drive.files.list({
+                q: `'${currentStagingFolderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`,
+                fields: 'nextPageToken, files(id, name, mimeType, webViewLink)',
+                orderBy: 'createdTime asc',
+                pageSize: 100,
+                pageToken,
+            });
+
+            const targetFiles = (response.data.files || []).filter(file =>
+                file.mimeType === 'application/pdf' || String(file.mimeType || '').startsWith('image/')
+            );
+            supportedFileFound = supportedFileFound || targetFiles.length > 0;
+            fileToScan = targetFiles.find(file => !scanningLocks.has(file.id)) || null;
+            pageToken = response.data.nextPageToken;
+        } while (!fileToScan && pageToken);
+
+        if (!supportedFileFound) {
+            return res.json({ success: true, message: "暂存区没有可扫描的 PDF 或图片", data: [] });
         }
 
         if (!fileToScan) {
@@ -254,11 +335,12 @@ app.get('/api/scan-pending', async (req, res) => {
             const fileData = await drive.files.get({ fileId: fileToScan.id, alt: 'media' }, { responseType: 'arraybuffer' });
             
             const prompt = `You are a highly precise financial auditor AI. Analyze this invoice/receipt.
-            CURRENT YEAR IS 2026.
+            CURRENT YEAR IS ${new Date().getFullYear()}.
             STRICT EXTRACTION RULES:
             1. Date: Check carefully. Often formatted as DD/MM/YYYY locally. Convert to YYYYMMDD.
             2. Amount: Extract the FINAL AMOUNT DUE or GRAND TOTAL. NEVER extract 'Cash Tendered', 'Change', or 'Subtotal'.
-            3. Invoice No: Look for INV No, Receipt No, or Tax Invoice No. Return the exact alphanumeric code.`;
+            3. Invoice No: Look for INV No, Receipt No, or Tax Invoice No. Return the exact alphanumeric code.
+            4. Currency: Return the ISO currency code. Malaysian Ringgit must be returned as MYR. Never assume MYR when another currency is printed.`;
 
             const responseSchema = {
                 type: Type.OBJECT,
@@ -267,9 +349,10 @@ app.get('/api/scan-pending', async (req, res) => {
                     date: { type: Type.STRING, description: "Exact invoice date in YYYYMMDD format. MUST be 8 digits." },
                     year_month: { type: Type.STRING, description: "Exact year and month in YYYY_MM format." },
                     amount: { type: Type.NUMBER, description: "FINAL GRAND TOTAL or AMOUNT DUE as a float." },
-                    invoice_no: { type: Type.STRING, description: "Clean alphanumeric Invoice No. If none exists, return 'UNKNOWN'." }
+                    invoice_no: { type: Type.STRING, description: "Clean alphanumeric Invoice No. If none exists, return 'UNKNOWN'." },
+                    currency: { type: Type.STRING, description: "ISO 4217 currency code such as MYR, SGD, USD, or CNY. Return UNKNOWN if it is not visible." }
                 },
-                required: ["vendor", "date", "year_month", "amount", "invoice_no"],
+                required: ["vendor", "date", "year_month", "amount", "invoice_no", "currency"],
             };
 
             const { result, modelUsed } = await analyzeInvoiceWithFallback({
@@ -280,30 +363,35 @@ app.get('/api/scan-pending', async (req, res) => {
             });
 
             let aiData = JSON.parse(result.text.trim());
-            aiData = validateAndFixDate(aiData);
+            aiData = validateInvoiceExtraction(aiData);
 
-            let rawInvoiceNo = aiData.invoice_no ? String(aiData.invoice_no).toUpperCase() : 'UNKNOWN';
-            const invoiceNo = rawInvoiceNo.includes('UNKNOWN') ? '' : rawInvoiceNo.replace(/[^A-Z0-9]/g, "");
-
-            const vendorKey = (aiData.vendor ? String(aiData.vendor) : "UNKNOWN").toUpperCase().replace(/[^A-Z0-9]/g, "");
-            const normalizedAmount = normalizeMoney(aiData.amount) || 0;
-            const fingerprint = `\${vendorKey}_\${normalizedAmount.toFixed(2)}_\${invoiceNo || "NO_NO"}`;
+            const fingerprint = buildInvoiceFingerprint(
+                aiData.vendor,
+                aiData.amount,
+                aiData.invoice_no,
+                aiData.date,
+            );
+            const duplicateArchive = await findArchivedFingerprint(fingerprint, fileToScan.id);
             
             const payload = {
                 fileId: fileToScan.id,
                 originalName: fileToScan.name,
                 mimeType: fileToScan.mimeType,
                 tempLink: fileToScan.webViewLink, 
-                vendor: aiData.vendor ? String(aiData.vendor) : "UNKNOWN_VENDOR",
+                vendor: aiData.vendor,
                 date: aiData.date || '',
                 year_month: aiData.year_month || '',
-                amount: normalizedAmount,
-                invoice_no: invoiceNo,
-                fingerprint: fingerprint,
+                amount: aiData.amount,
+                currency: aiData.currency,
+                invoice_no: aiData.invoice_no,
+                fingerprint,
                 modelUsed,
-                isDuplicate: false, 
+                isDuplicate: !!duplicateArchive,
+                duplicateFileName: duplicateArchive?.name || '',
+                duplicateFileLink: duplicateArchive?.webViewLink || '',
                 needsReview: !!aiData.needsReview,
-                reviewReason: aiData.reviewReason
+                reviewReason: aiData.reviewReason,
+                reviewReasons: aiData.reviewReasons || [],
             };
 
             res.json({ success: true, data: [payload] });
@@ -325,7 +413,7 @@ app.post('/api/delete-pending', async (req, res) => {
         const { fileId } = req.body;
         if (!fileId) return res.status(400).json({ success: false, code: "MISSING_FILE_ID", error: "缺少参数 fileId" });
 
-        console.log(`🗑️ [废单扔弃] 正在将文件移出暂存区, ID: \${fileId}`);
+        console.log(`🗑️ [废单扔弃] 正在将文件移出暂存区, ID: ${fileId}`);
         const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
         const previousParents = (file.data.parents || []).join(',');
 
@@ -351,7 +439,7 @@ app.post('/api/hold-pending', async (req, res) => {
         const validReasons = ['MANUAL_REVIEW_REQUIRED', 'NO_AP_MATCH', 'UNCLEAR_AMOUNT', 'UNCLEAR_DATE', 'UNKNOWN_VENDOR', 'POSSIBLE_DUPLICATE', 'OTHER'];
         const holdReason = validReasons.includes(reason) ? reason : 'OTHER';
 
-        console.log(`⏸️ [挂起暂存] 将文件移入保留区, ID: \${fileId}, 理由: \${holdReason}`);
+        console.log(`⏸️ [挂起暂存] 将文件移入保留区, ID: ${fileId}, 理由: ${holdReason}`);
         
         const file = await drive.files.get({ fileId: fileId, fields: 'parents, name, webViewLink' });
         const previousParents = (file.data.parents || []).join(',');
@@ -367,7 +455,7 @@ app.post('/api/hold-pending', async (req, res) => {
 
         res.json({ 
             success: true, 
-            message: `账单已挂起 (原因: \${holdReason})`,
+            message: `账单已挂起 (原因: ${holdReason})`,
             finalDriveLink: updatedFile.data.webViewLink
         });
     } catch (err) {
@@ -383,9 +471,13 @@ app.post('/api/commit-bill', async (req, res) => {
     try {
         const { fileId, originalName, mimeType, verifiedVendor, verifiedDate, verifiedAmount, verifiedInvoiceNo, forceCommit } = req.body;
         if (!fileId) return res.status(400).json({ success: false, code: "MISSING_FILE_ID", error: "缺少参数 fileId" });
-        console.log(`📦 收单归档指令: [\${verifiedVendor}]`);
+        console.log(`📦 收单归档指令: [${verifiedVendor}]`);
 
-        const fileExt = originalName.includes('.') ? originalName.substring(originalName.lastIndexOf('.')) : (mimeType.startsWith('image/') ? '.jpg' : '.pdf');
+        const safeOriginalName = String(originalName || 'invoice');
+        const safeMimeType = String(mimeType || 'application/pdf');
+        const fileExt = safeOriginalName.includes('.')
+            ? safeOriginalName.substring(safeOriginalName.lastIndexOf('.'))
+            : (safeMimeType.startsWith('image/') ? '.jpg' : '.pdf');
         
         let customDateStr = '(unk)';
         if (verifiedDate && typeof verifiedDate === 'string' && verifiedDate.length === 8) {
@@ -396,16 +488,28 @@ app.post('/api/commit-bill', async (req, res) => {
                 const dayPrefix = String(dateObj.getDate()).padStart(2, '0');
                 const monthPrefix = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const yearPrefix = dateObj.getFullYear();
-                customDateStr = `\${yearPrefix}\${monthPrefix}\${dayPrefix}`;
+                customDateStr = `${yearPrefix}${monthPrefix}${dayPrefix}`;
             }
         }
+        if (!isValidDateKey(customDateStr)) customDateStr = '(unk)';
 
-        const yearMonthFolder = customDateStr !== '(unk)' ? `\${customDateStr.substring(0,4)}_\${customDateStr.substring(4,6)}` : 'UNKNOWN_DATE';
-        
+        const cleanVendorValue = String(verifiedVendor || '').trim();
         const normalizedAmount = normalizeMoney(verifiedAmount);
-        const formattedAmountStr = normalizedAmount !== null ? normalizedAmount.toFixed(2) : '(unk)';
-        
-        const cleanInvoiceNo = verifiedInvoiceNo ? String(verifiedInvoiceNo).toUpperCase().replace(/[^A-Z0-9]/g, "") : '(unk)';
+        if (!cleanVendorValue || normalizeVendorKey(cleanVendorValue) === 'UNKNOWNVENDOR') {
+            return res.status(400).json({ success: false, code: 'VERIFICATION_REQUIRED', error: '供应商名称无效，请人工确认后再归档。' });
+        }
+        if (customDateStr === '(unk)') {
+            return res.status(400).json({ success: false, code: 'VERIFICATION_REQUIRED', error: '账单日期无效，请人工确认后再归档。' });
+        }
+        if (normalizedAmount === null || normalizedAmount <= 0) {
+            return res.status(400).json({ success: false, code: 'VERIFICATION_REQUIRED', error: '账单金额必须大于 RM0.00。' });
+        }
+
+        const yearMonthFolder = `${customDateStr.substring(0,4)}_${customDateStr.substring(4,6)}`;
+        const formattedAmountStr = normalizedAmount.toFixed(2);
+        const normalizedInvoiceNo = normalizeInvoiceNo(verifiedInvoiceNo);
+        const cleanInvoiceNo = normalizedInvoiceNo || 'NO_INV';
+        const fingerprint = buildInvoiceFingerprint(cleanVendorValue, normalizedAmount, normalizedInvoiceNo, customDateStr);
 
         let targetFolderId, finalName;
         let matchedId = null;
@@ -422,27 +526,38 @@ app.post('/api/commit-bill', async (req, res) => {
         if (matchedId && matchedConfig) {
             targetFolderId = await getOrCreateFolder(matchedConfig.folderName, mainSuppliersBaseFolderId);
             const vendorString = matchedConfig.folderName.replace(/^\d{4}_/, ''); 
-            finalName = `\${customDateStr}_\${vendorString}_\${cleanInvoiceNo}_RM\${formattedAmountStr}\${fileExt}`;
+            finalName = `${customDateStr}_${vendorString}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
         } else if (whitelist2_BankTransfers.some(kw => String(verifiedVendor).toUpperCase().includes(kw)) || normalizedAmount >= 1000) {
             targetFolderId = await getOrCreateFolder("BIG_AMOUNT_TRANSFERS", mainSuppliersBaseFolderId);
             const cleanVendor = verifiedVendor ? String(verifiedVendor).replace(/[^A-Z0-9]/g, "_").toUpperCase() : '(unk)';
-            finalName = `\${customDateStr}_BANK_\${cleanVendor}_\${cleanInvoiceNo}_RM\${formattedAmountStr}\${fileExt}`;
+            finalName = `${customDateStr}_BANK_${cleanVendor}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
         } else {
             targetFolderId = await getOrCreateFolder(yearMonthFolder, pettyCashBaseFolderId);
             const cleanVendor = verifiedVendor ? String(verifiedVendor).replace(/[^A-Z0-9]/g, "_").toUpperCase() : '(unk)';
-            finalName = `PETTY_CASH_\${customDateStr}_\${cleanVendor}_\${cleanInvoiceNo}_RM\${formattedAmountStr}\${fileExt}`;
+            finalName = `PETTY_CASH_${customDateStr}_${cleanVendor}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
         }
 
-        if (!forceCommit) {
-            const isAlreadyArchived = await checkFileExistsInFolder(targetFolderId, finalName);
-            if (isAlreadyArchived) {
-                console.warn(`🛑 [拦截物理搬家] 归档目录已存在同名文件: \${finalName}`);
-                return res.status(409).json({ 
-                    success: false, 
-                    code: "DUPLICATE_ARCHIVE_DETECTED",
-                    error: `该账单在归档文件夹中已存在 (\${finalName})，怀疑是历史重复单据。是否仍要强制覆盖/保存？` 
-                });
-            }
+        const [duplicateFingerprintFile, isAlreadyArchived] = await Promise.all([
+            findArchivedFingerprint(fingerprint, fileId),
+            checkFileExistsInFolder(targetFolderId, finalName),
+        ]);
+
+        if ((duplicateFingerprintFile || isAlreadyArchived) && !forceCommit) {
+            console.warn(`🛑 [拦截物理搬家] 发现重复账单: ${finalName}`);
+            return res.status(409).json({
+                success: false,
+                code: "DUPLICATE_ARCHIVE_DETECTED",
+                duplicateFileName: duplicateFingerprintFile?.name || finalName,
+                duplicateFileLink: duplicateFingerprintFile?.webViewLink || '',
+                error: `归档区已经存在相同账单（${duplicateFingerprintFile?.name || finalName}）。请确认是否仍要另存为重复件。`
+            });
+        }
+
+        if ((duplicateFingerprintFile || isAlreadyArchived) && forceCommit) {
+            const duplicateSuffix = `_DUP_${Date.now()}`;
+            finalName = finalName.endsWith(fileExt)
+                ? `${finalName.slice(0, -fileExt.length)}${duplicateSuffix}${fileExt}`
+                : `${finalName}${duplicateSuffix}`;
         }
 
         const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
@@ -452,12 +567,18 @@ app.post('/api/commit-bill', async (req, res) => {
             fileId: fileId,
             addParents: targetFolderId,
             removeParents: previousParents,
-            requestBody: { name: finalName },
+            requestBody: {
+                name: finalName,
+                appProperties: {
+                    apFingerprint: fingerprint,
+                    apVerifiedAt: new Date().toISOString(),
+                },
+            },
             fields: 'id, name, webViewLink'
         });
 
-        console.log(`✅ 搬家完成！新文件名: \${finalName}`);
-        res.json({ success: true, finalDriveLink: updatedFile.data.webViewLink });
+        console.log(`✅ 搬家完成！新文件名: ${finalName}`);
+        res.json({ success: true, finalDriveLink: updatedFile.data.webViewLink, finalFileName: finalName, fingerprint });
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, code: "COMMIT_ERROR", error: err.message });
@@ -466,5 +587,5 @@ app.post('/api/commit-bill', async (req, res) => {
 
 const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`AP AI service running on port \${PORT}`);
+    console.log(`AP AI service running on port ${PORT}`);
 });

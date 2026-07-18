@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Users, Crown, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, Layout, Box, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
@@ -56,6 +56,31 @@ interface ToDoItem {
     onClick: () => void;
 }
 
+const normalizeDateOnly = (value: unknown): string => {
+    const datePart = String(value || '').split('T')[0];
+    return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : '';
+};
+
+const shiftDate = (dateValue: unknown, days: number): string => {
+    const datePart = normalizeDateOnly(dateValue);
+    if (!datePart) return '';
+    const [year, month, day] = datePart.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    if (!Number.isFinite(date.getTime())) return '';
+    date.setDate(date.getDate() + days);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const getEffectiveAPDueDate = (item: ExpenseItem): string =>
+    normalizeDateOnly(item.dueDate) || shiftDate(item.time, 15);
+
+const sortSettlementsNewestFirst = (records: SettlementRecord[]): SettlementRecord[] =>
+    [...records].sort((a, b) => {
+        const dateOrder = String(b.date || '').localeCompare(String(a.date || ''));
+        if (dateOrder !== 0) return dateOrder;
+        return String(b.timestamp || '').localeCompare(String(a.timestamp || ''));
+    });
+
 export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ currentEmployee, onNavigate, onOpenConfig, onLogout }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -83,6 +108,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     const [totalUnpaidBillsAmount, setTotalUnpaidBillsAmount] = useState<number | null>(null);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
     const [monthlyBudget] = useState<number>(150000); // 默认每月目标 RM 150,000
+    const previousActiveModalRef = useRef<ActiveModal>('NONE');
 
     // Notify parent App.tsx when activeModal changes (for hiding bottom navigation)
     useEffect(() => {
@@ -210,11 +236,12 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                 let overdueCount = 0;
                 let overdueAmount = 0;
                 apItems.forEach(item => {
-                    if (!item.dueDate) return;
-                    const dueDate = new Date(`${item.dueDate.slice(0, 10)}T00:00:00`);
+                    const effectiveDueDate = getEffectiveAPDueDate(item);
+                    if (!effectiveDueDate) return;
+                    const dueDate = new Date(`${effectiveDueDate}T00:00:00`);
                     if (!Number.isFinite(dueDate.getTime())) return;
                     const diffDays = Math.round((dueDate.getTime() - todayStart.getTime()) / 86400000);
-                    const amount = item.outstandingAmount !== undefined ? item.outstandingAmount : item.amount;
+                    const amount = Number(item.outstandingAmount !== undefined ? item.outstandingAmount : item.amount) || 0;
                     if (diffDays < 0) {
                         overdueCount++;
                         overdueAmount += amount;
@@ -248,7 +275,21 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
     useEffect(() => {
         fetchData();
+
+        const handleSettlementsUpdated = () => {
+            void fetchData();
+        };
+        window.addEventListener('klk-settlements-updated', handleSettlementsUpdated);
+        return () => window.removeEventListener('klk-settlements-updated', handleSettlementsUpdated);
     }, []);
+
+    useEffect(() => {
+        const previousModal = previousActiveModalRef.current;
+        previousActiveModalRef.current = activeModal;
+        if (previousModal !== 'NONE' && activeModal === 'NONE') {
+            void fetchData();
+        }
+    }, [activeModal]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -289,9 +330,13 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             };
         }
 
-        // Since transactions are recorded after the day ends, we offset "Today" by 1 day to show yesterday's sales.
-        const todayRecord = settlements.find(r => r.date === tzDates.yesterdayStr);
-        const lastWeekRecord = settlements.find(r => r.date === tzDates.lastWeekSameDayStr);
+        // Always display the newest completed business day, including a settlement submitted today.
+        const sortedSettlements = sortSettlementsNewestFirst(settlements);
+        const todayRecord = sortedSettlements[0];
+        const lastWeekBusinessDate = shiftDate(todayRecord?.date, -7);
+        const lastWeekRecord = lastWeekBusinessDate
+            ? sortedSettlements.find(r => r.date === lastWeekBusinessDate)
+            : undefined;
 
         const todaySales = todayRecord ? todayRecord.sales.total : null;
         const lastWeekSales = lastWeekRecord ? lastWeekRecord.sales.total : null;
@@ -302,12 +347,12 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
         }
 
         // Generate the sales trend for the last 7 available settlement entries (reversed to chronological order)
-        const weeklySalesTrend = settlements
+        const weeklySalesTrend = sortedSettlements
             .slice(0, 7)
             .map(r => r.sales.total)
             .reverse();
             
-        const recentSalesData = settlements.slice(0, 7).reverse().map(s => {
+        const recentSalesData = sortedSettlements.slice(0, 7).reverse().map(s => {
             const parts = s.date.split('-');
             return {
                 name: parts.length === 3 ? `${parts[1]}/${parts[2]}` : s.date,
@@ -370,6 +415,22 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
         overdueCount: (overdueAPCount || 0) + (overdueBillsCount || 0),
         overdueAmount: (overdueAPAmount || 0) + (overdueBillsAmount || 0),
     }), [dueSoonAPCount, pendingBillsCount, dueSoonAPAmount, pendingBillsAmount, overdueAPCount, overdueBillsCount, overdueAPAmount, overdueBillsAmount]);
+
+    const dashboardFinancials = useMemo(() => {
+        const outstandingAmount = (totalUnpaidBillsAmount || 0) + (unpaidAPAmount || 0);
+        const outstandingCount = (totalUnpaidBillsCount || 0) + (unpaidAPCount || 0);
+        const monthTotal = kpiMetrics.monthTotalSales || 0;
+
+        return {
+            outstandingAmount,
+            outstandingCount,
+            nonOverdueAmount: Math.max(0, outstandingAmount - paymentMetrics.overdueAmount),
+            monthlyProgress: monthlyBudget > 0 ? Math.round((monthTotal / monthlyBudget) * 100) : 0,
+            projectedMonthSales: kpiMetrics.monthSettlementsCount > 0
+                ? (monthTotal / kpiMetrics.monthSettlementsCount) * 30
+                : null,
+        };
+    }, [totalUnpaidBillsAmount, unpaidAPAmount, totalUnpaidBillsCount, unpaidAPCount, paymentMetrics.overdueAmount, kpiMetrics.monthTotalSales, kpiMetrics.monthSettlementsCount, monthlyBudget]);
 
     // Build a scored decision queue. Boss decisions and management follow-up are separated.
     const toDoItems = useMemo(() => {
@@ -604,18 +665,24 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     };
 
     return (
-        <div className="w-full min-h-screen bg-[#F3F4F6] px-3 sm:px-5 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-12" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
-            <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6">
+        <div className="w-full min-h-screen bg-[#F6F7F9] px-4 sm:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+8rem)] md:pb-14" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+            <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
                 
-                <div className="flex items-center justify-between gap-4 py-1.5">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-xl bg-[#FFD200] text-[#171717] flex items-center justify-center">
-                                <Gauge size={19} />
+                <div className="flex min-h-[64px] items-center justify-between gap-3 py-1">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#FFD200] text-[#171717] shadow-[0_8px_20px_rgba(255,210,0,0.22)]">
+                                <Gauge size={21} strokeWidth={2.5} />
                             </div>
-                            <div>
-                                <h1 className="text-xl sm:text-2xl font-black text-stone-950 tracking-tight">金莲记 ERP 经营看盘</h1>
-                                <p className="text-[11px] sm:text-xs font-semibold text-stone-500">实时经营分析与关键指标汇总</p>
+                            <div className="min-w-0">
+                                <h1 className="truncate text-[19px] sm:text-2xl font-black text-stone-950 tracking-tight">金莲记 ERP 经营看盘</h1>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold text-stone-500">
+                                    <span className="truncate">实时经营分析与关键指标汇总</span>
+                                    <span className="sm:hidden shrink-0 text-stone-300">·</span>
+                                    <span className="sm:hidden shrink-0 text-stone-400">
+                                        {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('zh-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -630,7 +697,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                         <button
                             onClick={handleRefresh}
                             disabled={loading || refreshing}
-                            className="w-11 h-11 flex items-center justify-center text-stone-600 bg-white border border-stone-200 shadow-sm rounded-xl active:bg-stone-50 active:scale-95 transition-all outline-none disabled:opacity-50"
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-stone-200 bg-white text-stone-600 shadow-sm outline-none transition-all active:scale-95 active:bg-stone-50 disabled:opacity-50"
                             title="刷新数据"
                         >
                             <RefreshCw size={18} className={`${refreshing ? 'animate-spin' : ''}`} />
@@ -640,114 +707,100 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
                 {/* Loading skeleton loader */}
                 {loading ? (
-                    <div className="space-y-6 animate-pulse">
-                        <div className="bg-[#FFD200]/10 border border-[#FFD200]/30 rounded-3xl p-6 h-40"></div>
-                        <div className="grid grid-cols-4 gap-3 h-20">
-                            {[1, 2, 3, 4].map(i => (
+                    <div className="space-y-3 animate-pulse">
+                        <div className="h-52 rounded-[1.75rem] bg-stone-900/90"></div>
+                        <div className="grid h-44 grid-cols-2 gap-3">
+                            {[1, 2].map(i => (
                                 <div key={i} className="bg-stone-100 rounded-2xl"></div>
                             ))}
                         </div>
+                        <div className="h-36 rounded-2xl border border-stone-200 bg-white"></div>
                         <div className="bg-white rounded-3xl p-6 h-60 border border-stone-200/50"></div>
                     </div>
                 ) : (
                     <>
-                        {/* 经营结果：只保留老板每天真正需要看的四个数字 */}
-                        <section className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                            <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-between">
-                                <div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-[11px] font-black text-stone-500">最新已结营业额</span>
-                                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-600"><Store size={18} /></span>
+                        {/* 经营结果：统一为主指标 → 异常 → 账款摘要的阅读顺序 */}
+                        <section className="space-y-3">
+                            <div className="relative overflow-hidden rounded-[1.75rem] border border-stone-800 bg-[#171717] p-5 text-white shadow-[0_18px_45px_rgba(23,23,23,0.16)] sm:p-6">
+                                <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-[#FFD200]/10 blur-2xl" />
+                                <div className="relative flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-[11px] font-black tracking-[0.14em] text-stone-400">本月累计营业额</p>
+                                        <div className="mt-3 flex items-baseline gap-2 whitespace-nowrap">
+                                            <span className="text-sm font-black text-[#FFD200]">RM</span>
+                                            <strong className="text-[clamp(2rem,9vw,3rem)] font-black leading-none tracking-[-0.04em] text-white">
+                                                {kpiMetrics.monthTotalSales !== null ? kpiMetrics.monthTotalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
+                                            </strong>
+                                        </div>
                                     </div>
-                                    <div className="mt-4 flex items-baseline gap-1">
-                                        <span className="text-xs font-black text-stone-500">RM</span>
-                                        <strong className="text-xl sm:text-2xl font-black tracking-tight text-stone-950">
-                                            {kpiMetrics.todaySales !== null ? kpiMetrics.todaySales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
-                                        </strong>
-                                    </div>
-                                </div>
-                                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                                    <span className="text-stone-400">{kpiMetrics.activeDateStr || '暂无结算'}</span>
-                                    {kpiMetrics.salesDiffPercent !== null && (
-                                        <span className={`rounded-full px-2 py-1 ${kpiMetrics.salesDiffPercent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                                            {kpiMetrics.salesDiffPercent >= 0 ? '↑' : '↓'} {Math.abs(kpiMetrics.salesDiffPercent).toFixed(1)}% 比上周同日
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-between">
-                                <div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-[11px] font-black text-stone-500">本月累计营业额</span>
-                                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><TrendingUp size={18} /></span>
-                                    </div>
-                                    <div className="mt-4 flex items-baseline gap-1">
-                                        <span className="text-xs font-black text-stone-500">RM</span>
-                                        <strong className="text-xl sm:text-2xl font-black tracking-tight text-stone-950">
-                                            {kpiMetrics.monthTotalSales !== null ? kpiMetrics.monthTotalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
-                                        </strong>
-                                    </div>
+                                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#FFD200] text-stone-950 shadow-[0_8px_24px_rgba(255,210,0,0.24)]"><TrendingUp size={21} strokeWidth={2.5} /></span>
                                 </div>
                                 {kpiMetrics.monthTotalSales !== null && (
-                                    <div className="mt-2.5">
-                                        <div className="flex justify-between text-[10px] font-bold text-stone-500 mb-1">
-                                            <span>目标 RM {monthlyBudget.toLocaleString()}</span>
-                                            <span>{Math.round((kpiMetrics.monthTotalSales / monthlyBudget) * 100)}%</span>
+                                    <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                                        <div className="flex items-center justify-between gap-3 text-[11px] font-bold">
+                                            <span className="text-stone-300">目标 RM {monthlyBudget.toLocaleString()}</span>
+                                            <span className="rounded-full bg-[#FFD200] px-2.5 py-1 font-black text-stone-950">{dashboardFinancials.monthlyProgress}%</span>
                                         </div>
-                                        <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden mb-2">
-                                            <div 
-                                                className={`h-full rounded-full ${kpiMetrics.monthTotalSales >= monthlyBudget ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
-                                                style={{ width: `${Math.min(100, (kpiMetrics.monthTotalSales / monthlyBudget) * 100)}%` }} 
-                                            />
+                                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                                            <div className={`h-full rounded-full ${kpiMetrics.monthTotalSales >= monthlyBudget ? 'bg-emerald-400' : 'bg-[#FFD200]'}`} style={{ width: `${Math.min(100, dashboardFinancials.monthlyProgress)}%` }} />
                                         </div>
-                                        {kpiMetrics.monthSettlementsCount > 0 && (
-                                            <p className="text-[10px] font-black text-amber-600 bg-amber-50 rounded px-1.5 py-0.5 border border-amber-200/50 inline-block">
-                                                预估本月可达: RM {((kpiMetrics.monthTotalSales / kpiMetrics.monthSettlementsCount) * 30).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </p>
-                                        )}
+                                        <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-bold">
+                                            <span className="text-stone-400">已结算 {kpiMetrics.monthSettlementsCount} 天</span>
+                                            {dashboardFinancials.projectedMonthSales !== null && <span className="text-right text-[#FFD200]">预计月底 RM {dashboardFinancials.projectedMonthSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
+                                        </div>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-between">
-                                <div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-[11px] font-black text-stone-500">未付款账单</span>
-                                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-50 text-sky-600"><CalendarClock size={18} /></span>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button type="button" onClick={() => onNavigate('SETTLEMENT')} className="flex min-h-[172px] min-w-0 flex-col rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(28,25,23,0.06)] transition-all active:scale-[0.985]">
+                                    <div className="flex min-h-10 items-start justify-between gap-2">
+                                        <span className="pt-1 text-[11px] font-black leading-4 text-stone-500">最新已结营业额</span>
+                                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#FFF8D6] text-amber-700"><Store size={17} /></span>
                                     </div>
-                                    <div className="mt-4 flex items-baseline gap-1">
-                                        <span className="text-xs font-black text-stone-500">RM</span>
-                                        <strong className="text-xl sm:text-2xl font-black tracking-tight text-stone-950">
-                                            {((totalUnpaidBillsAmount || 0) + (unpaidAPAmount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </strong>
+                                    <div className="mt-4 flex min-w-0 items-baseline gap-1.5 whitespace-nowrap">
+                                        <span className="text-[11px] font-black text-stone-400">RM</span>
+                                        <strong className="min-w-0 text-[clamp(1.25rem,5.2vw,1.8rem)] font-black leading-none tracking-[-0.035em] text-stone-950">{kpiMetrics.todaySales !== null ? kpiMetrics.todaySales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}</strong>
                                     </div>
-                                </div>
-                                <div>
-                                    <p className="mt-2 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">允许合理的挂账期与欠款</p>
-                                    <p className="mt-1 text-[10px] font-bold text-stone-400">共计 {(totalUnpaidBillsCount || 0) + (unpaidAPCount || 0)} 笔欠款</p>
-                                </div>
+                                    <div className="mt-auto pt-4">
+                                        <p className="text-[10px] font-bold text-stone-400">{kpiMetrics.activeDateStr || '暂无结算'} · Kepong</p>
+                                        {kpiMetrics.salesDiffPercent !== null && <p className={`mt-1.5 inline-flex rounded-lg px-2 py-1 text-[10px] font-black ${kpiMetrics.salesDiffPercent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{kpiMetrics.salesDiffPercent >= 0 ? '↑' : '↓'} {Math.abs(kpiMetrics.salesDiffPercent).toFixed(1)}% 较上周同日</p>}
+                                    </div>
+                                </button>
+
+                                <button type="button" onClick={() => setActiveModal('AP')} className={`flex min-h-[172px] min-w-0 flex-col rounded-2xl border p-4 text-left shadow-[0_8px_24px_rgba(28,25,23,0.06)] transition-all active:scale-[0.985] ${paymentMetrics.overdueCount > 0 ? 'border-rose-200 bg-rose-50/70' : 'border-emerald-200 bg-emerald-50/70'}`}>
+                                    <div className="flex min-h-10 items-start justify-between gap-2">
+                                        <span className={`pt-1 text-[11px] font-black leading-4 ${paymentMetrics.overdueCount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>已逾期付款</span>
+                                        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white ${paymentMetrics.overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{paymentMetrics.overdueCount > 0 ? <AlertTriangle size={17} /> : <ShieldCheck size={17} />}</span>
+                                    </div>
+                                    <div className="mt-4 flex min-w-0 items-baseline gap-1.5 whitespace-nowrap">
+                                        <span className={`text-[11px] font-black ${paymentMetrics.overdueCount > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>RM</span>
+                                        <strong className={`min-w-0 text-[clamp(1.25rem,5.2vw,1.8rem)] font-black leading-none tracking-[-0.035em] ${paymentMetrics.overdueCount > 0 ? 'text-rose-950' : 'text-emerald-950'}`}>{paymentMetrics.overdueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                    </div>
+                                    <div className="mt-auto flex items-end justify-between gap-2 pt-4">
+                                        <p className={`text-[10px] font-black leading-4 ${paymentMetrics.overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{paymentMetrics.overdueCount > 0 ? `${paymentMetrics.overdueCount} 笔需立即处理` : '目前没有逾期款项'}</p>
+                                        <ChevronRight size={15} className={paymentMetrics.overdueCount > 0 ? 'text-rose-300' : 'text-emerald-300'} />
+                                    </div>
+                                </button>
                             </div>
 
-                            <div className={`rounded-2xl border p-4 sm:p-5 shadow-sm flex flex-col justify-between ${paymentMetrics.overdueCount > 0 ? 'border-rose-200 bg-rose-50/70' : 'border-emerald-200 bg-emerald-50/70'}`}>
-                                <div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className={`text-[11px] font-black ${paymentMetrics.overdueCount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>已逾期付款</span>
-                                        <span className={`grid h-9 w-9 place-items-center rounded-xl ${paymentMetrics.overdueCount > 0 ? 'bg-white text-rose-600' : 'bg-white text-emerald-600'}`}>
-                                            {paymentMetrics.overdueCount > 0 ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
-                                        </span>
+                            <button type="button" onClick={() => setActiveModal('AP')} className="w-full rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(28,25,23,0.05)] transition-all active:scale-[0.99] sm:p-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-black tracking-wide text-stone-500">应付账款总额</p>
+                                        <div className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
+                                            <span className="text-xs font-black text-stone-400">RM</span>
+                                            <strong className="text-[clamp(1.65rem,7vw,2.25rem)] font-black leading-none tracking-[-0.04em] text-stone-950">{dashboardFinancials.outstandingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                        </div>
                                     </div>
-                                    <div className="mt-4 flex items-baseline gap-1">
-                                        <span className={`text-xs font-black ${paymentMetrics.overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>RM</span>
-                                        <strong className={`text-xl sm:text-2xl font-black tracking-tight ${paymentMetrics.overdueCount > 0 ? 'text-rose-950' : 'text-emerald-950'}`}>
-                                            {paymentMetrics.overdueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </strong>
-                                    </div>
+                                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-100 text-stone-700"><CalendarClock size={19} /></span>
                                 </div>
-                                <p className={`mt-2 text-[10px] font-bold ${paymentMetrics.overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                    {paymentMetrics.overdueCount > 0 ? `${paymentMetrics.overdueCount} 笔需立即处理` : '目前没有逾期款项'}
-                                </p>
-                            </div>
+                                <div className="mt-4 grid grid-cols-3 divide-x divide-stone-200 rounded-xl bg-stone-50 px-2 py-3">
+                                    <div className="px-2"><p className="text-[9px] font-bold text-stone-400">待付款</p><p className="mt-1 text-xs font-black text-stone-800">{dashboardFinancials.outstandingCount} 笔</p></div>
+                                    <div className="px-2"><p className="text-[9px] font-bold text-stone-400">7天内到期</p><p className="mt-1 truncate text-xs font-black text-amber-700">RM {paymentMetrics.dueSoonAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
+                                    <div className="px-2"><p className="text-[9px] font-bold text-stone-400">未逾期</p><p className="mt-1 truncate text-xs font-black text-emerald-700">RM {dashboardFinancials.nonOverdueAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
+                                </div>
+                            </button>
                         </section>
 
                         {/* 图表与快速查看 */}

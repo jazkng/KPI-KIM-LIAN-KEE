@@ -214,17 +214,17 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
               .map((t) => (
                 <div
                   key={t.id}
-                  className="p-3.5 flex items-center justify-between hover:bg-gray-50/50 transition duration-150 group"
+                  className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50 transition duration-150 group"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50 text-gray-500 shrink-0 border border-gray-100 shadow-inner">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50 text-gray-500 shrink-0 border border-gray-100 shadow-inner mt-0.5">
                       <Recycle size={15} className="opacity-80" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-extrabold text-xs text-[#111111] truncate">
+                      <div className="font-extrabold text-sm text-[#111111] break-words whitespace-normal leading-snug">
                         {t.note?.replace("[代收] ", "") || "Extra Income"}
                       </div>
-                      <div className="text-[10px] text-gray-400 font-bold mt-1 flex items-center gap-1.5 flex-wrap">
+                      <div className="text-[10px] text-gray-400 font-bold mt-1.5 flex items-center gap-1.5 flex-wrap">
                         <span className="bg-gray-100 px-1.5 py-0.5 rounded-sm">{t.date}</span>
                         <span>•</span>
                         <span className="uppercase text-gray-500 font-mono text-[9px]">
@@ -234,17 +234,17 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                    <span className="font-mono font-black text-xs text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-100/30">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-gray-50 pt-2 sm:pt-0 sm:border-none">
+                    <span className="font-mono font-black text-sm text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-100/30">
                       +{formatMoney(t.amount)}
                     </span>
                     
-                    {/* Action buttons (always visible on touch screens, group-hover on desktop) */}
-                    <div className="flex gap-1">
+                    {/* Action buttons */}
+                    <div className="flex gap-1.5">
                       <button
                         type="button"
                         onClick={() => onEditIncome(t)}
-                        className="p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-xs cursor-pointer active:scale-90"
+                        className="p-2 bg-white border border-gray-200 text-gray-500 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-xs cursor-pointer active:scale-90"
                         style={{ minWidth: "36px", minHeight: "36px" }}
                         title="编辑 (Edit)"
                       >
@@ -255,7 +255,7 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
                         type="button"
                         onClick={() => onGenerateReceipt(t)}
                         disabled={isGeneratingPdf}
-                        className="p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-xs cursor-pointer active:scale-90 disabled:opacity-50"
+                        className="p-2 bg-white border border-gray-200 text-gray-500 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-xs cursor-pointer active:scale-90 disabled:opacity-50"
                         style={{ minWidth: "36px", minHeight: "36px" }}
                         title="打印收据"
                       >

@@ -193,24 +193,40 @@ export const KitchenAlertDisplay: React.FC = () => {
         });
     }, [getAudioContext]);
 
+    const speakEnglish = useCallback((text: string) => {
+        if (!('speechSynthesis' in window)) return;
+
+        const speech = window.speechSynthesis;
+        const voices = speech.getVoices();
+        const preferredVoice =
+            voices.find(voice => voice.lang.toLowerCase() === 'en-my') ||
+            voices.find(voice => voice.lang.toLowerCase() === 'en-gb') ||
+            voices.find(voice => voice.lang.toLowerCase() === 'en-us') ||
+            voices.find(voice => voice.lang.toLowerCase().startsWith('en'));
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = preferredVoice?.lang || 'en-US';
+        if (preferredVoice) utterance.voice = preferredVoice;
+        utterance.rate = 0.9;
+        utterance.volume = 1;
+
+        speech.cancel();
+        speech.speak(utterance);
+    }, []);
+
     const announceAlerts = useCallback((newAlerts: KitchenAlert[]) => {
         if (!newAlerts.length || !isStartedRef.current || !soundEnabledRef.current) return;
 
         void playAlertTone();
-        if (!('speechSynthesis' in window)) return;
-
         const announcement = newAlerts.slice(0, 3).map(alert => {
-            const typeLabel = TYPE_META[alert.alertType]?.label || '厨房通知';
-            return `${alert.tableNo}号桌，${alert.dishName}，${typeLabel}`;
-        }).join('。');
-        const remaining = newAlerts.length > 3 ? `。另外还有${newAlerts.length - 3}项通知` : '';
-        const utterance = new SpeechSynthesisUtterance(`新厨房通知。${announcement}${remaining}`);
-        utterance.lang = 'zh-HK';
-        utterance.rate = 0.9;
-        utterance.volume = 1;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
-    }, [playAlertTone]);
+            const typeLabel = TYPE_META[alert.alertType]?.english || 'Kitchen alert';
+            return `Table ${alert.tableNo}. ${typeLabel} request`;
+        }).join('. ');
+        const remaining = newAlerts.length > 3
+            ? `. There are ${newAlerts.length - 3} more alerts`
+            : '';
+        speakEnglish(`New kitchen alert. ${announcement}${remaining}. Please check the screen.`);
+    }, [playAlertTone, speakEnglish]);
 
     useEffect(() => {
         setConnectionState(navigator.onLine ? 'CONNECTING' : 'OFFLINE');
@@ -382,6 +398,7 @@ export const KitchenAlertDisplay: React.FC = () => {
         await getAudioContext();
         await requestWakeLock();
         void playAlertTone();
+        speakEnglish('Kitchen alert sound enabled.');
     };
 
     const toggleSound = async () => {
@@ -391,6 +408,7 @@ export const KitchenAlertDisplay: React.FC = () => {
         if (nextValue) {
             await getAudioContext();
             void playAlertTone();
+            speakEnglish('Kitchen alert sound enabled.');
         } else if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
         }

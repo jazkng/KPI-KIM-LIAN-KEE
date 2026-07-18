@@ -65,6 +65,24 @@ const normalizeVendorForMatch = (value: unknown): string =>
 const getBillMatchAmount = (bill: ExpenseItem): number | null =>
     toMoneyCents(bill.totalBillAmount ?? bill.outstandingAmount ?? bill.amount);
 
+const getDefaultDueDate = (dateValue: unknown, days = 15): string => {
+    const datePart = String(dateValue || '').split('T')[0];
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+    if (!match) return '';
+
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    if (Number.isNaN(date.getTime())) return '';
+    date.setDate(date.getDate() + days);
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getEffectiveDueDate = (bill: Partial<ExpenseItem>): string =>
+    bill.dueDate || (bill.paymentStatus !== 'PAID' ? getDefaultDueDate(bill.time) : '');
+
 const getApiErrorMessage = (payload: any, fallback: string): string => {
     let msg = payload?.error || payload?.message || fallback;
     if (typeof msg === 'object') {
@@ -75,6 +93,32 @@ const getApiErrorMessage = (payload: any, fallback: string): string => {
         }
     }
     return msg;
+};
+
+const AI_REVIEW_REASON_LABELS: Record<string, string> = {
+    INVALID_OR_MISSING_DATE: '账单日期无法确认',
+    UNCLEAR_AMOUNT: '最终金额无法确认',
+    UNKNOWN_VENDOR: '供应商无法确认',
+    UNSUPPORTED_CURRENCY: '账单不是 MYR／RM，请先换算',
+    UNKNOWN_CURRENCY: '币种无法确认',
+    MANUAL_REVIEW_REQUIRED: '需要人工复核',
+};
+
+const getAiReviewReasons = (scanData: any): string[] => {
+    const reasons = Array.isArray(scanData?.reviewReasons)
+        ? scanData.reviewReasons
+        : (scanData?.reviewReason ? [scanData.reviewReason] : []);
+    return [...new Set(reasons.filter(Boolean))];
+};
+
+const getHoldReasonForScan = (scanData: any): 'MANUAL_REVIEW_REQUIRED' | 'NO_AP_MATCH' | 'UNCLEAR_AMOUNT' | 'UNCLEAR_DATE' | 'UNKNOWN_VENDOR' | 'POSSIBLE_DUPLICATE' => {
+    if (scanData?.isDuplicate) return 'POSSIBLE_DUPLICATE';
+    const reasons = getAiReviewReasons(scanData);
+    if (reasons.includes('INVALID_OR_MISSING_DATE')) return 'UNCLEAR_DATE';
+    if (reasons.includes('UNCLEAR_AMOUNT')) return 'UNCLEAR_AMOUNT';
+    if (reasons.includes('UNKNOWN_VENDOR')) return 'UNKNOWN_VENDOR';
+    if (reasons.length > 0) return 'MANUAL_REVIEW_REQUIRED';
+    return 'NO_AP_MATCH';
 };
 
 const requestApAi = async (path: string, init?: RequestInit) => {
@@ -815,16 +859,13 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 totalBillAmount: bill.totalBillAmount !== undefined ? Math.round(bill.totalBillAmount * 100) / 100 : 0,
                 creditNote: bill.creditNote !== undefined ? Math.round(bill.creditNote * 100) / 100 : 0,
                 outstandingAmount: bill.outstandingAmount !== undefined ? Math.round(bill.outstandingAmount * 100) / 100 : 0,
+                dueDate: bill.paymentStatus !== 'PAID' ? getEffectiveDueDate(bill) : bill.dueDate,
                 tags: bill.tags || [],
                 particulars: bill.particulars || (bill.category ? getParticularsOptions(bill)[0]?.value : ''),
             });
         } else {
             const defaultTime = new Date().toISOString();
-            const defaultDueDate = (() => {
-                const d = new Date();
-                d.setDate(d.getDate() + 15);
-                return d.toISOString().split('T')[0];
-            })();
+            const defaultDueDate = getDefaultDueDate(defaultTime);
             setEditingBill({ 
                 id: '', 
                 company: defaultCompany || '', 
@@ -848,8 +889,24 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     // 💡 升级核心：处理保存逻辑，特别增加了 options?.forceCommit 重名覆盖控制
-    const handleSave = async (options?: { forceCommit?: boolean }) => {
+    const handleSave = async (options?: { forceCommit?: boolean; reviewConfirmed?: boolean }) => {
         if (!editingBill.company || editingBill.totalBillAmount === undefined) return alert("Please fill required fields (Payee & Amount)");
+        if (!editingBill.time) return alert("请填写正确的账单日期后再保存。");
+        if ((editingBill as any).pendingFileId && Number(editingBill.totalBillAmount) <= 0) return alert("AI 扫描账单金额必须大于 RM0.00，请人工核对。");
+        const pendingReviewReasons = Array.isArray((editingBill as any).pendingReviewReasons)
+            ? (editingBill as any).pendingReviewReasons as string[]
+            : [];
+        if ((editingBill as any).pendingFileId && pendingReviewReasons.length > 0 && !options?.reviewConfirmed) {
+            const reviewSummary = pendingReviewReasons
+                .map(reason => AI_REVIEW_REASON_LABELS[reason] || reason)
+                .join('、');
+            const confirmed = await (window as any).systemDialog.confirm(
+                `AI 标记以下资料需要人工复核：\n${reviewSummary}\n\n请确认你已经检查并修正供应商、日期、金额与币种。`,
+                '应付账款'
+            );
+            if (confirmed) await handleSave({ ...options, reviewConfirmed: true });
+            return;
+        }
         if (editingBill.category === 'MARKETING') {
             if (!editingBill.marketingSubCategory) return alert("⚠️ 营销类账单必须选择「营销类型」！");
             if (editingBill.marketingSubCategory === 'AD_OUTPUT' && !editingBill.adChannel) return alert("⚠️ 广告输出必须选择「广告渠道」！");
@@ -886,7 +943,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             setIsSaving(false);
                             const duplicateMessage = getApiErrorMessage(commitError.payload, '该账单疑似已经归档。');
                             if (await (window as any).systemDialog.confirm(`⚠️ 历史账单重复警告：\n${duplicateMessage}\n\n点击【确定执行】仍然保存此重复账单；点击【取消】中断入账。`, '应付账款')) {
-                                await handleSave({ forceCommit: true });
+                                await handleSave({ ...options, forceCommit: true, reviewConfirmed: true });
                             }
                             return;
                         }
@@ -951,11 +1008,19 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             delete (rawBill as any).pendingFileId;
             delete (rawBill as any).pendingOriginalName;
             delete (rawBill as any).pendingMimeType;
+            delete (rawBill as any).pendingReviewReasons;
+            delete (rawBill as any).pendingCurrency;
 
             const finalBill = JSON.parse(JSON.stringify(rawBill));
             if (finalBill.outstandingAmount! <= 0.1) finalBill.paymentStatus = 'PAID';
             else if (finalBill.outstandingAmount! < Math.round((fullTotal - cn) * 100) / 100) finalBill.paymentStatus = 'PARTIAL';
             else finalBill.paymentStatus = 'UNPAID';
+
+            // 未付／部分付款必须有到期日；默认以账单日期加 15 天计算。
+            // 已付款账单不强制填写，也不会参与逾期计算。
+            if (finalBill.paymentStatus !== 'PAID' && !finalBill.dueDate) {
+                finalBill.dueDate = getDefaultDueDate(finalBill.time);
+            }
 
             await DataManager.saveStandaloneExpense(finalBill); 
             if (finalBill.settlementId) {
@@ -1138,6 +1203,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 amount: 0,
                 outstandingAmount: fullTotal - (bill.creditNote || 0),
                 paymentStatus: 'UNPAID',
+                dueDate: bill.dueDate || getDefaultDueDate(bill.time),
                 paymentDate: null,
                 paymentMethod: null
             };
@@ -1973,7 +2039,11 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     }, [allBills, viewMode, selectedSupplierId, supplierById]);
 
     const overdueBillsCount = useMemo(() => {
-        return allBills.filter(b => b.paymentStatus !== 'PAID' && new Date() > new Date(b.dueDate || '9999-12-31')).length;
+        return allBills.filter(b => {
+            if (b.paymentStatus === 'PAID') return false;
+            const dueDate = getEffectiveDueDate(b);
+            return Boolean(dueDate) && new Date() > new Date(`${dueDate}T23:59:59`);
+        }).length;
     }, [allBills]);
 
     const thisMonthOutstanding = useMemo(() => {
@@ -2597,7 +2667,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                         {filteredBills.map(bill => {
                             const isPaid = bill.paymentStatus === 'PAID';
-                            const isOverdue = !isPaid && new Date() > new Date(bill.dueDate || '9999-12-31');
+                            const effectiveDueDate = getEffectiveDueDate(bill);
+                            const isOverdue = !isPaid && Boolean(effectiveDueDate) && new Date() > new Date(`${effectiveDueDate}T23:59:59`);
                             const sup = supplierByName.get(bill.company);
                             const isSelected = selectedBillIds.has(bill.id);
                             return (
@@ -2659,6 +2730,15 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                             {(bill as any).invoiceRef && (
                                                 <span className="text-[8px] md:text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-mono font-bold border border-purple-100" title="Invoice No.">
                                                     INV: {(bill as any).invoiceRef}
+                                                </span>
+                                            )}
+                                            {!isPaid && effectiveDueDate && (
+                                                <span className={`text-[8px] md:text-[9px] px-1.5 py-0.5 rounded font-bold border inline-flex items-center gap-1 ${
+                                                    isOverdue
+                                                        ? 'bg-red-50 text-red-700 border-red-200'
+                                                        : 'bg-orange-50 text-orange-700 border-orange-200'
+                                                }`} title="付款到期日">
+                                                    <Calendar size={9}/> {isOverdue ? '逾期' : 'Due'}: {effectiveDueDate}
                                                 </span>
                                             )}
                                             {isPaid && (
@@ -3394,10 +3474,10 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             ? Math.abs(scannedAmountCents - billAmountCents) : Number.POSITIVE_INFINITY;
                         const amountMatches = amountDifferenceCents <= 2;
                         const invoiceMatches = Boolean(scannedInvoiceNo && billInvoiceNo && scannedInvoiceNo === billInvoiceNo);
-                        const score = (vendorMatches ? 50 : 0) + (amountMatches ? 40 : 0) + (invoiceMatches ? 100 : 0);
+                        const score = (vendorMatches ? 50 : 0) + (amountMatches ? 40 : 0) + (invoiceMatches ? 70 : 0);
                         return { bill, score, vendorMatches, amountMatches, invoiceMatches, amountDifferenceCents };
                     })
-                    .filter(match => match.invoiceMatches || (match.vendorMatches && match.amountMatches))
+                    .filter(match => match.vendorMatches && (match.amountMatches || match.invoiceMatches))
                     .sort((a, b) => b.score - a.score || a.amountDifferenceCents - b.amountDifferenceCents)
                     .map(match => match.bill);
                 const searchedPendingBills = allPendingBills.filter(b => {
@@ -3415,8 +3495,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <div className="bg-[#111111] text-white px-5 py-4 flex justify-between items-center shrink-0 border-b-[3px] border-[#FFD200]">
                                 <div>
                                     <h3 className="font-serif font-black text-sm md:text-lg flex items-center gap-2">🤖 AP 智能对账中转站</h3>
-                                    <p className="text-[10px] text-gray-400 font-mono">AI 提取预览：{aiScannedData.vendor} · 金额: RM {Number(aiScannedData.amount).toFixed(2)}</p>
-                                    <p className="text-[9px] text-[#FFD200]/90 font-bold mt-0.5">智能配对条件：供应商名称 + 金额（允许 ±RM0.02）或 Invoice No. 完全一致</p>
+                                    <p className="text-[10px] text-gray-400 font-mono">AI 提取预览：{aiScannedData.vendor} · {aiScannedData.currency || 'MYR'} {Number(aiScannedData.amount).toFixed(2)}</p>
+                                    <p className="text-[9px] text-[#FFD200]/90 font-bold mt-0.5">智能配对条件：供应商名称 + 金额（允许 ±RM0.02）或供应商名称 + Invoice No.</p>
                                 </div>
                                 <button onClick={() => setIsMatchModalOpen(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white"><X size={18}/></button>
                             </div>
@@ -3428,6 +3508,24 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     <span className="text-[11px] font-black uppercase tracking-wider">
                                         🚨 [重复单据警告]：系统发现暂存区已存在一张数据指纹完全一致的单据！请格外核对是否重复上传！
                                     </span>
+                                </div>
+                            )}
+
+                            {aiScannedData.needsReview && (
+                                <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 shrink-0">
+                                    <div className="flex items-start gap-2 text-amber-800">
+                                        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] font-black">AI 无法确认部分资料，保存前必须人工修正</p>
+                                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                                {getAiReviewReasons(aiScannedData).map(reason => (
+                                                    <span key={reason} className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-[9px] font-black text-amber-700">
+                                                        {AI_REVIEW_REASON_LABELS[reason] || reason}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
@@ -3456,11 +3554,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                             disabled={isHoldingFile || isDeletingFile}
                                             onClick={() => handleHoldPendingFile(
                                                 aiScannedData.fileId,
-                                                aiScannedData.isDuplicate
-                                                    ? 'POSSIBLE_DUPLICATE'
-                                                    : aiScannedData.needsReview
-                                                    ? (aiScannedData.reviewReason === 'INVALID_OR_MISSING_DATE' ? 'UNCLEAR_DATE' : 'MANUAL_REVIEW_REQUIRED')
-                                                    : 'NO_AP_MATCH'
+                                                getHoldReasonForScan(aiScannedData)
                                             )}
                                             className="min-h-[48px] bg-[#FFD200] hover:bg-[#FFE14D] border border-[#FFD200] text-[#111111] py-3 px-4 rounded-[14px] font-black text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 shadow-[0_6px_18px_rgba(255,210,0,0.18)]"
                                         >
@@ -3530,11 +3624,14 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                                 setEditingBill({
                                                                     ...bill,
                                                                     time: finalDate || bill.time,
-                                                                    invoiceRef: aiScannedData.invoice_no !== 'UNKNOWN' ? aiScannedData.invoice_no : (bill.invoiceRef || ''),
+                                                                    dueDate: bill.dueDate || getDefaultDueDate(finalDate || bill.time),
+                                                                    invoiceRef: String(aiScannedData.invoice_no || '').trim() ? aiScannedData.invoice_no : (bill.invoiceRef || ''),
                                                                     linkUrl: aiScannedData.tempLink,
                                                                     pendingFileId: aiScannedData.fileId,
                                                                     pendingOriginalName: aiScannedData.originalName,
-                                                                    pendingMimeType: aiScannedData.mimeType
+                                                                    pendingMimeType: aiScannedData.mimeType,
+                                                                    pendingReviewReasons: getAiReviewReasons(aiScannedData),
+                                                                    pendingCurrency: aiScannedData.currency
                                                                 } as any);
                                                                 setIsFormOpen(true);
                                                             }}
@@ -3574,23 +3671,28 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                         paymentStatus: 'UNPAID',
                                                         time: (aiScannedData.date && aiScannedData.date.length === 8) 
                                                             ? `${aiScannedData.date.substring(0,4)}-${aiScannedData.date.substring(4,6)}-${aiScannedData.date.substring(6,8)}` 
-                                                            : new Date().toISOString().split('T')[0],
+                                                            : '',
+                                                        dueDate: (aiScannedData.date && aiScannedData.date.length === 8)
+                                                            ? getDefaultDueDate(`${aiScannedData.date.substring(0,4)}-${aiScannedData.date.substring(4,6)}-${aiScannedData.date.substring(6,8)}`)
+                                                            : '',
                                                         tags: [],
                                                         linkUrl: aiScannedData.tempLink,
                                                         note: '🤖 AI 自动抓取识别盲录入' + (aiScannedData.isDuplicate ? ' [⚠️ 疑似重复件]' : ''),
                                                         paymentMethod: 'BANK_TRANSFER',
                                                         paidBy: 'COMPANY',
                                                         isAdvancePayment: false,
-                                                        invoiceRef: aiScannedData.invoice_no !== 'UNKNOWN' ? aiScannedData.invoice_no : '',
+                                                        invoiceRef: String(aiScannedData.invoice_no || '').trim() ? aiScannedData.invoice_no : '',
                                                         pendingFileId: aiScannedData.fileId,
                                                         pendingOriginalName: aiScannedData.originalName,
-                                                        pendingMimeType: aiScannedData.mimeType
+                                                        pendingMimeType: aiScannedData.mimeType,
+                                                        pendingReviewReasons: getAiReviewReasons(aiScannedData),
+                                                        pendingCurrency: aiScannedData.currency
                                                     } as any);
                                                     setIsFormOpen(true); 
                                                 }}
                                                 className="px-6 py-3 bg-[#FFD200] hover:bg-[#FFE14D] text-[#111111] rounded-xl text-xs font-black shadow-[0_6px_18px_rgba(255,210,0,0.22)] border border-[#FFD200]"
                                             >
-                                                ⚡ 一键生成全新独立账单
+                                                {aiScannedData.needsReview ? '⚠️ 打开并人工补全资料' : '⚡ 一键生成全新独立账单'}
                                             </button>
                                         </div>
                                     </div>

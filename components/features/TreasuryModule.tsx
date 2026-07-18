@@ -305,6 +305,7 @@ const DeletedLedgerModalBody = "";
 
 export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<TreasuryTab>("OVERVIEW");
+
   const [config, setConfig] = useState<TreasuryConfig>({
     initialDate: new Date().toISOString().split("T")[0],
     initialCash: 0,
@@ -1895,7 +1896,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     }
   };
 
-  // 使用 Portal，避免父层 transform / overflow / sidebar 布局影响 fixed 全屏遮罩
   return createPortal(
     <TreasuryShell
       header={<TreasuryHeader onClose={onClose} />}
@@ -2853,6 +2853,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
           items={getLedgerData(viewLedger)}
         />
       )}
+
     </TreasuryShell>,
     document.body
   );

@@ -21,6 +21,21 @@ interface BillFormDrawerProps {
     onNavigateToSelfVoucher?: (prefillData: { company: string; date: string; totalAmount: number; particulars: string; billRefId: string }) => void;
 }
 
+const getDefaultDueDate = (dateValue: unknown, days = 15): string => {
+    const datePart = String(dateValue || '').split('T')[0];
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+    if (!match) return '';
+
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    if (Number.isNaN(date.getTime())) return '';
+    date.setDate(date.getDate() + days);
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
     isOpen,
     onClose,
@@ -132,10 +147,10 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                         const newDate = e.target.value;
                                         setEditingBill(prev => {
                                             const next = { ...prev, time: newDate };
-                                            if (newDate) {
-                                                const d = new Date(newDate);
-                                                d.setDate(d.getDate() + 15);
-                                                next.dueDate = d.toISOString().split('T')[0];
+                                            const previousAutoDueDate = getDefaultDueDate(prev.time);
+                                            const shouldKeepAutomaticDueDate = !prev.dueDate || prev.dueDate === previousAutoDueDate;
+                                            if (newDate && prev.paymentStatus !== 'PAID' && shouldKeepAutomaticDueDate) {
+                                                next.dueDate = getDefaultDueDate(newDate);
                                             }
                                             return next;
                                         });
@@ -144,12 +159,18 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             </div>
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Due Date</label>
-                                <input 
-                                    type="date" 
-                                    className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none" 
-                                    value={editingBill.dueDate || ''} 
-                                    onChange={e => setEditingBill(prev => ({...prev, dueDate: e.target.value}))} 
-                                />
+                                {editingBill.paymentStatus !== 'PAID' ? (
+                                    <input 
+                                        type="date" 
+                                        className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none" 
+                                        value={editingBill.dueDate || ''} 
+                                        onChange={e => setEditingBill(prev => ({...prev, dueDate: e.target.value}))} 
+                                    />
+                                ) : (
+                                    <div className="w-full p-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs border border-emerald-100">
+                                        已付款，无需到期日
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -529,7 +550,16 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                     <select 
                                         className="w-full p-2 bg-white border border-orange-200 rounded-lg text-xs font-bold outline-none" 
                                         value={editingBill.paymentStatus || 'UNPAID'} 
-                                        onChange={e => setEditingBill(prev => ({...prev, paymentStatus: e.target.value as any}))}
+                                        onChange={e => {
+                                            const nextStatus = e.target.value as ExpenseItem['paymentStatus'];
+                                            setEditingBill(prev => ({
+                                                ...prev,
+                                                paymentStatus: nextStatus,
+                                                dueDate: nextStatus !== 'PAID' && !prev.dueDate
+                                                    ? getDefaultDueDate(prev.time)
+                                                    : prev.dueDate,
+                                            }));
+                                        }}
                                     >
                                         <option value="UNPAID">UNPAID (未付)</option>
                                         <option value="PAID">PAID (已付)</option>

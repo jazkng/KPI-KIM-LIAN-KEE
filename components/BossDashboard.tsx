@@ -562,32 +562,6 @@ export const BossDashboard: React.FC<{
                     </div>
                 )}
 
-                {/* 5. BRAND INSPIRATIONAL FOOTER (Monzo/Linear vibe) */}
-                <div className="bg-gradient-to-br from-stone-900 via-stone-920 to-stone-950 border border-[#FFD200]/20 rounded-3xl p-5 text-white shadow-md relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-b from-[#FFD200]/5 to-transparent rounded-full blur-3xl pointer-events-none"></div>
-
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-[#FFD200]/15 p-2 rounded-xl border border-[#FFD200]/35 shrink-0">
-                                <Sparkles size={18} className="text-[#FFD200] animate-pulse" />
-                            </div>
-                            <div>
-                                <h4 className="font-extrabold text-[#FFD200] text-sm tracking-wide uppercase">AI 经营分析重点建议</h4>
-                                <p className="text-[10px] text-stone-400 font-semibold mt-0.5">点击进入 AI 智脑，向专属餐饮财务专家提问以进行经营对账与智能稽查。</p>
-                            </div>
-                        </div>
-
-                        {/* Trigger AI Assistant Dialog */}
-                        <button
-                            onClick={() => setAiOpen(true)}
-                            className="bg-[#FFD200] active:bg-[#FFD200]/90 text-stone-950 font-black text-xs px-4 py-2.5 rounded-xl shrink-0 active:scale-95 transition-all outline-none border border-[#FFD200]"
-                            style={{ minHeight: '44px' }}
-                        >
-                            提问智脑
-                        </button>
-                    </div>
-                </div>
-
             </div>
 
             {/* Modals rendering area */}
