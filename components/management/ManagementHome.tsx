@@ -291,7 +291,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             list.push({ module: 'SELF_INVOICE', label: mt('module_self_invoice', lang), icon: '📄', bg: 'bg-violet-50 border-violet-200/80', text: 'text-violet-600 font-extrabold' });
         }
         if (allowedModules.includes('KITCHEN_ALERT')) {
-            list.push({ module: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '通知厨房', icon: '🔔', bg: 'bg-red-50 border-red-200/80', text: 'text-red-600 font-extrabold' });
+            list.push({ module: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: '🔔', bg: 'bg-red-50 border-red-200/80', text: 'text-red-600 font-extrabold' });
         }
         return sortNavigationItems(list, item => item.module);
     }, [allowedModules, lang]);

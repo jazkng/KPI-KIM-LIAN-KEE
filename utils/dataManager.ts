@@ -2284,7 +2284,7 @@ export class DataManager {
     }
 
     // ==========================================
-    // 👑 自制凭单 (Self-Issued Voucher)
+    // 👑 自开凭单 (Self-Issued Voucher)
     // ==========================================
     static async getSelfIssuedVouchers(): Promise<SelfIssuedVoucher[]> {
         try {

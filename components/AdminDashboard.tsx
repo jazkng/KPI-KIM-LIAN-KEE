@@ -140,25 +140,25 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      const showAll = !allowedModules || allowedModules.length === 0;
 
      if (showAll || allowedModules?.includes('QUEUE_MANAGER')) {
-         tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队取号', icon: <Armchair size={18} /> });
+         tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队叫号', icon: <Armchair size={18} /> });
      }
      if (showAll || allowedModules?.includes('SETTLEMENT')) {
          tabs.push({ key: 'SETTLEMENT', label: lang === 'my' ? 'နေ့စဉ်စာရင်း' : '每日结算', icon: <Calculator size={18} /> });
      }
      if (showAll || allowedModules?.includes('KITCHEN_ALERT')) {
-         tabs.push({ key: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '通知厨房', icon: <BellRing size={18} /> });
+         tabs.push({ key: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: <BellRing size={18} /> });
      }
      if (showAll || allowedModules?.includes('ROSTER') || allowedModules?.includes('ROSTER_KITCHEN') || allowedModules?.includes('ROSTER_FLOOR')) {
-         tabs.push({ key: 'ROSTER', label: lang === 'my' ? 'အလှည့်ကျတာဝန်' : '排班缺席', icon: <CalendarOff size={18} /> });
+         tabs.push({ key: 'ROSTER', label: lang === 'my' ? 'အလှည့်ကျတာဝန်' : '排班管理', icon: <CalendarOff size={18} /> });
      }
      if (showAll || allowedModules?.includes('ATTENDANCE_CONSOLE')) {
-         tabs.push({ key: 'ATTENDANCE_CONSOLE', label: lang === 'my' ? 'တက်ရောက်မှု' : '考勤总控', icon: <Clock size={18} /> });
+         tabs.push({ key: 'ATTENDANCE_CONSOLE', label: lang === 'my' ? 'တက်ရောက်မှု' : '考勤管理', icon: <Clock size={18} /> });
      }
      if (showAll || allowedModules?.includes('ASSESSMENT')) {
-         tabs.push({ key: 'ASSESSMENT', label: lang === 'my' ? 'ကျွမ်းကျင်မှုစစ်' : '能力评测', icon: <Award size={18} /> });
+         tabs.push({ key: 'ASSESSMENT', label: lang === 'my' ? 'ကျွမ်းကျင်မှုစစ်' : '技能评估', icon: <Award size={18} /> });
      }
      if (showAll || allowedModules?.includes('PROCUREMENT')) {
-         tabs.push({ key: 'PROCUREMENT', label: lang === 'my' ? 'ပစ္စည်းမှာယူမှု' : '智能订货', icon: <ShoppingCart size={18} /> });
+         tabs.push({ key: 'PROCUREMENT', label: lang === 'my' ? 'ပစ္စည်းမှာယူမှု' : '采购订货', icon: <ShoppingCart size={18} /> });
      }
      if (showAll || allowedModules?.includes('MENU_MANAGEMENT')) {
          tabs.push({ key: 'MENU_MANAGEMENT', label: lang === 'my' ? 'ဟင်းချက်နည်း' : '智能菜谱', icon: <Utensils size={18} /> });
@@ -186,7 +186,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          tabs.push({ key: 'AP', label: lang === 'my' ? 'ပေးရန်ရှိစာရင်း' : '应付账款', icon: <CreditCard size={18} /> });
      }
      if (showAll || allowedModules?.includes('SELF_INVOICE')) {
-         tabs.push({ key: 'SELF_INVOICE', label: lang === 'my' ? 'ကိုယ်တိုင်ပြေစာ' : '自制凭单', icon: <FileText size={18} /> });
+         tabs.push({ key: 'SELF_INVOICE', label: lang === 'my' ? 'ကိုယ်တိုင်ပြေစာ' : '自开凭单', icon: <FileText size={18} /> });
      }
      return sortNavigationItems(tabs, tab => tab.key);
   }, [allowedModules, lang]);
@@ -253,11 +253,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
           case 'SUPPLIER_CONTACTS': return '供应商通讯录 (Suppliers)';
           case 'QUEUE': return '排队叫号系统 (Queue)';
           case 'ATTENDANCE_CONSOLE': return '考勤指挥台 (Attendance Console)';
-          case 'PROCUREMENT': return '智能订货系统 (Procurement)';
+          case 'PROCUREMENT': return '采购订货系统 (Procurement)';
           case 'MENU_MANAGEMENT': return '智能菜谱管理 (Menu)';
-          case 'ASSESSMENT': return '员工能力评测 (Skill Matrix)';
+          case 'ASSESSMENT': return '员工技能评估 (Skill Matrix)';
           case 'AP': return '应付账款 (Accounts Payable)';
-          case 'SELF_INVOICE': return '自制凭单 (Voucher Maker)';
+          case 'SELF_INVOICE': return '自开凭单 (Voucher Maker)';
           default: return '管理控制台';
       }
   }
@@ -476,7 +476,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                         localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
                         setActiveTab('SELF_INVOICE');
                     } else {
-                        alert(lang === 'my' ? "သင့်တွင် ကိုယ်တိုင်ထုတ်ပြေစာ စာမျက်နှာကို ဝင်ရောက်ခွင့်မရှိပါ" : "您没有自制凭单模块的访问权限");
+                        alert(lang === 'my' ? "သင့်တွင် ကိုယ်တိုင်ထုတ်ပြေစာ စာမျက်နှာကို ဝင်ရောက်ခွင့်မရှိပါ" : "您没有自开凭单模块的访问权限");
                     }
                 }} 
              />

@@ -819,7 +819,7 @@ const EmployeeMonthlySheetModal: React.FC<{
                         <div className={`border-b-4 border-black flex justify-between items-start ${isExporting ? 'pb-2 mb-3' : 'pb-4 mb-6'}`}>
                             <div>
                                 <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111]">KIM LIAN KEE (金莲记)</h1>
-                                <p className="text-xs text-gray-500 font-black tracking-widest mt-0.5 uppercase">Monthly Attendance Record • 员工月度打卡表</p>
+                                <p className="text-xs text-gray-500 font-black tracking-widest mt-0.5 uppercase">Monthly Attendance Record (员工月度打卡表)</p>
                                 <div className={`grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-700 ${isExporting ? 'mt-2' : 'mt-4'}`}>
                                     <div><span className="text-gray-400 font-bold uppercase">Name (姓名):</span> <span className="font-black">{employee.name}</span></div>
                                     <div><span className="text-gray-400 font-bold uppercase">No (工号):</span> <span className="font-mono font-black">{employee.id}</span></div>

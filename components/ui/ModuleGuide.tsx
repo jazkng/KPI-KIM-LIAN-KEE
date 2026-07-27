@@ -38,7 +38,7 @@ const GUIDE_CONTENT: Record<GuideModule, { title: string; steps: string[] }> = {
         ]
     },
     BILLS: {
-        title: '固定支出 (Bills) - 循环月费',
+        title: '经常性支出 (Bills) - 循环月费',
         steps: [
             '💡 定义: 基于“时间”的循环费用 (房租、水电、网费)。',
             '✅ 包含: 每月租金 (Monthly Rent)、TNB、Syabas、WiFi。',

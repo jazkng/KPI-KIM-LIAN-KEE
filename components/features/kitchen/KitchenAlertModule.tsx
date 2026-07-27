@@ -87,7 +87,7 @@ export const KitchenAlertModule: React.FC<KitchenAlertModuleProps> = ({ employee
         if (lang === 'my') return my;
         // Mapping of Chinese text to its English counterpart for bilingual display
         const translations: Record<string, string> = {
-            '通知厨房': '通知厨房 / Kitchen Alert',
+            '厨房通知': '通知厨房 / Kitchen Alert',
             '发出通知': '发出通知 / Send Alert',
             '我的通知': '我的通知 / My Alerts',
             '订单资料': '订单资料 / Order Info',
@@ -339,7 +339,7 @@ export const KitchenAlertModule: React.FC<KitchenAlertModuleProps> = ({ employee
                                     <ChefHat size={23} strokeWidth={2.5} />
                                 </div>
                                 <div>
-                                    <h1 className="text-lg font-black tracking-tight">{tr('通知厨房', 'မီးဖိုချောင်သို့ အသိပေးရန်')}</h1>
+                                    <h1 className="text-lg font-black tracking-tight">{tr('厨房通知', 'မီးဖိုချောင်သို့ အသိပေးရန်')}</h1>
                                     <p className="text-[10px] text-white/55 font-bold uppercase tracking-[0.16em] mt-0.5">Kitchen Alert · Kepong</p>
                                 </div>
                             </div>

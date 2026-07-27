@@ -391,7 +391,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("⚠️ 确定要删除该张自制凭单记录吗？删除后将无法恢复。")) return;
+        if (!confirm("⚠️ 确定要删除该张自开凭单记录吗？删除后将无法恢复。")) return;
         await DataManager.deleteSelfIssuedVoucher(id);
         if (previewVoucher?.id === id) setPreviewVoucher(null);
         loadVouchers();
@@ -495,7 +495,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
     const handleBatchDeleteVouchers = async () => {
         if (selectedVoucherIds.length === 0) return;
-        if (!confirm(`⚠️ 确定要批量删除这 ${selectedVoucherIds.length} 张自制凭单记录吗？此操作不可恢复！`)) return;
+        if (!confirm(`⚠️ 确定要批量删除这 ${selectedVoucherIds.length} 张自开凭单记录吗？此操作不可恢复！`)) return;
         
         setIsSaving(true);
         try {
@@ -518,7 +518,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
     const handleOpenBatchPrintModal = () => {
         if (selectedVoucherIds.length === 0) {
-            alert("请先选择要批量打印/生成的自制凭单");
+            alert("请先选择要批量打印/生成的自开凭单");
             return;
         }
         setBatchVoucherTitle('RECONCILIATION RECEIPT / VOUCHER');
@@ -836,7 +836,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 setPreviewVoucher(firstGen);
             }
 
-            alert(`🎉 成功智能批量生成 ${totalToGenerateCount} 张自制凭单！\n已自动为您全选这 ${totalToGenerateCount} 张单据，您可以立刻点击“批量打印”成套输出 A5 账单！`);
+            alert(`🎉 成功智能批量生成 ${totalToGenerateCount} 张自开凭单！\n已自动为您全选这 ${totalToGenerateCount} 张单据，您可以立刻点击“批量打印”成套输出 A5 账单！`);
         } catch (error) {
             console.error("Bulk generate failed", error);
             alert("❌ 批量生成凭单失败，请重试。");
@@ -1114,7 +1114,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             {filteredVouchers.length === 0 ? (
                                 <div className="text-center py-16 px-4 bg-[#ffffff] rounded-2xl border border-gray-100 shadow-inner">
                                     <div className="text-4xl mb-3">📬</div>
-                                    <p className="text-xs text-[#9ca3af] font-bold">没有找到自制凭单记录</p>
+                                    <p className="text-xs text-[#9ca3af] font-bold">没有找到自开凭单记录</p>
                                     <p className="text-[10px] text-[#9ca3af] mt-1">此工具用于由于运输承运商、买菜无票等情况需要手工补充规范化对账单据的场景。</p>
                                     <button 
                                         onClick={handleOpenCreateNew} 
@@ -1386,7 +1386,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             {/* Modal Form Scroll Area */}
                             <div className="flex-grow overflow-y-auto p-4 md:p-5 space-y-4 text-left">
                                 <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-3.5 text-xs text-amber-900 leading-relaxed font-semibold">
-                                    💡 <strong>使用场景：</strong>针对没有正规发票的采买，例如菜市场采购的 <strong>鱼饼 Fish Cake</strong> 或临时运输费，您可以一键在选定月份按天均匀分布生成多份自制凭单，免除手工一份份重复输入的痛苦！
+                                    💡 <strong>使用场景：</strong>针对没有正规发票的采买，例如菜市场采购的 <strong>鱼饼 Fish Cake</strong> 或临时运输费，您可以一键在选定月份按天均匀分布生成多份自开凭单，免除手工一份份重复输入的痛苦！
                                 </div>
 
                                 {/* Date selection mode picker */}
@@ -2001,12 +2001,12 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 <div className="flex items-center justify-between">
                                     <h3 className="font-black text-base text-stone-800 flex items-center gap-1.5">
                                         <Printer size={18} className="text-amber-500"/>
-                                        <span>批量自制凭单对账工具</span>
+                                        <span>批量自开凭单对账工具</span>
                                     </h3>
                                     <span className="bg-stone-100 text-stone-500 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">BATCH</span>
                                 </div>
                                 <p className="text-[10px] text-stone-400 font-bold leading-normal">
-                                    已自动加载选中的 {selectedVoucherIds.length} 张自制凭单/收据记录。点击打印将自动以“一页一单（A5）”格式成套输出，无需单独按键生成。
+                                    已自动加载选中的 {selectedVoucherIds.length} 张自开凭单/收据记录。点击打印将自动以“一页一单（A5）”格式成套输出，无需单独按键生成。
                                 </p>
 
                                 <hr className="border-stone-100" />

@@ -2237,7 +2237,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
                                         { label: '常规账单 🏢', value: 'REGULAR', count: billTypeCounts.regular },
-                                        { label: '固定支出 📌', value: 'FIXED', count: billTypeCounts.fixed },
+                                        { label: '经常性支出 📌', value: 'FIXED', count: billTypeCounts.fixed },
                                         { label: '薪资相关 🧠', value: 'SALARY', count: billTypeCounts.salary },
                                         { label: '银行/平台 ⚙️', value: 'PLATFORM', count: billTypeCounts.platform },
                                         { label: '显示全部 📊', value: 'ALL', count: billTypeCounts.total }
@@ -2534,7 +2534,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         {[
                             { value: 'ALL', label: '全部类型', english: 'All Types', count: billTypeCounts.total, icon: ListChecks },
                             { value: 'REGULAR', label: '常规账单', english: 'Regular', count: billTypeCounts.regular, icon: Archive },
-                            { value: 'FIXED', label: '固定支出', english: 'Fixed', count: billTypeCounts.fixed, icon: RotateCcw },
+                            { value: 'FIXED', label: '经常性支出', english: 'Fixed', count: billTypeCounts.fixed, icon: RotateCcw },
                             { value: 'SALARY', label: '薪资相关', english: 'Salary', count: billTypeCounts.salary, icon: User },
                             { value: 'PLATFORM', label: '银行／平台', english: 'Bank / Platform', count: billTypeCounts.platform, icon: CreditCard },
                         ].map(option => {
@@ -2638,7 +2638,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <span className="text-xl shrink-0">📌</span>
                                     <div className="min-w-0">
-                                        <p className="font-black text-teal-950 truncate">当前仅显示租金、水电等固定支出 (共 {filteredBills.length} 笔)</p>
+                                        <p className="font-black text-teal-950 truncate">当前仅显示租金、水电等经常性支出 (共 {filteredBills.length} 笔)</p>
                                         <p className="text-[10px] text-teal-800/90 truncate">常规账单、薪资发放及平台手续费已安全独立隐藏</p>
                                     </div>
                                 </div>

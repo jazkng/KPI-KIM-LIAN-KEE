@@ -165,7 +165,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                         paymentStatus: 'PAID',
                         paymentMethod: p.method as any,
                         time: p.date,
-                        note: `[固定支出] ${p.name}${p.referenceNo ? ` | Ref: ${p.referenceNo}` : ''}${p.usage ? ` | Usage: ${p.usage} ${CATEGORY_CONFIG[p.category]?.unit || ''}` : ''}`,
+                        note: `[经常性支出] ${p.name}${p.referenceNo ? ` | Ref: ${p.referenceNo}` : ''}${p.usage ? ` | Usage: ${p.usage} ${CATEGORY_CONFIG[p.category]?.unit || ''}` : ''}`,
                         paidBy: p.method === 'CASH' ? 'SHOP_CASH' : 'COMPANY',
                         linkUrl: p.linkUrl || undefined,
                         tags: ['RECURRING_BILL'],
@@ -326,7 +326,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 paymentStatus: 'PAID',
                 paymentMethod: payMethod as any,
                 time: payDate,
-                note: `[固定支出] ${payingBill.name}${payRef ? ` | Ref: ${payRef}` : ''}${payUsage ? ` | Usage: ${payUsage} ${CATEGORY_CONFIG[payingBill.category]?.unit || ''}` : ''}`,
+                note: `[经常性支出] ${payingBill.name}${payRef ? ` | Ref: ${payRef}` : ''}${payUsage ? ` | Usage: ${payUsage} ${CATEGORY_CONFIG[payingBill.category]?.unit || ''}` : ''}`,
                 paidBy: payMethod === 'CASH' ? 'SHOP_CASH' : 'COMPANY',
                 linkUrl: payLink || undefined,
                 tags: ['RECURRING_BILL'],
@@ -769,7 +769,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
                         <div>
-                            <h3 className="font-sans font-extrabold text-sm tracking-tight leading-none">固定支出管理</h3>
+                            <h3 className="font-sans font-extrabold text-sm tracking-tight leading-none">经常性支出管理</h3>
                             <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 leading-none">Recurring Bills</p>
                         </div>
                     </div>
@@ -2041,7 +2041,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                     </div>
                                                     <div>
                                                         <h4 className="font-extrabold text-xs text-stone-900">{item.name}</h4>
-                                                        <span className="text-[9px] text-stone-400 font-semibold">{item.payableTo ? `收款商: ${item.payableTo}` : '其他固定支出'}</span>
+                                                        <span className="text-[9px] text-stone-400 font-semibold">{item.payableTo ? `收款商: ${item.payableTo}` : '其他经常性支出'}</span>
                                                     </div>
                                                 </div>
                                                 <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-bold">项目 #{idx + 1}</span>

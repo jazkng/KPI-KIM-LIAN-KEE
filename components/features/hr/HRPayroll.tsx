@@ -5197,7 +5197,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             <div className="border-b-4 border-black flex justify-between items-start pb-3 mb-6">
               <div>
                 <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111]">KIM LIAN KEE (金莲记)</h1>
-                <p className="text-[11px] text-gray-500 font-black tracking-widest mt-1 uppercase">Monthly Attendance Record • 员工月度打卡表</p>
+                <p className="text-[11px] text-gray-500 font-black tracking-widest mt-1 uppercase">Monthly Attendance Record (员工月度打卡表)</p>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[11px] text-gray-700 mt-3">
                   <div><span className="text-gray-400 font-bold uppercase">Name (姓名):</span> <span className="font-black">{editingEmp.name}</span></div>
                   <div><span className="text-gray-400 font-bold uppercase">No (工号):</span> <span className="font-mono font-black">{editingEmp.id}</span></div>

@@ -131,7 +131,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
                  <div className="flex items-center gap-3">
                     <div className="bg-black p-2 rounded-xl text-[#FFD200]"><Armchair size={24} /></div>
-                    <div><h3 className="font-black text-xl text-[#111111]">排队取号系统</h3><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Queue Control Center</p></div>
+                    <div><h3 className="font-black text-xl text-[#111111]">排队叫号系统</h3><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Queue Control Center</p></div>
                  </div>
                  <div className="flex gap-2 w-full md:w-auto">
                     <ModuleGuideButton module="QUEUE" dark />

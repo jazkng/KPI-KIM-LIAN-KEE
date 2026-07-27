@@ -522,8 +522,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
                                     <p className="font-black tracking-[0.1em] uppercase text-[#111111]">Daily Settlement Report</p>
                                     <p className="font-medium">每日结算报告</p>
-                                    <p><span className="font-black text-[#111111]">Business date</span> · {localRecord.date}</p>
-                                    <p><span className="font-black text-[#111111]">Report no.</span> · SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                                    <p><span className="font-black text-[#111111]">Business date</span>: {localRecord.date}</p>
+                                    <p><span className="font-black text-[#111111]">Report no.</span>: SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
                                 </div>
                             </div>
                         </div>
@@ -565,7 +565,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                         <span className="font-mono font-black text-sm whitespace-nowrap">RM {localRecord.sales.storeHubTotal.toFixed(2)}</span>
                                     </div>
                                     <div className="mx-3 border-t border-[#FDE68A] py-2 space-y-1.5 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash · 现金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash (现金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>TNG eWallet</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.tng || 0).toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Debit Card</span><span className="font-mono whitespace-nowrap">RM {totalDebit.toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Credit Card</span><span className="font-mono whitespace-nowrap">RM {totalCard.toFixed(2)}</span></div>
@@ -596,9 +596,9 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div className="space-y-2.5 pt-1">
                                     <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
                                     <div className="space-y-1.5 px-1 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float · 开班备用金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales · 今日现金收入</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
-                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions · 现金扣除</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float (开班备用金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales (今日现金收入)</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions (现金扣除)</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
                                     </div>
                                     <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-2.5"><p className="font-black text-[#111111]">Expected Cash</p><p className="text-[9px] text-[#6B7280]">系统理论应余</p><p className="mt-1 font-mono font-black text-sm">RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}</p></div><div className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] p-2.5"><p className="font-black text-[#1E40AF]">Actual Cash</p><p className="text-[9px] text-[#3B82F6]">钱箱实际点算</p><p className="mt-1 font-mono font-black text-sm text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p></div></div>
                                 </div>
@@ -619,7 +619,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             </div>
                             <div className="mt-3 flex items-center justify-between text-[8px] text-[#9CA3AF]">
                                 <span className="whitespace-nowrap">System-generated internal audit document</span>
-                                <span className="whitespace-nowrap">Kepong Branch · 甲洞分行</span>
+                                <span className="whitespace-nowrap">Kepong Branch (甲洞分行)</span>
                             </div>
                         </div>
                     </div>

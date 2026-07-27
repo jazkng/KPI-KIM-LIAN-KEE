@@ -49,7 +49,7 @@ interface ModuleDefinition {
 export const MODULE_DEFINITIONS = {
     // ── 订货 ──
     'PROCUREMENT': {
-        label: '智能订货 (Ordering)', desc: '补货、PO单与收货点算', icon: ShoppingCart, tab: 'PROCUREMENT',
+        label: '采购订货 (Ordering)', desc: '补货、PO单与收货点算', icon: ShoppingCart, tab: 'PROCUREMENT',
         guide: '1. 智能补货：系统自动列出库存不足的物品。\n2. 发送订单：一键生成 PO 单并 WhatsApp 发送。\n3. 收货点算：货到后，开启 PO 单进行数量核对，确认无误后自动入库。',
     },
     // ── 菜单 ──
@@ -121,7 +121,7 @@ export const MODULE_DEFINITIONS = {
     },
     // ── 队号 ──
     'QUEUE_MANAGER': {
-        label: '排队取号 (Queue)', desc: '发号、叫号与大屏控制', icon: Armchair, tab: 'QUEUE',
+        label: '排队叫号 (Queue)', desc: '发号、叫号与大屏控制', icon: Armchair, tab: 'QUEUE',
         guide: '1. 高峰期由柜台或马王负责。2. 5人以上选大桌(C系列)。3. 叫号三次不应需跳号并在系统点取消。',
     },
     'QUEUE': {
@@ -129,17 +129,17 @@ export const MODULE_DEFINITIONS = {
         guide: '显示排队号码和语音播报。',
     },
     'KITCHEN_ALERT': {
-        label: '通知厨房 (Kitchen Alert)', desc: '催菜、漏单、做错与重做通知', icon: BellRing, tab: 'KITCHEN_ALERT',
+        label: '厨房通知 (Kitchen Alert)', desc: '催菜、漏单、做错与重做通知', icon: BellRing, tab: 'KITCHEN_ALERT',
         guide: '1. 输入桌号和菜单单号。\n2. 选择菜品、大小、数量和通知原因。\n3. 提交后在“我的通知”查看厨房是否已接收或解决。',
     },
     // ── 考勤 ──
     'ATTENDANCE_CONSOLE': {
-        label: '考勤总控 (Attendance)', desc: '打卡、点名与工时报表', icon: Clock, tab: 'ATTENDANCE_CONSOLE',
+        label: '考勤管理 (Attendance)', desc: '打卡、点名与工时报表', icon: Clock, tab: 'ATTENDANCE_CONSOLE',
         guide: '管理层专用考勤系统。支持代打卡、补卡、快速点名及查看月度工时达标情况。',
     },
     // ── 评测 ──
     'ASSESSMENT': {
-        label: '能力评测 (Skill Matrix)', desc: '员工技能评分与评估', icon: Award, tab: 'ASSESSMENT',
+        label: '技能评估 (Skill Matrix)', desc: '员工技能评分与评估', icon: Award, tab: 'ASSESSMENT',
         guide: '对下属或同级员工进行多维度能力打分 (效率/态度/技能等)。',
     },
     // ── 今日预警 ──
@@ -158,18 +158,18 @@ export const MODULE_DEFINITIONS = {
     },
     'AP': {
         label: '应付账款 (AP)', desc: '进货单据与付款管理', icon: CreditCard, tab: 'AP',
-        guide: '管理所有进货单据和非固定支出。',
+        guide: '管理所有进货单据和非经常性支出。',
     },
     'SELF_INVOICE': {
-        label: '自制凭单 (Voucher Maker)', desc: '生成与自制支出凭证', icon: FileText, tab: 'SELF_INVOICE',
-        guide: '1. 一键或批量自制凭单。\n2. 用于记录无正规发票的零散支出。',
+        label: '自开凭单 (Voucher Maker)', desc: '生成与自制支出凭证', icon: FileText, tab: 'SELF_INVOICE',
+        guide: '1. 一键或批量自开凭单。\n2. 用于记录无正规发票的零散支出。',
     },
     'TREASURY': {
         label: '资金管理 (Treasury)', desc: '现金流与股东资金', icon: Landmark, tab: 'TREASURY',
         guide: '查看公司总资金状况，记录转账和注资。',
     },
     'BILLS': {
-        label: '固定支出 (Bills)', desc: '租金水电等月费', icon: Banknote, tab: 'BILLS',
+        label: '经常性支出 (Bills)', desc: '租金水电等月费', icon: Banknote, tab: 'BILLS',
         guide: '管理每月的固定循环账单。',
     },
     'WARRANTY': {
