@@ -1,5 +1,5 @@
 import React from "react";
-import { Wallet, ShieldAlert, Sparkles, TrendingUp } from "lucide-react";
+import { Wallet, Sparkles, TrendingUp } from "lucide-react";
 
 interface TreasuryBalanceHeroProps {
   totalAmount: number;
@@ -42,7 +42,7 @@ export const TreasuryBalanceHero: React.FC<TreasuryBalanceHeroProps> = ({
             </div>
           </div>
 
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-800/80 border border-stone-700/80 text-[10px] font-bold text-stone-300">
+          <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-800/80 border border-stone-700/80 text-[10px] font-bold text-stone-300">
             <Sparkles size={11} className="text-[#FFD200]" />
             全盘掌控
           </span>
@@ -53,7 +53,7 @@ export const TreasuryBalanceHero: React.FC<TreasuryBalanceHeroProps> = ({
           <div className="text-[10px] uppercase tracking-widest font-bold text-stone-400">
             期末自由支配总资金 (Ending Portfolio)
           </div>
-          <h2 className="mt-1 break-words text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#FFD200] font-mono tabular-nums leading-none">
+ <h2 className="mt-1 break-words text-3xl md:text-5xl font-black tracking-tight text-[#FFD200] font-mono tabular-nums leading-none">
             {isLoading ? (
               <span className="animate-pulse text-stone-600">RM --,--.-</span>
             ) : (

@@ -12,7 +12,6 @@ import { SettlementRecord, StoreConfig, ExpenseItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 
-
 interface SettlementModuleProps {
     storeConfig: StoreConfig;
     onClose?: () => void;
@@ -83,15 +82,15 @@ const ReconItem = ({
     const feeRate = (reconFee !== null && reconFee > 0 && expected > 0) ? ((reconFee / expected) * 100).toFixed(1) : null;
     
     return (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm mt-2 gap-3 sm:gap-2">
+        <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm mt-2 gap-3 md:gap-2">
             <div className="flex-1 min-w-0">
-                <div className="flex justify-between sm:block items-center mb-1 sm:mb-0">
+                <div className="flex justify-between md:block items-center mb-1 md:mb-0">
                     <p className="text-xs font-black text-gray-800 truncate pr-2">{label}</p>
-                    <div className="flex flex-col items-end sm:items-start gap-0.5 mt-1">
+                    <div className="flex flex-col items-end md:items-start gap-0.5 mt-1">
                         {commission !== null && (
                             <p className="text-[9px] text-gray-400 font-mono whitespace-nowrap line-through">Gross: RM {gross.toFixed(2)}</p>
                         )}
-                        <p className="text-[11px] text-[#1A1A1A] font-bold font-mono whitespace-nowrap">预期到账 (Net): RM {expected.toFixed(2)}</p>
+                        <p className="text-[11px] text-[#111111] font-bold font-mono whitespace-nowrap">预期到账 (Net): RM {expected.toFixed(2)}</p>
                         {ads > 0 && (
                             <p className="text-[9px] text-orange-500 font-bold font-mono whitespace-nowrap">- 已扣除当班广告 RM {ads.toFixed(2)}</p>
                         )}
@@ -117,15 +116,15 @@ const ReconItem = ({
                 )}
             </div>
             
-            <div className="flex justify-end shrink-0 w-full sm:w-auto">
+            <div className="flex justify-end shrink-0 w-full md:w-auto">
                 {isReconciled ? (
-                    <span className="flex items-center justify-center w-full sm:w-auto gap-1 text-[10px] font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200">
+                    <span className="flex items-center justify-center w-full md:w-auto gap-1 text-[10px] font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200">
                         <CheckCircle2 size={14}/> 已过账
                     </span>
                 ) : (
                     <button 
                         onClick={onReconcile}
-                        className="flex items-center justify-center w-full sm:w-auto gap-1 text-[11px] font-black text-[#FFD700] bg-[#1A1A1A] hover:bg-black px-4 py-2 rounded-lg shadow-md active:scale-95 transition-all"
+                        className="flex items-center justify-center w-full md:w-auto gap-1 text-[11px] font-black text-[#FFD200] bg-[#111111] hover:bg-black px-4 py-2 rounded-lg shadow-md active:scale-95 transition-all"
                     >
                         <ShieldCheck size={14}/> 核对到账
                     </button>
@@ -158,8 +157,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     const grabGross = Number(deliveryBreakdown.grabGross) || 0;
     const grabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
     const grabAds = Number(deliveryBreakdown.grabAds) || 0;
-    const grabExpected = grabNet - grabAds;
-    const grabComm = grabGross > grabNet ? grabGross - grabNet : 0; 
+    const grabExpected = grabNet - grabAds; 
     
     const pandaNet = deliveryBreakdown.pandaNet !== undefined ? Number(deliveryBreakdown.pandaNet) : (Number(deliveryBreakdown.panda) || 0);
     const pandaAds = Number(deliveryBreakdown.pandaAds) || 0;
@@ -182,7 +180,6 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     const totalRecordExpenses = recordExpenses.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
     const totalDebit = (localRecord.sales.duitnow || 0);
     const totalCard = localRecord.sales.card || 0;
-    const totalBank = (localRecord.sales.tng || 0) + totalDebit + totalCard + (localRecord.sales.amex || 0);
     
     const reconStatus = (localRecord as any).reconStatus || {};
 
@@ -355,18 +352,18 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm animate-in fade-in" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="bg-white w-full max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar relative pb-[max(16px,env(safe-area-inset-bottom))]">
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="bg-white w-full max-w-lg rounded-t-[2rem] md:rounded-[2rem] shadow-2xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar relative pb-[max(16px,env(safe-area-inset-bottom))]">
                 
                 {/* 核销弹窗 UI */}
                 {reconTarget && (
-                    <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-50 rounded-t-[2rem] sm:rounded-[2rem] p-6 flex flex-col items-center justify-center animate-in zoom-in-95">
+                    <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-50 rounded-t-[2rem] md:rounded-[2rem] p-6 flex flex-col items-center justify-center animate-in zoom-in-95">
                         <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-200 w-full max-w-sm">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-black text-lg text-blue-900 flex items-center gap-2"><ShieldCheck size={20}/> 银行入账核对</h4>
                                 <button onClick={() => { setReconTarget(null); setReconActual(''); }} className="p-1 hover:bg-gray-100 rounded-full"><X size={16}/></button>
                             </div>
-                            <p className="text-xs text-gray-500 font-bold mb-4">当前核对: <span className="text-[#1A1A1A]">{reconTarget.label}</span></p>
+                            <p className="text-xs text-gray-500 font-bold mb-4">当前核对: <span className="text-[#111111]">{reconTarget.label}</span></p>
                             
                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4 space-y-1">
                                 {reconTarget.grossAmount > reconTarget.expectedAmount && (
@@ -407,7 +404,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 )}
                             </div>
 
-                            <button onClick={() => executeReconciliation(false)} disabled={!reconActual || isProcessingRecon} className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-md hover:bg-black disabled:opacity-50 flex justify-center items-center gap-2">
+                            <button onClick={() => executeReconciliation(false)} disabled={!reconActual || isProcessingRecon} className="w-full py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black shadow-md hover:bg-black disabled:opacity-50 flex justify-center items-center gap-2">
                                 {isProcessingRecon ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>}
                                 确认实收并平账
                             </button>
@@ -415,30 +412,30 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                     </div>
                 )}
 
-                <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-[#1A1A1A] rounded-t-[2rem] sm:rounded-t-[2rem] sticky top-0 z-10">
+                <div className="p-4 md:p-5 border-b border-gray-100 flex justify-between items-center bg-[#111111] rounded-t-[2rem] md:rounded-t-[2rem] sticky top-0 z-10">
                     <div>
-                        <h3 className="font-black text-lg sm:text-xl text-[#FFD700]">结算单详情 (Receipt Details)</h3>
-                        <p className="text-[10px] sm:text-xs text-gray-400 font-mono mt-1 font-bold tracking-widest">{localRecord.date} • {new Date(localRecord.timestamp).toLocaleTimeString()}</p>
+                        <h3 className="font-black text-lg md:text-xl text-[#FFD200]">结算单详情 (Receipt Details)</h3>
+                        <p className="text-[10px] md:text-xs text-gray-400 font-mono mt-1 font-bold tracking-widest">{localRecord.date} • {new Date(localRecord.timestamp).toLocaleTimeString()}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={handleDownloadPDF} disabled={isGenerating} className="p-2 bg-[#FFD700] text-black rounded-full hover:bg-white hover:text-black transition-colors shadow-lg disabled:opacity-50" title="导出为 PDF">
+                        <button onClick={handleDownloadPDF} disabled={isGenerating} className="p-2 bg-[#FFD200] text-black rounded-full hover:bg-white hover:text-black transition-colors shadow-lg disabled:opacity-50" title="导出为 PDF">
                             {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <FileDown size={18}/>}
                         </button>
-                        <button onClick={onClose} className="p-2 bg-white/10 text-white rounded-full hover:bg-white/20 hover:text-[#FFD700] transition-colors"><X size={18}/></button>
+                        <button onClick={onClose} className="p-2 bg-white/10 text-white rounded-full hover:bg-white/20 hover:text-[#FFD200] transition-colors"><X size={18}/></button>
                     </div>
                 </div>
                 
                 {/* 详情区：恢复没有任何 Cash/Bank 的%版本，但引入修改后的 ReconItem */}
-                <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 bg-[#F8F9FA] flex-grow pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6">
-                    <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-end pb-4 border-b border-gray-100 gap-2 bg-[#FFD700]/10 p-4 rounded-xl border border-[#FFD700]/30">
+                <div className="p-4 md:p-6 space-y-5 md:space-y-6 bg-[#F6F7FB] flex-grow pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-6">
+                    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                        <div className="flex flex-col md:flex-row justify-between md:items-end pb-4 border-b border-gray-100 gap-2 bg-[#FFD200]/10 p-4 rounded-xl border border-[#FFD200]/30">
                             <div>
                                 <span className="text-xs font-black text-gray-600 uppercase tracking-widest leading-tight">Total Sales (核心总营业额)</span>
                                 <p className="text-[10px] text-gray-400 font-bold mt-1">老板视角：已彻底挤干Grab账面水分</p>
                             </div>
-                            <div className="flex items-baseline gap-1 text-[#1A1A1A] shrink-0 self-end sm:self-auto">
+                            <div className="flex items-baseline gap-1 text-[#111111] shrink-0 self-end md:self-auto">
                                 <span className="text-sm font-bold">RM</span>
-                                <span className="text-2xl sm:text-3xl font-black font-mono tracking-tighter whitespace-nowrap">{localRecord.sales.total.toFixed(2)}</span>
+                                <span className="text-2xl md:text-3xl font-black font-mono tracking-tighter whitespace-nowrap">{localRecord.sales.total.toFixed(2)}</span>
                             </div>
                         </div>
                         
@@ -451,10 +448,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
 
                         <div className="flex justify-between items-center text-sm p-2 gap-2">
                             <span className="flex items-center gap-2 text-gray-600 font-bold shrink-0"><Banknote size={16} className="text-green-600"/> Cash (现金)</span>
-                            <span className="font-mono font-bold text-[#1A1A1A] text-base sm:text-lg whitespace-nowrap shrink-0">RM {localRecord.sales.cash.toFixed(2)}</span>
+                            <span className="font-mono font-bold text-[#111111] text-base md:text-lg whitespace-nowrap shrink-0">RM {localRecord.sales.cash.toFixed(2)}</span>
                         </div>
                         
-                        <div className="bg-blue-50/50 p-3 sm:p-4 rounded-xl space-y-2 border border-blue-100 overflow-hidden">
+                        <div className="bg-blue-50/50 p-3 md:p-4 rounded-xl space-y-2 border border-blue-100 overflow-hidden">
                             <p className="text-[10px] font-black text-blue-800 uppercase flex items-center gap-1.5"><CreditCard size={12}/> Digital & POS Payments</p>
                             <ReconItem label="TNG eWallet" gross={localRecord.sales.tng || 0} isReconciled={isChannelReconciled(reconStatus, 'tng')} actualAmount={getReconActual(reconStatus, 'tng')} onReconcile={() => setReconTarget({key: 'tng', label: 'TNG eWallet', expectedAmount: localRecord.sales.tng || 0, grossAmount: localRecord.sales.tng || 0})} />
                             <ReconItem label="Debit / DuitNow" gross={totalDebit} isReconciled={isChannelReconciled(reconStatus, 'debit')} actualAmount={getReconActual(reconStatus, 'debit')} onReconcile={() => setReconTarget({key: 'debit', label: 'Debit / DuitNow', expectedAmount: totalDebit, grossAmount: totalDebit})} />
@@ -463,10 +460,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         </div>
 
                         {totalDelivery > 0 && (
-                            <div className="bg-orange-50/50 p-3 sm:p-4 rounded-xl space-y-2 border border-orange-100 overflow-hidden">
+                            <div className="bg-orange-50/50 p-3 md:p-4 rounded-xl space-y-2 border border-orange-100 overflow-hidden">
                                 <div className="flex flex-wrap justify-between items-center border-b border-orange-100 pb-2 gap-1">
                                     <p className="text-[10px] font-black text-orange-800 uppercase flex items-center gap-1.5"><Truck size={12}/> Delivery Platforms</p>
-                                    <span className="font-mono text-[10px] sm:text-xs font-black text-orange-800 whitespace-nowrap bg-orange-100/50 px-2 py-0.5 rounded">记账总额: RM {totalDelivery.toFixed(2)}</span>
+                                    <span className="font-mono text-[10px] md:text-xs font-black text-orange-800 whitespace-nowrap bg-orange-100/50 px-2 py-0.5 rounded">记账总额: RM {totalDelivery.toFixed(2)}</span>
                                 </div>
                                 <ReconItem label="GrabFood" gross={grabGross} net={grabNet} ads={grabAds} isReconciled={isChannelReconciled(reconStatus, 'grab')} actualAmount={getReconActual(reconStatus, 'grab')} onReconcile={() => setReconTarget({key: 'grab', label: 'GrabFood', expectedAmount: grabExpected, grossAmount: grabGross})} />
                                 <ReconItem label="FoodPanda" gross={pandaGross} net={pandaNet} ads={pandaAds} isReconciled={isChannelReconciled(reconStatus, 'panda')} actualAmount={getReconActual(reconStatus, 'panda')} onReconcile={() => setReconTarget({key: 'panda', label: 'FoodPanda', expectedAmount: (deliveryBreakdown.pandaNet !== undefined ? pandaExpected : pandaGross), grossAmount: pandaGross})} />
@@ -476,19 +473,19 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         )}
                     </div>
                     
-                    <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 rounded-xl border-2 gap-2 ${localRecord.variance >= 0 ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                    <div className={`flex flex-col md:flex-row md:justify-between md:items-center p-4 rounded-xl border-2 gap-2 ${localRecord.variance >= 0 ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
                         <div>
                             <span className="font-black uppercase tracking-widest text-xs block mb-1">Cash Variance</span>
-                            {localRecord.varianceReason && <span className="text-[10px] text-gray-600 font-bold block sm:inline">{localRecord.varianceReason}</span>}
+                            {localRecord.varianceReason && <span className="text-[10px] text-gray-600 font-bold block md:inline">{localRecord.varianceReason}</span>}
                         </div>
-                        <span className="font-mono font-black text-2xl self-end sm:self-auto whitespace-nowrap">{localRecord.variance > 0 ? '+' : ''}{localRecord.variance.toFixed(2)}</span>
+                        <span className="font-mono font-black text-2xl self-end md:self-auto whitespace-nowrap">{localRecord.variance > 0 ? '+' : ''}{localRecord.variance.toFixed(2)}</span>
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <button onClick={() => onUndoEdit(localRecord)} className="flex-[2] py-3.5 sm:py-4 bg-[#1A1A1A] border-2 border-[#1A1A1A] text-[#FFD700] rounded-2xl font-black text-sm hover:bg-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <div className="flex flex-col md:flex-row gap-3">
+                        <button onClick={() => onUndoEdit(localRecord)} className="flex-[2] py-3.5 md:py-4 bg-[#111111] border-2 border-[#111111] text-[#FFD200] rounded-2xl font-black text-sm hover:bg-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
                             <RotateCcw size={18}/> 撤销并重新编辑 (Undo & Edit)
                         </button>
-                        <button onClick={() => onDelete(localRecord.id)} className="flex-[1] py-3.5 sm:py-4 bg-white border-2 border-red-100 text-red-600 rounded-2xl font-black text-sm hover:bg-red-50 transition-all flex items-center justify-center gap-2 shadow-sm">
+                        <button onClick={() => onDelete(localRecord.id)} className="flex-[1] py-3.5 md:py-4 bg-white border-2 border-red-100 text-red-600 rounded-2xl font-black text-sm hover:bg-red-50 transition-all flex items-center justify-center gap-2 shadow-sm">
                             <Trash2 size={18}/> 仅删除
                         </button>
                     </div>
@@ -518,15 +515,15 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             <div className="h-1.5 w-12 bg-[#FFD200] rounded-full mb-2.5" />
                             <div className="flex items-start justify-between gap-6">
                                 <div>
-                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111]">KIM LIAN KEE GROUP</h1>
-                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280]">Kepong Branch</p>
+                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111] whitespace-nowrap">KIM LIAN KEE GROUP</h1>
+                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280] whitespace-nowrap">Kepong Branch</p>
                                     <p className="text-[9px] leading-3.5 font-semibold text-[#6B7280]">甲洞分行</p>
                                 </div>
                                 <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
                                     <p className="font-black tracking-[0.1em] uppercase text-[#111111]">Daily Settlement Report</p>
                                     <p className="font-medium">每日结算报告</p>
-                                    <p><span className="font-black text-[#111111]">Business date</span> · {localRecord.date}</p>
-                                    <p><span className="font-black text-[#111111]">Report no.</span> · SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                                    <p><span className="font-black text-[#111111]">Business date</span>: {localRecord.date}</p>
+                                    <p><span className="font-black text-[#111111]">Report no.</span>: SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
                                 </div>
                             </div>
                         </div>
@@ -568,7 +565,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                         <span className="font-mono font-black text-sm whitespace-nowrap">RM {localRecord.sales.storeHubTotal.toFixed(2)}</span>
                                     </div>
                                     <div className="mx-3 border-t border-[#FDE68A] py-2 space-y-1.5 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash · 现金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash (现金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>TNG eWallet</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.tng || 0).toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Debit Card</span><span className="font-mono whitespace-nowrap">RM {totalDebit.toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Credit Card</span><span className="font-mono whitespace-nowrap">RM {totalCard.toFixed(2)}</span></div>
@@ -592,16 +589,16 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             <section className="space-y-4">
                                 <div className="space-y-2.5">
                                     <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
-                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407]">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412]">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
+                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407] whitespace-nowrap">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412] whitespace-nowrap">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
                                     {totalRecordExpenses > 0 && <div className="rounded-lg border border-[#FECACA] overflow-hidden"><div className="flex justify-between items-center bg-[#FEF2F2] px-3 py-2"><span><span className="block font-black text-[#991B1B]">Cash Expenses</span><span className="block text-[9px] text-[#B91C1C]">当日钱箱现金支出</span></span><span className="font-mono font-black text-[#B91C1C] whitespace-nowrap">- RM {totalRecordExpenses.toFixed(2)}</span></div><div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">{recordExpenses.map((e: any, idx: number) => <div key={e.id || idx} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span className="truncate">{e.company || '未知商户'} · {e.item || '杂物'}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(e.amount).toFixed(2)}</span></div>)}</div></div>}
                                     {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="rounded-lg bg-[#F6F7FB] px-3 py-2 text-[#6B7280]">今日无任何临时现金支出或业主提支</p>}
                                 </div>
                                 <div className="space-y-2.5 pt-1">
                                     <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
                                     <div className="space-y-1.5 px-1 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float · 开班备用金</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales · 今日现金收入</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
-                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions · 现金扣除</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float (开班备用金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
+                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales (今日现金收入)</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
+                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions (现金扣除)</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
                                     </div>
                                     <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-2.5"><p className="font-black text-[#111111]">Expected Cash</p><p className="text-[9px] text-[#6B7280]">系统理论应余</p><p className="mt-1 font-mono font-black text-sm">RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}</p></div><div className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] p-2.5"><p className="font-black text-[#1E40AF]">Actual Cash</p><p className="text-[9px] text-[#3B82F6]">钱箱实际点算</p><p className="mt-1 font-mono font-black text-sm text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p></div></div>
                                 </div>
@@ -621,8 +618,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Approved by</p><p>管理层</p></div>
                             </div>
                             <div className="mt-3 flex items-center justify-between text-[8px] text-[#9CA3AF]">
-                                <span>System-generated internal audit document</span>
-                                <span>Kepong Branch · 甲洞分行</span>
+                                <span className="whitespace-nowrap">System-generated internal audit document</span>
+                                <span className="whitespace-nowrap">Kepong Branch (甲洞分行)</span>
                             </div>
                         </div>
                     </div>
@@ -904,11 +901,11 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
     };
 
     const renderSummarySection = () => (
-        <div className="bg-[#1A1A1A] p-6 text-white shadow-2xl flex flex-col justify-between shrink-0 rounded-[2rem] md:rounded-none md:rounded-l-[2rem] h-auto overflow-visible md:h-full md:overflow-y-auto select-none">
+        <div className="bg-[#111111] p-6 text-white shadow-2xl flex flex-col justify-between shrink-0 rounded-[2rem] md:rounded-none md:rounded-l-[2rem] h-auto overflow-visible md:h-full md:overflow-y-auto select-none">
             <div className="space-y-6">
-                <h3 className="text-sm font-black text-[#FFD700] uppercase tracking-widest flex items-center gap-2"><Calculator size={18}/> 现金对账 (Reconciliation)</h3>
+                <h3 className="text-sm font-black text-[#FFD200] uppercase tracking-widest flex items-center gap-2"><Calculator size={18}/> 现金对账 (Reconciliation)</h3>
                 <div className="space-y-3 p-4 bg-white/5 rounded-2xl border border-white/10">
-                    <div className="flex justify-between text-sm"><span className="text-gray-400">Opening Float</span><span className="font-mono text-[#FFD700]">RM {openingTotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-gray-400">Opening Float</span><span className="font-mono text-[#FFD200]">RM {openingTotal.toFixed(2)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-gray-400">Cash Sales</span><span className="font-mono text-green-400">+ RM {(salesData?.cash || 0).toFixed(2)}</span></div>
                     
                     {/* 🌟 1. 业主提支 (Owner's Drawings) - 极简高雅重构 */}
@@ -916,11 +913,11 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     <div className="space-y-1.5">
                         <label className="text-[10px] font-black text-orange-400 uppercase tracking-widest block font-sans">业主提支 (Owner's Drawings)</label>
                         <div className="relative">
-                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-450 font-black text-xs font-sans">RM</span>
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-500 font-black text-xs font-sans">RM</span>
                             <input 
                                 type="number" 
                                 placeholder="0.00 (提取今日营业款)" 
-                                className="w-full bg-black/60 border border-orange-500/25 rounded-xl p-3.5 pl-10 text-xs font-mono font-black text-orange-350 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all min-h-[44px]" 
+                                className="w-full bg-black/60 border border-orange-500/25 rounded-xl p-3.5 pl-10 text-xs font-mono font-black text-orange-400 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all min-h-[44px]" 
                                 value={ownerWithdrawal || ''} 
                                 onChange={e => setOwnerWithdrawal(parseFloat(e.target.value) || 0)} 
                             />
@@ -991,13 +988,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     </div>
 
                     <div className="h-px bg-white/10 my-2"></div>
-                    <div className="flex justify-between items-center"><span className="text-xs font-black text-[#FFD700] uppercase">Expected Cash</span><span className="text-xl font-mono font-black text-white">RM {totals.expectedCash.toFixed(2)}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-xs font-black text-[#FFD200] uppercase">Expected Cash</span><span className="text-xl font-mono font-black text-white">RM {totals.expectedCash.toFixed(2)}</span></div>
                 </div>
                 <div className="bg-white/10 p-6 rounded-[2rem] border border-white/10 relative">
-                    <label className="text-[10px] font-black text-[#FFD700] uppercase block mb-3 text-center tracking-widest">钱箱实际结余 (Actual Closing Cash)</label>
+                    <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-3 text-center tracking-widest">钱箱实际结余 (Actual Closing Cash)</label>
                     <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-black text-2xl">RM</span>
-                        <input type="number" value={closingCashInput || ''} onChange={e => setClosingCashInput(parseFloat(e.target.value) || 0)} className="w-full p-4 pl-14 bg-black/40 border-2 border-[#FFD700]/30 rounded-2xl text-center font-black text-4xl text-white outline-none focus:border-[#FFD700] transition-all shadow-inner" placeholder="0.00" />
+                        <input type="number" value={closingCashInput || ''} onChange={e => setClosingCashInput(parseFloat(e.target.value) || 0)} className="w-full p-4 pl-14 bg-black/40 border-2 border-[#FFD200]/30 rounded-2xl text-center font-black text-4xl text-white outline-none focus:border-[#FFD200] transition-all shadow-inner" placeholder="0.00" />
                     </div>
                     <div className={`mt-4 p-3 rounded-xl text-center border transition-all ${totals.variance >= 0 ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-red-500/20 border-red-500/30 text-red-400'}`}>
                         <p className="text-[10px] font-black uppercase tracking-widest mb-1">现金差异 (Variance)</p>
@@ -1013,10 +1010,10 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
             </div>
             <div className="mt-6 pt-6 border-t border-white/10 space-y-4">
                 <div className="flex justify-between items-end">
-                    <div><p className="text-[9px] text-gray-500 uppercase font-black tracking-widest">Total Sales (已去水分)</p><p className="text-2xl font-black font-mono text-[#FFD700]">RM {totals.totalRevenue.toFixed(2)}</p></div>
+                    <div><p className="text-[9px] text-gray-500 uppercase font-black tracking-widest">Total Sales (已去水分)</p><p className="text-2xl font-black font-mono text-[#FFD200]">RM {totals.totalRevenue.toFixed(2)}</p></div>
                     <div><p className="text-[9px] text-gray-500 uppercase font-black tracking-widest text-right">POS Sales Only</p><p className="text-lg font-black font-mono text-white text-right">RM {totals.posSales.toFixed(2)}</p></div>
                 </div>
-                <button onClick={handleSubmitSettlement} disabled={isSubmitting} className="w-full py-4 bg-[#FFD700] text-black rounded-2xl font-black text-lg shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:bg-white active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
+                <button onClick={handleSubmitSettlement} disabled={isSubmitting} className="w-full py-4 bg-[#FFD200] text-black rounded-2xl font-black text-lg shadow-[0_10px_30px_rgba(255,210,0,0.3)] hover:bg-white active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                     {isSubmitting ? <Loader2 size={24} className="animate-spin"/> : <Check size={24} strokeWidth={4}/>}
                     {isSubmitting ? '提交中...' : '完成结算 (Submit)'}
                 </button>
@@ -1026,8 +1023,8 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
 
     return (
         <div className={isStandalone ? "fixed inset-0 bg-black/90 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200" : "w-full h-full flex flex-col relative animate-in fade-in"}>
-            <div className={isStandalone ? "bg-[#F5F7FA] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl font-sans relative" : "flex-grow flex flex-col overflow-hidden font-sans relative"}>
-                <div className="bg-[#1A1A1A] px-4 py-3 md:py-4 pt-[max(env(safe-area-inset-top,12px),12px)] flex items-center justify-between text-white shrink-0 border-b-4 border-[#FFD700] relative z-50 shadow-md">
+            <div className={isStandalone ? "bg-[#F6F7FB] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl font-sans relative" : "flex-grow flex flex-col overflow-hidden font-sans relative"}>
+                <div className="bg-[#111111] px-4 py-3 md:py-4 pt-[max(env(safe-area-inset-top,12px),12px)] flex items-center justify-between text-white shrink-0 border-b-4 border-[#FFD200] relative z-50 shadow-md">
                     <div className="flex items-center gap-2 md:gap-3">
                         {onClose && (
                             <button 
@@ -1040,13 +1037,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                 <ArrowLeft size={18} className="stroke-[2.5]" />
                             </button>
                         )}
-                        <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg shrink-0"><Calculator size={20} className="md:w-6 md:h-6"/></div>
+                        <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg shrink-0"><Calculator size={20} className="md:w-6 md:h-6"/></div>
                         <div><h3 className="font-serif font-black text-sm md:text-xl tracking-wide">每日结算中心</h3><p className="text-[8px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">SETTLEMENT & CASH CONTROL</p></div>
                     </div>
                     <div className="flex items-center gap-2 relative z-50">
                         <div className="hidden md:flex bg-white/10 p-1 rounded-xl justify-center cursor-pointer relative z-50">
-                            <button onClick={() => setActiveTab('SHIFT')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap relative z-50 ${activeTab === 'SHIFT' ? 'bg-[#FFD700] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}>当班 (Shift)</button>
-                            <button onClick={() => setActiveTab('HISTORY')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap relative z-50 ${activeTab === 'HISTORY' ? 'bg-[#FFD700] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}>历史 (History)</button>
+                            <button onClick={() => setActiveTab('SHIFT')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap relative z-50 ${activeTab === 'SHIFT' ? 'bg-[#FFD200] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}>当班 (Shift)</button>
+                            <button onClick={() => setActiveTab('HISTORY')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap relative z-50 ${activeTab === 'HISTORY' ? 'bg-[#FFD200] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}>历史 (History)</button>
                         </div>
                         <div className="flex gap-2 relative z-50 items-center">
                             <ModuleGuideButton module="SETTLEMENT" />
@@ -1063,29 +1060,29 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     </div>
                 </div>
 
-                <div className="flex-grow overflow-hidden bg-[#F5F7FA]">
+                <div className="flex-grow overflow-hidden bg-[#F6F7FB]">
                     {activeTab === 'SHIFT' ? (
                         !isShiftOpen ? (
-                            <div className="h-full overflow-y-auto bg-[#F5F7FA]">
+                            <div className="h-full overflow-y-auto bg-[#F6F7FB]">
                                 <div className="min-h-full p-4 md:p-6 flex flex-col items-center justify-center">
-                                    <div className="max-w-xs sm:max-w-md w-full bg-white p-5 md:p-8 rounded-3xl shadow-lg text-center border-t-8 border-[#FFD700]">
+                                    <div className="max-w-xs md:max-w-md w-full bg-white p-5 md:p-8 rounded-3xl shadow-lg text-center border-t-8 border-[#FFD200]">
                                         <Power size={48} className="mx-auto text-gray-200 mb-4 md:mb-6"/>
-                                        <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] mb-1 md:mb-2">准备开班?</h2>
+                                        <h2 className="text-xl md:text-2xl font-black text-[#111111] mb-1 md:mb-2">准备开班?</h2>
                                         <div className="mb-4 md:mb-6 bg-gray-50 p-3 md:p-4 rounded-2xl border border-gray-100">
                                             <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase mb-1.5 block tracking-widest flex items-center gap-2 justify-center"><Calendar size={12}/> 营业日期 (Business Date)</label>
                                             <div className="flex items-center gap-2">
-                                                <input type="date" value={businessDate} onChange={(e) => setBusinessDate(e.target.value)} className="w-full p-2.5 md:p-3 bg-white border-2 border-gray-200 rounded-xl font-black text-[#1A1A1A] outline-none focus:border-[#FFD700] text-center text-base md:text-lg shadow-sm min-h-[44px]"/>
-                                                <button onClick={handleForceToday} className="w-[44px] h-[44px] flex items-center justify-center bg-white border-2 border-gray-200 rounded-xl hover:border-[#FFD700] hover:text-[#FFD700] transition-colors"><RotateCcw size={18}/></button>
+                                                <input type="date" value={businessDate} onChange={(e) => setBusinessDate(e.target.value)} className="w-full p-2.5 md:p-3 bg-white border-2 border-gray-200 rounded-xl font-black text-[#111111] outline-none focus:border-[#FFD200] text-center text-base md:text-lg shadow-sm min-h-[44px]"/>
+                                                <button onClick={handleForceToday} className="w-[44px] h-[44px] flex items-center justify-center bg-white border-2 border-gray-200 rounded-xl hover:border-[#FFD200] hover:text-[#FFD200] transition-colors"><RotateCcw size={18}/></button>
                                             </div>
                                         </div>
                                         <div className="bg-gray-50 p-4 md:p-6 rounded-2xl mb-6 md:mb-8 border border-gray-100 text-left">
                                             <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">开班现金金额 (Opening Float)</label>
                                             <div className="relative">
                                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xl md:text-2xl">RM</span>
-                                                <input type="number" value={openingTotal || ''} onChange={e => setOpeningTotal(parseFloat(e.target.value) || 0)} className="w-full pl-12 pr-4 py-3 md:py-4 bg-white border-2 border-gray-200 rounded-xl font-mono text-2xl md:text-3xl font-black text-[#1A1A1A] outline-none focus:border-[#FFD700] transition-all shadow-sm min-h-[48px]" placeholder="0.00" />
+                                                <input type="number" value={openingTotal || ''} onChange={e => setOpeningTotal(parseFloat(e.target.value) || 0)} className="w-full pl-12 pr-4 py-3 md:py-4 bg-white border-2 border-gray-200 rounded-xl font-mono text-2xl md:text-3xl font-black text-[#111111] outline-none focus:border-[#FFD200] transition-all shadow-sm min-h-[48px]" placeholder="0.00" />
                                             </div>
                                         </div>
-                                        <button onClick={handleStartShift} className="w-full bg-[#FFD700] active:bg-yellow-500 text-black py-3.5 md:py-4 rounded-xl font-black text-sm md:text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"><Play size={18} fill="currentColor"/> 确认开班 (Start)</button>
+                                        <button onClick={handleStartShift} className="w-full bg-[#FFD200] active:bg-yellow-500 text-black py-3.5 md:py-4 rounded-xl font-black text-sm md:text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"><Play size={18} fill="currentColor"/> 确认开班 (Start)</button>
                                     </div>
                                 </div>
                             </div>
@@ -1093,12 +1090,12 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             <div className="h-full flex flex-col md:flex-row overflow-hidden animate-in fade-in">
                                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                                     <div className="flex justify-between items-end border-b pb-4 border-gray-200">
-                                        <div><h2 className="text-2xl font-black text-[#1A1A1A]">{new Date(businessDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</h2><p className="text-xs font-bold text-gray-400">Business Date (Settlement Date)</p></div>
+                                        <div><h2 className="text-2xl font-black text-[#111111]">{new Date(businessDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</h2><p className="text-xs font-bold text-gray-400">Business Date (Settlement Date)</p></div>
                                         <div className="text-right"><p className="text-[10px] font-bold text-gray-400 uppercase">Opening Float</p><p className="text-lg font-mono font-black text-blue-600">RM {openingTotal.toFixed(2)}</p></div>
                                     </div>
                                     
                                     {/* 📦 StoreHub POS Total - 极简高雅栏目（右侧直接显示金额，已去除退款记录） */}
-                                    <div className="bg-blue-50/65 p-4 rounded-2xl border border-blue-150/80 flex items-center justify-between gap-4">
+                                    <div className="bg-blue-50/65 p-4 rounded-2xl border border-blue-200/80 flex items-center justify-between gap-4">
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-1.5 h-6 rounded-full bg-blue-600 shrink-0"></div>
                                             <div>
@@ -1106,14 +1103,14 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                 <p className="text-[9px] text-blue-500 font-black mt-1 uppercase tracking-wider">系统已自动求和 (Auto Calculated)</p>
                                             </div>
                                         </div>
-                                        <div className="font-mono text-xl sm:text-2xl font-black text-blue-950 whitespace-nowrap">
+                                        <div className="font-mono text-xl md:text-2xl font-black text-blue-950 whitespace-nowrap">
                                             RM {totals.storeHubTotal.toFixed(2)}
                                         </div>
                                     </div>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-3 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-                                            <h4 className="text-xs font-bold text-[#1A1A1A] uppercase border-b pb-3 mb-3">POS Payment Methods (In-Store)</h4>
+                                            <h4 className="text-xs font-bold text-[#111111] uppercase border-b pb-3 mb-3">POS Payment Methods (In-Store)</h4>
                                             
                                             {/* Cash (现金) */}
                                             <div className="flex items-center gap-2.5 mb-3 group">
@@ -1133,7 +1130,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             
                                             {/* TNG eWallet */}
                                             <div className="flex items-center gap-2.5 mb-3 group">
-                                                <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-605 shrink-0 shadow-sm border border-cyan-200/50 group-hover:scale-105 transition-transform"><Wallet size={18}/></div>
+                                                <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600 shrink-0 shadow-sm border border-cyan-200/50 group-hover:scale-105 transition-transform"><Wallet size={18}/></div>
                                                 <span className="text-xs font-black text-gray-700 w-24 shrink-0 whitespace-nowrap">TNG eWallet</span>
                                                 <div className="relative flex-grow">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-gray-300 text-xs font-bold pointer-events-none">RM</span>
@@ -1165,7 +1162,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             
                                             {/* Credit Card */}
                                             <div className="flex items-center gap-2.5 mb-3 group">
-                                                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-650 shrink-0 shadow-sm border border-purple-200/50 group-hover:scale-105 transition-transform"><CreditCard size={18}/></div>
+                                                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-700 shrink-0 shadow-sm border border-purple-200/50 group-hover:scale-105 transition-transform"><CreditCard size={18}/></div>
                                                 <span className="text-xs font-black text-gray-700 w-24 shrink-0 whitespace-nowrap">Credit Card</span>
                                                 <div className="relative flex-grow">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-gray-300 text-xs font-bold pointer-events-none">RM</span>
@@ -1188,7 +1185,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <input 
                                                         type="number" 
                                                         placeholder="0.00"
-                                                        className="w-full p-3 pl-10 bg-gray-50/50 border border-gray-200 focus:border-blue-450 rounded-xl text-right font-mono font-black text-sm text-gray-950 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all tabular-nums shadow-inner min-h-[44px]" 
+                                                        className="w-full p-3 pl-10 bg-gray-50/50 border border-gray-200 focus:border-blue-500 rounded-xl text-right font-mono font-black text-sm text-gray-950 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all tabular-nums shadow-inner min-h-[44px]" 
                                                         value={salesData.amex || ''} 
                                                         onChange={e => setSalesData({...salesData, amex: parseFloat(e.target.value)})} 
                                                     />
@@ -1203,7 +1200,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             </div>
                                             
                                             {/* 🌟 GRAB专属三列输入区域 - 美化 */}
-                                            <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-green-200/60 mb-4 shadow-sm animate-in fade-in-50">
+                                            <div className="bg-white p-3.5 md:p-4 rounded-2xl border border-green-200/60 mb-4 shadow-sm animate-in fade-in-50">
                                                 <div className="flex justify-between items-center mb-2 px-1">
                                                     <span className="text-xs font-black text-green-700 font-sans">GrabFood (精确记账)</span>
                                                     <span className="text-[9px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Auto Calc</span>
@@ -1245,7 +1242,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             {/* 🌟 Panda / Shopee 极简与三列模式 */}
                                             <div className="space-y-4">
                                                 {/* 🌟 FoodPanda 三列高精准输入区域 - 美化 */}
-                                                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-pink-200 shadow-sm animate-in fade-in-50">
+                                                <div className="bg-white p-3.5 md:p-4 rounded-2xl border border-pink-200 shadow-sm animate-in fade-in-50">
                                                     <div className="flex justify-between items-center mb-2 px-1">
                                                         <span className="text-xs font-black text-pink-700 font-sans">FoodPanda (精确记账)</span>
                                                         <span className="text-[9px] bg-pink-50 text-pink-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Net to Sum</span>
@@ -1285,7 +1282,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                 </div>
 
                                                 {/* 🌟 ShopeeFood 三列高精准输入区域 - 美化 */}
-                                                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-orange-200 shadow-sm animate-in fade-in-50">
+                                                <div className="bg-white p-3.5 md:p-4 rounded-2xl border border-orange-200 shadow-sm animate-in fade-in-50">
                                                     <div className="flex justify-between items-center mb-2 px-1">
                                                         <span className="text-xs font-black text-orange-700 font-sans">ShopeeFood (精确记账)</span>
                                                         <span className="text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Net to Sum</span>
@@ -1347,7 +1344,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <span className="text-gray-600 font-sans tracking-wide uppercase">Delivery Mix Total</span>
                                                     <span className="font-mono text-orange-600 text-lg">RM {totals.deliverySales.toFixed(2)}</span>
                                                 </div>
-                                                <p className="text-[9px] text-orange-650 font-black tracking-wide font-sans mt-0.5">Grab(实收) + Panda(Gross) + Shopee(Net)</p>
+                                                <p className="text-[9px] text-orange-700 font-black tracking-wide font-sans mt-0.5">Grab(实收) + Panda(Gross) + Shopee(Net)</p>
                                             </div>
                                         </div>
                                     </div>
@@ -1366,34 +1363,34 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             </div>
                         )
                     ) : (
-                        <div className="h-full flex flex-col bg-[#F5F7FA]">
-                            <div className="p-3 sm:p-6 bg-white border-b border-gray-200 shadow-sm shrink-0">
+                        <div className="h-full flex flex-col bg-[#F6F7FB]">
+                            <div className="p-3 md:p-6 bg-white border-b border-gray-200 shadow-sm shrink-0">
                                 <div className="max-w-4xl mx-auto flex justify-between items-center gap-2">
-                                    <div className="flex items-center gap-2 sm:gap-3">
-                                        <div className="bg-[#1A1A1A] p-1.5 sm:p-2 rounded-xl text-[#FFD700] shadow-md"><Calendar className="w-5 h-5 sm:w-5 sm:h-5"/></div>
+                                    <div className="flex items-center gap-2 md:gap-3">
+                                        <div className="bg-[#111111] p-1.5 md:p-2 rounded-xl text-[#FFD200] shadow-md"><Calendar className="w-5 h-5 md:w-5 md:h-5"/></div>
                                         <div>
-                                            <h4 className="font-black text-[#1A1A1A] text-base sm:text-lg">历史账单</h4>
-                                            <p className="hidden sm:block text-[10px] text-gray-400 font-bold uppercase mt-0.5">Archive & Reconciliation History</p>
+                                            <h4 className="font-black text-[#111111] text-base md:text-lg">历史账单</h4>
+                                            <p className="hidden md:block text-[10px] text-gray-400 font-bold uppercase mt-0.5">Archive & Reconciliation History</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 bg-gray-50 p-1.5 sm:p-2 rounded-xl border border-gray-200">
-                                        <span className="hidden sm:inline text-xs font-black text-gray-400 px-2">月份:</span>
-                                        <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#1A1A1A] text-sm sm:text-base outline-none w-[110px] sm:w-auto" />
+                                    <div className="flex items-center gap-2 bg-gray-50 p-1.5 md:p-2 rounded-xl border border-gray-200">
+                                        <span className="hidden md:inline text-xs font-black text-gray-400 px-2">月份:</span>
+                                        <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm md:text-base outline-none w-[110px] md:w-auto" />
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-[calc(6rem+env(safe-area-inset-bottom,16px))]">
-                                <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                                <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                                     {isLoading ? (
                                         <div className="flex flex-col items-center justify-center py-20 text-gray-400 lg:col-span-2">
-                                            <Loader2 size={48} className="animate-spin mb-4 text-[#FFD700]"/>
+                                            <Loader2 size={48} className="animate-spin mb-4 text-[#FFD200]"/>
                                             <p className="font-bold">正在拉取 {filterMonth} 的账单...</p>
                                         </div>
                                     ) : historyRecords.length === 0 ? (
                                         <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-gray-200 lg:col-span-2">
-                                            <History size={64} className="mx-auto mb-4 opacity-10 text-[#1A1A1A]"/>
-                                            <p className="font-black text-[#1A1A1A]">{filterMonth} 暂无历史数据</p>
+                                            <History size={64} className="mx-auto mb-4 opacity-10 text-[#111111]"/>
+                                            <p className="font-black text-[#111111]">{filterMonth} 暂无历史数据</p>
                                         </div>
                                     ) : (
                                         historyRecords.map(record => {
@@ -1402,8 +1399,6 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             const cash = record.sales.cash || 0;
                                             const rs = (record as any).reconStatus || {};
                                             const deliveryBreakdown = record.sales.deliveryBreakdown || {} as any;
-                                            
-                                            const grabGross = Number(deliveryBreakdown.grabGross) || 0;
                                             const grabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
                                             const grabAds = Number(deliveryBreakdown.grabAds) || 0;
                                             const grabExpected = grabNet - grabAds;
@@ -1427,18 +1422,18 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             if (shopeeExpected > 0 && !isChannelReconciled(rs, 'shopee')) hasPending = true;
 
                                             return (
-                                                <div key={record.id} onClick={() => setSelectedRecord(record)} className={`bg-white p-5 sm:p-6 rounded-2xl border ${hasPending ? 'border-amber-200 border-l-4 border-l-amber-500 shadow-sm bg-gradient-to-br from-white to-amber-50/[0.01]' : 'border-gray-200 border-l-4 border-l-emerald-500 shadow-sm'} hover:shadow-md hover:border-r-gray-300 hover:border-t-gray-300 hover:border-b-gray-300 active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-4`}>
+                                                <div key={record.id} onClick={() => setSelectedRecord(record)} className={`bg-white p-5 md:p-6 rounded-2xl border ${hasPending ? 'border-amber-200 border-l-4 border-l-amber-500 shadow-sm bg-gradient-to-br from-white to-amber-50/[0.01]' : 'border-gray-200 border-l-4 border-l-emerald-500 shadow-sm'} hover:shadow-md hover:border-r-gray-300 hover:border-t-gray-300 hover:border-b-gray-300 active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-4`}>
                                                     {/* Card Header Info */}
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-3.5">
                                                             {/* Date Box - Omitted month as requested, only showing day */}
                                                             <div className="w-12 h-12 bg-gray-50 border border-gray-200/85 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
-                                                                <span className="text-xl font-extrabold text-gray-955 font-mono tracking-tight">{record.date.split('-')[2]}</span>
+                                                                <span className="text-xl font-extrabold text-gray-950 font-mono tracking-tight">{record.date.split('-')[2]}</span>
                                                             </div>
                                                             {/* Totals Title & Value */}
                                                             <div>
                                                                 <div className="text-xs font-bold text-gray-400">当日总营业额</div>
-                                                                <div className="text-lg sm:text-xl font-black text-gray-95" style={{ color: '#1A1A1A' }}>RM {record.sales.total.toFixed(2)}</div>
+                                                                <div className="text-lg md:text-xl font-black text-gray-95" style={{ color: '#111111' }}>RM {record.sales.total.toFixed(2)}</div>
                                                             </div>
                                                         </div>
                                                         {/* Right side Status Badges */}
@@ -1454,7 +1449,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                                      已核对
                                                                  </span>
                                                              )}
-                                                            <div className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded-md leading-none ${record.variance >= 0 ? 'text-emerald-700 bg-emerald-50 border border-emerald-250' : 'text-rose-700 bg-rose-50 border border-rose-200'}`}>
+                                                            <div className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded-md leading-none ${record.variance >= 0 ? 'text-emerald-700 bg-emerald-50 border border-emerald-300' : 'text-rose-700 bg-rose-50 border border-rose-200'}`}>
                                                                 {record.variance >= 0 ? '+' : ''}{record.variance.toFixed(2)}
                                                             </div>
                                                         </div>
@@ -1464,19 +1459,19 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <div className="grid grid-cols-4 gap-2">
                                                         <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
                                                             <div className="text-[10px] text-gray-400 font-bold truncate">💵 Cash</div>
-                                                            <div className="text-xs sm:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(cash)}</div>
+                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(cash)}</div>
                                                         </div>
                                                         <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
                                                             <div className="text-[10px] text-gray-400 font-bold truncate">🔵 TNG</div>
-                                                            <div className="text-xs sm:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(tng)}</div>
+                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(tng)}</div>
                                                         </div>
                                                         <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
                                                             <div className="text-[10px] text-gray-400 font-bold truncate">💳 Card</div>
-                                                            <div className="text-xs sm:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(totalCardVal)}</div>
+                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(totalCardVal)}</div>
                                                         </div>
                                                         <div className="bg-amber-50/70 p-2 text-center flex flex-col justify-center rounded-xl border border-amber-100">
-                                                            <div className="text-[10px] text-amber-805 font-bold truncate">🛵 Delivery</div>
-                                                            <div className="text-xs sm:text-[13px] font-black font-mono text-amber-900 mt-1 whitespace-nowrap">RM {Math.round(totalDeliveryVal)}</div>
+                                                            <div className="text-[10px] text-amber-800 font-bold truncate">🛵 Delivery</div>
+                                                            <div className="text-xs md:text-[13px] font-black font-mono text-amber-900 mt-1 whitespace-nowrap">RM {Math.round(totalDeliveryVal)}</div>
                                                         </div>
                                                     </div>
 
@@ -1484,19 +1479,19 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     {totalDeliveryVal > 0 && (
                                                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5 px-0.5">
                                                             {grabExpected > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-lg">
+                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                                                                     <span className="font-mono font-extrabold">RM {Math.round(grabExpected)}</span>
                                                                 </span>
                                                             )}
                                                             {pandaGross > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-pink-850 bg-pink-50 border border-pink-150 px-2 py-0.5 rounded-lg">
+                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-pink-900 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0"></span>
                                                                     <span className="font-mono font-extrabold">RM {Math.round(pandaGross)}</span>
                                                                 </span>
                                                             )}
                                                             {shopeeExpected > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-orange-950 bg-orange-50 border border-orange-150 px-2 py-0.5 rounded-lg">
+                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-orange-950 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
                                                                     <span className="font-mono font-extrabold">RM {Math.round(shopeeExpected)}</span>
                                                                 </span>
@@ -1522,13 +1517,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             onClick={() => setActiveTab('SHIFT')} 
                             className={`flex flex-col items-center justify-center flex-1 h-full text-center transition-all cursor-pointer ${
                                 activeTab === 'SHIFT' 
-                                    ? 'text-[#1A1A1A] font-black scale-105' 
+                                    ? 'text-[#111111] font-black scale-105' 
                                     : 'text-gray-400 font-bold active:text-gray-600'
                             }`}
                         >
                             <div className={`p-1.5 rounded-xl transition-all ${
                                 activeTab === 'SHIFT' 
-                                    ? 'bg-[#FFD700] text-black shadow-sm' 
+                                    ? 'bg-[#FFD200] text-black shadow-sm' 
                                     : 'bg-transparent text-gray-400'
                             }`}>
                                 <Calculator size={18} strokeWidth={2.5}/>
@@ -1540,13 +1535,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             onClick={() => setActiveTab('HISTORY')} 
                             className={`flex flex-col items-center justify-center flex-1 h-full text-center transition-all cursor-pointer ${
                                 activeTab === 'HISTORY' 
-                                    ? 'text-[#1A1A1A] font-black scale-105' 
+                                    ? 'text-[#111111] font-black scale-105' 
                                     : 'text-gray-400 font-bold active:text-gray-600'
                             }`}
                         >
                             <div className={`p-1.5 rounded-xl transition-all ${
                                 activeTab === 'HISTORY' 
-                                    ? 'bg-[#FFD700] text-black shadow-sm' 
+                                    ? 'bg-[#FFD200] text-black shadow-sm' 
                                     : 'bg-transparent text-gray-400'
                             }`}>
                                 <History size={18} strokeWidth={2.5}/>
@@ -1560,7 +1555,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center border-t-8 border-red-600 animate-in zoom-in-95">
                             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><Trash2 size={32} className="text-red-600"/></div>
-                            <h3 className="font-black text-2xl text-[#1A1A1A] mb-2">严重警告</h3>
+                            <h3 className="font-black text-2xl text-[#111111] mb-2">严重警告</h3>
                             <p className="text-sm text-gray-500 font-bold mb-2">确定要仅删除 <span className="text-red-600">{selectedRecord?.date}</span> 的结算记录吗？</p>
                             <p className="text-xs text-red-500 bg-red-50 p-2 rounded-lg mb-6 border border-red-100">
                                 <AlertTriangle size={12} className="inline mr-1"/> 如果你想修改数据，请使用“撤销并重新编辑”按钮。此操作将永久清空记录。

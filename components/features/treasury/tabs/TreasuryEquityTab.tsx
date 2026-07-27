@@ -69,7 +69,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
     <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-200">
       
       {/* Shareholders List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-150">
+      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
         <div className="flex justify-between items-center mb-5">
           <div>
             <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
@@ -115,7 +115,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
               return (
                 <div
                   key={s.id}
-                  className="bg-gray-50 p-4 rounded-2xl border border-gray-150 flex flex-col justify-between hover:border-gray-300 transition-colors relative"
+                  className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col justify-between hover:border-gray-300 transition-colors relative"
                 >
                   <div className="w-full">
                     {/* Shareholder Metadata Header */}
@@ -134,7 +134,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                         <button
                           type="button"
                           onClick={() => onEditShareholder(s)}
-                          className="p-1.5 bg-white border border-gray-150 rounded-lg text-gray-400 hover:text-[#111111] shadow-xs cursor-pointer"
+                          className="p-1.5 bg-white border border-gray-200 rounded-lg text-gray-400 hover:text-[#111111] shadow-xs cursor-pointer"
                           title="编辑股东"
                         >
                           <Settings size={13} />
@@ -142,7 +142,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                         <button
                           type="button"
                           onClick={() => onDeleteShareholder(s.id)}
-                          className="p-1.5 bg-white border border-gray-150 rounded-lg text-gray-400 hover:text-red-500 shadow-xs cursor-pointer"
+                          className="p-1.5 bg-white border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 shadow-xs cursor-pointer"
                           title="删除股东"
                         >
                           <Trash2 size={13} />
@@ -152,7 +152,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
 
                     {/* Numeric breakdown cards */}
                     <div className="grid grid-cols-3 gap-2 mt-4">
-                      <div className="bg-white p-2 rounded-xl border border-gray-150 text-center">
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
                         <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                           股本 (Capital)
                         </div>
@@ -164,7 +164,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                         </div>
                       </div>
                       
-                      <div className="bg-white p-2 rounded-xl border border-gray-150 text-center">
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
                         <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                           净垫资 (Net Inj.)
                         </div>
@@ -177,7 +177,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                         </div>
                       </div>
                       
-                      <div className="bg-white p-2 rounded-xl border border-gray-150 text-center">
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
                         <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                           已分红 (Dividends)
                         </div>
@@ -195,8 +195,8 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
       </div>
 
       {/* Shareholder Injections & Repayments List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-150">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
+      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-5">
           <div>
             <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
               <PiggyBank size={18} className="text-[#111111]" /> 股东注资与还款记录
@@ -209,14 +209,14 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
             <button
               type="button"
               onClick={onAddRepayment}
-              className="flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
+              className="flex-1 md:flex-none bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
             >
               <ArrowDownLeft size={14} /> 还钱给股东
             </button>
             <button
               type="button"
               onClick={onAddInjection}
-              className="flex-1 sm:flex-none bg-green-50 text-green-700 border border-green-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-green-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
+              className="flex-1 md:flex-none bg-green-50 text-green-700 border border-green-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-green-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
             >
               <ArrowUpRight size={14} /> 股东注资
             </button>
@@ -305,7 +305,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                           已还款: <span className="text-indigo-500">-{formatMoney(totalRepay)}</span>
                         </div>
                       </div>
-                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-150">
+                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-200">
                         {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </div>
                     </div>
@@ -369,7 +369,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
       </div>
 
       {/* Dividend Payouts List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-150">
+      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
@@ -443,7 +443,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                           </span>
                         </div>
                       </div>
-                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-150">
+                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-200">
                         {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </div>
                     </div>

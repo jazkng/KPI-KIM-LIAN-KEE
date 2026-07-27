@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { ScrollText, X, Search, ChevronDown, ExternalLink } from "lucide-react";
 import { LedgerItem } from "../treasuryTypes";
 
@@ -9,7 +9,7 @@ export const GroupedLedgerItem = ({ group }: { group: any }) => {
   const mainItem = group.items[0];
 
   return (
-    <div className="bg-white rounded-xl md:rounded-none shadow-xs md:shadow-none border border-gray-150 md:border-b md:border-t-0 md:border-x-0 overflow-hidden flex flex-col transition-all">
+    <div className="bg-white rounded-xl md:rounded-none shadow-xs md:shadow-none border border-gray-200 md:border-b md:border-t-0 md:border-x-0 overflow-hidden flex flex-col transition-all">
       {/* --- MOBILE COMPACT VIEW (md:hidden) --- */}
       <div
         onClick={() => !isSingle && setIsExpanded(!isExpanded)}
@@ -64,7 +64,7 @@ export const GroupedLedgerItem = ({ group }: { group: any }) => {
           {!isSingle && (
             <ChevronDown
               size={12}
-              className={`text-stone-450 transition-transform duration-200 ${
+              className={`text-stone-500 transition-transform duration-200 ${
                 isExpanded ? "rotate-180 text-amber-500" : ""
               }`}
             />
@@ -147,11 +147,11 @@ export const GroupedLedgerItem = ({ group }: { group: any }) => {
             )}
           </div>
 
-          <div className="shrink-0 text-right font-mono text-[10px] text-stone-550 flex items-center gap-1">
+          <div className="shrink-0 text-right font-mono text-[10px] text-stone-600 flex items-center gap-1">
             {!isSingle && (
               <ChevronDown
                 size={11}
-                className={`text-stone-450 transition-transform ${
+                className={`text-stone-500 transition-transform ${
                   isExpanded ? "rotate-180 text-amber-500" : ""
                 }`}
               />
@@ -165,7 +165,7 @@ export const GroupedLedgerItem = ({ group }: { group: any }) => {
           {group.items.map((item: any, idx: number) => (
             <div
               key={item.id}
-              className="flex justify-between items-center bg-white py-1 px-2.5 rounded-lg border border-gray-150 shadow-xs hover:border-gray-250 transition-colors"
+              className="flex justify-between items-center bg-white py-1 px-2.5 rounded-lg border border-gray-200 shadow-xs hover:border-gray-300 transition-colors"
             >
               <div className="text-[10px] md:text-xs text-gray-500 font-bold flex items-center gap-2 pr-2 overflow-hidden">
                 <span className="bg-[#111111] text-[#FFD200] rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] shrink-0 font-extrabold">
@@ -325,7 +325,7 @@ export const TreasuryLedgerModal: React.FC<TreasuryLedgerModalProps> = ({
               placeholder="查询特定摘要、类型、分类或金额..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent flex-grow font-bold text-xs md:text-sm text-stone-850 outline-none placeholder:text-stone-400 w-full"
+              className="bg-transparent flex-grow font-bold text-xs md:text-sm text-stone-900 outline-none placeholder:text-stone-400 w-full"
             />
             {searchQuery && (
               <button
@@ -466,8 +466,8 @@ export const TreasuryLedgerModal: React.FC<TreasuryLedgerModalProps> = ({
 
               {/* MOBILE VIEW (Single list timeline) */}
               <div className="block md:hidden space-y-3">
-                <div className="flex flex-col bg-white rounded-2xl border border-gray-150 overflow-hidden shadow-xs">
-                  <div className="bg-stone-50 border-b border-gray-150 px-3 py-2 flex items-center justify-between">
+                <div className="flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs">
+                  <div className="bg-stone-50 border-b border-gray-200 px-3 py-2 flex items-center justify-between">
                     <h4 className="text-[11px] font-bold text-stone-700 flex items-center gap-1.5">
                       <span>📋</span> 交易明细时间流
                     </h4>

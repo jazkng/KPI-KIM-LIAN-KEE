@@ -1,54 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  History,
-  Settings,
   X,
-  Plus,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Banknote,
-  CreditCard,
   Calendar,
-  Save,
-  Trash2,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  ArrowRight,
-  UserPlus,
-  Users,
-  Wrench,
-  PiggyBank,
-  FileText,
   MinusCircle,
-  Info,
-  Calculator,
-  Download,
-  Zap,
-  Droplets,
-  Home,
-  Coins,
-  Recycle,
-  FileDown,
   Loader2,
-  ScrollText,
-  Table2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Circle,
-  LayoutList,
   Archive,
-  Gem,
-  Printer,
-  ExternalLink,
   Search,
-  Lock,
-  Edit3,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+  } from "lucide-react";
 import {
   TreasuryConfig,
   FundTransfer,
@@ -73,24 +32,17 @@ import {
 import { db } from "../../firebaseConfig";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
-import { applyResolvedStylesForPdf } from "../../utils/pdfStyleResolver";
+import { applyResolvedStylesForPdf, waitForPdfFonts } from "../../utils/pdfStyleResolver";
 
 import {
   SETTINGS_PASSWORD,
-  SHAREHOLDER_OWNER_MAP,
   DEFAULT_INCOME_SOURCES,
 } from "./treasury/treasuryConstants";
 import {
   generateMonthsRange,
   formatMoney,
-  formatDate,
   getMonthLabel,
-  getPreviousMonth,
-  getNextMonth,
-  normalizeShareholderName,
-  cleanTransactionNote,
-  calculatePercentage,
-} from "./treasury/treasuryUtils";
+  } from "./treasury/treasuryUtils";
 import { TreasuryShell } from "./treasury/TreasuryShell";
 import { TreasuryHeader } from "./treasury/components/TreasuryHeader";
 import { TreasuryMobileTabs } from "./treasury/components/TreasuryMobileTabs";
@@ -118,191 +70,6 @@ interface TreasuryModuleProps {
   onClose: () => void;
 }
 
-// 🌟 新增：智能折叠列表项组件 (在手机端适配单行极简高密风格，防止视觉杂乱)
-const GroupedLedgerItem = ({ group }: { group: any }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const isSingle = group.items.length === 1;
-  const mainItem = group.items[0];
-
-  return (
-    <div className="bg-white rounded-xl md:rounded-none shadow-sm md:shadow-none border border-gray-150 md:border-b md:border-t-0 md:border-x-0 overflow-hidden flex flex-col transition-all">
-      {/* --- MOBILE COMPACT VIEW (md:hidden) --- */}
-      <div
-        onClick={() => !isSingle && setIsExpanded(!isExpanded)}
-        className="p-2.5 flex md:hidden items-center justify-between gap-3 active:bg-gray-100 transition-colors cursor-pointer touch-pan-y"
-      >
-        <div className="min-w-0 flex-1 flex items-start gap-2">
-          {/* Status Dot / Flag */}
-          <span
-            className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${group.type === "IN" ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]" : "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]"}`}
-          />
-
-          <div className="min-w-0 flex-1">
-            <div className="font-extrabold text-xs text-stone-900 truncate leading-tight flex items-center gap-1.5 flex-wrap">
-              <span className="truncate max-w-[160px]">{group.baseDesc}</span>
-              {!isSingle && (
-                <span className="text-[8px] bg-orange-100 text-orange-850 px-1 py-0.2 rounded font-black shrink-0">
-                  合{group.items.length}笔
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1 text-[9px] text-stone-400 font-medium mt-0.5">
-              <span className="font-mono">{group.date}</span>
-              <span>•</span>
-              <span className="bg-stone-100 text-stone-600 px-1 rounded-sm text-[8px] font-bold">
-                {group.category}
-              </span>
-              {group.tag && (
-                <>
-                  <span>•</span>
-                  <span className="text-blue-600 font-bold">#{group.tag}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="text-right shrink-0 flex items-center gap-2">
-          <div className="flex flex-col items-end">
-            <span
-              className={`font-mono font-black text-xs ${group.type === "IN" ? "text-green-600" : "text-red-600"}`}
-            >
-              {group.type === "IN" ? "+" : "-"}{" "}
-              {group.totalAmount.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-          {!isSingle && (
-            <ChevronDown
-              size={12}
-              className={`text-stone-400 transition-transform duration-200 ${isExpanded ? "rotate-180 text-orange-500" : ""}`}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* --- DESKTOP VIEW (hidden md:flex) --- */}
-      <div
-        onClick={() => !isSingle && setIsExpanded(!isExpanded)}
-        className={`hidden md:flex flex-col gap-1 px-3 py-2 border-b border-gray-100 transition-colors ${!isSingle ? "cursor-pointer hover:bg-gray-50" : "hover:bg-gray-50"}`}
-      >
-        {/* LINE 1: Description & Amount */}
-        <div className="flex justify-between items-center w-full gap-2">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span
-              className="font-extrabold text-stone-900 text-xs truncate"
-              title={group.baseDesc}
-            >
-              {group.baseDesc}
-            </span>
-            {!isSingle && (
-              <span className="text-[8px] bg-orange-100 text-orange-850 px-1 py-0.2 rounded font-black shrink-0">
-                合{group.items.length}笔
-              </span>
-            )}
-            {isSingle && mainItem.linkUrl && (
-              <a
-                href={mainItem.linkUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-[8px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 px-1 py-0.2 rounded flex items-center gap-0.5 font-bold transition-all border border-indigo-100 shrink-0"
-              >
-                <ExternalLink size={8} strokeWidth={3} /> 单据
-              </a>
-            )}
-          </div>
-
-          <div className="shrink-0 text-right font-mono font-black text-xs">
-            <span
-              className={
-                group.type === "IN" ? "text-green-600" : "text-red-600"
-              }
-            >
-              {group.type === "IN" ? "+" : "-"}{" "}
-              {group.totalAmount.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-        </div>
-
-        {/* LINE 2: Badges/Meta & Balance */}
-        <div className="flex justify-between items-center w-full gap-2 text-[10px]">
-          <div className="flex flex-wrap items-center gap-1.5 text-stone-400 font-semibold min-w-0">
-            {/* Type badge */}
-            <span
-              className={`px-1 py-0.2 rounded text-[8px] font-black border leading-none ${group.type === "IN" ? "bg-green-50 text-green-700 border-green-100" : "bg-red-50 text-red-700 border-red-100"}`}
-            >
-              {group.type}
-            </span>
-            <span className="font-mono text-stone-500 text-[9px]">
-              {group.date}
-            </span>
-            {group.category && (
-              <>
-                <span>•</span>
-                <span className="bg-stone-100 text-stone-600 px-1 rounded-sm text-[8px] font-bold">
-                  {group.category}
-                </span>
-              </>
-            )}
-            {group.tag && (
-              <>
-                <span>•</span>
-                <span className="text-blue-600 text-[8px] font-bold bg-blue-50 px-1 rounded-sm border border-blue-100">
-                  #{group.tag}
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="shrink-0 text-right font-mono text-[10px] text-stone-500 flex items-center gap-1">
-            {!isSingle && (
-              <ChevronDown
-                size={11}
-                className={`text-stone-450 transition-transform ${isExpanded ? "rotate-180 text-orange-500" : ""}`}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {!isSingle && isExpanded && (
-        <div className="border-t border-gray-100 bg-gray-50/80 p-1.5 md:p-2 md:pl-10 space-y-1 animate-in slide-in-from-top-1 shadow-inner">
-          {group.items.map((item: any, idx: number) => (
-            <div
-              key={item.id}
-              className="flex justify-between items-center bg-white py-1 px-2.5 rounded-lg border border-gray-150 shadow-xs hover:border-gray-250 transition-colors"
-            >
-              <div className="text-[10px] md:text-xs text-gray-500 font-bold flex items-center gap-2 pr-2 pr-2 overflow-hidden">
-                <span className="bg-[#1A1A1A] text-[#FFD700] rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] shrink-0">
-                  {idx + 1}
-                </span>
-                <span className="truncate">{item.desc}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span
-                  className={`font-mono font-bold text-[10px] md:text-xs ${item.type === "IN" ? "text-green-500" : "text-red-500"}`}
-                >
-                  {item.type === "IN" ? "+" : "-"} RM{" "}
-                  {item.amount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const LedgerModal = () => null;
-const DeletedLedgerModalBody = "";
-
 export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<TreasuryTab>("OVERVIEW");
 
@@ -316,7 +83,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [billPayments, setBillPayments] = useState<BillPaymentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [viewLedger, setViewLedger] = useState<"CASH" | "BANK" | null>(null);
 
   // --- 👑 月度结账新功能 State ---
@@ -336,7 +103,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   );
   const [historyRecords, setHistoryRecords] = useState<LedgerItem[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [historyStats, setHistoryStats] = useState({ totalIn: 0, totalOut: 0 });
+  const [, setHistoryStats] = useState({ totalIn: 0, totalOut: 0 });
   const [historyAccountFilter, setHistoryAccountFilter] = useState<
     "ALL" | "CASH" | "BANK"
   >("ALL");
@@ -804,9 +571,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
   const [expandedInjections, setExpandedInjections] = useState<
     Record<string, boolean>
   >({});
-  const [expandedDividends, setExpandedDividends] = useState<
-    Record<string, boolean>
-  >({});
 
   const [isIncomeModalOpen, setIsIncomeModalOpen] = useState(false);
   const [incomeForm, setIncomeForm] = useState({
@@ -1240,12 +1004,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     }
   };
 
-  const reloadAllData = async () => {
-    await loadData();
-    await loadClosings();
-    await loadSelectedMonthLedger(selectedMonth);
-  };
-
   // --- COMPUTED VALUES ---
   const totalCapital = useMemo(() => {
     return (config.shareholders || []).reduce(
@@ -1253,12 +1011,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
       0,
     );
   }, [config.shareholders]);
-
-  const totalInjections = useMemo(() => {
-    return transfers
-      .filter((t) => t.fromAccount === ("SHAREHOLDER" as any))
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [transfers]);
 
   const dividendHistory = useMemo(() => {
     return expenses.filter((e) => e.category === "DIVIDEND");
@@ -1377,111 +1129,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
       availableMonths,
     };
   }, [transfers, incomeFilterMonth]);
-
-  // --- BALANCE CALCULATION ---
-  const balances = useMemo(() => {
-    let cash = Number(config.initialCash) || 0;
-    let bank = Number(config.initialBank) || 0;
-    const startDate = new Date(config.initialDate);
-
-    settlements.forEach((s) => {
-      if (new Date(s.date) >= startDate) {
-        const sCash = Number(s.sales?.cash || 0);
-        const sOpening = Number(s.openingCash || 0);
-        const sClosing = Number(s.closingCash || 0);
-
-        cash += sCash;
-
-        if (s.variance !== undefined && s.variance !== 0) {
-          cash += Number(s.variance);
-        } else if (
-          s.variance === undefined &&
-          s.closingCash !== undefined &&
-          s.openingCash !== undefined
-        ) {
-          const inferredVariance = sClosing - sOpening - sCash;
-          cash += inferredVariance;
-        } else if (s.variance === undefined && s.closingCash === undefined) {
-          const refundAmt = Number(s.sales?.refundTotal || 0);
-          cash -= refundAmt;
-        }
-
-        const bankIncome =
-          Number(s.sales.tng || 0) +
-          Number(s.sales.duitnow || 0) +
-          Number(s.sales.card || 0) +
-          Number(s.sales.amex || 0);
-
-        const bd = s.sales.deliveryBreakdown || ({} as any);
-        const grabNet = Number(bd.grabNet) || Number(bd.grab) || 0;
-        const grabAds = Number(bd.grabAds) || 0;
-        const grabExpected = grabNet - grabAds;
-        const pandaGross = Number(bd.pandaGross) || Number(bd.panda) || 0;
-        const shopeeGross = Number(bd.shopeeGross) || Number(bd.shopee) || 0;
-        const lalamove = Number(bd.lalamove) || 0;
-        const deliveryIncome =
-          Math.max(0, grabExpected) + pandaGross + shopeeGross + lalamove;
-
-        bank += bankIncome + deliveryIncome;
-      }
-    });
-
-    expenses.forEach((e) => {
-      if (e.expenseType === "RECURRING") return;
-      if (e.id.startsWith("bill_sync_")) return;
-
-      if (e.paymentStatus === "PAID" || e.paymentStatus === "PARTIAL") {
-        const payDateStr =
-          e.paymentDate?.split("T")[0] ||
-          e.time?.split("T")[0] ||
-          (e as any).createdAt?.split("T")[0];
-        if (!payDateStr) return;
-
-        const payDate = new Date(payDateStr);
-        if (payDate >= startDate) {
-          const amt = Number(e.amount) || 0;
-          const method = e.paymentMethod
-            ? e.paymentMethod.toUpperCase()
-            : "BANK_TRANSFER";
-          if (method.includes("CASH")) cash -= amt;
-          else bank -= amt;
-        }
-      }
-    });
-
-    billPayments.forEach((b) => {
-      if (new Date(b.date) >= startDate) {
-        const amt = Number(b.amount) || 0;
-        const method = b.method ? b.method.toUpperCase() : "BANK_TRANSFER";
-        if (method.includes("CASH")) cash -= amt;
-        else bank -= amt;
-      }
-    });
-
-    transfers.forEach((t) => {
-      const transferDateStr = t.date?.split("T")[0];
-      if (!transferDateStr) return;
-
-      if (new Date(transferDateStr) >= startDate) {
-        const amt = Number(t.amount) || 0;
-        if (t.fromAccount === "CASH") cash -= amt;
-        else if (t.fromAccount === "BANK") bank -= amt;
-
-        if (
-          t.fromAccount === ("SHAREHOLDER" as any) ||
-          t.fromAccount === ("OTHER" as any)
-        ) {
-          if (t.toAccount === "CASH") cash += amt;
-          else bank += amt;
-        } else {
-          if (t.toAccount === "CASH") cash += amt;
-          else if (t.toAccount === "BANK") bank += amt;
-        }
-      }
-    });
-
-    return { cash, bank, total: cash + bank };
-  }, [config, settlements, expenses, billPayments, transfers]);
 
   // --- LEDGER DATA ---
   const getLedgerData = (type: "CASH" | "BANK") => {
@@ -1757,6 +1404,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
+        await waitForPdfFonts();
         const canvas = await html2canvas(printRef.current, {
           scale: 2,
           useCORS: true,
@@ -1854,46 +1502,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     });
     alert("✅ 还钱记录已保存 (Repayment Saved)");
     loadData();
-  };
-
-  const handleCheckpoint = async () => {
-    const today = new Date().toISOString().split("T")[0];
-
-    if (config.initialDate === today) {
-      return alert("⚠️ 今天已经进行过结转，无需重复操作。");
-    }
-
-    if (
-      !confirm(
-        `⚠️ 确认执行【资金结转快照 (Checkpoint)】吗？\n\n` +
-          `系统会将现在的真实余额：\n` +
-          `💰 现金: ${formatMoney(balances.cash)}\n` +
-          `🏦 银行: ${formatMoney(balances.bank)}\n\n` +
-          `保存为新的"初始资金"，并将计算起点更新为【今天 (${today})】。\n\n` +
-          `🎯 优势：大幅提升 App 流畅度！避免拉取几千条旧账单导致云端账单爆炸。\n` +
-          `⚠️ 注意：结转后，修改今天之前的旧账单将不再影响现在的总资产。`,
-      )
-    )
-      return;
-
-    setLoading(true);
-    try {
-      const newConfig = {
-        ...config,
-        initialDate: today,
-        initialCash: balances.cash,
-        initialBank: balances.bank,
-      };
-      await DataManager.saveTreasuryConfig(newConfig);
-      setConfig(newConfig);
-      alert("✅ 资金结转快照保存成功！系统已重置计算起点。");
-      loadData();
-    } catch (error) {
-      console.error("Checkpoint error", error);
-      alert("结转失败，请检查网络！");
-    } finally {
-      setLoading(false);
-    }
   };
 
   return createPortal(
@@ -2085,7 +1693,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
 
                 <div
                   className="
-                    divide-y divide-gray-150
+                    divide-y divide-gray-200
                     space-y-1
                     pr-1
                     max-h-none
@@ -2145,11 +1753,11 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                               {getMonthLabel(monthStr)}
                             </span>
                             {closing ? (
-                              <span className="bg-green-100 text-green-850 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                              <span className="bg-green-100 text-green-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
                                 已结账
                               </span>
                             ) : (
-                              <span className="bg-amber-100 text-amber-850 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                              <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
                                 待结算
                               </span>
                             )}
@@ -2167,7 +1775,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                           <div className="flex items-center gap-3 font-mono text-[10px] md:text-xs text-right shrink-0">
                             {closing ? (
                               <>
-                                <div className="hidden sm:block text-left mr-2">
+                                <div className="hidden md:block text-left mr-2">
                                   <span className="text-green-500 font-bold block">
                                     +
                                     {formatMoney(
@@ -2400,21 +2008,21 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
             <div
               ref={printRef}
               id="treasury-receipt-export-root"
-              className="w-[148mm] min-h-[210mm] bg-white p-10 font-sans text-black relative border-8 border-[#1A1A1A] flex flex-col justify-between"
+              className="w-[148mm] min-h-[210mm] bg-white p-10 font-sans text-black relative border-8 border-[#111111] flex flex-col justify-between"
               style={{ boxSizing: "border-box" }}
             >
               {/* Top Decorative Gold Bar */}
-              <div className="absolute top-0 left-0 right-0 h-2 bg-[#FFD700]" />
+              <div className="absolute top-0 left-0 right-0 h-2 bg-[#FFD200]" />
               
               <div>
                 {/* Header */}
                 <div className="flex justify-between items-start border-b-2 border-gray-200 pb-6 mb-8">
                   <div>
-                    <h1 className="text-2xl font-black uppercase tracking-widest text-[#1A1A1A] mb-1">
+                    <h1 className="text-2xl font-black uppercase tracking-widest text-[#111111] mb-1">
                       OFFICIAL RECEIPT
                     </h1>
                     <div className="flex items-center gap-1.5 mb-2">
-                      <span className="w-2 h-2 rounded-full bg-[#FFD700]" />
+                      <span className="w-2 h-2 rounded-full bg-[#FFD200]" />
                       <p className="text-xs font-black text-gray-700 tracking-wider">
                         KIM LIAN KEE (KEPONG)
                       </p>
@@ -2430,7 +2038,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
                         Receipt No
                       </p>
-                      <p className="text-lg font-mono font-black text-[#1A1A1A] bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 inline-block">
+                      <p className="text-lg font-mono font-black text-[#111111] bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 inline-block">
                         #{printingRecord?.id.slice(-6).toUpperCase()}
                       </p>
                     </div>
@@ -2466,21 +2074,21 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Received From (付款人):
                             </p>
-                            <h2 className="text-sm font-black text-[#1A1A1A]">{sourceName}</h2>
+                            <h2 className="text-sm font-black text-[#111111]">{sourceName}</h2>
                           </div>
                           <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100 shadow-sm">
                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Payment For (款项用途):
                             </p>
-                            <h2 className="text-sm font-black text-[#1A1A1A]">{description}</h2>
+                            <h2 className="text-sm font-black text-[#111111]">{description}</h2>
                           </div>
                         </div>
 
                         {/* Amount Banner */}
-                        <div className="bg-[#1A1A1A] text-white p-6 rounded-2xl border-b-4 border-[#FFD700] shadow-xl relative overflow-hidden flex items-center justify-between">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFD700]/10 rounded-full blur-2xl pointer-events-none" />
+                        <div className="bg-[#111111] text-white p-6 rounded-2xl border-b-4 border-[#FFD200] shadow-xl relative overflow-hidden flex items-center justify-between">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFD200]/10 rounded-full blur-2xl pointer-events-none" />
                           <div className="relative z-10">
-                            <p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">
+                            <p className="text-[10px] font-black text-[#FFD200] uppercase tracking-widest mb-1">
                               TOTAL AMOUNT RECEIVED
                             </p>
                             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
@@ -2488,7 +2096,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                             </p>
                           </div>
                           <div className="relative z-10 text-right">
-                            <p className="text-3xl font-mono font-black text-[#FFD700]">
+                            <p className="text-3xl font-mono font-black text-[#FFD200]">
                               RM {printingRecord.amount.toFixed(2)}
                             </p>
                           </div>
@@ -2519,7 +2127,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                     </p>
                     <p className="text-xs font-black text-gray-800">KIM LIAN KEE</p>
                   </div>
-                  <div className="border-t-2 border-[#FFD700] pt-3 relative">
+                  <div className="border-t-2 border-[#FFD200] pt-3 relative">
                     <p className="text-[9px] font-black text-[#D4AF37] uppercase tracking-widest mb-1">
                       Authorized Signature (授权签章)
                     </p>
@@ -2541,13 +2149,13 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
             <div className="bg-white w-full md:max-w-5xl h-[92vh] md:h-[88vh] md:rounded-[2rem] rounded-t-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
               <div
                 style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}
-                className="bg-[#1A1A1A] px-4 md:px-5 pb-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]"
+                className="bg-[#111111] px-4 md:px-5 pb-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200]"
               >
                 <div>
                   <h3 className="font-black text-base md:text-xl flex items-center gap-2">
                     <Archive
                       size={18}
-                      className="md:w-5 md:h-5 text-[#FFD700]"
+                      className="md:w-5 md:h-5 text-[#FFD200]"
                     />{" "}
                     历史账本档案馆
                   </h3>
@@ -2578,13 +2186,13 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                       type="month"
                       value={historyMonth}
                       onChange={(e) => setHistoryMonth(e.target.value)}
-                      className="p-2 bg-transparent font-black text-[#1A1A1A] outline-none cursor-pointer text-sm w-full md:w-auto"
+                      className="p-2 bg-transparent font-black text-[#111111] outline-none cursor-pointer text-sm w-full md:w-auto"
                     />
                   </div>
                   <button
                     onClick={() => fetchHistoryData(historyMonth)}
                     disabled={isHistoryLoading}
-                    className="bg-[#1A1A1A] text-[#FFD700] px-4 md:px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 text-xs md:text-sm whitespace-nowrap"
+                    className="bg-[#111111] text-[#FFD200] px-4 md:px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 text-xs md:text-sm whitespace-nowrap"
                   >
                     {isHistoryLoading ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -2599,19 +2207,19 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                   <div className="flex bg-gray-200 border border-gray-300 rounded-xl p-0.5 shadow-sm shrink-0">
                     <button
                       onClick={() => setHistoryAccountFilter("CASH")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "CASH" ? "bg-[#FFD700] text-black shadow-sm font-bold" : "text-stone-600 hover:text-[#1A1A1A]"}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "CASH" ? "bg-[#FFD200] text-black shadow-sm font-bold" : "text-stone-600 hover:text-[#111111]"}`}
                     >
                       💵 现金 (Cash)
                     </button>
                     <button
                       onClick={() => setHistoryAccountFilter("BANK")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "BANK" ? "bg-[#FFD700] text-black shadow-sm font-bold" : "text-stone-600 hover:text-[#1A1A1A]"}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "BANK" ? "bg-[#FFD200] text-black shadow-sm font-bold" : "text-stone-600 hover:text-[#111111]"}`}
                     >
                       🏦 银行 (Bank)
                     </button>
                     <button
                       onClick={() => setHistoryAccountFilter("ALL")}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "ALL" ? "bg-[#1A1A1A] text-white shadow-sm font-bold" : "text-stone-400 hover:text-stone-600"}`}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${historyAccountFilter === "ALL" ? "bg-[#111111] text-white shadow-sm font-bold" : "text-stone-400 hover:text-stone-600"}`}
                     >
                       全部
                     </button>
@@ -2633,12 +2241,12 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                         placeholder="简易搜寻特定商家公司名称、类型分类或金额..."
                         value={historySearchQuery}
                         onChange={(e) => setHistorySearchQuery(e.target.value)}
-                        className="bg-transparent flex-grow font-bold text-xs text-[#1A1A1A] outline-none placeholder:text-gray-400 w-full"
+                        className="bg-transparent flex-grow font-bold text-xs text-[#111111] outline-none placeholder:text-gray-400 w-full"
                       />
                       {historySearchQuery && (
                         <button
                           onClick={() => setHistorySearchQuery("")}
-                          className="p-0.5 hover:bg-gray-150 rounded-full text-gray-400"
+                          className="p-0.5 hover:bg-gray-200 rounded-full text-gray-400"
                         >
                           <X size={14} />
                         </button>
@@ -2663,7 +2271,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                     <div className="flex bg-gray-100 border border-gray-200 rounded-xl p-1 shadow-inner w-full max-w-sm">
                       <button
                         onClick={() => setHistoryActiveFlow("ALL")}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${historyActiveFlow === "ALL" ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:text-[#1A1A1A]"}`}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${historyActiveFlow === "ALL" ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:text-[#111111]"}`}
                       >
                         全部 (ALL)
                       </button>
@@ -2744,7 +2352,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                               >
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <div className="min-w-0">
-                                    <div className="font-bold text-xs md:text-sm text-[#1A1A1A] truncate flex items-center gap-1.5">
+                                    <div className="font-bold text-xs md:text-sm text-[#111111] truncate flex items-center gap-1.5">
                                       {item.account && (
                                         <span
                                           className={`px-1 py-0.5 rounded text-[8px] font-extrabold uppercase shrink-0 ${item.account === "CASH" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
@@ -2805,7 +2413,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
                               >
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <div className="min-w-0">
-                                    <div className="font-bold text-xs md:text-sm text-[#1A1A1A] truncate flex items-center gap-1.5">
+                                    <div className="font-bold text-xs md:text-sm text-[#111111] truncate flex items-center gap-1.5">
                                       {item.account && (
                                         <span
                                           className={`px-1 py-0.5 rounded text-[8px] font-extrabold uppercase shrink-0 ${item.account === "CASH" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
@@ -2842,7 +2450,6 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
             </div>
           </div>
         )}
-
 
       {/* Ledger Modal */}
       {viewLedger && (

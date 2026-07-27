@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { getDaysInMonth, getDayOfWeekText, getHolidayName, getEmployeeDept } from './rosterUtils';
+import { getDaysInMonth, getHolidayName, getEmployeeDept } from './rosterUtils';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { Calendar, User, Briefcase, Activity, CheckCircle, Clock } from 'lucide-react';
+import { Calendar, User, Activity, CheckCircle } from 'lucide-react';
 
 interface RosterEmployeeViewProps {
     employees: any[];

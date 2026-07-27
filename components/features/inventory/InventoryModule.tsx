@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     Search, Layers, AlertTriangle, ChevronUp, ChevronDown, 
-    Plus, Edit3, Trash2, CheckCircle2, X, Calculator, Link as LinkIcon, Save, Package, Image as ImageIcon,
-    Filter, Calendar, CalendarDays, Box, ArrowRightLeft, Minus, DollarSign, History, Clock, User, Scale, Loader2, Check, Flame, Send, ClipboardList, CheckSquare, PlayCircle, RefreshCw,
-    FileDown, Printer, Square, UserCheck, PenLine, ChevronRight, Users, XCircle, AlertOctagon, RotateCcw, CalendarClock, ArrowLeft, HelpCircle, Lock
+    Plus, Edit3, CheckCircle2, X, Image as ImageIcon,
+    Box, Minus, DollarSign, History, Clock, User, Scale, Loader2, Check, Flame, Send, ClipboardList, CheckSquare, PlayCircle, RefreshCw,
+    FileDown, UserCheck, PenLine, Users, XCircle, AlertOctagon, RotateCcw, CalendarClock, ArrowLeft, HelpCircle, Lock
 } from 'lucide-react';
-import { StockItem, Employee, AppModule, Supplier, UomOption, InventoryLog, InventoryLogItem, InventoryTask, InventoryPermission, InventoryScope, PortalRole, AppLanguage } from '../../../types';
+import { StockItem, Employee, AppModule, Supplier, InventoryLog, InventoryLogItem, InventoryTask, InventoryPermission, InventoryScope, PortalRole, AppLanguage } from '../../../types';
 import { 
     CATEGORY_SECTIONS, getCategoryLabel, getCategoryColor, 
     getToday, getYesterday, daysBetween, 
-    FREQ_OPTIONS, INPUT_STYLE, LABEL_STYLE, 
-    TaskCompletion 
+    FREQ_OPTIONS, TaskCompletion 
 } from './inventoryConstants';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { AssignModal } from './AssignModal';
@@ -21,7 +20,7 @@ import { StockEditModal } from './StockEditModal';
 import { jsPDF } from "jspdf";
 import ExcelJS from 'exceljs';
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
     needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase
@@ -32,7 +31,6 @@ import {
     resolveInventoryAccess,
 } from '../../../utils/inventoryAccess';
 import { getPortalRole } from '../../../utils/orgAccess';
-
 
 // ============================================================
 // NEW TYPES for recurring task system
@@ -165,7 +163,7 @@ const MemoizedStockCard = React.memo(({
                                 e.stopPropagation();
                                 onImageClick?.(item.image, tItem(item));
                             }}
-                            className="w-24 h-16 md:w-28 md:h-20 rounded-xl overflow-hidden shrink-0 border border-gray-150 bg-gray-50 bg-cover bg-center cursor-zoom-in hover:scale-105 active:scale-95 transition-all shadow-sm" 
+                            className="w-24 h-16 md:w-28 md:h-20 rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-50 bg-cover bg-center cursor-zoom-in hover:scale-105 active:scale-95 transition-all shadow-sm" 
                             style={{ backgroundImage: `url(${item.image})` }} 
                         />
                     )}
@@ -237,11 +235,11 @@ const MemoizedStockCard = React.memo(({
                                 e.stopPropagation();
                                 onImageClick?.(item.image, tItem(item));
                             }}
-                            className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50 bg-cover bg-center cursor-zoom-in hidden sm:block" 
+                            className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50 bg-cover bg-center cursor-zoom-in hidden md:block" 
                             style={{ backgroundImage: `url(${item.image})` }} 
                         />
                     ) : (
-                        <div className="w-20 h-20 rounded-xl shrink-0 border border-[#E5E7EB] bg-[#F6F7FB] flex flex-col items-center justify-center text-gray-300 hidden sm:flex">
+                        <div className="w-20 h-20 rounded-xl shrink-0 border border-[#E5E7EB] bg-[#F6F7FB] flex flex-col items-center justify-center text-gray-300 hidden md:flex">
                             <ImageIcon size={24}/>
                             <span className="text-[8px] font-bold text-gray-400 mt-1 uppercase">NO PHOTO</span>
                         </div>
@@ -1532,6 +1530,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
                 if (i > 0) pdf.addPage();
 
+                await waitForPdfFonts();
                 const canvas = await html2canvas(element, { 
                     scale: 2, 
                     useCORS: true, 
@@ -1610,7 +1609,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 {group.assigneeName.charAt(0)}
                             </div>
                             <div>
-                                <div className="font-black text-[#1A1A1A] text-sm flex items-center gap-2 flex-wrap">
+                                <div className="font-black text-[#111111] text-sm flex items-center gap-2 flex-wrap">
                                     {group.assigneeName}
                                     <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">{group.allItems.length} items</span>
                                     <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><CalendarClock size={9}/> {freqLabel}</span>
@@ -1700,7 +1699,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <span className="font-black text-[#1A1A1A]">{log.date}</span>
+                                <span className="font-black text-[#111111]">{log.date}</span>
                                 <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 font-bold">{new Date(log.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
                             </div>
                             <div className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-0.5">
@@ -1724,7 +1723,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             <tbody>
                                 {log.items.map((item, idx) => (
                                     <tr key={idx} className="border-b border-gray-100 last:border-0">
-                                        <td className="p-2 font-bold text-[#1A1A1A]">{item.stockName}</td>
+                                        <td className="p-2 font-bold text-[#111111]">{item.stockName}</td>
                                         <td className="p-2 text-center text-gray-600">
                                             {item.oldQty} ➔ <span className="font-black">{item.newQty}</span>
                                         </td>
@@ -1749,7 +1748,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         confirmedTaskCount === myTask.items.length;
 
     return (
-        <div className="p-0 md:p-6 pb-32 flex flex-col bg-[#F5F7FA] min-h-screen">
+        <div className="p-0 md:p-6 pb-32 flex flex-col bg-[#F6F7FB] min-h-screen">
             {/* Styles to hide parent AdminDashboard header on mobile to prevent overlapping / double headers */}
             <style>{`
               @media (max-width: 767px) {
@@ -1763,17 +1762,17 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             `}</style>
             
             {myTask && (
-                <div className="fixed inset-0 z-[100] bg-[#F5F7FA] flex flex-col">
-                    <div className="bg-[#1A1A1A] text-white px-4 pb-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] shrink-0">
+                <div className="fixed inset-0 z-[100] bg-[#F6F7FB] flex flex-col">
+                    <div className="bg-[#111111] text-white px-4 pb-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] shrink-0">
                         <div className="flex justify-between items-center">
                             <div>
-                                <p className="text-[10px] font-bold text-[#FFD700] uppercase tracking-wider">盘点任务</p>
+                                <p className="text-[10px] font-bold text-[#FFD200] uppercase tracking-wider">盘点任务</p>
                                 <p className="font-black text-lg mt-0.5">{myTask.items.length} 个物品</p>
                             </div>
                             <button onClick={() => { setMyTask(null); setMode(employee?.role?.includes('Owner') ? 'MASTER' : 'CHECK'); loadStock(currentStockView); }} className="px-4 py-2 min-h-[44px] rounded-xl bg-white/10 text-sm font-bold active:bg-white/20">取消</button>
                         </div>
                         <div className="mt-3 bg-white/10 rounded-full h-2 overflow-hidden">
-                            <div className="bg-[#FFD700] h-full rounded-full transition-all" style={{ width: `${(confirmedTaskCount / myTask.items.length) * 100}%` }}/>
+                            <div className="bg-[#FFD200] h-full rounded-full transition-all" style={{ width: `${(confirmedTaskCount / myTask.items.length) * 100}%` }}/>
                         </div>
                         <div className="text-[10px] text-white/60 mt-1 text-right">{confirmedTaskCount} / {myTask.items.length} 已确认</div>
                     </div>
@@ -1781,7 +1780,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         {items.map(item => renderItemCard(item))}
                     </div>
                     <div className="px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-white border-t border-gray-200 shrink-0">
-                        <button onClick={() => handleSubmitCheck(myTask)} disabled={isSubmitting || !isCurrentTaskFullyConfirmed} className="w-full min-h-[56px] bg-[#1A1A1A] text-[#FFD200] py-4 rounded-2xl font-black text-base shadow-xl active:scale-[0.98] flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none disabled:active:scale-100">
+                        <button onClick={() => handleSubmitCheck(myTask)} disabled={isSubmitting || !isCurrentTaskFullyConfirmed} className="w-full min-h-[56px] bg-[#111111] text-[#FFD200] py-4 rounded-2xl font-black text-base shadow-xl active:scale-[0.98] flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none disabled:active:scale-100">
                             {isSubmitting ? <Loader2 size={20} className="animate-spin"/> : <CheckCircle2 size={20}/>} {isSubmitting ? '提交中...' : isCurrentTaskFullyConfirmed ? '提交盘点' : `请先确认全部 (${confirmedTaskCount}/${myTask.items.length})`}
                         </button>
                     </div>
@@ -1837,19 +1836,19 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 scrollbar-none">
                         {allowedScopes.includes('KITCHEN') && <button
                             onClick={() => handleViewChange('KITCHEN')} 
-                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'KITCHEN' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
+                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'KITCHEN' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
                         >
                             {t('厨房')}
                         </button>}
                         {allowedScopes.includes('BAR') && <button
                             onClick={() => handleViewChange('BAR')} 
-                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'BAR' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
+                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'BAR' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
                         >
                             {t('水吧')}
                         </button>}
                         {allowedScopes.includes('GENERAL') && <button
                             onClick={() => handleViewChange('GENERAL')} 
-                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'GENERAL' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
+                            className={`flex-1 min-w-[76px] h-11 rounded-xl text-xs font-black transition-all ${currentStockView === 'GENERAL' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border border-gray-200'}`}
                         >
                             {t('后勤')}
                         </button>}
@@ -1870,7 +1869,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 placeholder={t('Search item...')} 
                                 value={searchTerm} 
                                 onChange={(e) => setSearchTerm(e.target.value)} 
-                                className="w-full pl-9 pr-4 h-11 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] shadow-sm"
+                                className="w-full pl-9 pr-4 h-11 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] shadow-sm"
                             />
                         </div>
                         
@@ -2008,9 +2007,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 {!myTask && !isRestrictedView && !hasNoInventoryAccess && allowedScopes.length > 0 && (
                     <div className="hidden md:flex flex-col md:flex-row justify-between items-center mb-4 gap-4 shrink-0">
                         <div className="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border border-gray-200 w-full md:w-auto overflow-x-auto">
-                            {allowedScopes.includes('KITCHEN') && <button onClick={() => handleViewChange('KITCHEN')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'KITCHEN' ? 'bg-[#1A1A1A] text-[#FFD700]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('厨房')}</button>}
-                            {allowedScopes.includes('BAR') && <button onClick={() => handleViewChange('BAR')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'BAR' ? 'bg-[#1A1A1A] text-[#FFD700]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('水吧')}</button>}
-                            {allowedScopes.includes('GENERAL') && <button onClick={() => handleViewChange('GENERAL')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'GENERAL' ? 'bg-[#1A1A1A] text-[#FFD700]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('后勤')}</button>}
+                            {allowedScopes.includes('KITCHEN') && <button onClick={() => handleViewChange('KITCHEN')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'KITCHEN' ? 'bg-[#111111] text-[#FFD200]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('厨房')}</button>}
+                            {allowedScopes.includes('BAR') && <button onClick={() => handleViewChange('BAR')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'BAR' ? 'bg-[#111111] text-[#FFD200]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('水吧')}</button>}
+                            {allowedScopes.includes('GENERAL') && <button onClick={() => handleViewChange('GENERAL')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${currentStockView === 'GENERAL' ? 'bg-[#111111] text-[#FFD200]' : 'text-gray-500 hover:bg-gray-50'}`}>{t('后勤')}</button>}
                             {allowedScopes.includes('FUEL') && <button onClick={() => handleViewChange('FUEL')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 ${currentStockView === 'FUEL' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}><Flame size={12}/> {t('燃料')}</button>}
                         </div>
                         
@@ -2022,7 +2021,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     placeholder="Search item..." 
                                     value={searchTerm} 
                                     onChange={(e) => setSearchTerm(e.target.value)} 
-                                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700]"
+                                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200]"
                                 />
                             </div>
                             
@@ -2044,7 +2043,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     >
                                         {isGeneratingPdf ? <Loader2 size={18} className="animate-spin"/> : <FileDown size={18}/>}
                                     </button>
-                                    {canAddItem && <button onClick={() => setEditingItem({ category: CATEGORY_SECTIONS[currentStockView][0].id, unit: 'unit' })} className="bg-[#1A1A1A] text-[#FFD700] p-2 rounded-xl shadow-sm hover:bg-black"><Plus size={18}/></button>}
+                                    {canAddItem && <button onClick={() => setEditingItem({ category: CATEGORY_SECTIONS[currentStockView][0].id, unit: 'unit' })} className="bg-[#111111] text-[#FFD200] p-2 rounded-xl shadow-sm hover:bg-black"><Plus size={18}/></button>}
                                 </>
                             )}
                             <button 
@@ -2064,7 +2063,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         
                         {(canExecuteStocktake || canViewStock) && <div className="flex bg-gray-200 p-1 rounded-lg border border-gray-300">
                             {canExecuteStocktake && <button onClick={() => {setMode('CHECK'); setViewType('LIST');}} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${mode === 'CHECK' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>✅ 盘点模式</button>}
-                            {canViewStock && <button onClick={() => {setMode('MASTER'); setViewType('LIST');}} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${mode === 'MASTER' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>⚙️ 管理模式</button>}
+                            {canViewStock && <button onClick={() => {setMode('MASTER'); setViewType('LIST');}} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${mode === 'MASTER' ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>⚙️ 管理模式</button>}
                         </div>}
 
                         {mode === 'MASTER' && (
@@ -2098,7 +2097,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         {viewType === 'LIST' && (
                             <div className="text-right px-2">
                                 <div className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">物品数 (Items)</div>
-                                <div className="text-sm md:text-base font-black text-[#1A1A1A]">{filteredItems.length}</div>
+                                <div className="text-sm md:text-base font-black text-[#111111]">{filteredItems.length}</div>
                             </div>
                         )}
                     </div>
@@ -2120,7 +2119,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
                         <Lock size={26}/>
                     </div>
-                    <h3 className="text-base font-black text-[#1A1A1A]">没有可用的库存权限</h3>
+                    <h3 className="text-base font-black text-[#111111]">没有可用的库存权限</h3>
                     <p className="mt-2 text-xs font-medium leading-5 text-gray-400">
                         {allowedScopes.length === 0 ? '尚未分配厨房、水吧、后勤或燃料的管理范围。' : '请联系老板开启查看库存或执行盘点权限。'}
                     </p>
@@ -2134,7 +2133,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     <div className="mb-4">
                         {myDueTasks.length > 0 && (
                             <div className="space-y-2 mb-3">
-                                <h4 className="font-black text-sm text-[#1A1A1A] flex items-center gap-2 px-1"><Clock size={14} className="text-yellow-600"/> 待完成盘点</h4>
+                                <h4 className="font-black text-sm text-[#111111] flex items-center gap-2 px-1"><Clock size={14} className="text-yellow-600"/> 待完成盘点</h4>
                                 {myDueTasks.map(task => {
                                     const freq = (task as any).checkFrequency || 1;
                                     const freqLabel = FREQ_OPTIONS.find(f => f.value === freq)?.label || `每${freq}天`;
@@ -2190,7 +2189,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex bg-gray-200 p-1 rounded-lg">
                                 <button onClick={() => setTaskSubView('ASSIGNMENTS')}
-                                    className={`flex items-center gap-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${taskSubView === 'ASSIGNMENTS' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-gray-500'}`}>
+                                    className={`flex items-center gap-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${taskSubView === 'ASSIGNMENTS' ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500'}`}>
                                     <Users size={14}/> 常驻指派
                                 </button>
                                 <button onClick={() => setTaskSubView('LOG')}
@@ -2234,7 +2233,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 <div className="flex bg-gray-200 p-0.5 rounded-lg mb-4 w-fit">
                                     {(['TODAY', 'YESTERDAY', 'WEEK', 'ALL'] as const).map(f => (
                                         <button key={f} onClick={() => setTaskDateFilter(f)}
-                                            className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${taskDateFilter === f ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                            className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${taskDateFilter === f ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                                             {f === 'TODAY' ? '今日' : f === 'YESTERDAY' ? '昨日' : f === 'WEEK' ? '本周' : '全部'}
                                         </button>
                                     ))}
@@ -2250,7 +2249,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-green-100 text-green-700 rounded-xl"><CheckCircle2 size={16}/></div>
                                                 <div>
-                                                    <div className="font-bold text-sm text-[#1A1A1A]">{c.assigneeName}</div>
+                                                    <div className="font-bold text-sm text-[#111111]">{c.assigneeName}</div>
                                                     <div className="text-[10px] text-gray-400">
                                                         {c.date} · {new Date(c.completedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · {c.items.length} items
                                                     </div>
@@ -2275,7 +2274,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
                         
                         {/* 🛡️ 致命漏洞护栏 UI：防止全表扫描带来的并发熔断与计费爆炸 */}
-                        <div className="bg-red-50 border-l-4 border-[#1A1A1A] p-4 my-4 shadow-sm rounded-r-xl">
+                        <div className="bg-red-50 border-l-4 border-[#111111] p-4 my-4 shadow-sm rounded-r-xl">
                             <div className="flex">
                                 <div className="flex-shrink-0">
                                     <AlertOctagon className="h-5 w-5 text-red-600" />
@@ -2283,7 +2282,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 <div className="ml-3">
                                     <h3 className="text-sm font-bold text-red-800 tracking-wide">高危计费防护 (BILLING PROTECTION)</h3>
                                     <div className="mt-1 text-xs text-red-700 font-medium">
-                                        <p>为防止全表扫描导致账单爆炸和系统熔断，流水日志已强制开启 <code className="font-mono text-[#1A1A1A] font-bold bg-[#FFD700] px-1.5 py-0.5 rounded ml-1">limit(50)</code> 限制。</p>
+                                        <p>为防止全表扫描导致账单爆炸和系统熔断，流水日志已强制开启 <code className="font-mono text-[#111111] font-bold bg-[#FFD200] px-1.5 py-0.5 rounded ml-1">limit(50)</code> 限制。</p>
                                     </div>
                                 </div>
                             </div>
@@ -2364,7 +2363,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
             {!myTask && mode === 'CHECK' && !isRestrictedView && canExecuteStocktake && (
                 <div className="fixed bottom-0 left-0 w-full bg-white p-4 border-t border-gray-200 md:static md:bg-transparent md:border-0 md:p-0 mt-4">
-                    <button onClick={() => handleSubmitCheck()} disabled={isSubmitting} className="w-full bg-[#1A1A1A] text-[#FFD700] py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2">
+                    <button onClick={() => handleSubmitCheck()} disabled={isSubmitting} className="w-full bg-[#111111] text-[#FFD200] py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2">
                         <CheckCircle2 size={20}/> {isSubmitting ? 'Saving...' : '提交盘点'}
                     </button>
                 </div>
@@ -2460,7 +2459,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         />
                         <div className="mt-4 text-center">
                             <h3 className="text-base md:text-lg font-black text-white tracking-wide">{previewImage.name}</h3>
-                            <p className="text-xs text-gray-450 mt-1 font-mono font-semibold">点击空白处或右上角关闭 (Tap anywhere to close)</p>
+                            <p className="text-xs text-gray-500 mt-1 font-mono font-semibold">点击空白处或右上角关闭 (Tap anywhere to close)</p>
                         </div>
                     </div>
                 </div>

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Building2, X, Save, Star, Loader2, CreditCard, Landmark, Truck, Mail, MapPin } from 'lucide-react';
+import { Building2, X, Save, Star, Loader2 } from 'lucide-react';
 import { Supplier, SupplierBank } from '../../../types';
 import { ACCOUNTING_CATEGORIES_OPTIONS, SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
 
@@ -107,12 +107,12 @@ export const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-[#1A1A1A]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in">
+        <div className="fixed inset-0 bg-[#111111]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in">
             <div className="bg-white w-full max-w-2xl rounded-[2rem] p-6 md:p-8 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto border border-gray-100 scrollbar-thin">
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4 sticky top-0 bg-white z-10">
-                    <h3 className="font-black text-xl text-[#1A1A1A] flex items-center gap-2">
-                        <div className="p-2 bg-gradient-to-br from-gray-800 to-[#1A1A1A] text-[#FFD700] rounded-xl"><Building2 size={20}/></div>
+                    <h3 className="font-black text-xl text-[#111111] flex items-center gap-2">
+                        <div className="p-2 bg-gradient-to-br from-gray-800 to-[#111111] text-[#FFD200] rounded-xl"><Building2 size={20}/></div>
                         {supplierForm.id && suppliers.some(s => s.id === supplierForm.id) ? '编辑供应商专业档案' : '录入新供应商专业档案'}
                     </h3>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"><X size={20}/></button>
@@ -133,7 +133,7 @@ export const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                                 <div>
                                     <label className={SUP_LABEL_STYLE}>ID (唯一编码)</label>
                                     <input 
-                                        className={`${SUP_INPUT_STYLE} font-mono ${suppliers.some(s => s.id === supplierForm.id) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'text-blue-700 font-bold focus:ring-[#FFD700]'}`} 
+                                        className={`${SUP_INPUT_STYLE} font-mono ${suppliers.some(s => s.id === supplierForm.id) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'text-blue-700 font-bold focus:ring-[#FFD200]'}`} 
                                         value={supplierForm.id || ''} 
                                         onChange={e => onChange({...supplierForm, id: e.target.value.trim().toUpperCase()})} 
                                         placeholder="如: S8001" 
@@ -149,12 +149,12 @@ export const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                                     </select>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between bg-yellow-50/50 p-3 rounded-2xl border border-yellow-250 cursor-pointer group" onClick={() => onChange({...supplierForm, isFavorite: !supplierForm.isFavorite})}>
+                            <div className="flex items-center justify-between bg-yellow-50/50 p-3 rounded-2xl border border-yellow-300 cursor-pointer group" onClick={() => onChange({...supplierForm, isFavorite: !supplierForm.isFavorite})}>
                                 <div>
                                     <p className="text-xs font-black text-yellow-800">设为星标优选常用商户 (Primary Favorite)</p>
                                     <p className="text-[9.5px] text-yellow-600 font-bold mt-0.5">置顶显示，在应付账单模块可快捷检索和快速转账</p>
                                 </div>
-                                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${supplierForm.isFavorite ? 'bg-[#FFD700] text-black shadow-md scale-105' : 'bg-white border border-yellow-200 text-gray-300 group-hover:bg-yellow-100'}`}>
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${supplierForm.isFavorite ? 'bg-[#FFD200] text-black shadow-md scale-105' : 'bg-white border border-yellow-200 text-gray-300 group-hover:bg-yellow-100'}`}>
                                     <Star size={18} className={supplierForm.isFavorite ? "fill-black text-black" : ""} />
                                 </div>
                             </div>
@@ -339,7 +339,7 @@ export const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     </div>
 
                     {/* Save Button */}
-                    <button onClick={onSave} disabled={isSyncingName} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-sm mt-4 flex justify-center items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95 transition-all">
+                    <button onClick={onSave} disabled={isSyncingName} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-sm mt-4 flex justify-center items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95 transition-all">
                         {isSyncingName ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 保存并同步供应商档案 (Save Profile)
                     </button>
                 </div>

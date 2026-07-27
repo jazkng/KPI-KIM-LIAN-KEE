@@ -9,7 +9,6 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
-  Archive,
   Plus,
   Trash2,
   Edit3,
@@ -128,7 +127,7 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
         {cards.map((card) => (
           <div
             key={card.l}
-            className="bg-white p-3.5 md:p-5 rounded-2xl border border-gray-150 shadow-xs flex flex-col justify-between h-24 md:h-28 relative overflow-hidden group"
+            className="bg-white p-3.5 md:p-5 rounded-2xl border border-gray-200 shadow-xs flex flex-col justify-between h-24 md:h-28 relative overflow-hidden group"
           >
             <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
               <card.i size={44} />
@@ -151,9 +150,9 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
       </div>
 
       {/* History List Section */}
-      <div className="bg-white rounded-2xl border border-gray-150 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
         {/* Switch Filter Row */}
-        <div className="p-4 border-b border-gray-150 bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div className="flex items-center gap-2">
             <History size={18} className="text-gray-400" />
             <h3 className="font-extrabold text-sm md:text-base text-[#111111]">
@@ -214,7 +213,7 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
               .map((t) => (
                 <div
                   key={t.id}
-                  className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50 transition duration-150 group"
+                  className="p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-gray-50/50 transition duration-150 group"
                 >
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50 text-gray-500 shrink-0 border border-gray-100 shadow-inner mt-0.5">
@@ -234,7 +233,7 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-gray-50 pt-2 sm:pt-0 sm:border-none">
+                  <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 border-t border-gray-50 pt-2 md:pt-0 md:border-none">
                     <span className="font-mono font-black text-sm text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-100/30">
                       +{formatMoney(t.amount)}
                     </span>

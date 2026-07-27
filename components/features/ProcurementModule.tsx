@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ShoppingCart, Package, Truck, AlertTriangle, Plus, FileText, Send, Printer, CheckCircle2, X, RefreshCw, ChevronRight, Search, ClipboardCheck, ArrowDownToLine, Loader2, Info, ChevronDown, Filter, Utensils, Coffee, Box, Wrench, Minus, ChevronUp, History, Clock, Zap, Trash2, Fish, Beef, Wheat, Carrot, Soup, PaintBucket, Users, ArrowLeft, Percent, Bus, Scale, Calculator, Flame } from 'lucide-react';
-import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, CatalogItem, UomOption } from '../../types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ShoppingCart, Package, Truck, AlertTriangle, Plus, FileText, Send, Printer, CheckCircle2, X, RefreshCw, Search, ClipboardCheck, ArrowDownToLine, Loader2, Info, ChevronDown, Filter, Utensils, Coffee, Wrench, Minus, ChevronUp, History, Clock, Zap, Trash2, Fish, Beef, Wheat, Carrot, ArrowLeft, Percent, Bus, Scale, Calculator, Flame } from 'lucide-react';
+import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, CatalogItem } from '../../types';
 import { normalizeCatalogItem } from '../utils';
 import { DataManager } from '../../utils/dataManager';
+import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
-    calculateWeightedAverageCost, calculateReceivedLine, convertPurchaseToBase, calculatePurchaseToBaseRatio,
-    getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
+    calculateWeightedAverageCost, calculateReceivedLine, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
     getBaseUnit, getDisplayToBaseRatio, needsReplenishment
 } from '../../utils/unitConversion';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
-
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface ProcurementModuleProps {
     onClose?: () => void;
@@ -429,11 +428,6 @@ function getDefaultReplenishUnit(item: StockItem, catalogItem?: CatalogItem) {
         ratio: resolved.purchaseToBaseRatio,
         price: resolved.purchaseUnitPrice
     };
-}
-
-function getPriceForUnit(item: StockItem, unitName: string, catalogItem?: CatalogItem): number {
-    const resolved = resolveProcurementPrice(item, unitName, catalogItem);
-    return resolved.purchaseUnitPrice;
 }
 
 export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose }) => {
@@ -925,8 +919,6 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             const selectedPU = pUnits.find(p => p.unitName === draft.unit);
             
             const defaultPurchaseUnitId = selectedPU?.id;
-            const defaultPurchaseUnitName = selectedPU?.unitName || draft.unit;
-            const defaultToBaseRatio = selectedPU?.toBaseRatio ?? draft.ratio ?? 1;
             
             if (match) {
                 const { supplier, catalogItem: rawCatalogItem } = match;
@@ -1117,8 +1109,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 if (!element) continue;
                 if (i > 0) pdf.addPage();
                 
+                await waitForPdfFonts();
                 const canvas = await html2canvas(element, {
-                    scale: window.innerWidth < 768 ? 1.2 : 1.8,
+                    scale: window.innerWidth < MOBILE_BREAKPOINT ? 1.2 : 1.8,
                     useCORS: true,
                     allowTaint: false,
                     backgroundColor: "#ffffff",
@@ -1441,8 +1434,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             replenishDisplayUnit,
             replenishRatio,
             displayCurrentQty,
-            displayMinLevel,
-            displayMaxQty
+            displayMinLevel
         } = getItemReplenishConfig(item);
         
         const isLow = needsReplenishment(item);
@@ -1477,7 +1469,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 }`}
             >
                 {/* A. 商品标题区 (Responsive Column/Row Stacking to prevent overlap) */}
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-2.5">
+                <div className="flex flex-col md:flex-row justify-between items-start gap-2.5">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-1.5 flex-wrap">
                             <h4 className="font-extrabold text-sm text-[#111111] leading-snug tracking-tight">
@@ -1505,7 +1497,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                         </div>
                     </div>
                     
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-1.5 w-full sm:w-auto shrink-0 mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-0 border-gray-100/80">
+                    <div className="flex md:flex-col items-center md:items-end justify-between md:justify-start gap-1.5 w-full md:w-auto shrink-0 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-0 border-gray-100/80">
                         <div className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
                             !resolvedPrice.isValid
                                 ? 'bg-orange-50 text-orange-600 border-orange-200'
@@ -1774,10 +1766,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* === HEADER === */}
-                <div className="bg-[#1A1A1A] px-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] shadow-md z-20"
+                <div className="bg-[#111111] px-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] shadow-md z-20"
                      style={{ paddingTop: 'max(env(safe-area-inset-top, 12px), 12px)', paddingBottom: '12px' }}>
                     <div className="flex items-center gap-2">
                         {onClose && (
@@ -1791,7 +1783,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                 <ArrowLeft size={18} className="stroke-[2.5]" />
                             </button>
                         )}
-                        <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg"><ShoppingCart size={20}/></div>
+                        <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg"><ShoppingCart size={20}/></div>
                         <div>
                             <h3 className="font-serif font-black text-lg tracking-wide">智能采购</h3>
                             <p className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">PROCUREMENT</p>
@@ -1805,10 +1797,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
                 {/* === TAB SWITCHER === */}
                 <div className="bg-white border-b border-gray-200 px-3 py-1.5 flex gap-2 shrink-0 z-10 shadow-sm">
-                    <button onClick={() => setActiveTab('REPLENISH')} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${activeTab === 'REPLENISH' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                    <button onClick={() => setActiveTab('REPLENISH')} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${activeTab === 'REPLENISH' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'bg-gray-100 text-gray-500'}`}>
                         <RefreshCw size={14}/> 智能补货
                     </button>
-                    <button onClick={() => { setActiveTab('ORDERS'); setVisibleOrderCount(15); }} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${activeTab === 'ORDERS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                    <button onClick={() => { setActiveTab('ORDERS'); setVisibleOrderCount(15); }} className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${activeTab === 'ORDERS' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'bg-gray-100 text-gray-500'}`}>
                         <History size={14}/> 采购记录
                     </button>
                 </div>
@@ -1842,7 +1834,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     <button 
                                                         key={cat.id} 
                                                         onClick={() => { setActiveCategory(cat.id); setActiveSubCategory('ALL'); }} 
-                                                        className={`px-3 py-2 rounded-xl text-[11px] font-black whitespace-nowrap flex items-center gap-1.5 transition-all shrink-0 ${activeCategory === cat.id ? 'bg-[#1A1A1A] text-[#FFD700] ring-2 ring-[#FFD700] ring-offset-1' : `${cat.color}`}`}
+                                                        className={`px-3 py-2 rounded-xl text-[11px] font-black whitespace-nowrap flex items-center gap-1.5 transition-all shrink-0 ${activeCategory === cat.id ? 'bg-[#111111] text-[#FFD200] ring-2 ring-[#FFD200] ring-offset-1' : `${cat.color}`}`}
                                                     >
                                                         <cat.icon size={13}/> {cat.label}
                                                     </button>
@@ -1875,7 +1867,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     placeholder="搜索..." 
                                                     value={searchTerm} 
                                                     onChange={e => setSearchTerm(e.target.value)} 
-                                                    className="w-full pl-8 pr-3 py-2 bg-gray-100 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#1A1A1A] transition-all"
+                                                    className="w-full pl-8 pr-3 py-2 bg-gray-100 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#111111] transition-all"
                                                 />
                                             </div>
 
@@ -1900,8 +1892,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     className="h-9 px-3 bg-blue-600 text-white rounded-xl font-black text-[10px] flex items-center gap-1.5 hover:bg-blue-700 transition-colors shadow-sm active:scale-95 whitespace-nowrap disabled:opacity-60 disabled:active:scale-100"
                                                 >
                                                     {isRefreshingForSmartFill ? <Loader2 size={13} className="animate-spin"/> : <Zap size={13} fill="currentColor"/>}
-                                                    <span className="hidden sm:inline">{isRefreshingForSmartFill ? '读取最新库存...' : '智能补货'}</span>
-                                                    <span className="sm:hidden">{isRefreshingForSmartFill ? '读取中' : '补货'}</span>
+                                                    <span className="hidden md:inline">{isRefreshingForSmartFill ? '读取最新库存...' : '智能补货'}</span>
+                                                    <span className="md:hidden">{isRefreshingForSmartFill ? '读取中' : '补货'}</span>
                                                 </button>
 
                                                 {/* Smart Fill Dropdown */}
@@ -1913,7 +1905,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                             
                                                             <div className="shrink-0">
                                                                 <button onClick={() => executeSmartFill('CATEGORY', 'ALL')} className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-xl text-xs font-bold flex items-center gap-2 mb-1">
-                                                                    <div className="bg-[#1A1A1A] text-[#FFD700] p-1.5 rounded"><Zap size={12}/></div>
+                                                                    <div className="bg-[#111111] text-[#FFD200] p-1.5 rounded"><Zap size={12}/></div>
                                                                     全店补货 (All Low Stock)
                                                                 </button>
                                                                 
@@ -2025,7 +2017,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                         >
                                                             <div className="flex items-start justify-between gap-2">
                                                                 <div className="min-w-0">
-                                                                    <p className="truncate text-xs font-black text-[#1A1A1A]">{completion.assigneeName}</p>
+                                                                    <p className="truncate text-xs font-black text-[#111111]">{completion.assigneeName}</p>
                                                                     <p className="mt-0.5 flex items-center gap-1 text-[9px] font-medium text-gray-400">
                                                                         <Clock size={10}/>
                                                                         {new Date(completion.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -2039,7 +2031,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                 type="button"
                                                                 onClick={() => executeStocktakeFill(completion)}
                                                                 disabled={isRefreshingForSmartFill}
-                                                                className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#1A1A1A] px-3 py-2.5 text-xs font-black text-[#FFD700] shadow-sm active:scale-[0.98] disabled:opacity-60"
+                                                                className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#111111] px-3 py-2.5 text-xs font-black text-[#FFD200] shadow-sm active:scale-[0.98] disabled:opacity-60"
                                                             >
                                                                 {isRefreshingForSmartFill ? <Loader2 size={14} className="animate-spin"/> : <Zap size={14}/>} 根据这次盘点补货
                                                             </button>
@@ -2051,8 +2043,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                     )}
 
                                     {/* ====== ITEM LIST (OPTIMIZED MOBILE) ====== */}
-                                    <div className="flex-grow overflow-y-auto bg-[#F5F7FA]" style={{ paddingBottom: cartTotalCount > 0 ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : '20px' }}>
-                                        <div className="p-2.5 md:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                                    <div className="flex-grow overflow-y-auto bg-[#F6F7FB]" style={{ paddingBottom: cartTotalCount > 0 ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : '20px' }}>
+                                        <div className="p-2.5 md:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
                                             {filteredStock.map(item => renderUnifiedCard(item))}
 
                                             {filteredStock.length === 0 && (
@@ -2068,12 +2060,12 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                     {cartTotalCount > 0 && (
                                         <div className="absolute left-3 right-3 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[600px] z-50"
                                              style={{ bottom: 'max(16px, env(safe-area-inset-bottom, 16px))' }}>
-                                            <div className="bg-[#1A1A1A] rounded-2xl shadow-2xl p-3 flex items-center justify-between border border-[#FFD700]/30 relative overflow-hidden">
-                                                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-[#FFD700] to-transparent"></div>
+                                            <div className="bg-[#111111] rounded-2xl shadow-2xl p-3 flex items-center justify-between border border-[#FFD200]/30 relative overflow-hidden">
+                                                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-[#FFD200] to-transparent"></div>
                                                 
                                                 <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => setShowCartDetail(!showCartDetail)}>
                                                     <div className="relative shrink-0">
-                                                        <div className="bg-[#FFD700] text-black w-10 h-10 rounded-xl flex items-center justify-center font-black text-base shadow-lg">
+                                                        <div className="bg-[#FFD200] text-black w-10 h-10 rounded-xl flex items-center justify-center font-black text-base shadow-lg">
                                                             {cartTotalCount}
                                                         </div>
                                                     </div>
@@ -2089,11 +2081,11 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                 <button 
                                                     onClick={handleGeneratePOs} 
                                                     disabled={isGenerating}
-                                                    className="bg-[#FFD700] hover:bg-white text-black px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg transition-all active:scale-95 shrink-0 ml-2"
+                                                    className="bg-[#FFD200] hover:bg-white text-black px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg transition-all active:scale-95 shrink-0 ml-2"
                                                 >
                                                     {isGenerating ? <Loader2 size={16} className="animate-spin"/> : <FileText size={16}/>}
-                                                    <span className="hidden sm:inline">生成采购单</span>
-                                                    <span className="sm:hidden">下单</span>
+                                                    <span className="hidden md:inline">生成采购单</span>
+                                                    <span className="md:hidden">下单</span>
                                                 </button>
                                             </div>
 
@@ -2101,7 +2093,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                             {showCartDetail && (
                                                 <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden max-h-[50vh] flex flex-col">
                                                     <div className="p-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0">
-                                                        <h4 className="font-black text-xs text-[#1A1A1A]">已选 ({cartTotalCount})</h4>
+                                                        <h4 className="font-black text-xs text-[#111111]">已选 ({cartTotalCount})</h4>
                                                         <button onClick={() => setOrderDrafts({})} className="text-[10px] text-red-500 font-bold flex items-center gap-1"><Trash2 size={11}/> 清空</button>
                                                     </div>
                                                     <div className="p-2 space-y-0.5 overflow-y-auto">
@@ -2110,10 +2102,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                             return (
                                                                 <div key={d.stockId} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-lg">
                                                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                                        <span className="font-bold text-xs text-[#1A1A1A] truncate">{item?.name}</span>
+                                                                        <span className="font-bold text-xs text-[#111111] truncate">{item?.name}</span>
                                                                         <span className="text-[10px] text-gray-400 font-mono shrink-0">x{d.qty} {d.unit}</span>
                                                                     </div>
-                                                                    <span className="font-mono font-bold text-xs text-[#1A1A1A] shrink-0 ml-2">RM {(d.qty * d.price).toFixed(2)}</span>
+                                                                    <span className="font-mono font-bold text-xs text-[#111111] shrink-0 ml-2">RM {(d.qty * d.price).toFixed(2)}</span>
                                                                 </div>
                                                             );
                                                         })}
@@ -2139,15 +2131,15 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                         {/* 新增：头部筛选与状态提示栏 */}
                                         <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-200">
                                             <div className="flex items-center gap-2">
-                                                <Clock size={16} className="text-[#FFD700]" />
-                                                <span className="text-xs font-black text-[#1A1A1A]">最近 50 条记录</span>
+                                                <Clock size={16} className="text-[#FFD200]" />
+                                                <span className="text-xs font-black text-[#111111]">最近 50 条记录</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <input 
                                                     type="date" 
                                                     value={orderDateFilter}
                                                     onChange={e => setOrderDateFilter(e.target.value)}
-                                                    className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-[#1A1A1A] text-gray-700"
+                                                    className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-[#111111] text-gray-700"
                                                 />
                                                 {orderDateFilter && (
                                                     <button onClick={() => setOrderDateFilter('')} className="bg-red-50 text-red-500 p-1.5 rounded-lg active:scale-95 transition-all">
@@ -2176,14 +2168,14 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
                                                     return (
                                                     <div key={po.id} className={`bg-white p-4 rounded-2xl border shadow-sm ${isReceived ? 'border-green-200' : isCancelled ? 'border-gray-300 opacity-75' : 'border-yellow-200'}`}>
-                                                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                                                        <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
                                                             <div className="flex items-center gap-3">
                                                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${isReceived ? 'bg-green-50 text-green-600' : isCancelled ? 'bg-gray-100 text-gray-500' : 'bg-yellow-50 text-yellow-600'}`}>
                                                                     {isReceived ? <CheckCircle2 size={22}/> : isCancelled ? <X size={22}/> : <Clock size={22}/>}
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <div className="flex items-center gap-2 flex-wrap">
-                                                                        <span className="font-mono font-black text-base text-[#1A1A1A]">{po.id}</span>
+                                                                        <span className="font-mono font-black text-base text-[#111111]">{po.id}</span>
                                                                         <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{po.date.split('T')[0]}</span>
                                                                         <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isReceived ? 'bg-green-100 text-green-700' : isCancelled ? 'bg-gray-200 text-gray-600' : 'bg-yellow-100 text-yellow-700'}`}>
                                                                             {isReceived ? '已收货' : isCancelled ? '已取消' : '等待收货'}
@@ -2199,9 +2191,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                 </div>
                                                             </div>
                                                             
-                                                            <div className="flex w-full sm:w-auto items-center gap-2 justify-end">
+                                                            <div className="flex w-full md:w-auto items-center gap-2 justify-end">
                                                                 {po.status === 'ORDERED' && (
-                                                                    <button onClick={() => initiateReceive(po)} className="min-h-11 flex-1 sm:flex-none bg-[#1A1A1A] text-[#FFD700] px-4 py-2.5 rounded-xl text-xs font-black shadow-lg active:scale-95 flex items-center justify-center gap-1.5">
+                                                                    <button onClick={() => initiateReceive(po)} className="min-h-11 flex-1 md:flex-none bg-[#111111] text-[#FFD200] px-4 py-2.5 rounded-xl text-xs font-black shadow-lg active:scale-95 flex items-center justify-center gap-1.5">
                                                                         <ClipboardCheck size={14}/> 收货
                                                                     </button>
                                                                 )}
@@ -2215,10 +2207,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                             </div>
                                                         </div>
 
-                                                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                        <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
                                                             <div className="rounded-xl bg-gray-50 border border-gray-100 p-2.5">
                                                                 <p className="text-[9px] font-bold text-gray-400 uppercase">预计金额</p>
-                                                                <p className="mt-0.5 text-sm font-black text-[#1A1A1A]">RM {po.totalEstimated.toFixed(2)}</p>
+                                                                <p className="mt-0.5 text-sm font-black text-[#111111]">RM {po.totalEstimated.toFixed(2)}</p>
                                                             </div>
                                                             <div className={`rounded-xl border p-2.5 ${isReceived ? 'bg-green-50 border-green-100' : 'bg-yellow-50 border-yellow-100'}`}>
                                                                 <p className={`text-[9px] font-bold uppercase ${isReceived ? 'text-green-600' : 'text-yellow-700'}`}>{isReceived ? '最终金额' : '当前状态'}</p>
@@ -2226,9 +2218,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                     {isReceived && hasFinalFigures ? `RM ${finalTotal.toFixed(2)}` : isReceived ? '已收货' : '待点算'}
                                                                 </p>
                                                             </div>
-                                                            <div className="col-span-2 sm:col-span-1 rounded-xl bg-gray-50 border border-gray-100 p-2.5 flex sm:block items-center justify-between">
+                                                            <div className="col-span-2 md:col-span-1 rounded-xl bg-gray-50 border border-gray-100 p-2.5 flex md:block items-center justify-between">
                                                                 <p className="text-[9px] font-bold text-gray-400 uppercase">{isReceived && hasFinalFigures ? '金额差异' : '物品数量'}</p>
-                                                                <p className={`mt-0.5 text-sm font-black ${amountDifference > 0 ? 'text-red-600' : amountDifference < 0 ? 'text-green-600' : 'text-[#1A1A1A]'}`}>
+                                                                <p className={`mt-0.5 text-sm font-black ${amountDifference > 0 ? 'text-red-600' : amountDifference < 0 ? 'text-green-600' : 'text-[#111111]'}`}>
                                                                     {isReceived && hasFinalFigures
                                                                         ? `${amountDifference > 0 ? '+' : ''}RM ${amountDifference.toFixed(2)}`
                                                                         : `${po.items.length} 项`}
@@ -2243,7 +2235,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                 const isShortReceived = hasReceivedQty && (item.receivedQty || 0) < item.orderQty;
                                                                 return (
                                                                 <div key={idx} className={`flex-shrink-0 min-w-[150px] px-2.5 py-2 rounded-xl text-[11px] border ${isShortReceived ? 'bg-red-50 border-red-100' : isReceived ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
-                                                                    <div className="font-bold text-[#1A1A1A] truncate">{item.name}</div>
+                                                                    <div className="font-bold text-[#111111] truncate">{item.name}</div>
                                                                     <div className="mt-1 text-[9px] font-medium text-gray-500">订购: {item.orderQty} {item.unit}</div>
                                                                     {isReceived && (
                                                                         <>
@@ -2251,7 +2243,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                                 {hasReceivedQty ? `实收: ${item.receivedQty} ${item.unit}` : '实收数量未记录'}
                                                                             </div>
                                                                             {isWeightItem && <div className="mt-0.5 text-[9px] font-bold text-orange-600">重量: {item.receivedWeight} {item.billingUnit || item.pricingUnit || item.baseUnit || 'KG'}</div>}
-                                                                            {typeof item.finalLineTotal === 'number' && <div className="mt-1 font-mono text-[9px] font-black text-[#1A1A1A]">RM {item.finalLineTotal.toFixed(2)}</div>}
+                                                                            {typeof item.finalLineTotal === 'number' && <div className="mt-1 font-mono text-[9px] font-black text-[#111111]">RM {item.finalLineTotal.toFixed(2)}</div>}
                                                                         </>
                                                                     )}
                                                                 </div>
@@ -2282,8 +2274,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
                 {/* ====== RECEIVE MODAL (iOS Safe) ====== */}
                 {isReceiveModalOpen && receivingPO && (
-                    <div className="fixed inset-0 bg-black/80 z-[200] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
-                        <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
+                    <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm">
+                        <div className="bg-white w-full md:max-w-2xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
                              style={{ 
                                  maxHeight: '100vh',
                                  borderTopLeftRadius: '1.5rem',
@@ -2291,19 +2283,19 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                  paddingBottom: 'env(safe-area-inset-bottom, 0px)'
                              }}>
                             {/* Handle bar for mobile */}
-                            <div className="sm:hidden flex justify-center pt-2 pb-1 shrink-0">
+                            <div className="md:hidden flex justify-center pt-2 pb-1 shrink-0">
                                 <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
                             </div>
                             
-                            <div className="px-4 py-3 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
+                            <div className="px-4 py-3 md:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
                                 <div>
-                                    <h3 className="font-black text-base sm:text-xl text-[#1A1A1A] flex items-center gap-2"><ArrowDownToLine className="text-blue-600" size={18}/> 收货点算</h3>
+                                    <h3 className="font-black text-base md:text-xl text-[#111111] flex items-center gap-2"><ArrowDownToLine className="text-blue-600" size={18}/> 收货点算</h3>
                                     <p className="text-[10px] text-gray-500 font-bold mt-0.5 font-mono">PO: {receivingPO.id}</p>
                                 </div>
                                 <button onClick={() => setIsReceiveModalOpen(false)} className="p-2 bg-white shadow-sm rounded-full hover:bg-gray-100"><X size={18}/></button>
                             </div>
 
-                            <div className="flex-grow overflow-y-auto px-3 py-3 sm:p-5 space-y-3 bg-[#F9FAFB]">
+                            <div className="flex-grow overflow-y-auto px-3 py-3 md:p-5 space-y-3 bg-[#F6F7FB]">
                                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex gap-2 items-start text-[11px] text-blue-800 font-bold">
                                     <Info size={14} className="shrink-0 mt-0.5"/>
                                     <p>核对实收数量，确认后自动增加库存并生成应付账款。</p>
@@ -2321,7 +2313,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                             <div key={idx} className={`bg-white border-2 rounded-xl p-3 flex flex-col gap-3 ${isShort ? 'border-red-100 bg-red-50/30' : 'border-gray-100'}`}>
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="font-black text-xs text-[#1A1A1A] mb-1 flex items-center gap-1.5 flex-wrap">
+                                                        <div className="font-black text-xs text-[#111111] mb-1 flex items-center gap-1.5 flex-wrap">
                                                             <span className="truncate">{item.name}</span>
                                                             <button 
                                                                 type="button"
@@ -2341,10 +2333,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end sm:flex-wrap">
-                                                    <div className="col-span-2 sm:col-span-1">
+                                                <div className="grid grid-cols-2 gap-2 md:flex md:items-end md:flex-wrap">
+                                                    <div className="col-span-2 md:col-span-1">
                                                         <label className="text-[9px] font-bold text-gray-400 uppercase mb-0.5 block">实收 ({item.unit})</label>
-                                                        <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] sm:flex sm:items-center">
+                                                        <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] md:flex md:items-center">
                                                             <button onClick={() => {
                                                                 const newVal = Math.max(0, item.receivedQty - 1);
                                                                 setReceivedItems(prev => { const n = [...prev]; n[idx].receivedQty = newVal; return n; });
@@ -2358,7 +2350,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                     const val = parseFloat(e.target.value) || 0;
                                                                     setReceivedItems(prev => { const n = [...prev]; n[idx].receivedQty = val; return n; });
                                                                 }}
-                                                                className={`min-w-0 w-full sm:w-16 h-11 border-y border-gray-300 text-center font-black text-base outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${isShort ? 'text-red-600 bg-red-50' : 'bg-white'}`}
+                                                                className={`min-w-0 w-full md:w-16 h-11 border-y border-gray-300 text-center font-black text-base outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${isShort ? 'text-red-600 bg-red-50' : 'bg-white'}`}
                                                             />
                                                             <button onClick={() => {
                                                                 const newVal = item.receivedQty + 1;
@@ -2385,7 +2377,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                         </div>
                                                     )}
 
-                                                    <div className={`min-w-0 ${item.billByWeight ? '' : 'col-span-2 sm:col-span-1'}`}>
+                                                    <div className={`min-w-0 ${item.billByWeight ? '' : 'col-span-2 md:col-span-1'}`}>
                                                         <label className="text-[9px] font-bold text-gray-400 uppercase mb-0.5 block">
                                                             {item.billByWeight ? `每${weightUnitLabel}价格 (RM/${weightUnitLabel})` : `每${item.unit}价格 (RM/${item.unit})`}
                                                         </label>
@@ -2449,7 +2441,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                 </div>
                             </div>
 
-                            <div className="px-4 py-3 sm:p-5 border-t border-gray-100 bg-white shrink-0">
+                            <div className="px-4 py-3 md:p-5 border-t border-gray-100 bg-white shrink-0">
                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                     <div>
                                         <label className="text-[9px] font-bold text-gray-400 uppercase mb-0.5 block flex items-center gap-1"><Percent size={9}/> Tax</label>
@@ -2475,14 +2467,14 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
                                 <div className="flex justify-between items-center mb-3 px-1 pt-2 border-t border-dashed border-gray-200">
                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</span>
-                                    <span className="text-2xl font-black font-mono text-[#1A1A1A]">
+                                    <span className="text-2xl font-black font-mono text-[#111111]">
                                         RM {(receivedItems.reduce(
                                             (sum, item) => sum + calculateReceivedLine(item).finalLineTotal,
                                             0
                                         ) + (receiveTax || 0) + (receiveDelivery || 0)).toFixed(2)}
                                     </span>
                                 </div>
-                                <button onClick={confirmReceive} disabled={isProcessingReceive} className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-sm shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-95">
+                                <button onClick={confirmReceive} disabled={isProcessingReceive} className="w-full py-3.5 bg-[#111111] text-[#FFD200] rounded-xl font-black text-sm shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-95">
                                     {isProcessingReceive ? <Loader2 size={20} className="animate-spin"/> : <CheckCircle2 size={20}/>} 确认入库
                                 </button>
                             </div>
@@ -2497,7 +2489,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                             <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <Trash2 size={28} className="text-red-600"/>
                             </div>
-                            <h4 className="text-lg font-black text-[#1A1A1A] mb-1">确认删除?</h4>
+                            <h4 className="text-lg font-black text-[#111111] mb-1">确认删除?</h4>
                             <p className="text-xs font-bold text-gray-500 mb-5">
                                 <span className="font-mono text-black">{deletePOCandidate}</span> · 无法撤销
                             </p>

@@ -16,13 +16,13 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
     receivingPO, receivedItems, isProcessingReceive, onUpdateItem, onConfirm, onClose
 }) => {
     return (
-        <div className="fixed inset-0 bg-[#1A1A1A]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-[#111111]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
                 <div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl"><ClipboardCheck size={24}/></div>
                         <div>
-                            <h3 className="font-black text-lg md:text-xl text-[#1A1A1A]">采购入库对账 (Receive PO)</h3>
+                            <h3 className="font-black text-lg md:text-xl text-[#111111]">采购入库对账 (Receive PO)</h3>
                             <p className="text-[10px] text-gray-500 font-mono mt-0.5 tracking-widest">ORDER REF: {receivingPO.id}</p>
                         </div>
                     </div>
@@ -50,7 +50,7 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
                             <tbody className="divide-y divide-gray-100">
                                 {receivedItems.map((item, idx) => (
                                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
-                                        <td className="p-4 font-bold text-xs text-[#1A1A1A]">
+                                        <td className="p-4 font-bold text-xs text-[#111111]">
                                             {item.name}
                                             <div className="text-[9px] text-gray-400 font-mono mt-0.5">{item.supplierCode || 'NO-CODE'}</div>
                                         </td>
@@ -94,7 +94,7 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
                             </p>
                         </div>
                     </div>
-                    <button onClick={onConfirm} disabled={isProcessingReceive} className="w-full md:w-auto px-8 py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+                    <button onClick={onConfirm} disabled={isProcessingReceive} className="w-full md:w-auto px-8 py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
                         {isProcessingReceive ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 确认入库并抛转账单
                     </button>
                 </div>

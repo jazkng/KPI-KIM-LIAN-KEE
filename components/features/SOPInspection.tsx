@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ClipboardCheck, CheckCircle2, User, Search, RefreshCcw, Filter } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, User, Search, RefreshCcw } from 'lucide-react';
 import { Employee, SOPItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -75,7 +75,7 @@ export const SOPInspection: React.FC = () => {
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
                 <div>
-                    <h3 className="font-black text-xl text-[#1A1A1A] flex items-center gap-2">
+                    <h3 className="font-black text-xl text-[#111111] flex items-center gap-2">
                         <ClipboardCheck className="text-brandRed" size={24} /> 
                         全员 SOP 进度稽查
                     </h3>
@@ -124,7 +124,7 @@ export const SOPInspection: React.FC = () => {
                                   <div className="flex items-center gap-3">
                                       <div className={`w-3 h-3 rounded-full ${isFullyDone ? 'bg-green-500 animate-pulse' : 'bg-yellow-400'}`}></div>
                                       <div>
-                                          <h4 className="font-black text-lg text-[#1A1A1A] leading-tight flex items-center gap-2">
+                                          <h4 className="font-black text-lg text-[#111111] leading-tight flex items-center gap-2">
                                               {getRoleShortName(staff.role)}
                                           </h4>
                                           <div className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">

@@ -8,14 +8,13 @@ import { ManagerDashboard } from './components/AdminDashboard';
 import { StaffDashboard } from './components/StaffDashboard';
 import { ManagementPortal } from './components/management/ManagementPortal';
 import { DeviceScreenPortal } from './components/features/device/DeviceScreenPortal';
-import { LogOut, Settings, Calculator, Home, User, Sparkles, Target, Layout } from 'lucide-react';
+import { LogOut, Settings, User, Sparkles, Target, Layout } from 'lucide-react';
 import { StoreConfigModal } from './components/features/StoreConfigModal';
 import { AIOperationsAssistant } from './components/features/AIOperationsAssistant';
 import { WhatsNewModal } from './components/ui/WhatsNewModal';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
-import { SystemDialogProvider } from './components/ui/SystemDialog';
 import { NotificationCenter } from './components/ui/NotificationCenter';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
@@ -366,12 +365,12 @@ export default function App() {
 
             {/* Header（仅登录后且在老板首页时显示，避免电脑端重复顶部栏） */}
             {currentUser === PortalRole.BOSS && !bossTab && (
-                <header className="bg-gradient-to-r from-[#8B0000] via-[#A00000] to-[#8B0000] text-[#FFD700]
+                <header className="bg-gradient-to-r from-[#8B0000] via-[#A00000] to-[#8B0000] text-[#FFD200]
                                    px-4 pb-2.5 pt-[max(env(safe-area-inset-top),0.5rem)]
                                    md:px-6 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)]
                                    hidden md:flex justify-between items-center
                                    shadow-[0_4px_14px_0_rgba(139,0,0,0.3)]
-                                   z-30 sticky top-0 border-b border-[#FFD700]/30 relative">
+                                   z-30 sticky top-0 border-b border-[#FFD200]/30 relative">
 
                     {/* 背景纹理 — pointer-events-none 确保不遮挡按钮 */}
                     <div
@@ -383,7 +382,7 @@ export default function App() {
                     <div className="flex items-center gap-3 md:gap-4 relative z-10 w-full justify-between md:justify-start">
                         <div className="flex items-center gap-2.5 md:gap-4">
                             <div className="w-10 h-10 md:w-16 md:h-16 bg-[#8B0000] rounded-full p-1 shadow-lg
-                                            border border-[#FFD700] flex items-center justify-center overflow-hidden shrink-0">
+                                            border border-[#FFD200] flex items-center justify-center overflow-hidden shrink-0">
                                 <img
                                     src={headerLogo || customLogo || "https://i.imgur.com/ex06Jva.png"}
                                     alt="Logo"
@@ -391,11 +390,11 @@ export default function App() {
                                 />
                             </div>
                             <div className="flex flex-col justify-center">
-                                <h1 className="font-black text-sm md:text-2xl tracking-widest text-[#FFD700] font-serif drop-shadow-md leading-tight">
+                                <h1 className="font-black text-sm md:text-2xl tracking-widest text-[#FFD200] font-serif drop-shadow-md leading-tight">
                                     御膳智控{' '}
                                     <span 
                                         onClick={() => setShowWhatsNew(true)}
-                                        className="text-[9px] md:text-sm opacity-80 font-sans tracking-normal font-normal text-white cursor-pointer hover:text-[#FFD700] hover:underline transition-all"
+                                        className="text-[9px] md:text-sm opacity-80 font-sans tracking-normal font-normal text-white cursor-pointer hover:text-[#FFD200] hover:underline transition-all"
                                         title="查看更新日志 (Changelog)"
                                     >
                                         ERP v{APP_VERSION}
@@ -408,24 +407,24 @@ export default function App() {
                         </div>
 
                         {/* 手机端右侧状态徽章：取代繁琐的顶部按钮，腾出双手触控极佳空间 */}
-                        <div className="md:hidden flex items-center gap-1.5 bg-[#FFD700]/10 border border-[#FFD700]/30 px-2.5 py-1 rounded-full shrink-0">
+                        <div className="md:hidden flex items-center gap-1.5 bg-[#FFD200]/10 border border-[#FFD200]/30 px-2.5 py-1 rounded-full shrink-0">
                             <span className="flex h-1.5 w-1.5 relative">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                             </span>
-                            <span className="text-[9px] text-[#FFD700] font-mono tracking-widest uppercase font-black">ONLINE</span>
+                            <span className="text-[9px] text-[#FFD200] font-mono tracking-widest uppercase font-black">ONLINE</span>
                         </div>
                     </div>
 
                     {/* 桌面端切换选项：仅老板且未进入具体子页时显示 */}
                     {currentUser === PortalRole.BOSS && !bossTab && (
-                        <div className="hidden md:flex items-center gap-1 bg-black/40 p-1 rounded-full border border-[#FFD700]/25 relative z-20 mx-4 shrink-0">
+                        <div className="hidden md:flex items-center gap-1 bg-black/40 p-1 rounded-full border border-[#FFD200]/25 relative z-20 mx-4 shrink-0">
                             <button
                                 onClick={() => setBossHomeView('PRIORITY')}
                                 className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
                                     bossHomeView === 'PRIORITY'
                                         ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
-                                        : 'text-stone-300 hover:text-[#FFD700]'
+                                        : 'text-stone-300 hover:text-[#FFD200]'
                                 }`}
                             >
                                 经营重点
@@ -435,7 +434,7 @@ export default function App() {
                                 className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
                                     bossHomeView === 'FUNCTIONS'
                                         ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
-                                        : 'text-stone-300 hover:text-[#FFD700]'
+                                        : 'text-stone-300 hover:text-[#FFD200]'
                                 }`}
                             >
                                 全部功能
@@ -450,7 +449,7 @@ export default function App() {
                                 <button
                                     onClick={() => setIsConfigOpen(true)}
                                     className="flex items-center justify-center w-8 h-8 md:w-9 md:h-9
-                                               text-white/80 hover:text-[#FFD700] bg-black/20 hover:bg-black/40
+                                               text-white/80 hover:text-[#FFD200] bg-black/20 hover:bg-black/40
                                                rounded-full transition-all active:scale-95 border border-white/10"
                                     title="系统设置 (Config)"
                                 >
@@ -462,11 +461,11 @@ export default function App() {
                         <button
                             onClick={handleLogout}
                             className="flex items-center justify-center gap-1.5 md:gap-2 text-[10px] md:text-xs
-                                       font-bold text-white/80 hover:text-[#FFD700] bg-black/20 hover:bg-black/40
+                                       font-bold text-white/80 hover:text-[#FFD200] bg-black/20 hover:bg-black/40
                                        px-3 py-2 md:px-4 md:py-2 rounded-full transition-all
                                        active:scale-95 border border-white/10"
                         >
-                            <span className="hidden sm:inline">退出 (Logout)</span>
+                            <span className="hidden md:inline">退出 (Logout)</span>
                             <LogOut size={14} className="md:w-4 md:h-4" />
                         </button>
                     </div>
@@ -561,7 +560,7 @@ export default function App() {
                                         className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
                                             !bossTab && bossHomeView === 'PRIORITY'
                                                 ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-750'
+                                                : 'text-stone-400 active:text-stone-800'
                                         }`}
                                     >
                                         <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'PRIORITY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
@@ -579,7 +578,7 @@ export default function App() {
                                         className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
                                             !bossTab && bossHomeView === 'FUNCTIONS'
                                                 ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-750'
+                                                : 'text-stone-400 active:text-stone-800'
                                         }`}
                                     >
                                         <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
@@ -594,7 +593,7 @@ export default function App() {
                                         className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
                                             isAiOpen
                                                 ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-750'
+                                                : 'text-stone-400 active:text-stone-800'
                                         }`}
                                     >
                                         <div className={`p-1.5 rounded-lg transition-all ${isAiOpen ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>

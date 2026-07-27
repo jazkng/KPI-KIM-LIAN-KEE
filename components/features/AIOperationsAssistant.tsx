@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-    Bot, Send, X, Sparkles, RefreshCw, User, MessageSquare, Terminal, AlertCircle, Play, 
-    TrendingUp, Shield, BarChart3, HelpCircle, Mic, MicOff, Volume2, Lock
+    Bot, Send, X, Sparkles, RefreshCw, User, Terminal, AlertCircle, Mic, MicOff, Lock
 } from 'lucide-react';
 import { DataManager } from '../../utils/dataManager';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
@@ -404,27 +403,27 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/92 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-xl animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-black/92 z-[300] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-xl animate-in fade-in duration-300">
             
             {/* Modal Body Container with High-End Glassmorphism and Fine Gold-Trim Edge */}
-            <div className="bg-[#0E0E10]/95 w-full sm:max-w-xl h-[95vh] sm:h-[85vh] sm:rounded-3xl rounded-t-[2rem] flex flex-col overflow-hidden shadow-[0_0_50px_rgba(255,215,0,0.15)] relative border-t border-stone-800/80 sm:border border-stone-800/70 text-stone-100 font-sans">
+            <div className="bg-[#0E0E10]/95 w-full md:max-w-xl h-[95vh] md:h-[85vh] md:rounded-3xl rounded-t-[2rem] flex flex-col overflow-hidden shadow-[0_0_50px_rgba(255,210,0,0.15)] relative border-t border-stone-800/80 md:border border-stone-800/70 text-stone-100 font-sans">
                 
                 {/* Visual Accent Glow Top-Right */}
-                <div className="absolute top-0 right-0 w-80 h-80 bg-[#FFD700]/5 rounded-full blur-3xl pointer-events-none z-0"></div>
+                <div className="absolute top-0 right-0 w-80 h-80 bg-[#FFD200]/5 rounded-full blur-3xl pointer-events-none z-0"></div>
 
                 {/* Header Section */}
                 <div 
                     style={{ paddingTop: 'calc(env(safe-area-inset-top) + 16px)' }} 
-                    className="bg-stone-900/60 backdrop-blur-md border-b border-stone-850/60 px-5 pb-4 flex justify-between items-center shrink-0 relative z-10"
+                    className="bg-stone-900/60 backdrop-blur-md border-b border-stone-900/60 px-5 pb-4 flex justify-between items-center shrink-0 relative z-10"
                 >
                     <div className="flex items-center gap-3">
-                        <div className="bg-gradient-to-tr from-[#3a3518] to-[#1a180f] p-2.5 rounded-2xl border border-[#FFD700]/35 shadow-inner">
-                            <Bot className="text-[#FFD700] animate-pulse" size={24} />
+                        <div className="bg-gradient-to-tr from-[#3a3518] to-[#1a180f] p-2.5 rounded-2xl border border-[#FFD200]/35 shadow-inner">
+                            <Bot className="text-[#FFD200] animate-pulse" size={24} />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
                                 <h3 className="font-extrabold text-white text-base tracking-wide">AI 智控脑库</h3>
-                                <span className="bg-gradient-to-r from-stone-700 to-stone-850 text-[#FFD700] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm border border-[#FFD700]/30 font-mono">BETA</span>
+                                <span className="bg-gradient-to-r from-stone-700 to-stone-900 text-[#FFD200] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm border border-[#FFD200]/30 font-mono">BETA</span>
                             </div>
                             <p className="text-[10px] text-stone-400 font-mono tracking-widest mt-0.5 uppercase flex items-center gap-1">
                                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -437,16 +436,16 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                         <button 
                             onClick={loadSystemContext}
                             style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
-                            className="w-11 h-11 flex items-center justify-center bg-stone-850/60 hover:bg-stone-800 active:scale-95 text-stone-400 hover:text-[#FFD700] border border-stone-800/50 rounded-full transition-all"
+                            className="w-11 h-11 flex items-center justify-center bg-stone-900/60 hover:bg-stone-800 active:scale-95 text-stone-400 hover:text-[#FFD200] border border-stone-800/50 rounded-full transition-all"
                             title="重新同步最新业务数据"
                             disabled={dataLoading}
                         >
-                            <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin text-[#FFD700]' : ''}`} />
+                            <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin text-[#FFD200]' : ''}`} />
                         </button>
                         <button 
                             onClick={onClose}
                             style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
-                            className="w-11 h-11 flex items-center justify-center bg-stone-850/60 hover:bg-stone-800 active:scale-95 text-stone-400 hover:text-white border border-stone-800/50 rounded-full transition-all"
+                            className="w-11 h-11 flex items-center justify-center bg-stone-900/60 hover:bg-stone-800 active:scale-95 text-stone-400 hover:text-white border border-stone-800/50 rounded-full transition-all"
                         >
                             <X size={18} />
                         </button>
@@ -459,7 +458,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                         <span className={`w-1.5 h-1.5 rounded-full ${systemContext ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}`}></span>
                         数据中心连通性: {systemContext ? `${systemContext.fetchTime}` : '等候校准...'}
                     </span>
-                    <span className="text-[#FFD700]/70 font-bold">Gemini 智力引擎 active 🌐</span>
+                    <span className="text-[#FFD200]/70 font-bold">Gemini 智力引擎 active 🌐</span>
                 </div>
 
                 {/* Error Banner */}
@@ -476,7 +475,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                     <div className="bg-stone-900/80 border border-stone-800/80 rounded-2xl p-4 shadow-md space-y-3 mb-4 shrink-0">
                         <div className="flex items-center justify-between border-b border-stone-800/50 pb-2">
                             <span className="text-xs font-black text-stone-200 tracking-wide flex items-center gap-1.5">
-                                <Sparkles size={14} className="text-[#FFD700]" />
+                                <Sparkles size={14} className="text-[#FFD200]" />
                                 经营脑库数据接入状态
                             </span>
                             <span className="text-[10px] text-stone-500 font-mono">Sync Status</span>
@@ -533,7 +532,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             {/* Avatar */}
                             <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 border shadow-md transition-all ${
                                 msg.role === 'user' 
-                                  ? 'bg-[#FFD700]/10 text-[#FFD700] border-[#FFD700]/20' 
+                                  ? 'bg-[#FFD200]/10 text-[#FFD200] border-[#FFD200]/20' 
                                   : 'bg-stone-900 text-stone-300 border-stone-800'
                             }`}>
                                 {msg.role === 'user' ? <User size={15} /> : <Bot size={15} />}
@@ -543,11 +542,11 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             <div className="flex flex-col space-y-1">
                                 <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-lg ${
                                     msg.role === 'user'
-                                      ? 'bg-gradient-to-r from-[#FFD700] to-[#E5A93C] text-black font-extrabold rounded-tr-none'
-                                      : 'bg-stone-900/90 border border-stone-850/85 text-stone-100 rounded-tl-none whitespace-pre-wrap'
+                                      ? 'bg-gradient-to-r from-[#FFD200] to-[#E5A93C] text-black font-extrabold rounded-tr-none'
+                                      : 'bg-stone-900/90 border border-stone-900/85 text-stone-100 rounded-tl-none whitespace-pre-wrap'
                                 }`}>
                                     {/* Handle bold text markdown manually with high-contrast formatting */}
-                                    {msg.text.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className={`font-black ${msg.role === 'user' ? 'text-black underline decoration-stone-900' : 'text-[#FFD700]'}`}>{part}</strong> : part)}
+                                    {msg.text.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className={`font-black ${msg.role === 'user' ? 'text-black underline decoration-stone-900' : 'text-[#FFD200]'}`}>{part}</strong> : part)}
                                 </div>
                                 <span className={`text-[9px] font-mono select-none px-1.5 ${msg.role === 'user' ? 'text-right text-stone-600' : 'text-stone-500'}`}>
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -560,10 +559,10 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                     {loading && (
                         <div className="flex gap-3 max-w-[85%] mr-auto items-center animate-pulse">
                             <div className="w-9 h-9 rounded-2xl bg-stone-900 text-stone-300 border border-stone-800 flex items-center justify-center shrink-0">
-                                <Bot size={15} className="animate-spin text-[#FFD700]" />
+                                <Bot size={15} className="animate-spin text-[#FFD200]" />
                             </div>
-                            <div className="bg-stone-900 border border-stone-850 text-stone-400 text-xs px-4 py-3 rounded-2xl rounded-tl-none flex items-center gap-2">
-                                <Sparkles size={13} className="text-[#FFD700] animate-bounce" />
+                            <div className="bg-stone-900 border border-stone-900 text-stone-400 text-xs px-4 py-3 rounded-2xl rounded-tl-none flex items-center gap-2">
+                                <Sparkles size={13} className="text-[#FFD200] animate-bounce" />
                                 <span className="font-medium">智脑正在秒级调度实时账单与库存数据，思考中...</span>
                             </div>
                         </div>
@@ -575,7 +574,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 {!loading && (
                     <div className="px-5 py-3 bg-[#0E0E10] border-t border-stone-900 shrink-0 select-none relative z-10">
                         <div className="flex items-center gap-1.5 mb-2 px-0.5">
-                            <Sparkles size={12} className="text-[#FFD700]" />
+                            <Sparkles size={12} className="text-[#FFD200]" />
                             <span className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block">智能决策预设 (Thumb actions)</span>
                         </div>
                         <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-none snap-x">
@@ -651,23 +650,23 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 {/* Input Tray Block with iOS Safe Area support */}
                 <div 
                     style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }} 
-                    className="p-4 bg-stone-900 border-t border-stone-850 shrink-0 relative z-20"
+                    className="p-4 bg-stone-900 border-t border-stone-900 shrink-0 relative z-20"
                 >
                     {/* Floating Audio Recording Wave Indicator Overlay */}
                     {isListening && (
-                        <div className="absolute left-1/2 -translate-x-1/2 -top-16 bg-stone-950 border border-[#FFD700]/30 shadow-2xl backdrop-blur-md rounded-full px-5 py-2.5 flex items-center gap-3 animate-bounce">
+                        <div className="absolute left-1/2 -translate-x-1/2 -top-16 bg-stone-950 border border-[#FFD200]/30 shadow-2xl backdrop-blur-md rounded-full px-5 py-2.5 flex items-center gap-3 animate-bounce">
                             <span className="relative flex h-3 w-3 shrink-0">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD700] opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#FFD700]"></span>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD200] opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#FFD200]"></span>
                             </span>
                             <div className="flex gap-0.5 items-center justify-center px-1">
-                                <span className="w-1 h-3 bg-[#FFD700] rounded-full animate-pulse inline-block"></span>
-                                <span className="w-1 h-5 bg-[#FFD700] rounded-full animate-pulse inline-block delay-75"></span>
-                                <span className="w-1 h-2 bg-[#FFD700] rounded-full animate-pulse inline-block delay-150"></span>
-                                <span className="w-1 h-6 bg-[#FFD700] rounded-full animate-pulse inline-block delay-200"></span>
-                                <span className="w-1 h-3 bg-[#FFD700] rounded-full animate-pulse inline-block delay-300"></span>
+                                <span className="w-1 h-3 bg-[#FFD200] rounded-full animate-pulse inline-block"></span>
+                                <span className="w-1 h-5 bg-[#FFD200] rounded-full animate-pulse inline-block delay-75"></span>
+                                <span className="w-1 h-2 bg-[#FFD200] rounded-full animate-pulse inline-block delay-150"></span>
+                                <span className="w-1 h-6 bg-[#FFD200] rounded-full animate-pulse inline-block delay-200"></span>
+                                <span className="w-1 h-3 bg-[#FFD200] rounded-full animate-pulse inline-block delay-300"></span>
                             </div>
-                            <p className="text-[10px] sm:text-xs text-[#FFD700] font-black tracking-widest uppercase">语音聆听中 | 说完请再点麦克风结束 </p>
+                            <p className="text-[10px] md:text-xs text-[#FFD200] font-black tracking-widest uppercase">语音聆听中 | 说完请再点麦克风结束 </p>
                         </div>
                     )}
 
@@ -681,7 +680,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                             placeholder={isListening ? "话筒静候中..." : "提问例如: 本月库存缺口最大的是什么？"}
                             disabled={loading || isListening}
-                            className="bg-transparent flex-grow font-extrabold text-xs sm:text-sm text-stone-100 outline-none placeholder:text-stone-600 py-1"
+                            className="bg-transparent flex-grow font-extrabold text-xs md:text-sm text-stone-100 outline-none placeholder:text-stone-600 py-1"
                         />
 
                         {/* HIGH-GRADE TRANSCRIPTION MICROPHONE BUTTON FOR iOS / MOBILE */}
@@ -692,7 +691,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                                 className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all border shrink-0 ${
                                     isListening 
                                       ? 'bg-rose-500 border-rose-400 text-white animate-pulse shadow-lg shadow-rose-500/20' 
-                                      : 'bg-stone-900 border-stone-800 text-stone-400 hover:text-white hover:border-[#FFD700]/30 hover:bg-[#FFD700]/5'
+                                      : 'bg-stone-900 border-stone-800 text-stone-400 hover:text-white hover:border-[#FFD200]/30 hover:bg-[#FFD200]/5'
                                 }`}
                                 title={isListening ? "停止麦克风" : "立即语音录入提问"}
                             >
@@ -713,7 +712,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
                             className={`w-11 h-11 rounded-xl font-bold text-xs flex items-center justify-center transition-all mr-0.5 shrink-0 ${
                                 input.trim() && !isListening
-                                  ? 'bg-gradient-to-r from-[#FFD700] to-[#E5A93C] text-black hover:brightness-110 active:scale-95' 
+                                  ? 'bg-gradient-to-r from-[#FFD200] to-[#E5A93C] text-black hover:brightness-110 active:scale-95' 
                                   : 'bg-stone-900 border border-stone-800 text-stone-600 cursor-not-allowed'
                             }`}
                         >

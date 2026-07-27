@@ -88,7 +88,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
             {/* Left Column (2 cols width on lg): Shifts breakdown list */}
             <div className="lg:col-span-2 space-y-6">
                 {/* Date Selector Banner */}
-                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h3 className="text-base font-bold text-gray-800">在岗值班明细 (Duty Roster Breakdown)</h3>
                         <p className="text-xs text-gray-400 mt-0.5">查看和校验每日具体班次的分配细节</p>
@@ -96,7 +96,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                     <select
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-gray-50 border border-gray-200 text-sm font-bold text-gray-800 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#FFD200] focus:border-transparent outline-none transition-all w-full sm:w-48"
+                        className="bg-gray-50 border border-gray-200 text-sm font-bold text-gray-800 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#FFD200] focus:border-transparent outline-none transition-all w-full md:w-48"
                         id="daily-date-select"
                     >
                         {days.map(d => (
@@ -122,7 +122,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                             {groupMorning.length === 0 ? (
                                 <p className="text-xs text-gray-400 italic py-2">无人员安排 (No staff assigned)</p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {groupMorning.map(emp => (
                                         <div key={emp.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60 text-xs flex justify-between items-center">
                                             <div>
@@ -154,7 +154,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                             {groupAfternoon.length === 0 ? (
                                 <p className="text-xs text-gray-400 italic py-2">无人员安排 (No staff assigned)</p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {groupAfternoon.map(emp => (
                                         <div key={emp.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60 text-xs flex justify-between items-center">
                                             <div>
@@ -186,7 +186,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                             {groupNight.length === 0 ? (
                                 <p className="text-xs text-gray-400 italic py-2">无人员安排 (No staff assigned)</p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {groupNight.map(emp => (
                                         <div key={emp.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60 text-xs flex justify-between items-center">
                                             <div>
@@ -218,7 +218,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                             {groupWork.length === 0 ? (
                                 <p className="text-xs text-gray-400 italic py-2">无人员安排 (No staff assigned)</p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {groupWork.map(emp => (
                                         <div key={emp.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60 text-xs flex justify-between items-center">
                                             <div>
@@ -245,7 +245,7 @@ export const RosterDailyCoverage: React.FC<RosterDailyCoverageProps> = ({
                             {groupOff.length === 0 ? (
                                 <p className="text-xs text-gray-400 italic py-2">全员在岗</p>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {groupOff.map(emp => {
                                         const statItem = ROSTER_STATUSES[emp.statusKey] || ROSTER_STATUSES.OFF;
                                         return (

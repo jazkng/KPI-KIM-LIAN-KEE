@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { getDayOfWeekText, getEmployeeDept } from './rosterUtils';
+import { getDayOfWeekText } from './rosterUtils';
 
 interface ExportOptions {
     showEmployeeId: boolean;
@@ -135,10 +135,7 @@ export async function exportRosterToExcel(
         deptCell.value = emp.role || 'Staff';
         deptCell.font = { name: 'Arial', size: 9 };
         deptCell.alignment = { vertical: 'middle', horizontal: 'center' };
-        deptCell.border = { right: { style: 'medium', color: { argb: 'FF666666' } } };
-
-        // Day pre-sets
-        const dayRoster = roster[monthKey] || {}; // wait, in database RosterModule has date keys like YYYY-MM-DD
+        deptCell.border = { right: { style: 'medium', color: { argb: 'FF666666' } } }; // wait, in database RosterModule has date keys like YYYY-MM-DD
         days.forEach((day, index) => {
             const colIdx = index + 3;
             const statusKey = (roster[day] || {})[emp.id] || 'UNASSIGNED';

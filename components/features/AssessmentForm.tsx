@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    X, Save, ArrowLeft, Award, AlertTriangle, 
-    CheckCircle2, Loader2, PenLine, Edit3, Shield, Clock,
-    HelpCircle, Check, MessageSquare, Flame, BookOpen, Users,
-    Zap, Sparkles, Target, Star
+    Save, ArrowLeft, Award, AlertTriangle, 
+    CheckCircle2, Loader2, Edit3, Shield, Clock,
+    Check, MessageSquare
 } from 'lucide-react';
 import { Employee, EmployeeRank, QuarterKey, AssessmentRecordV2, MetricScoreV2 } from '../../types';
 import { 
-    JOB_METRICS, GRADE_TIERS, MetricDef, 
+    JOB_METRICS, MetricDef, 
     MANAGEMENT_DIMENSIONS, EMPLOYEE_DIMENSIONS,
     JOB_CAPABILITY_SUBITEMS, MENTORSHIP_SUBITEMS, STRESS_SUBITEMS, TEAMWORK_SUBITEMS, PERSONAL_GROOMING_SUBITEMS,
-    getQuestionsForMetric, FactQuestion, FactOption 
+    getQuestionsForMetric, FactOption 
 } from './assessmentConfig'; // 💡 引入 MetricDef 和客观事实问答函数
 import { 
     getJobCategoryForEmployee, 
@@ -19,9 +18,7 @@ import {
     calculateOverallScore,
     getGradeFromScore,
     gradeToScore,
-    getTierByLabel,
-    calculateMultiRaterTotals,
-    getFinalScoreFromRecord
+    calculateMultiRaterTotals
 } from './assessmentUtils';
 import { DataManager } from '../../utils/dataManager';
 import { getOrgLevel } from '../../utils/orgAccess';
@@ -62,9 +59,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     const jobDef = JOB_METRICS[category];
     const isManagement = category === 'KITCHEN_HEAD' || category === 'FLOOR_MANAGER';
     const metrics: MetricDef[] = isManagement ? MANAGEMENT_DIMENSIONS : EMPLOYEE_DIMENSIONS;
-
-    // 判断当前登录者是不是初评人本人 (本人可编辑自己的初评)
-    const isInitialRater = existingRecord?.initialRating?.raterId === currentEmployee.id;
     const isOwnerRater = getOrgLevel(currentEmployee) === 'OWNER';
 
     // ============================================================================
@@ -133,7 +127,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     // ============================================================================
     const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
     const [allBossRatings, setAllBossRatings] = useState<any[]>([]);
-    const [loadingAllBossRatings, setLoadingAllBossRatings] = useState(false);
+    const [, setLoadingAllBossRatings] = useState(false);
 
     useEffect(() => {
         DataManager.getEmployees().then(setAllEmployees);
@@ -681,13 +675,13 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
             <div className="fixed inset-0 bg-black/90 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl text-center">
                     <AlertTriangle size={40} className="mx-auto text-orange-500 mb-4"/>
-                    <h3 className="font-black text-xl text-[#1A1A1A] mb-2">无法评分</h3>
+                    <h3 className="font-black text-xl text-[#111111] mb-2">无法评分</h3>
                     <p className="text-sm text-gray-500 font-bold mb-6">
                         {employee.name} 的岗位（{employee.role}）未配置评分指标，或已被豁免。
                     </p>
                     <button 
                         onClick={onClose} 
-                        className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-lg active:scale-95"
+                        className="w-full py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black shadow-lg active:scale-95"
                         style={{ minHeight: '48px', WebkitTapHighlightColor: 'transparent' }}
                     >
                         返回
@@ -705,11 +699,11 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
             className="fixed inset-0 bg-black/90 z-[110] flex flex-col backdrop-blur-sm animate-in fade-in duration-200"
             style={{ touchAction: 'manipulation' }}
         >
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-2xl md:mx-auto md:my-4 md:rounded-[2.5rem] md:h-[calc(100vh-2rem)] flex flex-col overflow-hidden shadow-2xl relative">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-2xl md:mx-auto md:my-4 md:rounded-[2.5rem] md:h-[calc(100vh-2rem)] flex flex-col overflow-hidden shadow-2xl relative">
                 
                 {/* ========== Header ========== */}
                 <div 
-                    className="bg-[#1A1A1A] text-white shrink-0 border-b-4 border-[#FFD700]"
+                    className="bg-[#111111] text-white shrink-0 border-b-4 border-[#FFD200]"
                     style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}
                 >
                     <div className="flex items-center gap-3 px-4 pb-4 md:px-5 md:pb-5">
@@ -725,7 +719,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                         </button>
                         
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center font-black text-gray-400 overflow-hidden border-2 border-[#FFD700] shrink-0">
+                            <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center font-black text-gray-400 overflow-hidden border-2 border-[#FFD200] shrink-0">
                                 {employee.avatar 
                                     ? <img src={employee.avatar} className="w-full h-full object-cover"/> 
                                     : employee.name.charAt(0)
@@ -733,7 +727,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                             </div>
                             <div className="min-w-0">
                                 <h3 className="font-black text-base md:text-lg truncate">{employee.name}</h3>
-                                <p className="text-[10px] md:text-xs text-[#FFD700] font-bold truncate">
+                                <p className="text-[10px] md:text-xs text-[#FFD200] font-bold truncate">
                                     {jobDef.emoji} {jobDef.label}
                                 </p>
                             </div>
@@ -772,7 +766,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                     {/* 季度信息 */}
                     <div className="px-4 md:px-5 pb-3 flex items-center justify-between text-[10px] md:text-xs font-bold text-white/60">
                         <div className="flex items-center gap-2">
-                            <Award size={12} className="text-[#FFD700]"/>
+                            <Award size={12} className="text-[#FFD200]"/>
                             <span>{formatQuarter(quarter)} · 评测 {getQuarterMonthRange(quarter)} 表现</span>
                         </div>
                     </div>
@@ -833,7 +827,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                             <div>
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">综合分</p>
                                 <div className="flex items-baseline gap-2 mt-0.5">
-                                    <span className="text-3xl font-black text-[#1A1A1A] font-mono">
+                                    <span className="text-3xl font-black text-[#111111] font-mono">
                                         {overallStats.score}
                                     </span>
                                     <span className="text-xs text-gray-400 font-bold">/ 120</span>
@@ -846,7 +840,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                             </div>
                             <div className="text-right">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">进度</p>
-                                <p className="text-lg font-black text-[#1A1A1A] font-mono mt-0.5">
+                                <p className="text-lg font-black text-[#111111] font-mono mt-0.5">
                                     {overallStats.filledCount} / {metrics.length}
                                 </p>
                             </div>
@@ -867,7 +861,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                                 </button>
                                 <button 
                                     onClick={handleEnterEdit}
-                                    className="py-4 rounded-2xl font-black text-base bg-[#1A1A1A] text-[#FFD700] hover:bg-black active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
+                                    className="py-4 rounded-2xl font-black text-base bg-[#111111] text-[#FFD200] hover:bg-black active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
                                     style={{ 
                                         minHeight: '56px',
                                         WebkitTapHighlightColor: 'transparent'
@@ -883,7 +877,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                                 disabled={saving || !validation.canSubmit}
                                 className={`w-full py-4 rounded-2xl font-black text-base shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
                                     validation.canSubmit && !saving
-                                        ? 'bg-[#1A1A1A] text-[#FFD700] hover:bg-black'
+                                        ? 'bg-[#111111] text-[#FFD200] hover:bg-black'
                                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 }`}
                                 style={{ 
@@ -967,7 +961,7 @@ const OverrideReasonModal: React.FC<OverrideReasonModalProps> = ({
                 
                 {/* Body */}
                 <div className="p-5">
-                    <label className="block text-xs font-black text-[#1A1A1A] uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-black text-[#111111] uppercase tracking-widest mb-2">
                         覆盖原因 <span className="text-red-600">*必填</span>
                     </label>
                     <textarea
@@ -1316,14 +1310,14 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
             <div className="bg-gradient-to-br from-gray-900 to-slate-800 rounded-3xl p-5 text-white shadow-xl">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <span className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest bg-white/10 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-black text-[#FFD200] uppercase tracking-widest bg-white/10 px-2 py-0.5 rounded-full">
                             综合评定成绩
                         </span>
                         <h3 className="text-xl font-black mt-1">最终得分与等级</h3>
                     </div>
                     <div className="bg-white/10 px-3.5 py-1.5 rounded-2xl border border-white/20 text-center">
                         <div className="text-xs font-bold text-gray-300">综合总分</div>
-                        <div className="text-2xl font-black text-[#FFD700]">{record.finalScore} 分</div>
+                        <div className="text-2xl font-black text-[#FFD200]">{record.finalScore} 分</div>
                     </div>
                 </div>
                 
@@ -1338,7 +1332,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                     
                     <div className="flex items-center justify-between">
                         <span className="text-gray-300 font-bold">2. 老板评分 (50%权重):</span>
-                        <span className="font-mono font-black text-[#FFD700]">
+                        <span className="font-mono font-black text-[#FFD200]">
                             {totals.bossesCount > 0 ? `${totals.bossesAverage} 分` : '⏳ 尚未评分'}
                         </span>
                     </div>
@@ -1373,7 +1367,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                     <div>
                         <div className="flex items-center gap-1.5">
                             <span className="text-[9px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded">初评</span>
-                            <span className="text-xs font-black text-[#1A1A1A]">
+                            <span className="text-xs font-black text-[#111111]">
                                 {record.initialRating ? `${record.initialRating.raterName} (${record.initialRating.raterRank})` : '（未评分）'}
                             </span>
                         </div>
@@ -1414,7 +1408,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                 }`}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="font-black text-[#1A1A1A]">{boss.name}</span>
+                                    <span className="font-black text-[#111111]">{boss.name}</span>
                                     {isSkipped ? (
                                         <span className="text-[8px] bg-gray-200 text-gray-500 px-1 rounded font-black">已跳过</span>
                                     ) : hasRated ? (
@@ -1460,7 +1454,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                             <div key={boss.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 space-y-1.5">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
-                                        <span className="font-black text-xs text-[#1A1A1A]">{boss.name}</span>
+                                        <span className="font-black text-xs text-[#111111]">{boss.name}</span>
                                         {isSkipped ? (
                                             <span className="text-[9px] font-black bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">仅评语 (已跳过评分)</span>
                                         ) : hasRated ? (
@@ -1528,7 +1522,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                     {MetricIcon && <MetricIcon size={16}/>}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <h4 className="font-black text-sm text-[#1A1A1A] leading-tight">
+                                    <h4 className="font-black text-sm text-[#111111] leading-tight">
                                         {t(metric.label, `metric_label_${metric.key}`)}
                                     </h4>
                                     <p className="text-[10px] text-gray-500 font-bold mt-0.5 leading-relaxed">
@@ -1578,7 +1572,7 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                                 )}
 
                                 {/* 各个老板的评分对比 */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                                     {BOSSES.map(boss => {
                                         const br = bossRatingsMap[boss.id];
                                         if (!br) return null;
@@ -1856,8 +1850,8 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
             {isOwnerRater && activeDimensionKey === null && (
                 <div className="bg-purple-950 text-white rounded-3xl p-4 shadow-md space-y-3">
                     <div className="flex items-center gap-2">
-                        <Shield size={16} className="text-[#FFD700]"/>
-                        <span className="text-[10px] font-black uppercase text-[#FFD700] tracking-widest">
+                        <Shield size={16} className="text-[#FFD200]"/>
+                        <span className="text-[10px] font-black uppercase text-[#FFD200] tracking-widest">
                             老板评分设置 (BEN / JAKE / JEFFREY / EVELYN)
                         </span>
                     </div>
@@ -1898,7 +1892,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
             {/* ⭐ 老板整体备注/跳过评语说明框 */}
             {isOwnerRater && activeDimensionKey === null && (
                 <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-2">
-                    <label className="block text-xs font-black text-[#1A1A1A] uppercase tracking-widest">
+                    <label className="block text-xs font-black text-[#111111] uppercase tracking-widest">
                         {isSkipped ? '✍️ 老板跳过评语 / 意见备注' : '✍️ 老板综合总评 / 评语 (选填)'}
                     </label>
                     <textarea
@@ -1920,7 +1914,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                                 📱 6维通用评估指标列表 (Click to assess)
                             </span>
-                            <span className="text-[10px] font-black bg-[#1A1A1A] text-[#FFD700] px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-black bg-[#111111] text-[#FFD200] px-2 py-0.5 rounded-full">
                                 移动版极简操作
                             </span>
                         </div>
@@ -1966,7 +1960,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                                    <span className="font-black text-[13px] text-[#1A1A1A] leading-tight">
+                                                    <span className="font-black text-[13px] text-[#111111] leading-tight">
                                                         {idx + 1}. {t(metric.label, `metric_label_${metric.key}`)}
                                                     </span>
                                                 </div>
@@ -2024,7 +2018,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                     <button
                         type="button"
                         onClick={() => setActiveDimensionKey(null)}
-                        className="flex items-center gap-1.5 px-3 py-2 -ml-2 rounded-xl text-xs font-black text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100 transition-colors w-fit"
+                        className="flex items-center gap-1.5 px-3 py-2 -ml-2 rounded-xl text-xs font-black text-gray-600 hover:text-[#111111] hover:bg-gray-100 transition-colors w-fit"
                         style={{ minHeight: '44px' }}
                     >
                         <ArrowLeft size={16}/>
@@ -2032,10 +2026,10 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                     </button>
 
                     {/* Prominent Header Card */}
-                    <div className="bg-[#1A1A1A] text-white rounded-[2rem] p-5 shadow-md border-b-4 border-[#FFD700] space-y-2">
+                    <div className="bg-[#111111] text-white rounded-[2rem] p-5 shadow-md border-b-4 border-[#FFD200] space-y-2">
                         <div className="flex items-center gap-2">
                             <span className="text-xl">🎯</span>
-                            <span className="text-[10px] font-black uppercase text-[#FFD700] tracking-widest">
+                            <span className="text-[10px] font-black uppercase text-[#FFD200] tracking-widest">
                                 详细评估板块 (Dimension Details)
                             </span>
                         </div>
@@ -2123,7 +2117,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         onClick={() => onSelectGrade(activeDimensionKey, grade)}
                                                         className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all active:scale-[0.99] flex items-start justify-between gap-3 ${
                                                             isSelected
-                                                                ? 'bg-purple-950 border-purple-500 text-[#FFD700] shadow-sm'
+                                                                ? 'bg-purple-950 border-purple-500 text-[#FFD200] shadow-sm'
                                                                 : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'
                                                         }`}
                                                         style={{ minHeight: '68px', WebkitTapHighlightColor: 'transparent' }}
@@ -2131,7 +2125,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
-                                                                    isSelected ? 'bg-[#FFD700] text-black' : 'bg-gray-100 text-gray-500'
+                                                                    isSelected ? 'bg-[#FFD200] text-black' : 'bg-gray-100 text-gray-500'
                                                                 }`}>
                                                                     {t(item.label, item.labelKey)}
                                                                 </span>
@@ -2169,7 +2163,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                                 {idx + 1}
                                                             </span>
                                                             <div className="min-w-0 flex-1">
-                                                                <h4 className="text-xs font-black text-[#1A1A1A] leading-tight">
+                                                                <h4 className="text-xs font-black text-[#111111] leading-tight">
                                                                     {t(item.label, `subitem_label_${item.key}`)}
                                                                 </h4>
                                                                 <div className="text-[10px] text-gray-500 font-bold mt-1 leading-normal whitespace-pre-wrap">
@@ -2252,7 +2246,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         {idx + 1}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="text-xs font-black text-[#1A1A1A] leading-tight">
+                                                        <h4 className="text-xs font-black text-[#111111] leading-tight">
                                                             {t(item.label, `subitem_label_${item.key}`)}
                                                         </h4>
                                                         <div className="text-[10px] text-gray-500 font-bold mt-1 leading-normal whitespace-pre-wrap">
@@ -2335,7 +2329,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         {idx + 1}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="text-xs font-black text-[#1A1A1A] leading-tight">
+                                                        <h4 className="text-xs font-black text-[#111111] leading-tight">
                                                             {t(item.label, `subitem_label_${item.key}`)}
                                                         </h4>
                                                         <p className="text-[10px] text-gray-400 font-bold mt-0.5 leading-normal">
@@ -2419,7 +2413,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         {idx + 1}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="text-xs font-black text-[#1A1A1A] leading-tight">
+                                                        <h4 className="text-xs font-black text-[#111111] leading-tight">
                                                             {t(item.label, `subitem_label_${item.key}`)}
                                                         </h4>
                                                         <p className="text-[10px] text-gray-400 font-bold mt-0.5 leading-normal">
@@ -2501,7 +2495,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                                         {idx + 1}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="text-xs font-black text-[#1A1A1A] leading-tight">
+                                                        <h4 className="text-xs font-black text-[#111111] leading-tight">
                                                             {t(item.label, `subitem_label_${item.key}`)}
                                                         </h4>
                                                         <p className="text-[10px] text-gray-400 font-bold mt-0.5 leading-normal">
@@ -2590,7 +2584,7 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                                         onChange={e => handleCommentChange(activeDimensionKey, e.target.value)}
                                         placeholder="请输入具体的实际事例说明（选填，C/D 档必填），如：本季度切配时漏写生产标签导致报废浪费..."
                                         rows={3}
-                                        className="w-full p-3 bg-white border-2 border-gray-200 focus:border-[#1A1A1A] rounded-2xl font-bold text-sm resize-none outline-none transition-colors"
+                                        className="w-full p-3 bg-white border-2 border-gray-200 focus:border-[#111111] rounded-2xl font-bold text-sm resize-none outline-none transition-colors"
                                         style={{ fontSize: '15px', minHeight: '84px' }}
                                     />
 

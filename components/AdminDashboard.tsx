@@ -1,7 +1,7 @@
 // components/AdminDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, BookOpen, CalendarOff, ClipboardCheck, Package, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
+import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
@@ -24,7 +24,6 @@ import { MenuManagement } from './features/MenuManagement';
 import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule'; // NEW IMPORT
 import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
 import { SelfInvoiceModule } from './features/SelfInvoiceModule';
-import { KitchenAlertDisplay } from './features/kitchen/KitchenAlertDisplay';
 import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
 
 const defaultBossEmployee: Employee = {
@@ -141,25 +140,25 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      const showAll = !allowedModules || allowedModules.length === 0;
 
      if (showAll || allowedModules?.includes('QUEUE_MANAGER')) {
-         tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队取号', icon: <Armchair size={18} /> });
+         tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队叫号', icon: <Armchair size={18} /> });
      }
      if (showAll || allowedModules?.includes('SETTLEMENT')) {
          tabs.push({ key: 'SETTLEMENT', label: lang === 'my' ? 'နေ့စဉ်စာရင်း' : '每日结算', icon: <Calculator size={18} /> });
      }
      if (showAll || allowedModules?.includes('KITCHEN_ALERT')) {
-         tabs.push({ key: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '通知厨房', icon: <BellRing size={18} /> });
+         tabs.push({ key: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: <BellRing size={18} /> });
      }
      if (showAll || allowedModules?.includes('ROSTER') || allowedModules?.includes('ROSTER_KITCHEN') || allowedModules?.includes('ROSTER_FLOOR')) {
-         tabs.push({ key: 'ROSTER', label: lang === 'my' ? 'အလှည့်ကျတာဝန်' : '排班缺席', icon: <CalendarOff size={18} /> });
+         tabs.push({ key: 'ROSTER', label: lang === 'my' ? 'အလှည့်ကျတာဝန်' : '排班管理', icon: <CalendarOff size={18} /> });
      }
      if (showAll || allowedModules?.includes('ATTENDANCE_CONSOLE')) {
-         tabs.push({ key: 'ATTENDANCE_CONSOLE', label: lang === 'my' ? 'တက်ရောက်မှု' : '考勤总控', icon: <Clock size={18} /> });
+         tabs.push({ key: 'ATTENDANCE_CONSOLE', label: lang === 'my' ? 'တက်ရောက်မှု' : '考勤管理', icon: <Clock size={18} /> });
      }
      if (showAll || allowedModules?.includes('ASSESSMENT')) {
-         tabs.push({ key: 'ASSESSMENT', label: lang === 'my' ? 'ကျွမ်းကျင်မှုစစ်' : '能力评测', icon: <Award size={18} /> });
+         tabs.push({ key: 'ASSESSMENT', label: lang === 'my' ? 'ကျွမ်းကျင်မှုစစ်' : '技能评估', icon: <Award size={18} /> });
      }
      if (showAll || allowedModules?.includes('PROCUREMENT')) {
-         tabs.push({ key: 'PROCUREMENT', label: lang === 'my' ? 'ပစ္စည်းမှာယူမှု' : '智能订货', icon: <ShoppingCart size={18} /> });
+         tabs.push({ key: 'PROCUREMENT', label: lang === 'my' ? 'ပစ္စည်းမှာယူမှု' : '采购订货', icon: <ShoppingCart size={18} /> });
      }
      if (showAll || allowedModules?.includes('MENU_MANAGEMENT')) {
          tabs.push({ key: 'MENU_MANAGEMENT', label: lang === 'my' ? 'ဟင်းချက်နည်း' : '智能菜谱', icon: <Utensils size={18} /> });
@@ -187,7 +186,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          tabs.push({ key: 'AP', label: lang === 'my' ? 'ပေးရန်ရှိစာရင်း' : '应付账款', icon: <CreditCard size={18} /> });
      }
      if (showAll || allowedModules?.includes('SELF_INVOICE')) {
-         tabs.push({ key: 'SELF_INVOICE', label: lang === 'my' ? 'ကိုယ်တိုင်ပြေစာ' : '自制凭单', icon: <FileText size={18} /> });
+         tabs.push({ key: 'SELF_INVOICE', label: lang === 'my' ? 'ကိုယ်တိုင်ပြေစာ' : '自开凭单', icon: <FileText size={18} /> });
      }
      return sortNavigationItems(tabs, tab => tab.key);
   }, [allowedModules, lang]);
@@ -254,11 +253,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
           case 'SUPPLIER_CONTACTS': return '供应商通讯录 (Suppliers)';
           case 'QUEUE': return '排队叫号系统 (Queue)';
           case 'ATTENDANCE_CONSOLE': return '考勤指挥台 (Attendance Console)';
-          case 'PROCUREMENT': return '智能订货系统 (Procurement)';
+          case 'PROCUREMENT': return '采购订货系统 (Procurement)';
           case 'MENU_MANAGEMENT': return '智能菜谱管理 (Menu)';
-          case 'ASSESSMENT': return '员工能力评测 (Skill Matrix)';
+          case 'ASSESSMENT': return '员工技能评估 (Skill Matrix)';
           case 'AP': return '应付账款 (Accounts Payable)';
-          case 'SELF_INVOICE': return '自制凭单 (Voucher Maker)';
+          case 'SELF_INVOICE': return '自开凭单 (Voucher Maker)';
           default: return '管理控制台';
       }
   }
@@ -301,12 +300,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
           
           if (activeTab !== safeTab) setActiveTab(safeTab as any);
       }
-  };
-
-  // Permission helper - check if user has permission for an action
-  const hasPermission = (module: AppModule): boolean => {
-      if (!allowedModules || allowedModules.length === 0) return true; // Boss mode - all access
-      return allowedModules.includes(module);
   };
 
   return (
@@ -368,7 +361,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       )}
       
       {/* HEADER */}
-      <div className={`admin-dashboard-header ${isManagementStaff ? 'bg-white border-b border-stone-200 text-[#111111]' : 'bg-[#1A1A1A] border-b-4 border-[#FFD700] text-white'} p-4 md:p-6 sticky top-0 z-30 shadow-sm`}>
+      <div className={`admin-dashboard-header ${isManagementStaff ? 'bg-white border-b border-stone-200 text-[#111111]' : 'bg-[#111111] border-b-4 border-[#FFD200] text-white'} p-4 md:p-6 sticky top-0 z-30 shadow-sm`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 md:gap-3">
             {onBack && (
@@ -377,7 +370,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                  </button>
             )}
             <div>
-                <h2 className={`text-lg md:text-xl font-serif font-black tracking-wide ${isManagementStaff ? 'text-[#111111]' : 'text-[#FFD700]'}`}>
+                <h2 className={`text-lg md:text-xl font-serif font-black tracking-wide ${isManagementStaff ? 'text-[#111111]' : 'text-[#FFD200]'}`}>
                     {isSingleMode ? getPageTitle() : (lang === 'my' ? 'စီမံခန့်ခွဲသူ မျက်နှာပြင်' : '管理层控制台')}
                 </h2>
                 {!isSingleMode && (
@@ -394,7 +387,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       {!isSingleMode && availableTabs.length > 0 ? (
         <div className={`flex p-3 md:p-4 gap-2 overflow-x-auto ${isManagementStaff ? 'bg-stone-50 border-b border-stone-200' : 'bg-[#F5F5F5] border-b border-gray-200'} scrollbar-hide`}>
             {availableTabs.map(tab => {
-                const isPermitted = hasPermission(tab.key as AppModule);
                 const isActive = activeTab === tab.key;
                 return (
                 <button 
@@ -402,7 +394,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                     onClick={() => setActiveTab(tab.key as any)} 
                     className={`flex-none min-w-[80px] md:min-w-[100px] py-2.5 md:py-3 px-2 rounded-lg flex flex-col items-center justify-center gap-1 md:gap-1.5 font-bold transition-all active:scale-95 text-[10px] md:text-xs ${
                         isActive 
-                            ? (isManagementStaff ? 'bg-[#FFD200] text-[#111111] shadow-xs border-b-2 border-stone-950 font-black' : 'bg-[#1A1A1A] text-[#FFD700] shadow-md border-b-4 border-[#C70000]') 
+                            ? (isManagementStaff ? 'bg-[#FFD200] text-[#111111] shadow-xs border-b-2 border-stone-950 font-black' : 'bg-[#111111] text-[#FFD200] shadow-md border-b-4 border-[#C70000]') 
                             : (isManagementStaff ? 'bg-white text-stone-500 border border-stone-200 hover:bg-stone-50' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100')
                     }`}
                 >
@@ -484,7 +476,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                         localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
                         setActiveTab('SELF_INVOICE');
                     } else {
-                        alert(lang === 'my' ? "သင့်တွင် ကိုယ်တိုင်ထုတ်ပြေစာ စာမျက်နှာကို ဝင်ရောက်ခွင့်မရှိပါ" : "您没有自制凭单模块的访问权限");
+                        alert(lang === 'my' ? "သင့်တွင် ကိုယ်တိုင်ထုတ်ပြေစာ စာမျက်နှာကို ဝင်ရောက်ခွင့်မရှိပါ" : "您没有自开凭单模块的访问权限");
                     }
                 }} 
              />

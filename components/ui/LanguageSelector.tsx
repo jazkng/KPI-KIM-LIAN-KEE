@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Languages, Check, ChevronDown } from 'lucide-react';
 import { AppLanguage } from '../../types';
+import { useIsMobile } from '../../utils/useIsMobile';
 
 interface LanguageSelectorProps {
   currentLang: AppLanguage;
@@ -17,16 +18,8 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [desktopPosition, setDesktopPosition] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 767px)');
-    const updateDeviceMode = () => setIsMobile(mediaQuery.matches);
-    updateDeviceMode();
-    mediaQuery.addEventListener('change', updateDeviceMode);
-    return () => mediaQuery.removeEventListener('change', updateDeviceMode);
-  }, []);
 
   const updateDesktopPosition = () => {
     const trigger = containerRef.current;

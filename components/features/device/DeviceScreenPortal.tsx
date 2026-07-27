@@ -91,7 +91,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
     const [connectionOnline, setConnectionOnline] = useState(navigator.onLine);
     const [menuOpen, setMenuOpen] = useState(false);
     const [allDevices, setAllDevices] = useState<DeviceAccount[]>([]);
-    const [loadingDevices, setLoadingDevices] = useState(false);
+    const [, setLoadingDevices] = useState(false);
 
     const enterScreen = useCallback((nextSession: DeviceSession, preferred?: DeviceScreen) => {
         const target = preferred && nextSession.allowedScreens.includes(preferred)
@@ -293,7 +293,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
     if (status === 'VERIFY_ERROR') {
         return (
             <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-4 py-8 safe-area-top safe-area-bottom">
-                <div className="w-full max-w-md rounded-[2rem] bg-white text-[#111111] p-6 sm:p-8 shadow-2xl text-center">
+                <div className="w-full max-w-md rounded-[2rem] bg-white text-[#111111] p-6 md:p-8 shadow-2xl text-center">
                     <div className="w-16 h-16 mx-auto rounded-2xl bg-red-100 text-red-700 flex items-center justify-center"><WifiOff size={32} /></div>
                     <h1 className="text-2xl font-black mt-5">设备验证暂时失败</h1>
                     <p className="text-sm text-stone-500 font-bold leading-6 mt-2">{errorMessage}</p>
@@ -310,7 +310,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
         const requestedMeta = SCREEN_META[requestedScreen || 'KITCHEN_ALERT'];
         return (
             <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-4 py-8 safe-area-top safe-area-bottom">
-                <div className="w-full max-w-lg rounded-[2rem] bg-white text-[#111111] p-6 sm:p-9 shadow-2xl border border-white/10">
+                <div className="w-full max-w-lg rounded-[2rem] bg-white text-[#111111] p-6 md:p-9 shadow-2xl border border-white/10">
                     <div className="flex items-start justify-between gap-4">
                         <div className="w-20 h-20 rounded-[1.6rem] bg-[#FFD200] flex items-center justify-center shadow-[0_12px_35px_rgba(255,210,0,0.35)]">
                             <MonitorSmartphone size={42} strokeWidth={2.4} />
@@ -321,7 +321,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                     </div>
 
                     <p className="text-xs font-black tracking-[0.24em] text-stone-400 uppercase mt-6 mb-2">Kim Lian Kee · Device Access</p>
-                    <h1 className="text-3xl sm:text-4xl font-black tracking-tight">设备户口登录</h1>
+                    <h1 className="text-3xl md:text-4xl font-black tracking-tight">设备户口登录</h1>
                     <p className="mt-2 text-sm text-stone-500 font-semibold">Device Account Login</p>
 
                     <div className="mt-6 rounded-2xl bg-[#FFF8D6] border border-[#FFD200]/50 p-4 flex items-center gap-3">

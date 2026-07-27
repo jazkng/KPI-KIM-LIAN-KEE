@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FileSpreadsheet, FileText, Settings, HelpCircle, Download } from 'lucide-react';
+import { X, FileSpreadsheet, FileText, Settings } from 'lucide-react';
 
 interface RosterExportModalProps {
     isOpen: boolean;

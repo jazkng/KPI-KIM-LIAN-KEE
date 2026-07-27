@@ -444,7 +444,7 @@ export const AssessmentHistoryPanel: React.FC<AssessmentHistoryPanelProps> = ({
                             近 {chartData.length} 季度走势
                         </h5>
                         <span className="ml-auto text-[10px] font-bold text-gray-400">
-                            平均 <span className="text-[#1A1A1A] font-black">{avgScore}</span>
+                            平均 <span className="text-[#111111] font-black">{avgScore}</span>
                         </span>
                     </div>
                     
@@ -506,7 +506,7 @@ export const AssessmentHistoryPanel: React.FC<AssessmentHistoryPanelProps> = ({
                                             {r.finalGrade}
                                         </div>
                                         <div>
-                                            <div className="text-xs font-black text-[#1A1A1A]">{formatQuarter(r.quarter)}</div>
+                                            <div className="text-xs font-black text-[#111111]">{formatQuarter(r.quarter)}</div>
                                             <div className="text-[9px] text-gray-400 font-bold">
                                                 {r.initialRating?.raterName || '无初评分'}
                                                 {r.ownerOverride && ` → 老板覆盖`}
@@ -514,7 +514,7 @@ export const AssessmentHistoryPanel: React.FC<AssessmentHistoryPanelProps> = ({
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-sm font-mono font-black text-[#1A1A1A]">{r.finalScore}</span>
+                                        <span className="text-sm font-mono font-black text-[#111111]">{r.finalScore}</span>
                                         <ChevronRight size={14} className="text-gray-300"/>
                                     </div>
                                 </button>

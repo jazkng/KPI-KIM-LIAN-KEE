@@ -62,7 +62,7 @@ export const FREQ_OPTIONS = [
     { value: 30, label: '每月', desc: 'Monthly' },
 ];
 
-export const INPUT_STYLE = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-bold text-[#1A1A1A] outline-none focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] transition-all placeholder:font-normal placeholder:text-gray-400";
+export const INPUT_STYLE = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-bold text-[#111111] outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all placeholder:font-normal placeholder:text-gray-400";
 export const LABEL_STYLE = "text-[10px] font-bold text-gray-400 uppercase mb-1.5 block tracking-wide";
 
 // 共用类型

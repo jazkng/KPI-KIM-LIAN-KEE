@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Gift, Sparkles, Check, ChevronRight, Layers, Smartphone, Globe, Bot, ShieldCheck, ArrowRight, BookOpen, Layers3 } from 'lucide-react';
-import { APP_VERSION, VERSION_HISTORY, SYSTEM_PHASES, PhaseInfo } from '../../constants/versionHistory';
+import { X, Gift, Sparkles, Check, ChevronRight, Layers, Smartphone, Globe, Bot, ShieldCheck, ArrowRight, BookOpen } from 'lucide-react';
+import { APP_VERSION, VERSION_HISTORY, SYSTEM_PHASES } from '../../constants/versionHistory';
 
 interface WhatsNewModalProps {
     isOpen: boolean;
@@ -21,11 +21,11 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
     const currentPhase = SYSTEM_PHASES.find(p => p.status === 'CURRENT') || SYSTEM_PHASES[3];
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm animate-in zoom-in duration-300">
+        <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-3 md:p-4 backdrop-blur-sm animate-in zoom-in duration-300">
             <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh] border border-stone-200">
                 
                 {/* Header with Dark Gold Aesthetic */}
-                <div className="bg-gradient-to-r from-[#111111] via-[#1A1A1A] to-[#262626] p-5 sm:p-6 text-white relative overflow-hidden shrink-0 border-b-4 border-[#FFD200]">
+                <div className="bg-gradient-to-r from-[#111111] to-[#262626] p-5 md:p-6 text-white relative overflow-hidden shrink-0 border-b-4 border-[#FFD200]">
                     <div className="absolute top-0 right-0 w-72 h-72 bg-[#FFD200] opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                     <div className="relative z-10 flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3.5">
@@ -44,7 +44,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                                         {currentPhase.titleZh.split('：')[0]}
                                     </span>
                                 </div>
-                                <h2 className="text-xl sm:text-2xl font-black tracking-wide text-white">金莲记 ERP 阶段化演进架构</h2>
+                                <h2 className="text-xl md:text-2xl font-black tracking-wide text-white">金莲记 ERP 阶段化演进架构</h2>
                                 <p className="text-xs text-stone-400 font-medium mt-0.5">What's New in Kim Lian Kee Group ERP</p>
                             </div>
                         </div>
@@ -60,7 +60,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                     </div>
 
                     {/* Navigation Tabs */}
-                    <div className="flex items-center gap-2 mt-5 overflow-x-auto no-scrollbar pt-1 pb-1">
+                    <div className="flex items-center gap-2 mt-5 overflow-x-auto scrollbar-hide pt-1 pb-1">
                         <button
                             onClick={() => setActiveTab('PHASES')}
                             className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 ${
@@ -100,7 +100,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-grow overflow-y-auto p-4 sm:p-6 space-y-6 bg-stone-50/50">
+                <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-6 bg-stone-50/50">
                     
                     {/* TAB 1: PHASES ROADMAP */}
                     {activeTab === 'PHASES' && (
@@ -174,7 +174,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                                                         {phase.summary}
                                                     </p>
 
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                         {phase.features.map((feat, fIdx) => (
                                                             <div key={fIdx} className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex items-start gap-2.5">
                                                                 <span className="text-base shrink-0 mt-0.5">{feat.icon}</span>
@@ -215,7 +215,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                                 {/* Feature 1: iOS & PWA */}
                                 <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
                                     <div>
@@ -291,7 +291,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose })
                     {activeTab === 'CHANGELOG' && (
                         <div className="space-y-4">
                             {/* Filter Bar */}
-                            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-1">
                                 <span className="text-xs font-bold text-stone-400 shrink-0 mr-1">筛选阶段:</span>
                                 <button
                                     onClick={() => setSelectedPhaseFilter('ALL')}

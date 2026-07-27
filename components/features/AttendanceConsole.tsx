@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
-    Clock, LogIn, LogOut, User, Search, CheckCircle2, AlertCircle, Calendar, X, 
-    History, Briefcase, Coffee, Edit3, Lock, AlertTriangle, ListChecks, FileBarChart, 
-    CheckSquare, XCircle, TrendingUp, ChefHat, Utensils, Trash2, Check, ArrowRight, 
-    CalendarOff, Palmtree, Home, Zap, ChevronDown, Users, FileDown, Loader2, Droplets 
+    Clock, LogIn, Search, CheckCircle2, AlertCircle, Calendar, X, 
+    Briefcase, Coffee, Edit3, Lock, ListChecks, FileBarChart, 
+    XCircle, TrendingUp, ChefHat, Trash2, Check, CalendarOff, Palmtree, Home, Zap, ChevronDown, Users, FileDown, Loader2, Droplets 
 } from 'lucide-react';
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
@@ -19,15 +18,11 @@ import {
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
-
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface AttendanceConsoleProps {
     onClose: () => void;
 }
-
-// --- CONSTANTS ---
-const STANDARD_WORK_HOURS = 10;
 const DEFAULT_LOCAL_REST = 4;
 const DEFAULT_FOREIGN_REST = 2;
 
@@ -184,13 +179,13 @@ const RollCallModal: React.FC<{
             <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[95vh] md:max-h-[90vh] relative">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-3xl">
                     <div>
-                        <h3 className="font-black text-2xl text-[#1A1A1A]">快速点名 (Roll Call)</h3>
+                        <h3 className="font-black text-2xl text-[#111111]">快速点名 (Roll Call)</h3>
                         <p className="text-sm text-gray-500 font-bold mt-1">{dateStr} • {staffList.length} Staff</p>
                     </div>
                     <button onClick={onClose} className="p-3 bg-white hover:bg-gray-100 rounded-full shadow-sm"><X size={24}/></button>
                 </div>
                 
-                <div className="flex-grow overflow-y-auto p-2.5 bg-[#F5F7FA]">
+                <div className="flex-grow overflow-y-auto p-2.5 bg-[#F6F7FB]">
                     <div className="grid grid-cols-2 gap-2">
                     {staffList.filter(s => !s.isAttendanceExempt).map(staff => {
                         const record = todayRecords.find(r => r.employeeId === staff.id);
@@ -205,7 +200,7 @@ const RollCallModal: React.FC<{
                                         {staff.avatar ? <img src={staff.avatar} className="w-full h-full object-cover rounded-full"/> : staff.name.charAt(0)}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <h4 className="font-bold text-xs text-[#1A1A1A] truncate leading-tight">{staff.name}</h4>
+                                        <h4 className="font-bold text-xs text-[#111111] truncate leading-tight">{staff.name}</h4>
                                         <p className="text-[9px] text-gray-400 font-bold truncate">{(staff.role || '').split('(')[0]}</p>
                                         {rosterBadge && planStatus !== 'WORK' && (
                                             <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold border ${rosterBadge.color} mt-0.5 inline-block`}>{rosterBadge.label}</span>
@@ -224,7 +219,7 @@ const RollCallModal: React.FC<{
                                         </div>
                                     ) : customTimeId === staff.id ? (
                                         <div className="flex items-center gap-1.5 w-full animate-in fade-in bg-gray-50 p-1.5 rounded-lg">
-                                            <input type="time" value={customTimeValue} onChange={(e) => setCustomTimeValue(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-sm font-bold flex-1 min-w-0 outline-none focus:border-[#FFD700]"/>
+                                            <input type="time" value={customTimeValue} onChange={(e) => setCustomTimeValue(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-sm font-bold flex-1 min-w-0 outline-none focus:border-[#FFD200]"/>
                                             <button onClick={() => handleTimeClockIn(staff)} disabled={!!processingId} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 shrink-0"><Check size={16} strokeWidth={3}/></button>
                                             <button onClick={() => setCustomTimeId(null)} className="bg-white text-gray-500 p-2 rounded-lg hover:bg-gray-200 shrink-0"><X size={16}/></button>
                                         </div>
@@ -311,6 +306,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
         setIsGeneratingPdf(true);
         try {
             await new Promise(r => setTimeout(r, 500)); 
+            await waitForPdfFonts();
             const canvas = await html2canvas(printRef.current, { 
                 scale: 2, 
                 useCORS: true, 
@@ -348,10 +344,10 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2 md:gap-4">
                             <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><FileBarChart size={20}/></div>
-                            <h3 className="font-black text-base md:text-xl text-[#1A1A1A]">达标检查</h3>
+                            <h3 className="font-black text-base md:text-xl text-[#111111]">达标检查</h3>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="flex items-center gap-1 bg-[#1A1A1A] text-[#FFD700] px-3 py-2 rounded-lg text-[10px] md:text-xs font-bold shadow-md disabled:opacity-50">
+                            <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="flex items-center gap-1 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-lg text-[10px] md:text-xs font-bold shadow-md disabled:opacity-50">
                                 {isGeneratingPdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} PDF
                             </button>
                             <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none w-32 md:w-auto"/>
@@ -371,7 +367,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
                                             <div className="flex items-center gap-2 min-w-0">
                                                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-black shrink-0">{row.emp.name.charAt(0)}</div>
                                                 <div className="min-w-0">
-                                                    <div className="font-bold text-sm text-[#1A1A1A] truncate">{row.emp.name}</div>
+                                                    <div className="font-bold text-sm text-[#111111] truncate">{row.emp.name}</div>
                                                     <div className="text-[9px] text-gray-400 flex items-center gap-1">
                                                         {(row.emp.role || '').split('(')[0]}
                                                         <span className={`px-1 py-0.5 rounded text-[8px] font-black ${row.isLocal ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>{row.isLocal ? 'L' : 'F'}</span>
@@ -385,8 +381,8 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
                                             )}
                                         </div>
                                         <div className="flex justify-between items-center text-[10px] text-gray-500 bg-gray-50 rounded-lg px-2 py-1.5">
-                                            <span>出勤 <span className="font-black text-[#1A1A1A] text-xs">{row.daysWorked}</span>/{row.targetDays}天</span>
-                                            <span>工时 <span className="font-black text-[#1A1A1A] text-xs">{row.totalHours.toFixed(0)}h</span></span>
+                                            <span>出勤 <span className="font-black text-[#111111] text-xs">{row.daysWorked}</span>/{row.targetDays}天</span>
+                                            <span>工时 <span className="font-black text-[#111111] text-xs">{row.totalHours.toFixed(0)}h</span></span>
                                             {row.lateCount > 0 && <span className="text-red-500 font-bold">迟到{row.lateCount}次</span>}
                                             <span className="text-gray-400">休{row.restDaysQuota}天</span>
                                         </div>
@@ -401,7 +397,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
                                 <tbody className="divide-y divide-gray-100">
                                     {reportData.map(row => (
                                         <tr key={row.emp.id} className="hover:bg-gray-50/50">
-                                            <td className="p-4"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-black">{row.emp.name.charAt(0)}</div><div><div className="font-bold text-[#1A1A1A]">{row.emp.name}</div><div className="text-[10px] text-gray-400">{(row.emp.role || '').split('(')[0]}</div></div></div></td>
+                                            <td className="p-4"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-black">{row.emp.name.charAt(0)}</div><div><div className="font-bold text-[#111111]">{row.emp.name}</div><div className="text-[10px] text-gray-400">{(row.emp.role || '').split('(')[0]}</div></div></div></td>
                                             <td className="p-4 text-center">
                                                 <span className={`text-[9px] px-2 py-1 rounded font-black uppercase ${row.isLocal ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>{row.isLocal ? 'Local' : 'Foreign'}</span>
                                                 <div className="text-[9px] text-gray-400 mt-1 font-bold">Quota: {row.restDaysQuota} Off</div>
@@ -485,15 +481,15 @@ const SecurityPinModal: React.FC<{ isOpen: boolean; onClose: () => void; onSucce
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl flex flex-col items-center border-t-8 border-[#FFD700] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+            <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl flex flex-col items-center border-t-8 border-[#FFD200] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
                 <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mb-6"><Lock size={40} className="text-yellow-600"/></div>
-                <h3 className="font-black text-2xl text-[#1A1A1A] mb-2">身份验证</h3>
+                <h3 className="font-black text-2xl text-[#111111] mb-2">身份验证</h3>
                 <p className="text-sm text-gray-500 font-bold mb-8">请输入 <span className="text-black bg-gray-100 px-2 py-0.5 rounded">{employeeName}</span> 的密码</p>
-                <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(''); }} className="w-full p-5 bg-gray-50 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none border-2 focus:border-[#FFD700] mb-6 shadow-inner" placeholder="••••" autoFocus />
+                <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(''); }} className="w-full p-5 bg-gray-50 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none border-2 focus:border-[#FFD200] mb-6 shadow-inner" placeholder="••••" autoFocus />
                 {error && <p className="text-red-500 text-sm font-bold mb-6 animate-pulse flex items-center gap-2"><AlertCircle size={16}/> {error}</p>}
                 <div className="grid grid-cols-2 gap-4 w-full">
                     <button onClick={onClose} className="py-4 min-h-[44px] bg-gray-100 rounded-2xl font-bold text-gray-600 text-sm hover:bg-gray-200">取消</button>
-                    <button onClick={handleVerify} disabled={!pin} className="py-4 min-h-[44px] bg-[#1A1A1A] text-[#FFD700] rounded-2xl font-bold shadow-xl disabled:opacity-50 text-sm hover:scale-105 transition-transform">确认 (Confirm)</button>
+                    <button onClick={handleVerify} disabled={!pin} className="py-4 min-h-[44px] bg-[#111111] text-[#FFD200] rounded-2xl font-bold shadow-xl disabled:opacity-50 text-sm hover:scale-105 transition-transform">确认 (Confirm)</button>
                 </div>
             </div>
         </div>
@@ -576,7 +572,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl pb-[max(env(safe-area-inset-bottom),1.5rem)] flex flex-col max-h-[90vh]">
-                <h3 className="font-black text-2xl text-[#1A1A1A] mb-2 shrink-0">修正考勤记录</h3>
+                <h3 className="font-black text-2xl text-[#111111] mb-2 shrink-0">修正考勤记录</h3>
                 <p className="text-xs text-gray-400 mb-6 shrink-0 font-bold uppercase tracking-wider">
                     员工: {record.employeeName} | 日期: {record.date}
                 </p>
@@ -595,7 +591,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
                                     updated[idx] = e.target.value;
                                     setPunchTimes(updated);
                                 }} 
-                                className="flex-1 p-3 bg-white rounded-xl font-mono text-lg font-bold border-2 border-gray-200 outline-none focus:border-[#FFD700]" 
+                                className="flex-1 p-3 bg-white rounded-xl font-mono text-lg font-bold border-2 border-gray-200 outline-none focus:border-[#FFD200]" 
                             />
                             {punchTimes.length > 1 && (
                                 <button 
@@ -620,7 +616,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
                     <button onClick={onClose} className="py-4 min-h-[44px] bg-gray-100 rounded-2xl font-bold text-gray-600 transition-all hover:bg-gray-200 active:scale-95">
                         取消
                     </button>
-                    <button onClick={handleSave} className="py-4 min-h-[44px] bg-[#1A1A1A] text-[#FFD700] rounded-2xl font-bold shadow-lg transition-all hover:bg-black active:scale-95">
+                    <button onClick={handleSave} className="py-4 min-h-[44px] bg-[#111111] text-[#FFD200] rounded-2xl font-bold shadow-lg transition-all hover:bg-black active:scale-95">
                         保存修正
                     </button>
                 </div>
@@ -729,6 +725,7 @@ const EmployeeMonthlySheetModal: React.FC<{
         setIsExporting(true);
         try {
             await new Promise(r => setTimeout(r, 600));
+            await waitForPdfFonts();
             const canvas = await html2canvas(printAreaRef.current, {
                 scale: 2,
                 useCORS: true,
@@ -778,18 +775,18 @@ const EmployeeMonthlySheetModal: React.FC<{
             <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col h-[100vh] md:h-[90vh] relative overflow-hidden">
                 
                 {/* Header (Non-printing) */}
-                <div className="p-4 md:p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center bg-gray-50 shrink-0 gap-4">
+                <div className="p-4 md:p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center bg-gray-50 shrink-0 gap-4">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-[#1A1A1A] text-[#FFD700] rounded-2xl flex items-center justify-center font-black">
+                        <div className="w-12 h-12 bg-[#111111] text-[#FFD200] rounded-2xl flex items-center justify-center font-black">
                             <Calendar size={24} />
                         </div>
                         <div>
-                            <h3 className="font-black text-lg md:text-xl text-[#1A1A1A]">月度考勤明细表 (Monthly Attendance)</h3>
+                            <h3 className="font-black text-lg md:text-xl text-[#111111]">月度考勤明细表 (Monthly Attendance)</h3>
                             <p className="text-xs text-gray-500 font-bold">员工: {employee.name} | ID: {employee.id}</p>
                         </div>
                     </div>
                     
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                         <div className="flex items-center bg-white border border-gray-200 rounded-xl px-1 py-1 shadow-sm shrink-0">
                             <button onClick={handlePrevMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 font-bold">&lt;</button>
                             <span className="font-black text-sm md:text-base px-3 text-gray-800 font-mono">{selectedMonth}</span>
@@ -799,7 +796,7 @@ const EmployeeMonthlySheetModal: React.FC<{
                         <button 
                             onClick={handleExportPDF} 
                             disabled={isExporting}
-                            className="bg-[#1A1A1A] text-[#FFD700] hover:bg-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg flex items-center gap-2 active:scale-95 transition-transform shrink-0 disabled:opacity-50"
+                            className="bg-[#111111] text-[#FFD200] hover:bg-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg flex items-center gap-2 active:scale-95 transition-transform shrink-0 disabled:opacity-50"
                         >
                             {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14}/>}
                             导出 PDF
@@ -821,8 +818,8 @@ const EmployeeMonthlySheetModal: React.FC<{
                         {/* Print Header */}
                         <div className={`border-b-4 border-black flex justify-between items-start ${isExporting ? 'pb-2 mb-3' : 'pb-4 mb-6'}`}>
                             <div>
-                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#1A1A1A]">KIM LIAN KEE (金莲记)</h1>
-                                <p className="text-xs text-gray-500 font-black tracking-widest mt-0.5 uppercase">Monthly Attendance Record • 员工月度打卡表</p>
+                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111]">KIM LIAN KEE (金莲记)</h1>
+                                <p className="text-xs text-gray-500 font-black tracking-widest mt-0.5 uppercase">Monthly Attendance Record (员工月度打卡表)</p>
                                 <div className={`grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-700 ${isExporting ? 'mt-2' : 'mt-4'}`}>
                                     <div><span className="text-gray-400 font-bold uppercase">Name (姓名):</span> <span className="font-black">{employee.name}</span></div>
                                     <div><span className="text-gray-400 font-bold uppercase">No (工号):</span> <span className="font-mono font-black">{employee.id}</span></div>
@@ -841,7 +838,7 @@ const EmployeeMonthlySheetModal: React.FC<{
                         {/* Table */}
                         <div className="border border-black overflow-hidden rounded">
                             <table className={`w-full border-collapse text-center ${isExporting ? 'text-[9.5px]' : 'text-xs'}`}>
-                                <thead className="bg-[#1A1A1A] text-white">
+                                <thead className="bg-[#111111] text-white">
                                     <tr className="border-b border-black">
                                         <th className={`${cellPadding} border-r border-black font-black w-24`}>日期 / 星期<br/>(Date / Day)</th>
                                         <th className={`${cellPadding} border-r border-black font-black`} colSpan={2}>上午 (AM)<br/><span className="text-[9px] font-normal">Check In / Out</span></th>
@@ -996,7 +993,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const [dailyRoster, setDailyRoster] = useState<Record<string, RosterStatus>>({}); 
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [, setCurrentTime] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<string>('');
 
     const [shiftSettings, setShiftSettings] = useState<AttendanceShiftSettings>(DEFAULT_ATTENDANCE_SETTINGS);
@@ -1200,7 +1197,6 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                     const arrayBuffer = evt.target?.result as ArrayBuffer;
 
                     if (isPdf) {
-                        
 
                         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
                         const pdf = await loadingTask.promise;
@@ -1507,7 +1503,6 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
 
                                     let blockDayXMap: { [dayNum: number]: number } = {};
                                     let maxConsecDays = 0;
-                                    let bestDayRowY = -1;
 
                                     rows.forEach(r => {
                                         const tempMap: { [dayNum: number]: number } = {};
@@ -1545,7 +1540,6 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                         if (consecDays > maxConsecDays && consecDays >= 5) {
                                             maxConsecDays = consecDays;
                                             blockDayXMap = tempMap;
-                                            bestDayRowY = r.y;
                                         }
                                     });
 
@@ -2176,7 +2170,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                     </div>
                     <div>
                         <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-black text-sm md:text-lg text-[#1A1A1A] leading-none">{staff.name}</h3>
+                            <h3 className="font-black text-sm md:text-lg text-[#111111] leading-none">{staff.name}</h3>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); toggleExemptStatus(staff); }} 
                                 className={`text-[9px] px-1.5 py-0.5 rounded font-bold transition-colors shadow-sm active:scale-95 ${staff.isAttendanceExempt ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
@@ -2395,8 +2389,8 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                     <button onClick={() => setShowRollCall(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><ListChecks size={12}/> 点名</button>
                     <button onClick={() => setShowReport(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><FileBarChart size={12}/> 达标</button>
                     <button onClick={() => setIsSettingsOpen(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Clock size={12}/> 排班设置</button>
-                    <button onClick={handleResetMonthlyAttendance} className="bg-rose-50 hover:bg-rose-100 border border-rose-250 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Trash2 size={12}/> 重置本月</button>
-                    <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Calendar size={12}/> 导入打卡</button>
+                    <button onClick={handleResetMonthlyAttendance} className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Trash2 size={12}/> 重置本月</button>
+                    <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Calendar size={12}/> 导入打卡</button>
                 </div>
             </div>
 
@@ -2404,27 +2398,27 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             <div className="bg-[#F6F7FB] md:bg-white px-4 md:px-6 py-2 md:py-4 shrink-0 z-10">
                 <div className="bg-white md:bg-transparent p-3 md:p-0 rounded-2xl border border-[#E5E7EB] md:border-none shadow-sm md:shadow-none flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4">
                     <div className="flex items-center justify-between w-full md:w-auto gap-2">
-                        <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-255 shrink-0">
+                        <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-300 shrink-0">
                             <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16} className="rotate-180"/></button>
                             <input type="date" value={selectedDate} onChange={handleDateChange} className="bg-transparent font-black text-xs md:text-lg outline-none text-center w-28 md:w-40 text-[#111111] font-mono" />
                             <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16}/></button>
                         </div>
                         
                         <div className="flex gap-1.5 text-[10px] md:text-sm font-bold shrink-0">
-                            <span className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1.5 rounded-xl border border-green-150"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{todayRecords.filter(r => r.clockOut && new Date(r.clockOut).getTime() > new Date().getTime()).length} 在岗</span>
-                            <span className="flex items-center gap-1 bg-gray-50 text-gray-600 px-2 py-1.5 rounded-xl border border-gray-150"><div className="w-2 h-2 rounded-full bg-gray-400"></div>{todayRecords.length} 记录</span>
+                            <span className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1.5 rounded-xl border border-green-200"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{todayRecords.filter(r => r.clockOut && new Date(r.clockOut).getTime() > new Date().getTime()).length} 在岗</span>
+                            <span className="flex items-center gap-1 bg-gray-50 text-gray-600 px-2 py-1.5 rounded-xl border border-gray-200"><div className="w-2 h-2 rounded-full bg-gray-400"></div>{todayRecords.length} 记录</span>
                         </div>
                     </div>
 
                     <div className="relative w-full md:w-80">
                         <Search className="absolute left-3.5 top-3 text-gray-400" size={16}/>
-                        <input type="text" placeholder="搜索员工名称..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2.5 md:py-3 bg-gray-50 border border-gray-255 md:border-none md:bg-gray-100 rounded-xl text-xs md:text-sm font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px]"/>
+                        <input type="text" placeholder="搜索员工名称..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2.5 md:py-3 bg-gray-50 border border-gray-300 md:border-none md:bg-gray-100 rounded-xl text-xs md:text-sm font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px]"/>
                     </div>
                 </div>
             </div>
 
             {/* Staff Grid */}
-            <div className="flex-grow overflow-y-auto bg-[#F5F7FA]">
+            <div className="flex-grow overflow-y-auto bg-[#F6F7FB]">
                 <div className="p-4 md:p-8 pb-[max(env(safe-area-inset-bottom),2rem)] grid grid-cols-1 gap-8">
                     {isLoading ? <div className="text-center py-20 text-gray-400 font-bold animate-pulse text-lg">Loading Staff Data...</div> : (
                         <>
@@ -2521,7 +2515,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                 <div className="fixed inset-0 bg-black/60 z-[320] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
                         {/* Header */}
-                        <div className="p-5 border-b border-gray-150 flex justify-between items-center bg-gray-50 shrink-0">
+                        <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                             <div>
                                 <h3 className="font-black text-lg text-gray-900 flex items-center gap-2">
                                     <span>📅</span> 导入人脸打卡数据
@@ -2544,7 +2538,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                         </div>
 
                         {/* Content Body */}
-                        <div className="p-6 overflow-y-auto space-y-5 flex-1 text-[#1A1A1A]">
+                        <div className="p-6 overflow-y-auto space-y-5 flex-1 text-[#111111]">
                             {/* Tips */}
                             <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 text-xs text-blue-900 flex gap-3">
                                 <span className="text-lg">💡</span>
@@ -2752,7 +2746,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="p-5 border-t border-gray-150 bg-gray-50 flex gap-3 justify-end shrink-0">
+                        <div className="p-5 border-t border-gray-200 bg-gray-50 flex gap-3 justify-end shrink-0">
                             <button
                                 onClick={() => {
                                     setIsFaceImportOpen(false);

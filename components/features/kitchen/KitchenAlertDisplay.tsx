@@ -543,12 +543,12 @@ export const KitchenAlertDisplay: React.FC = () => {
                     <div className="absolute inset-x-0 top-0 h-1 bg-red-500 animate-pulse" />
                 )}
 
-                <div className="p-2.5 sm:p-3">
+                <div className="p-2.5 md:p-3">
                     <div className="flex items-start justify-between gap-2">
                         <div className="flex items-start gap-2.5 min-w-0">
-                            <div className={`w-[52px] h-[52px] sm:w-[58px] sm:h-[58px] rounded-xl flex flex-col items-center justify-center shrink-0 ${isPending ? 'bg-[#FFD200] text-[#111111]' : 'bg-sky-500 text-white'}`}>
-                                <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-[0.12em] opacity-60">桌号/Table</span>
-                                <span className="max-w-[48px] truncate text-lg sm:text-xl font-black leading-none mt-0.5">{alert.tableNo}</span>
+                            <div className={`w-[52px] h-[52px] md:w-[58px] md:h-[58px] rounded-xl flex flex-col items-center justify-center shrink-0 ${isPending ? 'bg-[#FFD200] text-[#111111]' : 'bg-sky-500 text-white'}`}>
+                                <span className="text-[7px] md:text-[8px] font-black uppercase tracking-[0.12em] opacity-60">桌号/Table</span>
+                                <span className="max-w-[48px] truncate text-lg md:text-xl font-black leading-none mt-0.5">{alert.tableNo}</span>
                             </div>
 
                             <div className="min-w-0 pt-0.5">
@@ -566,7 +566,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                                         {isPending ? '待接收' : '处理中'}
                                     </span>
                                 </div>
-                                <h2 className="mt-1 text-sm sm:text-base font-black leading-tight text-white break-words">
+                                <h2 className="mt-1 text-sm md:text-base font-black leading-tight text-white break-words">
                                     {alert.dishName}
                                 </h2>
                                 <p className="mt-0.5 text-[9px] font-bold text-stone-500 truncate">单号 No.{alert.orderNo}</p>
@@ -575,7 +575,7 @@ export const KitchenAlertDisplay: React.FC = () => {
 
                         <div className={`shrink-0 min-w-[64px] rounded-lg border px-1.5 py-1 text-right ${timerTone}`}>
                             <div className="text-[7px] font-black tracking-wider opacity-65">{timerLabel}</div>
-                            <div className="mt-0.5 font-mono text-xs sm:text-sm font-black tabular-nums leading-none">
+                            <div className="mt-0.5 font-mono text-xs md:text-sm font-black tabular-nums leading-none">
                                 {formatElapsedClock(timerStart, now)}
                             </div>
                         </div>
@@ -599,7 +599,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                     {alert.note && (
                         <div className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5">
                             <div className="text-[7px] font-black tracking-wider text-amber-300/80">楼面备注 NOTE</div>
-                            <p className="mt-0.5 text-[11px] sm:text-xs leading-relaxed font-black text-amber-50 whitespace-pre-wrap break-words">
+                            <p className="mt-0.5 text-[11px] md:text-xs leading-relaxed font-black text-amber-50 whitespace-pre-wrap break-words">
                                 {alert.note}
                             </p>
                         </div>
@@ -640,13 +640,13 @@ export const KitchenAlertDisplay: React.FC = () => {
     if (!isStarted) {
         return (
             <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-4 py-8 safe-area-top safe-area-bottom">
-                <div className="w-full max-w-lg rounded-[2rem] bg-white text-[#111111] p-6 sm:p-9 shadow-2xl border border-white/10">
+                <div className="w-full max-w-lg rounded-[2rem] bg-white text-[#111111] p-6 md:p-9 shadow-2xl border border-white/10">
                     <div className="w-20 h-20 rounded-[1.6rem] bg-[#FFD200] flex items-center justify-center mb-6 shadow-[0_12px_35px_rgba(255,210,0,0.35)]">
                         <ChefHat size={42} strokeWidth={2.4} />
                     </div>
                     <p className="text-xs font-black tracking-[0.24em] text-stone-400 uppercase mb-2">Kim Lian Kee · Kepong</p>
-                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight">厨房通知处理台 / Kitchen Alert Display</h1>
-                    <p className="mt-2 text-xs sm:text-sm text-stone-500 font-bold uppercase tracking-wider">Receiver Board</p>
+                    <h1 className="text-2xl md:text-3xl font-black tracking-tight">厨房通知处理台 / Kitchen Alert Display</h1>
+                    <p className="mt-2 text-xs md:text-sm text-stone-500 font-bold uppercase tracking-wider">Receiver Board</p>
 
                     <div className="mt-6 rounded-2xl bg-[#FFF8D6] border border-[#FFD200]/50 p-4 flex gap-3">
                         <BellRing className="text-amber-600 shrink-0 mt-0.5" size={22} />
@@ -694,15 +694,15 @@ export const KitchenAlertDisplay: React.FC = () => {
     return (
         <div className={`h-full min-h-screen overflow-y-auto text-[#111111] ${displayView === 'ACTIVE' ? 'bg-[#0B0B0C]' : 'bg-[#F3F4F6]'}`}>
             <header className="sticky top-0 z-40 border-b border-white/10 bg-[#111111]/95 text-white shadow-2xl backdrop-blur safe-area-top">
-                <div className="mx-auto max-w-[2000px] px-3 sm:px-5 lg:px-7 py-2.5 sm:py-3">
+                <div className="mx-auto max-w-[2000px] px-3 md:px-5 lg:px-7 py-2.5 md:py-3">
                     <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-[0.9rem] bg-[#FFD200] text-[#111111] flex items-center justify-center shrink-0 shadow-[0_8px_24px_rgba(255,210,0,0.18)]">
+                        <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                            <div className="w-11 h-11 md:w-12 md:h-12 rounded-[0.9rem] bg-[#FFD200] text-[#111111] flex items-center justify-center shrink-0 shadow-[0_8px_24px_rgba(255,210,0,0.18)]">
                                 <ChefHat size={27} strokeWidth={2.5} />
                             </div>
                             <div className="min-w-0">
-                                <h1 className="truncate text-lg sm:text-xl font-black leading-tight">厨房通知处理台 / Kitchen Alerts</h1>
-                                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-stone-400">
+                                <h1 className="truncate text-lg md:text-xl font-black leading-tight">厨房通知处理台 / Kitchen Alerts</h1>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] md:text-xs font-bold text-stone-400">
                                     {connectionState === 'ONLINE' ? (
                                         <><Wifi size={13} className="text-emerald-400" /> <span className="text-emerald-400">实时连接 / Online</span></>
                                     ) : connectionState === 'CONNECTING' ? (
@@ -716,7 +716,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                             <div className="hidden md:flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 font-mono text-sm font-black tabular-nums">
                                 <Clock3 size={16} className="text-[#FFD200]" />
                                 {formatClock(now)}
@@ -731,7 +731,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                             </button>
                             <button
                                 onClick={() => void unlockAudioAndTest()}
-                                className="h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 px-2.5 sm:px-3 text-xs font-black flex items-center gap-1.5 active:scale-95 transition-all"
+                                className="h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 px-2.5 md:px-3 text-xs font-black flex items-center gap-1.5 active:scale-95 transition-all"
                                 title="测试警报声并强制解锁 iPad 声音 / Play Test & Unlock Audio"
                             >
                                 <Volume2 size={16} className="animate-bounce" />
@@ -750,7 +750,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                                     setIsStarted(false);
                                     isStartedRef.current = false;
                                 }}
-                                className="h-10 rounded-xl bg-white/5 border border-white/10 px-2.5 sm:px-3 text-xs font-black text-stone-300 hover:bg-white/10 flex items-center gap-1.5"
+                                className="h-10 rounded-xl bg-white/5 border border-white/10 px-2.5 md:px-3 text-xs font-black text-stone-300 hover:bg-white/10 flex items-center gap-1.5"
                                 title="更换操作人 / Switch Staff"
                             >
                                 <UserRound size={17} />
@@ -803,7 +803,7 @@ export const KitchenAlertDisplay: React.FC = () => {
             </header>
 
             {(errorMessage || successMessage) && (
-                <div className="sticky top-[1px] z-30 px-4 sm:px-6 lg:px-8 pt-3">
+                <div className="sticky top-[1px] z-30 px-4 md:px-6 lg:px-8 pt-3">
                     {errorMessage && (
                         <div className="max-w-4xl mx-auto rounded-2xl bg-red-600 text-white px-4 py-3 shadow-xl flex items-center gap-3 font-bold">
                             <AlertTriangle size={21} className="shrink-0" />
@@ -819,10 +819,10 @@ export const KitchenAlertDisplay: React.FC = () => {
                 </div>
             )}
 
-            <main className={`px-3 sm:px-5 lg:px-7 py-4 sm:py-5 safe-area-bottom ${displayView === 'ACTIVE' ? 'mx-auto w-full max-w-[2000px]' : ''}`}>
+            <main className={`px-3 md:px-5 lg:px-7 py-4 md:py-5 safe-area-bottom ${displayView === 'ACTIVE' ? 'mx-auto w-full max-w-[2000px]' : ''}`}>
                 {displayView === 'HISTORY' ? (
                     <div className="max-w-7xl mx-auto space-y-5">
-                        <section className="rounded-[1.6rem] bg-white border border-stone-200 shadow-sm p-4 sm:p-5">
+                        <section className="rounded-[1.6rem] bg-white border border-stone-200 shadow-sm p-4 md:p-5">
                             <div className="flex flex-col xl:flex-row xl:items-end gap-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
@@ -832,7 +832,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                                     <p className="mt-1 text-xs font-bold text-stone-400">每项通知、接收人、解决人和处理时间都会保留。</p>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-[180px_180px_minmax(220px,1fr)_auto] gap-2.5 xl:w-auto">
+                                <div className="grid grid-cols-1 md:grid-cols-[180px_180px_minmax(220px,1fr)_auto] gap-2.5 xl:w-auto">
                                     <label className="relative">
                                         <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
                                         <input
@@ -891,7 +891,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                             </div>
                             <div className="rounded-2xl bg-amber-50 text-amber-800 p-4 border border-amber-200">
                                 <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1"><TimerReset size={13} /> 平均解决时间</p>
-                                <p className="mt-1 text-xl sm:text-2xl font-black">{formatDuration(historySummary.averageMinutes)}</p>
+                                <p className="mt-1 text-xl md:text-2xl font-black">{formatDuration(historySummary.averageMinutes)}</p>
                             </div>
                         </section>
 
@@ -925,14 +925,14 @@ export const KitchenAlertDisplay: React.FC = () => {
                                     return (
                                         <article key={alert.id} className="rounded-2xl bg-white border border-stone-200 shadow-sm overflow-hidden">
                                             <div className={`h-1 ${alert.status === 'RESOLVED' ? 'bg-emerald-500' : alert.status === 'CANCELLED' ? 'bg-stone-300' : alert.status === 'ACKNOWLEDGED' ? 'bg-sky-500' : 'bg-[#FFD200]'}`} />
-                                            <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center gap-4">
+                                            <div className="p-4 md:p-5 flex flex-col lg:flex-row lg:items-center gap-4">
                                                 <div className="flex items-start gap-3 min-w-0 lg:w-[34%]">
                                                     <div className="w-14 h-14 rounded-2xl bg-[#111111] text-[#FFD200] flex flex-col items-center justify-center shrink-0">
                                                         <span className="text-[8px] font-bold text-white/50 uppercase">Table</span>
                                                         <span className="text-xl font-black max-w-[3rem] truncate">{alert.tableNo}</span>
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <h3 className="text-base sm:text-lg font-black break-words">{alert.dishName}</h3>
+                                                        <h3 className="text-base md:text-lg font-black break-words">{alert.dishName}</h3>
                                                         <p className="mt-1 text-xs font-bold text-stone-400 truncate">Order {alert.orderNo}</p>
                                                         <div className="mt-2 flex flex-wrap gap-1.5">
                                                             <span className={`rounded-lg border px-2 py-1 text-[10px] font-black ${typeMeta.tone}`}>{typeMeta.label}</span>
@@ -942,7 +942,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
                                                     <div>
                                                         <p className="text-[9px] font-black text-stone-400 uppercase">提交</p>
                                                         <p className="mt-1 text-xs font-black truncate">{alert.createdByName}</p>
@@ -970,7 +970,7 @@ export const KitchenAlertDisplay: React.FC = () => {
                                                 </div>
                                             </div>
                                             {alert.note && (
-                                                <div className="border-t border-stone-100 bg-amber-50/60 px-4 sm:px-5 py-3 text-xs font-bold text-stone-700">
+                                                <div className="border-t border-stone-100 bg-amber-50/60 px-4 md:px-5 py-3 text-xs font-bold text-stone-700">
                                                     <span className="text-amber-700 font-black">备注：</span>{alert.note}
                                                 </div>
                                             )}
@@ -985,8 +985,8 @@ export const KitchenAlertDisplay: React.FC = () => {
                         <div className="w-20 h-20 rounded-full border border-emerald-400/25 bg-emerald-400/10 text-emerald-400 flex items-center justify-center">
                             <CheckCircle2 size={40} strokeWidth={2.2} />
                         </div>
-                        <h2 className="mt-5 text-2xl sm:text-3xl font-black text-white">厨房通知已清空 / No Pending Alerts</h2>
-                        <p className="mt-2 text-sm sm:text-base font-semibold text-stone-500">楼面提交后会自动显示，不需要刷新 / Real-time updates automatically load here.</p>
+                        <h2 className="mt-5 text-2xl md:text-3xl font-black text-white">厨房通知已清空 / No Pending Alerts</h2>
+                        <p className="mt-2 text-sm md:text-base font-semibold text-stone-500">楼面提交后会自动显示，不需要刷新 / Real-time updates automatically load here.</p>
                         <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-4 py-2 text-xs font-bold text-stone-400">
                             {connectionState === 'ONLINE' ? <Wifi size={14} className="text-emerald-400" /> : <WifiOff size={14} className="text-red-400" />}
                             {connectionState === 'ONLINE' ? '实时连接正常 / Real-time Online' : '连接暂时中断 / Disconnected'}

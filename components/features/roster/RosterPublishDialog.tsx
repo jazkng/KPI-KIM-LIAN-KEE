@@ -22,9 +22,6 @@ export const RosterPublishDialog: React.FC<RosterPublishDialogProps> = ({
 
     if (!isOpen) return null;
 
-    const criticalErrors = anomalies.filter(a => a.severity === 'error');
-    const warningErrors = anomalies.filter(a => a.severity === 'warning');
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!publisher.trim()) {

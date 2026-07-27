@@ -34,7 +34,7 @@ export const QuickPayModal: React.FC<QuickPayModalProps> = ({
             >
                 {/* Drag handle (mobile only) */}
                 <div className="md:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 -mt-2"></div>
-                <h3 className="font-black text-xl text-[#1A1A1A] mb-1">支付账单 (Pay Bill)</h3>
+                <h3 className="font-black text-xl text-[#111111] mb-1">支付账单 (Pay Bill)</h3>
                 <p className="text-xs text-gray-500 font-bold mb-6">{bill.company} • Inv #{bill.id.slice(-6)}</p>
                 
                 <div className="space-y-4">
@@ -49,7 +49,7 @@ export const QuickPayModal: React.FC<QuickPayModalProps> = ({
                             type="number" 
                             value={payAmount} 
                             onChange={e => setPayAmount(parseFloat(e.target.value) || 0)} 
-                            className="w-full p-4 bg-gray-50 rounded-xl font-black text-xl outline-none focus:border-[#FFD700] border-2 border-transparent"
+                            className="w-full p-4 bg-gray-50 rounded-xl font-black text-xl outline-none focus:border-[#FFD200] border-2 border-transparent"
                         />
                     </div>
 
@@ -61,7 +61,7 @@ export const QuickPayModal: React.FC<QuickPayModalProps> = ({
                             type="date" 
                             value={paymentDate} 
                             onChange={e => setPaymentDate(e.target.value)} 
-                            className="w-full p-4 bg-gray-50 rounded-xl font-bold text-sm outline-none focus:border-[#FFD700] border-2 border-transparent text-gray-800"
+                            className="w-full p-4 bg-gray-50 rounded-xl font-bold text-sm outline-none focus:border-[#FFD200] border-2 border-transparent text-gray-800"
                         />
                     </div>
                     
@@ -70,7 +70,7 @@ export const QuickPayModal: React.FC<QuickPayModalProps> = ({
                         <div className="flex gap-3">
                             <button 
                                 onClick={() => setPayMethod('BANK_TRANSFER')} 
-                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all flex flex-col items-center justify-center gap-2 ${payMethod === 'BANK_TRANSFER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#FFD700] shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
+                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all flex flex-col items-center justify-center gap-2 ${payMethod === 'BANK_TRANSFER' ? 'bg-[#111111] text-[#FFD200] border-[#FFD200] shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
                             >
                                 <CreditCard size={28}/> Bank
                             </button>
@@ -107,7 +107,7 @@ export const QuickPayModal: React.FC<QuickPayModalProps> = ({
                     {payMethod ? (
                         <button 
                             onClick={() => onConfirm({ generatePV, paymentDate })} 
-                            className="w-full bg-[#1A1A1A] text-[#FFD700] py-4 rounded-xl font-black shadow-lg hover:bg-black flex items-center justify-center gap-2 mt-2 animate-in slide-in-from-bottom-2 fade-in"
+                            className="w-full bg-[#111111] text-[#FFD200] py-4 rounded-xl font-black shadow-lg hover:bg-black flex items-center justify-center gap-2 mt-2 animate-in slide-in-from-bottom-2 fade-in"
                         >
                             <DollarSign size={18}/> 确认支付 (Confirm)
                         </button>

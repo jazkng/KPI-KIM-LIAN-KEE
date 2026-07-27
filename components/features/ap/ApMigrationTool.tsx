@@ -26,7 +26,7 @@ export const ApMigrationTool: React.FC<ApMigrationToolProps> = ({
     return (
         <div className="fixed inset-0 bg-black/70 z-[220] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-white w-full md:max-w-3xl h-[90vh] md:max-h-[85vh] rounded-t-3xl md:rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1A1A1A] text-white p-4 flex justify-between items-center shrink-0 border-b-4 border-amber-400">
+                <div className="bg-[#111111] text-white p-4 flex justify-between items-center shrink-0 border-b-4 border-amber-400">
                     <div>
                         <h3 className="font-black text-lg flex items-center gap-2">🔧 营销账单批量补类目</h3>
                         <p className="text-[10px] text-gray-400 font-mono mt-0.5">{unCategorizedMarketingBills.length} 条历史账单待分类</p>
@@ -41,12 +41,12 @@ export const ApMigrationTool: React.FC<ApMigrationToolProps> = ({
                             <div key={bill.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
                                 <div className="flex justify-between items-start mb-2 pb-2 border-b border-gray-100">
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-black text-[#1A1A1A] truncate">{bill.company}</p>
+                                        <p className="text-sm font-black text-[#111111] truncate">{bill.company}</p>
                                         <p className="text-[10px] text-gray-500 mt-0.5 truncate">{bill.time?.split('T')[0]} · {bill.note?.slice(0, 30) || '—'}</p>
                                     </div>
                                     <span className="text-base font-mono font-black text-amber-700 shrink-0 ml-2">RM {Number(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</span>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                     <select
                                         value={data.subCat || ''}
                                         onChange={e => setMigrationData(m => ({
@@ -101,7 +101,7 @@ export const ApMigrationTool: React.FC<ApMigrationToolProps> = ({
                         <button 
                             onClick={onSave} 
                             disabled={isSaving || Object.values(migrationData).filter(d => d.subCat).length === 0} 
-                            className="px-4 py-2 bg-[#1A1A1A] text-[#FFD700] rounded-lg text-xs font-black hover:bg-black disabled:opacity-50 flex items-center gap-1.5"
+                            className="px-4 py-2 bg-[#111111] text-[#FFD200] rounded-lg text-xs font-black hover:bg-black disabled:opacity-50 flex items-center gap-1.5"
                         >
                             {isSaving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} 批量保存
                         </button>

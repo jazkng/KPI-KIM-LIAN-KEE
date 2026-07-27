@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
-    ClipboardCheck, Layout, Box, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
+    ClipboardCheck, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, Sparkles, BellRing
+    FileText, Calculator, Star, Search, BellRing
 } from 'lucide-react';
 import { Employee } from '../types';
 import { HRSystem } from './features/HRSystem';
@@ -12,7 +12,7 @@ import { RecurringBillsModule } from './features/RecurringBillsModule';
 import { OrgChart } from './features/OrgChart';
 import { FinancialReport } from './features/FinancialReport';
 import { AttendanceConsole } from './features/AttendanceConsole';
-import { AccountsPayableModule } from './features/AccountsPayableModule';
+import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
 import { TreasuryModule } from './features/TreasuryModule'; 
 import { WarrantyModule } from './features/WarrantyModule'; 
 import { EventsPlanningModule } from './features/EventsPlanningModule';
@@ -51,26 +51,26 @@ type CardConfig = {
 
 const BOSS_CARDS: CardConfig[] = [
     { id: "settlement", title: "每日结算", sub: "SETTLEMENT", icon: Calculator, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'SETTLEMENT' },
-    { id: "kitchen_alert", title: "通知厨房", sub: "KITCHEN ALERT", icon: BellRing, colorClass: "bg-red-50", iconColor: "text-red-500", actionType: 'NAVIGATE', target: 'KITCHEN_ALERT' },
+    { id: "kitchen_alert", title: "厨房通知", sub: "KITCHEN ALERT", icon: BellRing, colorClass: "bg-red-50", iconColor: "text-red-500", actionType: 'NAVIGATE', target: 'KITCHEN_ALERT' },
     { id: "queue", title: "排队叫号", sub: "QUEUE TV", icon: Armchair, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'QUEUE' },
-    { id: "logwrite", title: "运营日志（写）", sub: "ADD LOG", icon: PenTool, colorClass: "bg-orange-50", iconColor: "text-orange-500", actionType: 'NAVIGATE', target: 'LOGBOOK' },
-    { id: "logview", title: "运营日志（查）", sub: "VIEW", icon: BookOpen, colorClass: "bg-emerald-50", iconColor: "text-emerald-500", actionType: 'NAVIGATE', target: 'LOGBOOK_VIEW', alertKey: 'logs', alertColor: 'bg-blue-500' },
+    { id: "logwrite", title: "运营日志", sub: "ADD LOG", icon: PenTool, colorClass: "bg-orange-50", iconColor: "text-orange-500", actionType: 'NAVIGATE', target: 'LOGBOOK' },
+    { id: "logview", title: "日志查询", sub: "VIEW", icon: BookOpen, colorClass: "bg-emerald-50", iconColor: "text-emerald-500", actionType: 'NAVIGATE', target: 'LOGBOOK_VIEW', alertKey: 'logs', alertColor: 'bg-blue-500' },
     { id: "sop", title: "SOP 稽查", sub: "INSPECT", icon: ClipboardCheck, colorClass: "bg-violet-50", iconColor: "text-violet-500", actionType: 'NAVIGATE', target: 'SOP_INSPECT' },
     { id: "invcheck", title: "库存盘点", sub: "CHECK", icon: CheckSquare, colorClass: "bg-blue-50", iconColor: "text-blue-500", actionType: 'NAVIGATE', target: 'INVENTORY_CHECK' },
     { id: "stock", title: "库存总览", sub: "STOCK VALUE", icon: Eye, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'NAVIGATE', target: 'INVENTORY_VIEW', alertKey: 'stock' },
-    { id: "order", title: "智能订货", sub: "SMART ORDER", icon: ShoppingCart, colorClass: "bg-lime-50", iconColor: "text-lime-600", actionType: 'NAVIGATE', target: 'PROCUREMENT' },
+    { id: "order", title: "采购订货", sub: "SMART ORDER", icon: ShoppingCart, colorClass: "bg-lime-50", iconColor: "text-lime-600", actionType: 'NAVIGATE', target: 'PROCUREMENT' },
     { id: "supplier", title: "供应商", sub: "PURCHASING", icon: Truck, colorClass: "bg-blue-50", iconColor: "text-blue-600", actionType: 'NAVIGATE', target: 'SUPPLIER_CONTACTS' },
     { id: "menu", title: "智能菜谱", sub: "SMART RECIPE", icon: Coffee, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'MODAL', target: 'MENU' },
     { id: "price", title: "成本监控", sub: "PRICE MONITOR", icon: TrendingUp, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'PRICE_MONITOR' },
     { id: "ap", title: "应付账款", sub: "ACCOUNTS PAYABLE", icon: CreditCard, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'MODAL', target: 'AP' },
-    { id: "self_invoice", title: "自制凭单", sub: "VOUCHER MAKER", icon: FileText, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'SELF_INVOICE' },
-    { id: "bills", title: "固定支出", sub: "SUBSCRIPTIONS", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
+    { id: "self_invoice", title: "自开凭单", sub: "VOUCHER MAKER", icon: FileText, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'SELF_INVOICE' },
+    { id: "bills", title: "经常性支出", sub: "RECURRING EXPENSES", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
     { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
     { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
-    { id: "hr", title: "HR 指挥中心", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
-    { id: "attendance", title: "考勤总控台", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
-    { id: "roster", title: "排班缺席", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
-    { id: "assess", title: "能力评测", sub: "SKILL MATRIX", icon: Award, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'MODAL', target: 'ASSESSMENT' },
+    { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
+    { id: "attendance", title: "考勤管理", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
+    { id: "roster", title: "排班管理", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
+    { id: "assess", title: "技能评估", sub: "SKILL ASSESSMENT", icon: Award, colorClass: "bg-purple-50", iconColor: "text-purple-600", actionType: 'MODAL', target: 'ASSESSMENT' },
     { id: "org", title: "组织结构", sub: "ORG STRUCTURE", icon: Layout, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'ORG' },
     { id: "vote", title: "决策投票", sub: "BOARDROOM VOTE", icon: Vote, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'PLANNING', target: 'VOTE' },
     { id: "okr", title: "目标规划", sub: "OKRs & KPI", icon: Target, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'PLANNING', target: 'OKR' },
@@ -88,7 +88,6 @@ const BOSS_DASHBOARD_SECTIONS = MODULE_CATEGORIES.map(category => ({
         card => card.target,
     ),
 })).filter(section => section.cards.length > 0);
-
 
 // Custom Hook for Alerts
 function useDashboardAlerts() {
@@ -468,7 +467,7 @@ export const BossDashboard: React.FC<{
                                 <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case">({favoriteCards.length})</span>
                             </h3>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+ <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
                             {favoriteCards.map(card => (
                                 <DashboardCard
                                     key={`fav-${card.id}`}
@@ -529,13 +528,13 @@ export const BossDashboard: React.FC<{
                 {filteredSections.map((section, idx) => (
                     <div key={idx} className="bg-white rounded-3xl p-5 border border-stone-200/50 shadow-sm space-y-4">
                         <div className="flex justify-between items-center pb-2 border-b border-stone-100">
-                            <h3 className="font-black text-stone-850 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
+                            <h3 className="font-black text-stone-900 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
                                 <span className="text-[#FFD200] font-black">■</span>
                                 {section.title}
                                 <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case"> · {section.sub}</span>
                             </h3>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+ <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
                             {section.cards.map((card) => (
                                 <DashboardCard 
                                     key={card.id}
@@ -557,7 +556,7 @@ export const BossDashboard: React.FC<{
                         <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center text-stone-400 mx-auto mb-3">
                             <Search size={20} />
                         </div>
-                        <p className="text-sm font-extrabold text-stone-850">未找到相关功能</p>
+                        <p className="text-sm font-extrabold text-stone-900">未找到相关功能</p>
                         <p className="text-xs text-stone-400 mt-1">没有找到匹配 "{searchQuery}" 的功能</p>
                     </div>
                 )}

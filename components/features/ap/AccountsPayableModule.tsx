@@ -2033,7 +2033,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const showFab = viewMode === 'LIST' && !isFormOpen;
 
     return (
-        <div className="absolute inset-0 bg-[#F5F7FA] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
+        <div className="absolute inset-0 bg-[#F6F7FB] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
             {/* === MOBILE STICKY HEADER === */}
             <div className="md:hidden bg-[#111111] border-b-[3px] border-[#FFD200] px-4 flex justify-between items-center shrink-0 shadow-lg sticky top-0 z-40 safe-area-top h-[56px]">
                 <div className="flex items-center gap-3 min-w-0">
@@ -2062,15 +2062,15 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
             {/* === MOBILE KPI SUMMARY STRIP === */}
             <div className="flex md:hidden gap-2 px-4 py-3 bg-[#F6F7FB] border-b border-gray-200 overflow-x-auto scrollbar-hide shrink-0">
-                <div className="min-w-[140px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                <div className="min-w-[140px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">未付款总额</p>
                     <p className="text-sm font-black text-[#EF4444] mt-1">RM {totalInvoicesOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
-                <div className="min-w-[110px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                <div className="min-w-[110px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">逾期账单</p>
                     <p className="text-sm font-black text-stone-900 mt-1">{overdueBillsCount} 笔</p>
                 </div>
-                <div className="min-w-[130px] bg-white border border-gray-250/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                <div className="min-w-[130px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">本月待付款</p>
                     <p className="text-sm font-black text-stone-900 mt-1">RM {thisMonthOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
@@ -2107,7 +2107,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 </div>
                 <button 
                     onClick={() => setIsMobileFilterOpen(true)}
-                    className="flex items-center gap-1.5 bg-[#111111] hover:bg-black text-[#FFD200] text-xs font-black h-10 px-3.5 rounded-xl transition-all border border-stone-850 shrink-0 active:scale-95"
+                    className="flex items-center gap-1.5 bg-[#111111] hover:bg-black text-[#FFD200] text-xs font-black h-10 px-3.5 rounded-xl transition-all border border-stone-900 shrink-0 active:scale-95"
                 >
                     <Filter size={14}/>
                     <span>筛选</span>
@@ -2237,7 +2237,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
                                         { label: '常规账单 🏢', value: 'REGULAR', count: billTypeCounts.regular },
-                                        { label: '固定支出 📌', value: 'FIXED', count: billTypeCounts.fixed },
+                                        { label: '经常性支出 📌', value: 'FIXED', count: billTypeCounts.fixed },
                                         { label: '薪资相关 🧠', value: 'SALARY', count: billTypeCounts.salary },
                                         { label: '银行/平台 ⚙️', value: 'PLATFORM', count: billTypeCounts.platform },
                                         { label: '显示全部 📊', value: 'ALL', count: billTypeCounts.total }
@@ -2320,7 +2320,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 )}
                             </h2>
                             {isBillingCapped && (
-                                <span className="bg-red-650/90 text-white text-[9px] px-1.5 py-0.5 rounded-full font-serif lowercase tracking-normal scale-90 whitespace-nowrap font-black shrink-0">
+                                <span className="bg-red-700/90 text-white text-[9px] px-1.5 py-0.5 rounded-full font-serif lowercase tracking-normal scale-90 whitespace-nowrap font-black shrink-0">
                                     capped
                                 </span>
                             )}
@@ -2361,8 +2361,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <Plus size={12}/> 
-                        <span className="hidden sm:inline">新增账单</span>
-                        <span className="inline sm:hidden">新增</span>
+                        <span className="hidden md:inline">新增账单</span>
+                        <span className="inline md:hidden">新增</span>
                     </button>
 
                     <button 
@@ -2370,18 +2370,18 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <Calendar size={12}/> 
-                        <span className="hidden sm:inline">补开 PV</span>
-                        <span className="inline sm:hidden">补开</span>
+                        <span className="hidden md:inline">补开 PV</span>
+                        <span className="inline md:hidden">补开</span>
                     </button>
                     <button 
                         onClick={() => setShowPVHistory(true)} 
                         className="h-11 bg-white/10 hover:bg-white/15 text-white font-black text-xs px-4 rounded-[14px] border border-white/10 transition-all flex items-center gap-2 active:scale-[0.98] shrink-0 whitespace-nowrap"
                     >
                         <FileText size={12}/> 
-                        <span className="hidden sm:inline">PV 历史</span>
-                        <span className="inline sm:hidden">历史</span>
+                        <span className="hidden md:inline">PV 历史</span>
+                        <span className="inline md:hidden">历史</span>
                     </button>
-                    <div className="hidden sm:block"><ModuleGuideButton moduleId="ap"/></div>
+                    <div className="hidden md:block"><ModuleGuideButton moduleId="ap"/></div>
                 </div>
             </div>
 
@@ -2394,7 +2394,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         <div className="relative w-1/3 min-w-[100px] md:min-w-[130px]">
                             <input 
                                 type="text" 
-                                className="w-full pl-8 pr-7 py-2.5 md:py-3 bg-gray-50 hover:bg-gray-100 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-[#FFD700] transition-colors" 
+                                className="w-full pl-8 pr-7 py-2.5 md:py-3 bg-gray-50 hover:bg-gray-100 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-[#FFD200] transition-colors" 
                                 placeholder="公司 ID (8018)" 
                                 value={searchId} 
                                 onChange={e => { 
@@ -2421,7 +2421,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         <div className="relative flex-grow">
                             <input 
                                 type="text" 
-                                className="w-full pl-9 pr-8 py-2.5 md:py-3 bg-gray-50 hover:bg-gray-100 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-[#FFD700] transition-colors" 
+                                className="w-full pl-9 pr-8 py-2.5 md:py-3 bg-gray-50 hover:bg-gray-100 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-[#FFD200] transition-colors" 
                                 placeholder="搜索供应商名、备注、或金额..." 
                                 value={searchQuery} 
                                 onChange={e => { 
@@ -2534,7 +2534,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         {[
                             { value: 'ALL', label: '全部类型', english: 'All Types', count: billTypeCounts.total, icon: ListChecks },
                             { value: 'REGULAR', label: '常规账单', english: 'Regular', count: billTypeCounts.regular, icon: Archive },
-                            { value: 'FIXED', label: '固定支出', english: 'Fixed', count: billTypeCounts.fixed, icon: RotateCcw },
+                            { value: 'FIXED', label: '经常性支出', english: 'Fixed', count: billTypeCounts.fixed, icon: RotateCcw },
                             { value: 'SALARY', label: '薪资相关', english: 'Salary', count: billTypeCounts.salary, icon: User },
                             { value: 'PLATFORM', label: '银行／平台', english: 'Bank / Platform', count: billTypeCounts.platform, icon: CreditCard },
                         ].map(option => {
@@ -2584,16 +2584,16 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 );
                             })}
                             <div className="h-4 w-px bg-gray-200 shrink-0 mx-0.5"></div>
-                            {filteredBills.length > 0 && <button onClick={handleSelectAll} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 ${selectedBillIds.size > 0 && selectedBillIds.size === filteredBills.length ? 'bg-[#1A1A1A] text-[#FFD700]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}><ListChecks size={12}/> {selectedBillIds.size > 0 ? '取消' : '全选'}</button>}
+                            {filteredBills.length > 0 && <button onClick={handleSelectAll} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 ${selectedBillIds.size > 0 && selectedBillIds.size === filteredBills.length ? 'bg-[#111111] text-[#FFD200]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}><ListChecks size={12}/> {selectedBillIds.size > 0 ? '取消' : '全选'}</button>}
                             
-                            <div className="relative shrink-0 ml-auto"><select value={selectedTag} onChange={e => setSelectedTag(e.target.value)} className="bg-gray-50 border-none rounded-lg pl-2 pr-6 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD700] appearance-none"><option value="ALL">🔖 All Tags</option>{availableTags.map(t => <option key={t} value={t}>{t}</option>)}</select><div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDown size={10}/></div></div>
+                            <div className="relative shrink-0 ml-auto"><select value={selectedTag} onChange={e => setSelectedTag(e.target.value)} className="bg-gray-50 border-none rounded-lg pl-2 pr-6 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD200] appearance-none"><option value="ALL">🔖 All Tags</option>{availableTags.map(t => <option key={t} value={t}>{t}</option>)}</select><div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDown size={10}/></div></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* === MAIN CONTENT === */}
-            <div ref={mainScrollRef} className="mobile-fixed-actions-space flex-grow overflow-y-auto p-4 md:p-6 bg-[#F5F7FA] md:pb-32">
+            <div ref={mainScrollRef} className="mobile-fixed-actions-space flex-grow overflow-y-auto p-4 md:p-6 bg-[#F6F7FB] md:pb-32">
                 {/* 📊 智能信息导览条 (Dynamic Filter Information Banner) */}
                 {!loading && (
                     <>
@@ -2638,7 +2638,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <span className="text-xl shrink-0">📌</span>
                                     <div className="min-w-0">
-                                        <p className="font-black text-teal-950 truncate">当前仅显示租金、水电等固定支出 (共 {filteredBills.length} 笔)</p>
+                                        <p className="font-black text-teal-950 truncate">当前仅显示租金、水电等经常性支出 (共 {filteredBills.length} 笔)</p>
                                         <p className="text-[10px] text-teal-800/90 truncate">常规账单、薪资发放及平台手续费已安全独立隐藏</p>
                                     </div>
                                 </div>
@@ -2652,7 +2652,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         )}
 
                         {viewMode === 'SUPPLIER_DETAIL' && selectedSupplierId && (
-                            <div className="mb-4 bg-gradient-to-r from-red-50 to-amber-50 border border-red-200/80 rounded-2xl p-4 md:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-top-1 duration-200">
+                            <div className="mb-4 bg-gradient-to-r from-red-50 to-amber-50 border border-red-200/80 rounded-2xl p-4 md:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in slide-in-from-top-1 duration-200">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
                                         <span className="text-[9px] font-black text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-md uppercase tracking-wider">
@@ -2672,7 +2672,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         🏢 {supplierById.get(selectedSupplierId)?.name || '未知商家'}
                                     </h3>
                                     <p className="text-xs text-gray-500 font-bold">
-                                        累计未付款 Outstanding: <span className="font-mono text-red-650 font-black text-sm">RM {totalInvoicesOutstanding.toFixed(2)}</span>
+                                        累计未付款 Outstanding: <span className="font-mono text-red-700 font-black text-sm">RM {totalInvoicesOutstanding.toFixed(2)}</span>
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 shrink-0">
@@ -2703,11 +2703,11 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             const sup = supplierByName.get(bill.company);
                             const isSelected = selectedBillIds.has(bill.id);
                             return (
-                                <div key={bill.id} className={`bg-white rounded-2xl p-3 md:p-5 shadow-sm border-l-4 md:border-l-[6px] transition-all hover:shadow-lg group relative ${isPaid ? 'border-l-green-500' : isOverdue ? 'border-l-red-500' : 'border-l-orange-400'} ${isSelected ? 'ring-2 ring-offset-1 ring-[#FFD700]' : ''}`}>
+                                <div key={bill.id} className={`bg-white rounded-2xl p-3 md:p-5 shadow-sm border-l-4 md:border-l-[6px] transition-all hover:shadow-lg group relative ${isPaid ? 'border-l-green-500' : isOverdue ? 'border-l-red-500' : 'border-l-orange-400'} ${isSelected ? 'ring-2 ring-offset-1 ring-[#FFD200]' : ''}`}>
                                     {/* Top: checkbox + date + link */}
                                     <div className="flex justify-between items-center mb-2">
                                         <div className="flex items-center gap-2">
-                                            <button onClick={(e) => { e.stopPropagation(); toggleSelection(bill.id); }} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${isSelected ? 'bg-[#1A1A1A] border-[#1A1A1A] text-[#FFD700]' : 'border-gray-300 bg-white'}`}>{isSelected && <CheckSquare size={12} strokeWidth={3}/>}</button>
+                                            <button onClick={(e) => { e.stopPropagation(); toggleSelection(bill.id); }} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${isSelected ? 'bg-[#111111] border-[#111111] text-[#FFD200]' : 'border-gray-300 bg-white'}`}>{isSelected && <CheckSquare size={12} strokeWidth={3}/>}</button>
                                             <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1"><Calendar size={9}/> {bill.time.split('T')[0]}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
@@ -2738,7 +2738,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     <div className="mb-2 cursor-pointer" onClick={() => toggleSelection(bill.id)}>
                                         <div className="flex items-center gap-2 mb-1">
                                             <h4 className="font-black text-sm md:text-lg text-blue-900 leading-tight truncate">{bill.company}</h4>
-                                            {sup && <span className="bg-[#FFD700] text-black text-[9px] font-mono px-1.5 py-0.5 rounded font-black shrink-0">{sup.id}</span>}
+                                            {sup && <span className="bg-[#FFD200] text-black text-[9px] font-mono px-1.5 py-0.5 rounded font-black shrink-0">{sup.id}</span>}
                                         </div>
                                         {bill.paidBy && bill.paidBy !== 'COMPANY' && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold inline-flex items-center gap-1 ${bill.isAdvancePayment ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}><User size={9}/> {bill.paidBy} {bill.isAdvancePayment ? '垫付' : ''}</span>}
                                         <div className="flex flex-wrap gap-1 mt-1 items-center">
@@ -2775,8 +2775,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                             {isPaid && (
                                                 <span className={`text-[8px] md:text-[9px] px-1.5 py-0.5 rounded font-bold border inline-flex items-center gap-1 shrink-0 ${
                                                     bill.paymentMethod === 'CASH' 
-                                                        ? 'bg-emerald-55 text-emerald-700 border-emerald-250' 
-                                                        : 'bg-blue-55 text-blue-700 border-blue-250'
+                                                        ? 'bg-emerald-55 text-emerald-700 border-emerald-300' 
+                                                        : 'bg-blue-55 text-blue-700 border-blue-300'
                                                 }`}>
                                                     {bill.paymentMethod === 'CASH' ? '💵 Cash' : '🏦 Online Transfer'}
                                                 </span>
@@ -2801,7 +2801,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         {!isPaid ? (
                                             <button 
                                                 onClick={() => { setPayModalData(bill); setPayAmount(bill.outstandingAmount || 0); setPayMethod(''); }} 
-                                                className="flex-grow bg-[#1A1A1A] text-[#FFD200] py-2.5 px-4 rounded-xl text-xs font-black border border-[#FFD200]/20 shadow-sm hover:bg-black transition-all active:scale-95"
+                                                className="flex-grow bg-[#111111] text-[#FFD200] py-2.5 px-4 rounded-xl text-xs font-black border border-[#FFD200]/20 shadow-sm hover:bg-black transition-all active:scale-95"
                                             >
                                                 Pay Now
                                             </button>
@@ -2816,7 +2816,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         
                                         <button 
                                             onClick={() => handleOpenForm(bill)} 
-                                            className="h-10 w-10 flex items-center justify-center bg-gray-100 hover:bg-[#1A1A1A] hover:text-[#FFD200] text-gray-600 rounded-xl transition-all border border-gray-200 shrink-0 active:scale-95"
+                                            className="h-10 w-10 flex items-center justify-center bg-gray-100 hover:bg-[#111111] hover:text-[#FFD200] text-gray-600 rounded-xl transition-all border border-gray-200 shrink-0 active:scale-95"
                                             title="编辑账单"
                                         >
                                             <Edit3 size={15}/>
@@ -2830,7 +2830,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     {!dateRange.start && !dateRange.end && !searchId && !searchQuery && selectedTag === 'ALL' && viewMode !== 'SUPPLIER_DETAIL' && displayLimit < totalLoaded && (
                         <div className="flex flex-col items-center mt-6 gap-2">
                             <p className="text-[10px] text-gray-400 font-bold">显示 {Math.min(displayLimit, totalLoaded)} / {totalLoaded} 笔账单</p>
-                            <button onClick={() => setDisplayLimit(prev => prev + 30)} className="px-6 py-3 bg-white border-2 border-gray-200 hover:border-[#FFD700] text-[#1A1A1A] rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center gap-2">
+                            <button onClick={() => setDisplayLimit(prev => prev + 30)} className="px-6 py-3 bg-white border-2 border-gray-200 hover:border-[#FFD200] text-[#111111] rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center gap-2">
                                 <RefreshCw size={14}/> 加载更多 (Load 30 More)
                             </button>
                         </div>
@@ -2857,7 +2857,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     <div className="text-[10px] md:text-xs font-bold text-gray-500 shrink-0 font-sans">共 {stats.count} 笔</div>
                     <div className="flex gap-3 md:gap-6 text-right">
                         {stats.cn > 0 && <div><div className="text-[9px] text-gray-400 uppercase font-black">Total Credit</div><div className="text-sm font-black text-orange-600">RM {stats.cn.toFixed(2)}</div></div>}
-                        <div><div className="text-[9px] text-gray-400 uppercase font-black">Total Amount</div><div className="text-sm font-black text-[#1A1A1A]">RM {stats.total.toFixed(2)}</div></div>
+                        <div><div className="text-[9px] text-gray-400 uppercase font-black">Total Amount</div><div className="text-sm font-black text-[#111111]">RM {stats.total.toFixed(2)}</div></div>
                         <div><div className="text-[9px] text-gray-400 uppercase font-black">Total Outstanding</div><div className="text-lg font-black text-red-600">RM {stats.outstanding.toFixed(2)}</div></div>
                     </div>
                 </div>
@@ -2866,15 +2866,15 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             {/* === FLOATING BATCH ACTION BAR === */}
             {selectedBillIds.size > 0 && (
                 <div className="fixed bottom-6 md:bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-xl lg:max-w-2xl z-50 animate-in slide-in-from-bottom-10 fade-in duration-300">
-                    <div className="bg-[#1C1C1E]/95 backdrop-blur-md text-white p-3 md:p-4 rounded-2xl shadow-2xl flex flex-col md:flex-row justify-between items-center gap-3 border-2 border-[#FFD700]">
+                    <div className="bg-[#1C1C1E]/95 backdrop-blur-md text-white p-3 md:p-4 rounded-2xl shadow-2xl flex flex-col md:flex-row justify-between items-center gap-3 border-2 border-[#FFD200]">
                         <div className="flex items-center w-full justify-between md:w-auto md:justify-start gap-3 md:gap-4">
                             <div className="flex items-center gap-2 md:gap-4">
-                                <div className={`text-black w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black animate-bounce shadow-lg text-sm md:text-base ${allSelectedPaid ? 'bg-emerald-400' : 'bg-[#FFD700]'}`}>{selectedBillIds.size}</div>
+                                <div className={`text-black w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black animate-bounce shadow-lg text-sm md:text-base ${allSelectedPaid ? 'bg-emerald-400' : 'bg-[#FFD200]'}`}>{selectedBillIds.size}</div>
                                 <div>
                                     <p className="text-[9px] md:text-[10px] text-gray-400 uppercase font-bold tracking-widest leading-none mb-1">
                                         {allSelectedPaid ? 'Paid Total' : 'Selected Outstanding'}
                                     </p>
-                                    <p className={`text-sm md:text-xl font-mono font-black leading-none ${allSelectedPaid ? 'text-emerald-400' : 'text-[#FFD700]'}`}>
+                                    <p className={`text-sm md:text-xl font-mono font-black leading-none ${allSelectedPaid ? 'text-emerald-400' : 'text-[#FFD200]'}`}>
                                         RM {(allSelectedPaid ? batchPaidAmount : batchOutstandingAmount).toFixed(2)}
                                     </p>
                                 </div>
@@ -2888,7 +2888,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <Trash2 size={15}/> <span className="inline">删除</span>
                             </button>
 
-                            <button onClick={() => handleExportPDF(allBills.filter(b => selectedBillIds.has(b.id)))} disabled={isGeneratingPdf} className="flex-1 md:flex-none justify-center bg-white/15 hover:bg-white/25 text-[#FFD700] px-3 py-2.5 rounded-xl text-[11px] md:text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50" title="Export Selected PDF">
+                            <button onClick={() => handleExportPDF(allBills.filter(b => selectedBillIds.has(b.id)))} disabled={isGeneratingPdf} className="flex-1 md:flex-none justify-center bg-white/15 hover:bg-white/25 text-[#FFD200] px-3 py-2.5 rounded-xl text-[11px] md:text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50" title="Export Selected PDF">
                                 {isGeneratingPdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={15}/>} <span className="inline">PDF</span>
                             </button>
 
@@ -2897,7 +2897,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     <FileText size={15}/> 批量凭单
                                 </button>
                             ) : (
-                                <button onClick={() => {setIsBatchPayModalOpen(true); setPayMethod('');}} className="flex-[2] md:flex-none justify-center bg-[#FFD700] text-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-[#FFE66D] transition-all active:scale-95 flex items-center gap-1.5">
+                                <button onClick={() => {setIsBatchPayModalOpen(true); setPayMethod('');}} className="flex-[2] md:flex-none justify-center bg-[#FFD200] text-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-[#FFE66D] transition-all active:scale-95 flex items-center gap-1.5">
                                     <CheckCircle2 size={15}/> 批量支付
                                 </button>
                             )}
@@ -3006,7 +3006,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 </div>
                                 <div>
                                     <p className="text-[9px] font-black text-rose-800 uppercase tracking-widest mb-1">未付款总额 Outstanding</p>
-                                    <p className="text-lg font-black text-red-650 font-mono">RM {printData.reduce((acc,b)=>acc+(b.outstandingAmount||0),0).toFixed(2)}</p>
+                                    <p className="text-lg font-black text-red-700 font-mono">RM {printData.reduce((acc,b)=>acc+(b.outstandingAmount||0),0).toFixed(2)}</p>
                                 </div>
                             </div>
 
@@ -3035,15 +3035,15 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                 </div>
                                             </td>
                                             <td className="p-2.5 text-right font-mono font-bold">{(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</td>
-                                            <td className="p-2.5 text-right font-mono text-orange-650 font-bold">{(bill.creditNote || 0).toFixed(2)}</td>
-                                            <td className="p-2.5 text-right font-mono font-black text-red-650 bg-red-50/30">{(bill.outstandingAmount || 0).toFixed(2)}</td>
+                                            <td className="p-2.5 text-right font-mono text-orange-700 font-bold">{(bill.creditNote || 0).toFixed(2)}</td>
+                                            <td className="p-2.5 text-right font-mono font-black text-red-700 bg-red-50/30">{(bill.outstandingAmount || 0).toFixed(2)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
 
                             {/* ✍️ 签名确认区域 */}
-                            <div className="mt-16 pt-8 border-t border-gray-150 flex justify-between gap-12">
+                            <div className="mt-16 pt-8 border-t border-gray-200 flex justify-between gap-12">
                                 <div className="flex-1">
                                     <p className="text-[9px] font-black uppercase text-rose-900 tracking-wider">✍️ 供应商代表签字 &amp; 盖章 Supplier Signature &amp; Stamp</p>
                                     <div className="w-full border-b border-dashed border-gray-300 mt-14"></div>
@@ -3149,7 +3149,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             {pvJustCreated && (
                 <div className="fixed inset-0 bg-black/70 z-[210] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setPvJustCreated(null)}>
                     <div
-                        className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t-4 border-[#FFD700] animate-in slide-in-from-bottom md:zoom-in-95 duration-300 text-center"
+                        className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-3xl p-6 shadow-2xl border-t-4 border-[#FFD200] animate-in slide-in-from-bottom md:zoom-in-95 duration-300 text-center"
                         onClick={e => e.stopPropagation()}
                         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
                     >
@@ -3157,8 +3157,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         <div className="w-14 h-14 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-3">
                             <FileText size={28} />
                         </div>
-                        <h3 className="font-black text-lg text-[#1A1A1A] mb-1">付款凭单已生成</h3>
-                        <p className="text-2xl font-mono font-black text-[#1A1A1A] my-2">{pvJustCreated.pvNumber}</p>
+                        <h3 className="font-black text-lg text-[#111111] mb-1">付款凭单已生成</h3>
+                        <p className="text-2xl font-mono font-black text-[#111111] my-2">{pvJustCreated.pvNumber}</p>
                         <p className="text-xs text-gray-500 font-bold mb-5">
                             {pvJustCreated.payeeName} · RM {pvJustCreated.totalAmount.toFixed(2)}
                         </p>
@@ -3171,7 +3171,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             </button>
                             <button
                                 onClick={() => { const pv = pvJustCreated; setPvJustCreated(null); exportVoucherPDF(pv); }}
-                                className="py-3 bg-[#1A1A1A] text-[#FFD700] font-black rounded-xl text-xs shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2"
+                                className="py-3 bg-[#111111] text-[#FFD200] font-black rounded-xl text-xs shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2"
                             >
                                 <FileDown size={16} /> 下载 PDF
                             </button>
@@ -3192,7 +3192,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
                             <History size={28} />
                         </div>
-                        <h3 className="font-black text-lg text-[#1A1A1A] mb-1 text-center">为此账单补开 PV</h3>
+                        <h3 className="font-black text-lg text-[#111111] mb-1 text-center">为此账单补开 PV</h3>
                         <p className="text-xs text-gray-500 font-bold mb-4 text-center">
                             {generatePVForBill.company} · RM {(generatePVForBill.amount || 0).toFixed(2)}
                         </p>
@@ -3220,7 +3220,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     type="date"
                                     value={pvGenerateDate}
                                     onChange={e => setPvGenerateDate(e.target.value)}
-                                    className="w-full p-2.5 bg-white border border-amber-350 rounded-lg text-sm font-black outline-none focus:border-amber-500"
+                                    className="w-full p-2.5 bg-white border border-amber-400 rounded-lg text-sm font-black outline-none focus:border-amber-500"
                                     style={{ fontSize: 16 }}
                                 />
                                 <p className="text-[9px] text-amber-600 mt-1.5 italic">
@@ -3256,7 +3256,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 <div className="fixed inset-0 bg-black/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl p-8 shadow-2xl text-center max-w-sm w-full">
                         <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-3"/>
-                        <h3 className="font-black text-base text-[#1A1A1A] mb-2">{batchPVProgress.phase}</h3>
+                        <h3 className="font-black text-base text-[#111111] mb-2">{batchPVProgress.phase}</h3>
                         <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div
                                 className="bg-amber-500 h-full transition-all duration-300"
@@ -3282,7 +3282,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
                             <History size={28}/>
                         </div>
-                        <h3 className="font-black text-lg text-[#1A1A1A] mb-1 text-center">
+                        <h3 className="font-black text-lg text-[#111111] mb-1 text-center">
                             {batchPVMissingDialog.bills.length} 张账单没有 PV
                         </h3>
                         <p className="text-xs text-gray-500 font-bold mb-4 text-center">
@@ -3294,7 +3294,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <button
                                 type="button"
                                 onClick={() => setPvMergeMode('separate')}
-                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'separate' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
+                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'separate' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
                             >
                                 <span>📋</span>
                                 <span className="scale-[0.9] md:scale-100">逐项单开</span>
@@ -3302,7 +3302,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <button
                                 type="button"
                                 onClick={() => setPvMergeMode('group_vendor')}
-                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'group_vendor' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
+                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'group_vendor' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
                             >
                                 <span>🤝</span>
                                 <span className="scale-[0.9] md:scale-100 font-black">同商家合并</span>
@@ -3313,7 +3313,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     setPvMergeMode('merge');
                                     void ensureEmployeesLoaded();
                                 }}
-                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'merge' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
+                                className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'merge' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
                             >
                                 <span>🪙</span>
                                 <span className="scale-[0.9] md:scale-100 font-black">零用金</span>
@@ -3380,14 +3380,14 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         <button 
                                             type="button" 
                                             onClick={() => setMergePaymentMethod('CASH')} 
-                                            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${mergePaymentMethod === 'CASH' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${mergePaymentMethod === 'CASH' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
                                         >
                                             💵 Cash 现金
                                         </button>
                                         <button 
                                             type="button" 
                                             onClick={() => setMergePaymentMethod('BANK_TRANSFER')} 
-                                            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${mergePaymentMethod === 'BANK_TRANSFER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${mergePaymentMethod === 'BANK_TRANSFER' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
                                         >
                                             🏦 Bank 转账
                                         </button>
@@ -3405,21 +3405,21 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <button
                                     type="button"
                                     onClick={() => setBatchVoucherTitle('PAYMENT VOUCHER')}
-                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'PAYMENT VOUCHER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
+                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'PAYMENT VOUCHER' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
                                 >
                                     Payment Voucher
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setBatchVoucherTitle('CASH VOUCHER')}
-                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'CASH VOUCHER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
+                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'CASH VOUCHER' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-indigo-100 hover:bg-indigo-50'}`}
                                 >
                                     Cash Voucher
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setBatchVoucherTitle('AUTO')}
-                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'AUTO' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-550 border-indigo-100 hover:bg-indigo-50'}`}
+                                    className={`py-2 rounded-xl text-xs font-black transition-all border ${batchVoucherTitle === 'AUTO' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-600 border-indigo-100 hover:bg-indigo-50'}`}
                                 >
                                     Auto 自动
                                 </button>
@@ -3451,7 +3451,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 <div key={b.id} className="flex justify-between py-1 text-[11px] font-bold border-b border-gray-100 last:border-b-0 text-gray-700">
                                     <span className="truncate flex-1">{b.company || '未知商户'}</span>
                                     <span className="text-gray-400 ml-2 shrink-0">{(b.paymentDate || b.time || '').split('T')[0]}</span>
-                                    <span className="font-mono text-[#1A1A1A] ml-2 shrink-0">RM {((b.totalBillAmount || b.amount || 0) - (b.creditNote || 0)).toFixed(2)}</span>
+                                    <span className="font-mono text-[#111111] ml-2 shrink-0">RM {((b.totalBillAmount || b.amount || 0) - (b.creditNote || 0)).toFixed(2)}</span>
                                 </div>
                             ))}
                         </div>
@@ -3567,7 +3567,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 overflow-hidden bg-gray-100">
                                 
                                 {/* 左侧面板：发票高清看图核对 */}
-                                <div className="lg:col-span-5 border-r border-gray-200 flex flex-col h-full bg-[#1A1A1A]">
+                                <div className="lg:col-span-5 border-r border-gray-200 flex flex-col h-full bg-[#111111]">
                                     <div className="bg-gray-900 text-white px-3 py-2 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center justify-between border-b border-gray-800">
                                         <div className="flex items-center gap-1.5">
                                             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -3739,7 +3739,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
             {/* 📱 手机端底栏固定操作栏 (Sticky Bottom Actions Bar) - 适配 iOS、PWA & Apple HIG */}
             {!isFormOpen && !showBackdate && !showPVHistory && !showMigrationTool && !isBatchPayModalOpen && !isBatchDeleteModalOpen && !payModalData && (
-                <div id="ap-sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans transition-colors duration-200">
+                <div id="ap-sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#111111]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans transition-colors duration-200">
                     {/* Main List Mode */}
                     {viewMode === 'LIST' ? (
                         <div className="flex items-center justify-between w-full gap-2 font-sans">
@@ -3778,7 +3778,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <button 
                                 id="btn-ap-mobile-add-bill"
                                 onClick={() => handleOpenForm()}
-                                className="flex-[2] min-h-[44px] bg-[#FFD700] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
+                                className="flex-[2] min-h-[44px] bg-[#FFD200] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
                             >
                                 <Plus size={16} className="stroke-[3]" />
                                 <span>录入账单</span>
@@ -3794,7 +3794,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 className="flex-1 min-h-[44px] bg-white/5 border border-white/10 active:bg-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer"
                             >
                                 <ArrowLeft size={14} className="text-gray-300" />
-                                <span className="text-[9px] font-black text-gray-350 tracking-wider">返回列表</span>
+                                <span className="text-[9px] font-black text-gray-400 tracking-wider">返回列表</span>
                             </button>
 
                             {/* 为此商家补开 PV */}
@@ -3814,7 +3814,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                     const supplierName = supplierById.get(selectedSupplierId!)?.name || '';
                                     handleOpenForm(undefined, supplierName);
                                 }}
-                                className="flex-[2] min-h-[44px] bg-[#FFD700] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
+                                className="flex-[2] min-h-[44px] bg-[#FFD200] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
                             >
                                 <Plus size={16} className="stroke-[3]" />
                                 <span>录入新账</span>

@@ -26,7 +26,7 @@ export const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
             <div className="bg-white w-full h-full md:max-w-lg md:h-auto md:max-h-[90vh] md:rounded-3xl shadow-2xl animate-in zoom-in-95 flex flex-col relative overflow-hidden">
                 <div className="p-4 pt-[max(1rem,env(safe-area-inset-top))] md:p-6 md:pb-3 shrink-0 border-b border-gray-100 bg-white z-10">
                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-black text-xl text-[#1A1A1A] flex items-center gap-2"><PenLine size={20}/> 编辑常驻任务</h3>
+                        <h3 className="font-black text-xl text-[#111111] flex items-center gap-2"><PenLine size={20}/> 编辑常驻任务</h3>
                         <button onClick={onClose} className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
                     </div>
                     <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-xl border border-indigo-100 mb-3">
@@ -51,7 +51,7 @@ export const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
                     </div>
                 </div>
 
-                <div className="p-4 overflow-y-auto flex-grow space-y-2 bg-[#F9FAFB]">
+                <div className="p-4 overflow-y-auto flex-grow space-y-2 bg-[#F6F7FB]">
                     {editTaskStockData
                         .filter(s => !editTaskSearchTerm || s.name.toLowerCase().includes(editTaskSearchTerm.toLowerCase()))
                         .map(stockItem => {
@@ -64,7 +64,7 @@ export const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
                                 <div key={stockItem.id} onClick={() => onToggleItem(stockItem.id)}
                                     className={`p-3 min-h-[64px] rounded-xl border-2 cursor-pointer flex justify-between items-center transition-all touch-manipulation ${isSelected ? 'bg-indigo-50 border-indigo-400' : 'bg-white border-gray-100 hover:border-gray-300'}`}>
                                     <div>
-                                        <div className="font-bold text-sm text-[#1A1A1A]">{stockItem.name}</div>
+                                        <div className="font-bold text-sm text-[#111111]">{stockItem.name}</div>
                                         <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-2">
                                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${getCategoryColor(stockItem.category)}`}>{getCategoryLabel(stockItem.category)}</span>
                                             <span>当前：{countQty} {countUnit}</span>

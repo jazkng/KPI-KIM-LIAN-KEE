@@ -87,7 +87,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                 <div className="md:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 -mt-2"></div>
 
                 <div className="text-center md:text-left">
-                    <h3 className="font-black text-lg md:text-xl text-[#1A1A1A] mb-1">批量支付确认 & 电子凭证核销</h3>
+                    <h3 className="font-black text-lg md:text-xl text-[#111111] mb-1">批量支付确认 & 电子凭证核销</h3>
                     <p className="text-[11px] md:text-sm text-gray-500 font-bold mb-4">准备为批量的 {selectedCount} 笔账单登记付款</p>
                 </div>
                 
@@ -104,7 +104,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                         <button 
                             onClick={() => setPayMethod('BANK_TRANSFER')} 
                             type="button"
-                            className={`flex-1 py-3 rounded-xl md:rounded-2xl font-black text-xs md:text-sm border-2 transition-all flex flex-col items-center justify-center gap-1.5 ${payMethod === 'BANK_TRANSFER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#FFD700] shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
+                            className={`flex-1 py-3 rounded-xl md:rounded-2xl font-black text-xs md:text-sm border-2 transition-all flex flex-col items-center justify-center gap-1.5 ${payMethod === 'BANK_TRANSFER' ? 'bg-[#111111] text-[#FFD200] border-[#FFD200] shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
                         >
                             <CreditCard className="w-5 h-5 md:w-6 md:h-6"/> Bank
                         </button>
@@ -128,7 +128,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                             type="date"
                             value={paymentDate}
                             onChange={e => setPaymentDate(e.target.value)}
-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-black text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-black text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFD200]"
                         />
                     </div>
 
@@ -160,7 +160,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                                 value={bankRef}
                                 onChange={e => setBankRef(e.target.value)}
                                 placeholder={payMethod === 'BANK_TRANSFER' ? '例如: 831648818M' : '现金付款备注说明 / 无'}
-                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFD200]"
                             />
                         </div>
 
@@ -210,7 +210,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                                             value={soaUrl} 
                                             onChange={e => setSoaUrl(e.target.value)} 
                                             placeholder="或直接粘贴链接" 
-                                            className="w-full text-[8px] text-center font-bold p-1 border border-gray-200 rounded block focus:outline-none focus:ring-1 focus:ring-[#FFD700]"
+                                            className="w-full text-[8px] text-center font-bold p-1 border border-gray-200 rounded block focus:outline-none focus:ring-1 focus:ring-[#FFD200]"
                                         />
                                     </div>
                                 )}
@@ -261,7 +261,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                                             value={bankReceiptUrl} 
                                             onChange={e => setBankReceiptUrl(e.target.value)} 
                                             placeholder="或直接粘贴链接" 
-                                            className="w-full text-[8px] text-center font-bold p-1 border border-gray-200 rounded block focus:outline-none focus:ring-1 focus:ring-[#FFD700]"
+                                            className="w-full text-[8px] text-center font-bold p-1 border border-gray-200 rounded block focus:outline-none focus:ring-1 focus:ring-[#FFD200]"
                                         />
                                     </div>
                                 )}
@@ -276,7 +276,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                         onClick={handleConfirm} 
                         disabled={isSaving || isUploadingReceipt || isUploadingSoa} 
                         type="button"
-                        className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-sm md:text-base shadow-lg hover:bg-black flex items-center justify-center gap-2 animate-in slide-in-from-bottom-2 fade-in"
+                        className="w-full py-3.5 bg-[#111111] text-[#FFD200] rounded-xl font-black text-sm md:text-base shadow-lg hover:bg-black flex items-center justify-center gap-2 animate-in slide-in-from-bottom-2 fade-in"
                     >
                         {isSaving ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle2 size={18}/>} 确认支付 (Confirm)
                     </button>

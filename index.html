@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="fixed-layout">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -17,26 +17,20 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+    <!--
+      字重必须覆盖代码里实际用到的范围，否则浏览器会拿邻近字重顶替：
+      Inter 若不加载 700/900，font-bold 和 font-black 会双双落到 800，
+      粗细层级失效，且文字宽度与布局预期不符（PDF 导出时会挤出换行和重叠）。
+      用 `300..900` 区间语法拿到可变字体，单文件覆盖全字重，比拆成多个静态字重更省。
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
 
-    <script type="importmap">
-      {
-        "imports": {
-          "react/": "https://aistudiocdn.com/react@^19.2.0/",
-          "react": "https://aistudiocdn.com/react@^19.2.0",
-          "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-          "jspdf": "https://esm.sh/jspdf@2.5.1",
-          "html2canvas-pro": "https://esm.sh/html2canvas-pro@2.2.3",
-          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
-          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js",
-          "firebase/": "https://esm.sh/firebase@^12.7.0/"
-        }
-      }
-    </script>
-
+    <!--
+      首屏防闪样式：只保留 styles.css 加载完成前、加载动画本身需要的规则。
+      其余全局样式（滚动条、safe-area、触控优化等）统一由 styles.css 负责，
+      避免同一份 CSS 在两处维护出现分叉。
+    -->
     <style>
-      /* 首屏防闪样式 */
       html,
       body,
       #root {
@@ -54,61 +48,10 @@
 
       #root {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        inset: 0;
         height: 100%;
-        height: -webkit-fill-available; 
-        
         overflow-y: auto;
         overflow-x: hidden;
-        
-        overscroll-behavior: contain; 
-        -webkit-overflow-scrolling: touch;
-      }
-
-      /* 全局滚动条美化 */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #F6F7FB;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #E5E7EB;
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #FFD200;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      /* iOS Safe Area & HIG Touch Target Utilities */
-      .safe-area-top {
-        padding-top: calc(10px + env(safe-area-inset-top, 0px)) !important;
-      }
-      .safe-area-bottom {
-        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-      }
-      
-      @media (min-width: 768px) {
-        .safe-area-top {
-          padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
-        }
-        .safe-area-bottom {
-          padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
-        }
-      }
-
-      /* Make sure all touch elements have active state without click-delay on iOS */
-      button, a, [role="button"] {
-        -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
       }
 
       @keyframes html-spinner {

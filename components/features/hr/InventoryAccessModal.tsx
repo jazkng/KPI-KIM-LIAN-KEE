@@ -166,10 +166,10 @@ export const InventoryAccessModal: React.FC<InventoryAccessModalProps> = ({
 
     return (
         <div className="fixed inset-0 z-[220] flex items-end bg-black/70 backdrop-blur-sm md:items-center md:justify-center md:p-4">
-            <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F5F7FA] shadow-2xl md:h-auto md:max-h-[92vh] md:max-w-2xl md:rounded-3xl">
-                <header className="safe-area-top shrink-0 border-b border-white/10 bg-[#1A1A1A] px-4 pb-4 text-white md:pt-4">
+            <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F6F7FB] shadow-2xl md:h-auto md:max-h-[92vh] md:max-w-2xl md:rounded-3xl">
+                <header className="safe-area-top shrink-0 border-b border-white/10 bg-[#111111] px-4 pb-4 text-white md:pt-4">
                     <div className="flex min-h-[48px] items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFD700] text-black">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFD200] text-black">
                             <Warehouse size={20} />
                         </div>
                         <div className="min-w-0 flex-1">
@@ -267,7 +267,7 @@ export const InventoryAccessModal: React.FC<InventoryAccessModalProps> = ({
                     <button
                         type="button"
                         onClick={apply}
-                        className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#1A1A1A] text-sm font-black text-[#FFD700] shadow-lg active:scale-[0.99]"
+                        className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#111111] text-sm font-black text-[#FFD200] shadow-lg active:scale-[0.99]"
                         style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
                     >
                         <Check size={18} strokeWidth={3} /> 应用到员工档案

@@ -1403,7 +1403,7 @@ export interface TaskCompletion {
     updatedAt: string;   // 最后更新时间
 }
 
-// 👑 自制凭单 (Self-Issued Voucher / Invoice)
+// 👑 自开凭单 (Self-Issued Voucher / Invoice)
 export interface SelfVoucherItem {
     description: string;
     qty: number;

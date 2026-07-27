@@ -97,7 +97,7 @@ export const TreasuryAccountCard: React.FC<TreasuryAccountCardProps> = ({
           <p className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
             期末结余 (Ending Balance)
           </p>
-          <h3 className="text-2xl sm:text-3xl font-black text-[#111111] mt-1 font-mono tabular-nums leading-none">
+          <h3 className="text-2xl md:text-3xl font-black text-[#111111] mt-1 font-mono tabular-nums leading-none">
             {isLoading ? (
               <span className="animate-pulse text-stone-300">RM --,--.-</span>
             ) : (
@@ -109,26 +109,26 @@ export const TreasuryAccountCard: React.FC<TreasuryAccountCardProps> = ({
         {/* Three Columns Indicator Grid */}
         <div className="grid grid-cols-3 gap-1.5 py-2.5 my-2.5 text-center bg-stone-100/60 rounded-xl p-2 border border-stone-200/50">
           <div className="min-w-0">
-            <span className="block text-[9px] sm:text-[10px] font-black text-stone-500 uppercase tracking-wider">
+            <span className="block text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-wider">
               期初 Start
             </span>
-            <span className="block text-[11px] sm:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-stone-700">
+            <span className="block text-[11px] md:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-stone-700">
               {formatMoney(opening)}
             </span>
           </div>
           <div className="min-w-0 border-l border-r border-stone-300/60 px-1">
-            <span className="block text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-wider">
+            <span className="block text-[9px] md:text-[10px] font-black text-emerald-600 uppercase tracking-wider">
               流入 Cash In
             </span>
-            <span className="block text-[11px] sm:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-emerald-600">
+            <span className="block text-[11px] md:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-emerald-600">
               +{formatMoney(totalIn)}
             </span>
           </div>
           <div className="min-w-0">
-            <span className="block text-[9px] sm:text-[10px] font-black text-rose-600 uppercase tracking-wider">
+            <span className="block text-[9px] md:text-[10px] font-black text-rose-600 uppercase tracking-wider">
               流出 Cash Out
             </span>
-            <span className="block text-[11px] sm:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-rose-600">
+            <span className="block text-[11px] md:text-xs font-black font-mono tabular-nums tracking-tight leading-tight truncate mt-0.5 text-rose-600">
               -{formatMoney(totalOut)}
             </span>
           </div>

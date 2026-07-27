@@ -1,4 +1,4 @@
-import { ExpenseItem, MarketingSubCategory, AdChannel, MARKETING_SUBCAT_LABELS, AD_CHANNEL_LABELS } from '../../../types';
+import { ExpenseItem, MARKETING_SUBCAT_LABELS, AD_CHANNEL_LABELS } from '../../../types';
 
 export const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 

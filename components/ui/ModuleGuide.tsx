@@ -38,7 +38,7 @@ const GUIDE_CONTENT: Record<GuideModule, { title: string; steps: string[] }> = {
         ]
     },
     BILLS: {
-        title: '固定支出 (Bills) - 循环月费',
+        title: '经常性支出 (Bills) - 循环月费',
         steps: [
             '💡 定义: 基于“时间”的循环费用 (房租、水电、网费)。',
             '✅ 包含: 每月租金 (Monthly Rent)、TNB、Syabas、WiFi。',
@@ -154,20 +154,20 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
 
             {isOpen && (
                 <div 
-                    className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center px-0 sm:px-6 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-0 sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-end md:items-center justify-center px-0 md:px-6 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-0 md:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] animate-in fade-in duration-200"
                     onClick={() => setIsOpen(false)}
                 >
                     <div 
-                        className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
+                        className="bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom md:zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="bg-[#1A1A1A] px-5 py-4 flex justify-between items-center text-white border-b-4 border-[#FFD700] shrink-0">
+                        <div className="bg-[#111111] px-5 py-4 flex justify-between items-center text-white border-b-4 border-[#FFD200] shrink-0">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-[#FFD700] rounded-lg">
+                                <div className="p-2 bg-[#FFD200] rounded-lg">
                                     <BookOpen size={18} className="text-black"/>
                                 </div>
-                                <h3 className="font-black text-base sm:text-lg tracking-tight">{content.title}</h3>
+                                <h3 className="font-black text-base md:text-lg tracking-tight">{content.title}</h3>
                             </div>
                             <button 
                                 onClick={() => setIsOpen(false)} 
@@ -178,7 +178,7 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
                         </div>
 
                         {/* Content Area */}
-                        <div className="p-5 sm:p-6 space-y-4 bg-[#F9FAFB] flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                        <div className="p-5 md:p-6 space-y-4 bg-[#F6F7FB] flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                             {content.steps.map((step, idx) => {
                                 const isWarning = step.includes('⚠️') || step.includes('🚫') || step.includes('❌');
                                 return (
@@ -202,10 +202,10 @@ export const ModuleGuideButton: React.FC<{ module: GuideModule, dark?: boolean }
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-4 bg-white border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] shrink-0">
+                        <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-4 bg-white border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] shrink-0">
                             <button 
                                 onClick={() => setIsOpen(false)} 
-                                className="w-full py-4 bg-[#1A1A1A] hover:bg-black text-[#FFD700] rounded-xl font-black text-sm transition-all active:scale-[0.98]"
+                                className="w-full py-4 bg-[#111111] hover:bg-black text-[#FFD200] rounded-xl font-black text-sm transition-all active:scale-[0.98]"
                             >
                                 明白了 (Got it)
                             </button>

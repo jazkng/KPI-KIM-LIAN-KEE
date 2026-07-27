@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-    Settings, Crown, Layout, Cloud, Lock, Save, X, Download, AlertTriangle, 
-    Info, History, Database, RotateCcw, Loader2, Calendar, Upload, 
-    User, Phone, MapPin, Clock, Languages, Coins, Printer, Plus, Trash2, Check, Sparkles,
-    Image as ImageIcon, UploadCloud, Link as LinkIcon, CheckCircle, RefreshCw
+    Crown, Layout, Cloud, Lock, Save, X, Download, AlertTriangle, 
+    History, Database, RotateCcw, Loader2, Calendar, Upload, 
+    User, Phone, MapPin, Clock, Languages, Coins, Printer, Plus, Trash2, Sparkles,
+    Image as ImageIcon
 } from 'lucide-react';
 import { StoreConfig, Employee, SystemBackup } from '../../types';
 import { DataManager } from '../../utils/dataManager';
@@ -142,7 +142,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Mock Live Logs for Dev Tab
-    const [logs, setLogs] = useState<string[]>([
+    const [, setLogs] = useState<string[]>([
         `[${new Date().toLocaleTimeString()}] INFO: System initialized, version v${APP_VERSION}`,
         `[${new Date().toLocaleTimeString()}] DEBUG: Lazy-loading Firestore snapshot cache`,
         `[${new Date().toLocaleTimeString()}] INFO: Cloud snapshot list synced successfully (3 records)`,
@@ -295,8 +295,8 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
         const isBase64 = currentVal?.startsWith('data:');
 
         return (
-            <div className="bg-stone-50 p-3.5 rounded-xl border border-stone-200 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white border-2 border-dashed border-stone-300 rounded-xl flex items-center justify-center p-1 relative overflow-hidden shrink-0 shadow-inner group">
+            <div className="bg-stone-50 p-3.5 rounded-xl border border-stone-200 flex flex-col md:flex-row items-start md:items-center gap-4">
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-white border-2 border-dashed border-stone-300 rounded-xl flex items-center justify-center p-1 relative overflow-hidden shrink-0 shadow-inner group">
                     {currentVal ? (
                         <img src={currentVal} alt={label} className="w-full h-full object-contain rounded-lg" />
                     ) : (
@@ -307,7 +307,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                     )}
                     {uploadingTarget === field && (
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white rounded-xl">
-                            <Loader2 size={18} className="animate-spin text-[#FFD700]" />
+                            <Loader2 size={18} className="animate-spin text-[#FFD200]" />
                         </div>
                     )}
                 </div>
@@ -331,7 +331,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                         )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
                         <label className="bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0 active:scale-95">
                             <Upload size={13} className="text-[#8B0000]" />
                             <span>选择图片文件</span>
@@ -651,13 +651,13 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
 
                 {/* 1. USER PROFILE HEADER SECTION - Beautiful, flat, modern & clean row layout (preventing any flex-shrink/cutoff) */}
                 <div className="shrink-0 bg-stone-100 border border-stone-200 p-3.5 rounded-2xl flex items-center gap-3.5 mb-4 relative overflow-hidden">
-                    <div className="w-12 h-12 rounded-full bg-stone-900 border border-[#FFD700] flex items-center justify-center text-[#FFD700] text-base font-black shadow-inner shrink-0 uppercase">
+                    <div className="w-12 h-12 rounded-full bg-stone-900 border border-[#FFD200] flex items-center justify-center text-[#FFD200] text-base font-black shadow-inner shrink-0 uppercase">
                         {currentEmployee?.name?.slice(0, 2) || 'JK'}
                     </div>
                     <div className="text-left flex-grow min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                             <h4 className="text-sm font-black text-stone-900 tracking-wide truncate">{currentEmployee?.name || 'Jake 老板'}</h4>
-                            <span className="bg-[#FFD700]/15 text-[#8B0000] border border-[#FFD700]/40 text-[9px] font-black px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                            <span className="bg-[#FFD200]/15 text-[#8B0000] border border-[#FFD200]/40 text-[9px] font-black px-1.5 py-0.5 rounded-full whitespace-nowrap">
                                 {isSuperadmin ? 'Superadmin (开发者账户)' : 'Owner'}
                             </span>
                         </div>
@@ -692,7 +692,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                         <button 
                             onClick={() => setActiveTab('DEV')} 
                             style={{ minHeight: '44px' }}
-                            className={`flex-grow rounded-lg text-xs font-black tracking-wide transition-all flex items-center justify-center gap-1 ${activeTab === 'DEV' ? 'bg-[#8B0000] text-[#FFD700] shadow' : 'text-stone-500 hover:text-stone-800'}`}
+                            className={`flex-grow rounded-lg text-xs font-black tracking-wide transition-all flex items-center justify-center gap-1 ${activeTab === 'DEV' ? 'bg-[#8B0000] text-[#FFD200] shadow' : 'text-stone-500 hover:text-stone-800'}`}
                         >
                             <Sparkles size={12}/>
                             <span>🛠️ 开发者选项 (Dev)</span>
@@ -720,7 +720,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                             <span className="text-[10px] font-mono font-bold bg-stone-200 text-stone-700 px-2 py-1 rounded">ID: {boss.id}</span>
                                             <span className="text-xs font-black text-stone-800">修改登录昵称与 PIN 码</span>
                                         </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="text-[10px] text-stone-400 font-bold block mb-1">昵称 (Name)</label>
                                                 <input 
@@ -756,7 +756,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 <Layout size={14} className="text-[#8B0000]"/>
                                 <span>企业/店铺基本信息 (Enterprise Details)</span>
                             </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-[10px] text-stone-400 font-black uppercase block mb-1">店铺名称 (Store Name)</label>
                                     <div className="relative">
@@ -781,7 +781,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                         />
                                     </div>
                                 </div>
-                                <div className="sm:col-span-2">
+                                <div className="md:col-span-2">
                                     <label className="text-[10px] text-stone-400 font-black uppercase block mb-1">店面地址 (Address)</label>
                                     <div className="relative">
                                         <MapPin size={12} className="absolute left-3 top-3 text-stone-400"/>
@@ -794,12 +794,12 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                     </div>
                                 </div>
 
-                                <div className="sm:col-span-2">
+                                <div className="md:col-span-2">
                                     {renderImageUploadBox('店铺/应用主 Logo (Main App Logo)', '用于登录界面、顶栏显示及系统启动动画', 'logoUrl', storeConfig.logoUrl)}
                                 </div>
 
-                                <div className="sm:col-span-2 bg-stone-50/50 p-4 rounded-xl border border-stone-200/80">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-stone-200/60">
+                                <div className="md:col-span-2 bg-stone-50/50 p-4 rounded-xl border border-stone-200/80">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3 pb-2 border-b border-stone-200/60">
                                         <div>
                                             <label className="text-xs font-black text-stone-800 uppercase flex items-center gap-1.5">
                                                 <Clock size={14} className="text-[#8B0000]"/>
@@ -826,7 +826,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                 <span className="text-[11px] text-[#8B0000] font-black">当前为「只读预览」状态，点击下方按钮展开即可进行修改：</span>
                                             </div>
 
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                                 {DAYS_OF_WEEK.map((day) => {
                                                     const item = dailyHours[day] || { isOpen: true, open: '10:00', close: '22:00' };
                                                     return (
@@ -842,7 +842,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                                 {DAYS_ZH[day]}
                                                             </div>
                                                             {item.isOpen ? (
-                                                                <div className="text-xs font-black font-mono text-stone-850">
+                                                                <div className="text-xs font-black font-mono text-stone-900">
                                                                     ⏰ {item.open} - {item.close}
                                                                 </div>
                                                             ) : (
@@ -859,7 +859,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                 type="button"
                                                 onClick={() => setIsHoursExpanded(true)}
                                                 style={{ minHeight: '44px' }}
-                                                className="w-full flex items-center justify-center gap-2 bg-stone-900 text-[#FFD700] hover:bg-stone-800 border border-[#FFD700]/30 font-black text-xs py-2 px-4 rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                                                className="w-full flex items-center justify-center gap-2 bg-stone-900 text-[#FFD200] hover:bg-stone-800 border border-[#FFD200]/30 font-black text-xs py-2 px-4 rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
                                             >
                                                 <span>✏️ 展开详细修改营业时间 (Expand & Edit)</span>
                                             </button>
@@ -929,7 +929,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                     return (
                                                         <div 
                                                             key={day} 
-                                                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border transition-all ${
+                                                            className={`flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border transition-all ${
                                                                 item.isOpen 
                                                                     ? 'bg-white border-stone-200 shadow-xs' 
                                                                     : 'bg-stone-100/60 border-stone-200/50 opacity-60'
@@ -957,8 +957,8 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
 
                                                             {/* Time Inputs - highly optimized to prevent wrapping issues */}
                                                             {item.isOpen ? (
-                                                                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 flex-grow sm:justify-end w-full sm:w-auto">
-                                                                    <div className="flex items-center gap-1.5 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 w-full sm:w-auto justify-between sm:justify-start">
+                                                                <div className="flex flex-wrap md:flex-nowrap items-center gap-2 flex-grow md:justify-end w-full md:w-auto">
+                                                                    <div className="flex items-center gap-1.5 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 w-full md:w-auto justify-between md:justify-start">
                                                                         <span className="text-[10px] text-stone-500 font-extrabold shrink-0">开门:</span>
                                                                         <input 
                                                                             type="time" 
@@ -973,8 +973,8 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                                             className="p-1 border-0 focus:ring-0 text-xs font-black font-mono text-stone-800 bg-transparent text-center w-24 focus:outline-none"
                                                                         />
                                                                     </div>
-                                                                    <div className="hidden sm:block h-px w-2 bg-stone-300"></div>
-                                                                    <div className="flex items-center gap-1.5 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 w-full sm:w-auto justify-between sm:justify-start">
+                                                                    <div className="hidden md:block h-px w-2 bg-stone-300"></div>
+                                                                    <div className="flex items-center gap-1.5 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 w-full md:w-auto justify-between md:justify-start">
                                                                         <span className="text-[10px] text-stone-500 font-extrabold shrink-0">关店:</span>
                                                                         <input 
                                                                             type="time" 
@@ -991,7 +991,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                                     </div>
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-stone-400 text-xs font-black tracking-wider flex-grow text-right sm:pr-4 py-2 select-none">
+                                                                <div className="text-stone-400 text-xs font-black tracking-wider flex-grow text-right md:pr-4 py-2 select-none">
                                                                     💤 休息中 (Closed)
                                                                 </div>
                                                             )}
@@ -1005,7 +1005,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                     type="button"
                                                     onClick={() => setIsHoursExpanded(false)}
                                                     style={{ minHeight: '44px' }}
-                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-stone-900 text-[#FFD700] hover:bg-stone-800 border border-[#FFD700]/30 font-black text-xs py-2 px-6 rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                                                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-stone-900 text-[#FFD200] hover:bg-stone-800 border border-[#FFD200]/30 font-black text-xs py-2 px-6 rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
                                                 >
                                                     <span>🔒 完成编辑并折叠 (Save & Lock)</span>
                                                 </button>
@@ -1036,7 +1036,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 <Languages size={14} className="text-[#8B0000]"/>
                                 <span>系统偏好设置 (Global Preferences)</span>
                             </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-[10px] text-stone-400 font-bold block mb-1">多语种切换 (Language)</label>
                                     <div className="relative">
@@ -1111,7 +1111,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 💡 提示：在此开启或禁用员工打卡时允许使用的方法。至少需要选择一种方式。
                             </p>
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {/* 1. PIN 码 */}
                                 <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/50 hover:bg-stone-50 transition-all cursor-pointer select-none min-h-[52px]">
                                     <div className="flex items-start gap-2.5 min-w-0 pr-2">
@@ -1193,7 +1193,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 </label>
 
                                 {/* 5. WiFi */}
-                                <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/50 hover:bg-stone-50 transition-all cursor-pointer select-none min-h-[52px] sm:col-span-2">
+                                <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/50 hover:bg-stone-50 transition-all cursor-pointer select-none min-h-[52px] md:col-span-2">
                                     <div className="flex items-start gap-2.5 min-w-0 pr-2">
                                         <span className="text-xl shrink-0 mt-0.5">📶</span>
                                         <div className="min-w-0">
@@ -1222,9 +1222,9 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                     <div className="flex-grow overflow-y-auto min-h-0 pb-16 space-y-4 pr-1">
                         
                         <div className="bg-stone-900 text-stone-100 p-4 rounded-xl border border-stone-800 shadow-sm flex items-start gap-3">
-                            <Database size={18} className="text-[#FFD700] shrink-0 mt-0.5"/>
+                            <Database size={18} className="text-[#FFD200] shrink-0 mt-0.5"/>
                             <div>
-                                <h4 className="text-xs font-black text-[#FFD700] uppercase tracking-wider mb-1">系统数据安全与备份机制 (Security Snapshot)</h4>
+                                <h4 className="text-xs font-black text-[#FFD200] uppercase tracking-wider mb-1">系统数据安全与备份机制 (Security Snapshot)</h4>
                                 <p className="text-[10px] text-stone-400 leading-relaxed font-semibold">
                                     为了保障每日对账单与高频库存稽查的数据稳定性，系统已深度整合了本地高速缓存与云端轻量化机制。
                                     强烈建议您<strong>每月手动导出系统数据</strong>，妥善保存在个人电脑或离线介质上。
@@ -1233,21 +1233,21 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                         </div>
 
                         {/* Export / Import Bento Layout */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
                             {/* EXPORT */}
                             <div className="bg-white border border-stone-200 p-4 rounded-xl shadow-sm flex flex-col justify-between">
                                 <div>
                                     <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-[#8B0000] mb-2 shadow-inner">
                                         <Download size={16}/>
                                     </div>
-                                    <h4 className="text-xs font-black text-[#1A1A1A] mb-1">一键导出系统全量数据</h4>
+                                    <h4 className="text-xs font-black text-[#111111] mb-1">一键导出系统全量数据</h4>
                                     <p className="text-[10px] text-stone-400 mb-3 font-semibold">打包下载全店所有数据并另存为 JSON 文件，确保双重安全备份。</p>
                                 </div>
                                 <button 
                                     onClick={handleExportData} 
                                     disabled={isExporting} 
                                     style={{ minHeight: '44px' }}
-                                    className="w-full py-2 bg-stone-900 text-[#FFD700] text-xs font-black rounded-lg hover:bg-black transition-all flex justify-center items-center gap-2 shadow-sm"
+                                    className="w-full py-2 bg-stone-900 text-[#FFD200] text-xs font-black rounded-lg hover:bg-black transition-all flex justify-center items-center gap-2 shadow-sm"
                                 >
                                     {isExporting ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>} 
                                     {isExporting ? '生成中...' : '下载本地备份 (.json)'}
@@ -1263,7 +1263,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                     <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-stone-500 mb-2 shadow-sm">
                                         <Upload size={16}/>
                                     </div>
-                                    <h4 className="text-xs font-black text-[#1A1A1A] mb-1">导入本地备份数据</h4>
+                                    <h4 className="text-xs font-black text-[#111111] mb-1">导入本地备份数据</h4>
                                     <p className="text-[10px] text-stone-400 mb-3 font-semibold">选择先前导出的 JSON 数据，进行全量系统状态回滚与覆盖。</p>
                                 </div>
                                 <div className="w-full py-2 bg-white border border-stone-200 text-stone-600 text-xs font-black rounded-lg flex justify-center items-center gap-2 shadow-sm">
@@ -1295,7 +1295,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                                 {idx + 1}
                                             </div>
                                             <div>
-                                                <h4 className="font-extrabold text-[#1A1A1A] text-xs flex items-center gap-1.5">
+                                                <h4 className="font-extrabold text-[#111111] text-xs flex items-center gap-1.5">
                                                     <Calendar size={12} className="text-stone-400"/>
                                                     {new Date(bk.timestamp).toLocaleDateString()} 
                                                     <span className="text-[10px] font-medium text-stone-400">{new Date(bk.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -1365,7 +1365,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 <span>云端存储及脚本配置 (Cloud & Media Storage)</span>
                             </h4>
                             <div className="space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 block mb-1">Cloudinary Cloud Name</label>
                                         <input 
@@ -1394,7 +1394,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                         placeholder="https://script.google.com/macros/s/..." 
                                     />
                                 </div>
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-stone-100">
+                                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 pt-2 border-t border-stone-100">
                                     <p className="text-[10px] text-stone-500 font-medium">
                                         💡 填入 Cloudinary 凭证后，应用将自动将所有上传的 Logo 与图片同步存储至 Cloudinary 云端。
                                     </p>
@@ -1413,7 +1413,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
 
                         {/* A2. BRANDING & IMAGE MANAGEMENT */}
                         <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-stone-100">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 pb-2 border-b border-stone-100">
                                 <h4 className="text-xs font-black text-stone-800 uppercase tracking-widest flex items-center gap-2">
                                     <ImageIcon size={14} className="text-[#8B0000]"/>
                                     <span>应用视觉与品牌 Logo 图像管理 (App Branding & Logos)</span>
@@ -1436,7 +1436,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                 <span>云数据库参数 (Durable Databases)</span>
                             </h4>
                             <div className="space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 block mb-1">Firebase Project ID</label>
                                         <input 
@@ -1457,7 +1457,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                         />
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 block mb-1">Supabase REST Endpoint</label>
                                         <input 
@@ -1611,7 +1611,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                     <button 
                         onClick={handleSaveConfig} 
                         style={{ minHeight: '44px' }}
-                        className="flex-[2] py-3 bg-stone-900 text-[#FFD700] font-extrabold rounded-xl hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-lg text-xs"
+                        className="flex-[2] py-3 bg-stone-900 text-[#FFD200] font-extrabold rounded-xl hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-lg text-xs"
                     >
                         <Save size={16}/> 保存全部设置
                     </button>
@@ -1623,7 +1623,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
             {showChangelog && (
                 <div className="absolute inset-0 bg-white z-[130] flex flex-col p-6 animate-in slide-in-from-right w-full md:max-w-2xl ml-auto rounded-l-2xl shadow-2xl">
                     <div className="flex justify-between items-center mb-6 border-b pb-4">
-                        <h3 className="font-black text-xl flex items-center gap-2 text-[#1A1A1A]"><History size={24}/> 版本更新记录 (Changelog)</h3>
+                        <h3 className="font-black text-xl flex items-center gap-2 text-[#111111]"><History size={24}/> 版本更新记录 (Changelog)</h3>
                         <button onClick={() => setShowChangelog(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
                     </div>
                     <div className="flex-grow overflow-y-auto space-y-6">

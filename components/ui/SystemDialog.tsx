@@ -7,11 +7,7 @@ import {
   Info, 
   HelpCircle, 
   X, 
-  RefreshCw, 
-  FileText, 
-  HelpCircle as QuestionIcon,
-  CheckCircle2 as SuccessIcon,
-  CornerDownRight
+  RefreshCw
 } from 'lucide-react';
 
 export type DialogStatus = 'success' | 'error' | 'warning' | 'info' | 'neutral';
@@ -411,7 +407,7 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
               style={{ width: 'calc(100% - 32px)' }}
             >
               {/* Header */}
-              <div className="bg-[#1A1A1A] p-4 text-white relative">
+              <div className="bg-[#111111] p-4 text-white relative">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-black tracking-wider text-white">
@@ -434,7 +430,7 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
                   )}
                 </div>
                 {/* Gold Fine Line bottom */}
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D4AF37] via-[#FFD700] to-[#D4AF37]" />
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D4AF37] via-[#FFD200] to-[#D4AF37]" />
               </div>
 
               {/* Body */}
@@ -451,11 +447,11 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
               </div>
 
               {/* Action Footer */}
-              <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row-reverse gap-2 safe-area-bottom">
+              <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row-reverse gap-2 safe-area-bottom">
                 <button
                   onClick={handleConfirm}
                   disabled={isActionLoading}
-                  className="w-full sm:w-auto px-6 py-3 bg-[#EAA308] hover:bg-[#D49206] active:bg-[#B37B04] text-white font-bold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 select-none min-h-[48px]"
+                  className="w-full md:w-auto px-6 py-3 bg-[#EAA308] hover:bg-[#D49206] active:bg-[#B37B04] text-white font-bold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 select-none min-h-[48px]"
                 >
                   {isActionLoading && <RefreshCw size={16} className="animate-spin" />}
                   {options.primaryButtonText || '确定'}
@@ -464,7 +460,7 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
                   <button
                     onClick={handleCancel}
                     disabled={isActionLoading}
-                    className="w-full sm:w-auto px-6 py-3 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 border border-gray-300 font-bold text-sm rounded-xl shadow-sm transition-all duration-150 flex items-center justify-center select-none min-h-[48px]"
+                    className="w-full md:w-auto px-6 py-3 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 border border-gray-300 font-bold text-sm rounded-xl shadow-sm transition-all duration-150 flex items-center justify-center select-none min-h-[48px]"
                   >
                     {options.secondaryButtonText}
                   </button>
