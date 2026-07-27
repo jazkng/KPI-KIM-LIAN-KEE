@@ -139,9 +139,6 @@ export function runRosterCheck(
     // Filter out archived employees
     const activeEmployees = employees.filter(e => !e.isArchived && e.status !== 'TERMINATED');
 
-    // Group active employees by ID
-    const empMap = new Map(activeEmployees.map(e => [e.id, e]));
-
     // 1. UNASSIGNED Checks & HOLIDAY_WORK Checks & UNDERSTAFFED Checks per day
     days.forEach(day => {
         const dayRoster = roster[day] || {};

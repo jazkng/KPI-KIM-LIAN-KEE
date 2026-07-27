@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RosterCell } from './RosterCell';
-import { getDayOfWeekText, getEmployeeDept, getDeptLabel } from './rosterUtils';
+import { getDayOfWeekText, getEmployeeDept } from './rosterUtils';
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle } from 'lucide-react';
 
 interface RosterWeekViewProps {

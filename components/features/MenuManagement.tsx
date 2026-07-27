@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-    Utensils, Plus, Search, Edit3, Trash2, X, Save, Image as ImageIcon, Box,
-    Truck, RefreshCw, Camera, Loader2, Copy, Layers, AlertTriangle, Wrench,
+    Utensils, Plus, Search, Edit3, Trash2, X, Save, Box,
+    Truck, RefreshCw, Loader2, Copy, Layers, AlertTriangle, Wrench,
     ArrowLeft, ArrowRight, Move, ChevronLeft, ChevronDown, ChevronUp,
     BookOpen, Clock, Youtube, Hash, Film,
     StickyNote, ListOrdered, Sparkles, Info, Check, ExternalLink, Scale
 } from 'lucide-react';
 import { MenuItem, MenuCategory, MenuVariant, StockItem, MenuIngredient } from '../../types';
 import { DataManager } from '../../utils/dataManager';
+import { useIsMobile } from '../../utils/useIsMobile';
 import {
     getBaseUnit,
     getCostPerBaseUnit,
@@ -19,7 +20,6 @@ import {
 } from '../../utils/unitConversion';
 import { MENU_CATEGORIES, INITIAL_MENU_ITEMS } from '../../constants/menu';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
-import { uploadToCloudinary } from '../utils';
 import { db } from '../../firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -248,7 +248,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
     const [isReorderMode, setIsReorderMode] = useState(false);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
-    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+    const isMobile = useIsMobile();
 
     // ---- 👑 V2.2 食材出成损耗换算与物料审计 ----
     const [conversionProfiles, setConversionProfiles] = useState<any[]>([]);
@@ -262,7 +262,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const [capacityCount, setCapacityCount] = useState(1);
     const [capacityUnit, setCapacityUnit] = useState('只');
     const [dishQty, setDishQty] = useState(1);
-    const [dishUnit, setDishUnit] = useState('只');
+    const [dishUnit, ] = useState('只');
     
     // - 👑 新增: 多规格 (小/中/大碟) 支持 -
     const [isMultiSize, setIsMultiSize] = useState(true);
@@ -296,8 +296,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const [newImage, setNewImage] = useState('');
     const [newVariants, setNewVariants] = useState<MenuVariant[]>([]);
     const [activeVariantTab, setActiveVariantTab] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [, ] = useState(false);
 
     // ---- Modal / Selector State ----
     const [showStockSelector, setShowStockSelector] = useState(false);
@@ -338,9 +337,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     // ============================================================
     useEffect(() => {
         loadData();
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     // 👑 编辑模式以及物料审计模式下锁定 body 滚动 (iOS Safari 防止 modal 背景滚穿)
@@ -945,26 +941,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     };
 
     // ============================================================
-    // 图片上传
-    // ============================================================
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsUploading(true);
-        try {
-            const url = await uploadToCloudinary(file);
-            setNewImage(url);
-        } catch (error) {
-            console.error("Image upload failed:", error);
-            showInfo("上传失败", "图片上传失败，请重试 (Image upload failed)", 'error');
-        } finally {
-            setIsUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    };
-
-    // ============================================================
     // 价格 / 利润计算
     // ============================================================
     const calculateDeliveryPrice = (localPrice: number) => {
@@ -1395,8 +1371,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     }, [menuItems, activeCategory, searchTerm]);
 
     const containerClass = isModal
-        ? "fixed inset-0 z-[120] flex flex-col font-sans bg-[#F5F7FA]"
-        : "relative w-full h-[85dvh] bg-[#F5F7FA] flex flex-col font-sans rounded-3xl overflow-hidden border border-gray-200 shadow-xl";
+        ? "fixed inset-0 z-[120] flex flex-col font-sans bg-[#F6F7FB]"
+        : "relative w-full h-[85dvh] bg-[#F6F7FB] flex flex-col font-sans rounded-3xl overflow-hidden border border-gray-200 shadow-xl";
 
     // ============================================================
     // 渲染菜品卡片 (列表)
@@ -1411,7 +1387,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             className={`
                 bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col relative overflow-hidden h-full select-none
                 ${isReorderMode
-                    ? 'cursor-move ring-2 ring-[#FFD700] ring-offset-2 scale-[0.98]'
+                    ? 'cursor-move ring-2 ring-[#FFD200] ring-offset-2 scale-[0.98]'
                     : 'border border-gray-100 hover:border-yellow-400 cursor-default'
                 }
             `}
@@ -1430,14 +1406,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 </div>
                 {!isReorderMode && (
                     <div className="flex gap-1.5 shrink-0">
-                        <button onClick={() => handleEditItem(item)} className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-[#1A1A1A] bg-white border border-gray-200 hover:bg-[#FFD700] hover:border-[#FFD700] rounded-xl transition-colors active:scale-95 shadow-sm"><Edit3 size={12} /></button>
+                        <button onClick={() => handleEditItem(item)} className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-[#111111] bg-white border border-gray-200 hover:bg-[#FFD200] hover:border-[#FFD200] rounded-xl transition-colors active:scale-95 shadow-sm"><Edit3 size={12} /></button>
                         <button onClick={() => handleDeleteClick(item.id)} className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-red-600 bg-white border border-gray-200 hover:bg-red-500 hover:text-white hover:border-red-500 rounded-xl transition-colors active:scale-95 shadow-sm"><Trash2 size={12} /></button>
                     </div>
                 )}
             </div>
 
             <div className="p-3 md:p-4 flex flex-col flex-grow bg-white relative z-10">
-                <h4 className="font-black text-sm md:text-base text-[#1A1A1A] line-clamp-2 leading-snug mb-3 group-hover:text-yellow-600 transition-colors">
+                <h4 className="font-black text-sm md:text-base text-[#111111] line-clamp-2 leading-snug mb-3 group-hover:text-yellow-600 transition-colors">
                     {item.name}
                 </h4>
 
@@ -1456,7 +1432,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             return (
                                 <div key={idx} className="flex justify-between items-end border-b border-dashed border-gray-200 last:border-0 pb-1.5 last:pb-0">
                                     <span className="font-bold text-xs text-gray-600 truncate pr-2">{v.label}</span>
-                                    <div className={`font-mono font-black tabular-nums whitespace-nowrap leading-none ${priceMode === 'DELIVERY' ? 'text-blue-600' : 'text-[#1A1A1A]'}`}>
+                                    <div className={`font-mono font-black tabular-nums whitespace-nowrap leading-none ${priceMode === 'DELIVERY' ? 'text-blue-600' : 'text-[#111111]'}`}>
                                         <span className="text-[10px] mr-0.5 opacity-60">RM</span>
                                         <span className="text-sm">{dispPrice.toFixed(0)}</span>
                                     </div>
@@ -1469,7 +1445,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 {!isReorderMode && item.options && item.options.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                         {item.options.slice(0, 3).map(opt => (
-                            <span key={opt} className="text-[9px] bg-[#1A1A1A] text-[#FFD700] px-1.5 py-0.5 rounded flex items-center">{opt}</span>
+                            <span key={opt} className="text-[9px] bg-[#111111] text-[#FFD200] px-1.5 py-0.5 rounded flex items-center">{opt}</span>
                         ))}
                         {item.options.length > 3 && (
                             <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">+{item.options.length - 3}</span>
@@ -1503,12 +1479,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 onDragOver={(e) => handleIngDragOver(e, i)}
                 onDragEnd={handleIngDragEnd}
                 className={`bg-white rounded-2xl border-2 transition-all overflow-hidden shadow-sm flex flex-col
-                    ${draggedIngIdx === i ? 'border-[#FFD700] shadow-lg scale-[0.99]' : isExpanded ? 'border-[#FFD700] shadow-md col-span-2 lg:col-span-2 xl:col-span-2' : 'border-gray-200 hover:border-gray-300'}`}
+                    ${draggedIngIdx === i ? 'border-[#FFD200] shadow-lg scale-[0.99]' : isExpanded ? 'border-[#FFD200] shadow-md col-span-2 lg:col-span-2 xl:col-span-2' : 'border-gray-200 hover:border-gray-300'}`}
             >
                 {/* ---------- 顶栏: #序号 + 名称 + 删除 ---------- */}
                 <div className="p-2.5 pb-1.5 flex items-start gap-2">
                     <div className="flex flex-col gap-1.5 items-center justify-start shrink-0">
-                        <div className="bg-[#1A1A1A] text-[#FFD700] text-[10px] font-mono font-black min-w-[28px] h-7 px-1.5 rounded-lg flex items-center justify-center">
+                        <div className="bg-[#111111] text-[#FFD200] text-[10px] font-mono font-black min-w-[28px] h-7 px-1.5 rounded-lg flex items-center justify-center">
                             #{ing.order ?? i + 1}
                         </div>
                         {ingredientPhoto && (
@@ -1523,7 +1499,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         )}
                     </div>
                     <div className="flex-grow min-w-0">
-                        <div className="font-bold text-sm text-[#1A1A1A] leading-tight line-clamp-2">{ing.stockName}</div>
+                        <div className="font-bold text-sm text-[#111111] leading-tight line-clamp-2">{ing.stockName}</div>
                         {ing.spec && (
                             <span className="inline-block mt-1 text-[9px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold">
                                 {ing.spec}
@@ -1582,7 +1558,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 <div className="px-2.5 mt-2 bg-gray-50 rounded-xl p-2.5 border border-gray-200 space-y-1 mx-2.5">
                     <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
                         <span>使用数量 (Qty):</span>
-                        <span className="font-bold text-[#1A1A1A]">{ing.qty} {ing.unit}</span>
+                        <span className="font-bold text-[#111111]">{ing.qty} {ing.unit}</span>
                     </div>
                     {detail.conversionPath !== 'base' && detail.conversionPath !== 'direct' && (
                         <div className="flex items-center justify-between text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg font-bold">
@@ -1621,7 +1597,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         {ing.step && <ListOrdered size={10} className="text-blue-500" />}
                         {ing.note && <StickyNote size={10} className="text-gray-500" />}
                     </div>
-                    <div className="font-mono font-black text-xs text-[#1A1A1A] bg-gray-100 px-2 py-0.5 rounded flex items-center gap-1">
+                    <div className="font-mono font-black text-xs text-[#111111] bg-gray-100 px-2 py-0.5 rounded flex items-center gap-1">
                         RM {totalCost.toFixed(2)}
                         {yieldPercentVal < 100 && (
                             <span className="text-[8px] bg-orange-100 text-orange-700 px-1 rounded font-black" title={`含备料损耗折算 (出成率 ${yieldPercentVal}%)`}>
@@ -1652,7 +1628,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                     <button
                         onClick={() => setExpandedIngIdx(isExpanded ? null : i)}
                         className={`flex-[2] h-9 rounded-lg flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px] font-bold
-                            ${isExpanded ? 'bg-[#1A1A1A] text-[#FFD700]' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                            ${isExpanded ? 'bg-[#111111] text-[#FFD200]' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
                     >
                         {isExpanded ? (
                             <><ChevronUp size={14} /> 收起</>
@@ -1765,7 +1741,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                         {/* 👑 V2.2 自动重量与件数换算 (piecesPerKg) */}
                         {['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) && (
-                            <div className="bg-indigo-50/70 border-2 border-indigo-150 rounded-xl p-3 space-y-2">
+                            <div className="bg-indigo-50/70 border-2 border-indigo-200 rounded-xl p-3 space-y-2">
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-sm">🦐</span>
                                     <div>
@@ -1782,7 +1758,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 type="number"
                                                 placeholder="未设置 (按重量算)"
                                                 value={ing.piecesPerKg || ''}
-                                                className="w-full p-2 text-center text-xs font-bold outline-none text-[#1A1A1A]"
+                                                className="w-full p-2 text-center text-xs font-bold outline-none text-[#111111]"
                                                 onChange={e => {
                                                     const val = parseFloat(e.target.value) || 0;
                                                     updateIngredientField(i, 'piecesPerKg', val);
@@ -1826,7 +1802,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         )}
 
                         {/* 食材规格 + 出成率 + 处理时间 + 顺序号 */}
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div>
                                 <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
                                     <Sparkles size={10} /> 食材规格 (Spec)
@@ -1836,7 +1812,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     value={ing.spec || ''}
                                     onChange={e => updateIngredientField(i, 'spec', e.target.value)}
                                     placeholder="如: 大只虾、自制猪油"
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] font-bold"
+                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
                                 />
                             </div>
                             <div>
@@ -1853,7 +1829,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             const val = parseFloat(e.target.value) || 100;
                                             updateIngredientField(i, 'yieldPercent', val > 100 ? 100 : val < 1 ? 1 : val);
                                         }}
-                                        className="w-full p-2.5 text-center text-base font-bold outline-none text-[#1A1A1A]"
+                                        className="w-full p-2.5 text-center text-base font-bold outline-none text-[#111111]"
                                     />
                                     <span className="p-2 border-l bg-gray-50 text-[10px] text-gray-500 font-bold shrink-0">%</span>
                                 </div>
@@ -1868,7 +1844,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     value={ing.time || ''}
                                     onChange={e => updateIngredientField(i, 'time', parseFloat(e.target.value) || 0)}
                                     placeholder="0"
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] font-bold"
+                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
                                 />
                             </div>
                             <div>
@@ -1880,13 +1856,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     min="1"
                                     value={ing.order ?? i + 1}
                                     onChange={e => updateIngredientField(i, 'order', parseInt(e.target.value) || 1)}
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] font-bold"
+                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
                                 />
                             </div>
                         </div>
 
                         {yieldPercentVal < 100 && (
-                            <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-150 rounded-xl p-3 leading-normal">
+                            <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded-xl p-3 leading-normal">
                                 💡 <strong>净料与出成损耗分析</strong>：
                                 <ul className="list-disc pl-4 mt-1 space-y-0.5">
                                     <li>配方中所需基础净料：<strong>{detail.baseQty.toFixed(2)} {detail.unit}</strong> (来源于 {ing.qty} {ing.unit})</li>
@@ -1907,7 +1883,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                 onChange={e => updateIngredientField(i, 'step', e.target.value)}
                                 placeholder="如: 虾去壳留尾，用淀粉抓洗，沥干水分，热油爆香"
                                 rows={3}
-                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] resize-y leading-relaxed"
+                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
                             />
                         </div>
 
@@ -1921,7 +1897,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                 onChange={e => updateIngredientField(i, 'note', e.target.value)}
                                 placeholder="如: 必须新鲜，冷冻虾口感差"
                                 rows={2}
-                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] resize-y leading-relaxed"
+                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
                             />
                         </div>
 
@@ -2003,7 +1979,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {/* ====================================================== */}
             {/* 顶栏 Header (含 iOS safe-area) */}
             {/* ====================================================== */}
-            <div className="bg-[#1A1A1A] px-3 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] md:px-4 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] z-30 relative shadow-md">
+            <div className="bg-[#111111] px-3 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] md:px-4 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] z-30 relative shadow-md">
                 <div className="flex items-center gap-2 md:gap-4 min-w-0">
                     <button 
                         onClick={onClose || (() => window.history.back())}
@@ -2013,7 +1989,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                     >
                         <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
-                    <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg shrink-0"><Utensils size={20} className="md:w-6 md:h-6" /></div>
+                    <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg shrink-0"><Utensils size={20} className="md:w-6 md:h-6" /></div>
                     <div className="min-w-0">
                         <h3 className="font-serif font-black text-base md:text-xl tracking-wide truncate">智能菜谱系统</h3>
                         <p className="text-[9px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 truncate">SMART MENU</p>
@@ -2033,7 +2009,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {/* LIST 视图 */}
             {/* ====================================================== */}
             {viewMode === 'LIST' && (
-                <div className="flex-grow flex flex-col overflow-hidden bg-[#F5F7FA]">
+                <div className="flex-grow flex flex-col overflow-hidden bg-[#F6F7FB]">
                     <div className="bg-white border-b border-gray-200 p-2 md:p-3 space-y-2 shadow-sm z-20 shrink-0 sticky top-0">
                         {hasLegacyData && (
                             <div className="bg-yellow-50 border border-yellow-200 p-2 rounded-xl flex justify-between items-center animate-in slide-in-from-top-4">
@@ -2050,7 +2026,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         <div className="flex flex-col md:flex-row justify-between items-center gap-2">
                             <div className="flex gap-2 w-full md:flex-1 md:w-0 overflow-x-auto scrollbar-hide pb-1 md:pb-0 px-1">
                                 {categories.map(c => (
-                                    <button key={c.id} onClick={() => setActiveCategory(c.id)} disabled={isReorderMode && c.id === 'ALL'} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold whitespace-nowrap transition-all duration-200 border shrink-0 active:scale-95 ${activeCategory === c.id ? 'bg-gradient-to-r from-[#1A1A1A] to-[#333] text-[#FFD700] shadow-md border-transparent scale-105' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'}`}>
+                                    <button key={c.id} onClick={() => setActiveCategory(c.id)} disabled={isReorderMode && c.id === 'ALL'} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold whitespace-nowrap transition-all duration-200 border shrink-0 active:scale-95 ${activeCategory === c.id ? 'bg-gradient-to-r from-[#111111] to-[#333] text-[#FFD200] shadow-md border-transparent scale-105' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'}`}>
                                         {c.label}
                                     </button>
                                 ))}
@@ -2093,8 +2069,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             <Layers size={13} />
                                             <span>分类管理</span>
                                         </button>
-                                        <button onClick={handleAddNew} className="bg-[#FFD700] hover:bg-[#E5C100] text-black px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0 border border-yellow-400/20">
-                                            <Plus size={14} /> <span className="hidden sm:inline">新增</span>
+                                        <button onClick={handleAddNew} className="bg-[#FFD200] hover:bg-[#E5C100] text-black px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0 border border-yellow-400/20">
+                                            <Plus size={14} /> <span className="hidden md:inline">新增</span>
                                         </button>
                                     </>
                                 )}
@@ -2105,7 +2081,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             <div className="relative flex gap-2">
                                 <div className="relative flex-grow">
                                     <Search className="absolute left-3 top-2 text-gray-400" size={14} />
-                                    <input type="text" placeholder="搜索菜名 (Search Menu)..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-base md:text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD700] focus:border-transparent transition-all shadow-sm" />
+                                    <input type="text" placeholder="搜索菜名 (Search Menu)..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-base md:text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200] focus:border-transparent transition-all shadow-sm" />
                                 </div>
                                 <button onClick={handleResetToDefault} className="px-3 bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:bg-red-50 hover:border-red-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm shrink-0 active:scale-95" title="Reset">
                                     <RefreshCw size={12} /> 重置
@@ -2125,7 +2101,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     <div className="text-center py-20 text-gray-400 font-bold">暂无菜品 (No Items)</div>
                                 ) : (
                                     <div className="max-w-[1600px] mx-auto w-full">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
                                             {visibleGridItems.map((item, idx) => renderItemCard(item, idx))}
                                         </div>
                                     </div>
@@ -2140,12 +2116,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {/* YIELD_AUDIT 视图 - 食材损耗换算与物料审计 */}
             {/* ====================================================== */}
             {viewMode === 'YIELD_AUDIT' && (
-                <div className="flex-grow flex flex-col bg-[#F5F7FA] overflow-y-auto pb-40 md:pb-6 relative h-full">
+                <div className="flex-grow flex flex-col bg-[#F6F7FB] overflow-y-auto pb-40 md:pb-6 relative h-full">
                     {/* 页面子导航 */}
                     <div className="bg-white px-4 py-3 flex items-center justify-between border-b border-gray-200 shrink-0 sticky top-0 z-20 shadow-sm pt-[max(env(safe-area-inset-top),0.75rem)] pb-[env(safe-area-inset-bottom)]">
                         <button 
                             onClick={() => setViewMode('LIST')} 
-                            className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-[#1A1A1A] p-2 -ml-2 min-h-[44px] min-w-[44px] active:scale-95 transition-all text-left"
+                            className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-[#111111] p-2 -ml-2 min-h-[44px] min-w-[44px] active:scale-95 transition-all text-left"
                         >
                             <ArrowLeft size={16} />
                             <span>返回菜品列表</span>
@@ -2161,7 +2137,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         {/* 🏆 系统使用场景说明卡片 */}
                         <div className="bg-gradient-to-r from-slate-900 to-[#1e293b] text-white p-5 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                             <div className="space-y-1">
-                                <h4 className="font-black text-lg flex items-center gap-2 text-[#FFD700]">
+                                <h4 className="font-black text-lg flex items-center gap-2 text-[#FFD200]">
                                     💡 为什么要做「订货换算」与「损耗对账」？
                                 </h4>
                                 <p className="text-xs text-gray-300 leading-relaxed max-w-4xl">
@@ -2177,7 +2153,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             {/* ==================================================== */}
                             <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
                                 <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-                                    <h4 className="font-black text-base text-[#1A1A1A] flex items-center gap-1.5">
+                                    <h4 className="font-black text-base text-[#111111] flex items-center gap-1.5">
                                         <span className="text-xl">🛠️</span> 规格换算参数建模 (Profile Creator)
                                     </h4>
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">步骤 1</span>
@@ -2190,7 +2166,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
                                                 <span>🔗</span> 智能菜谱规格与配方联动系统
                                             </span>
-                                            <span className="text-[8px] bg-indigo-200 text-indigo-850 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                            <span className="text-[8px] bg-indigo-200 text-indigo-900 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                                                 AUTO SYNCED
                                             </span>
                                         </div>
@@ -2302,7 +2278,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     {/* 选择库存材料 */}
                                     <div>
                                         <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">
-                                            绑定库存物料 {useFormulaSync && <span className="text-[#FFD700] ml-1">🔒 [已联动菜谱配方]</span>}
+                                            绑定库存物料 {useFormulaSync && <span className="text-[#FFD200] ml-1">🔒 [已联动菜谱配方]</span>}
                                         </label>
                                         <select 
                                             className={`w-full p-3 rounded-xl text-xs font-black outline-none border text-black min-h-[44px] ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-900 border-indigo-200 cursor-not-allowed' : 'bg-gray-50 border-gray-200'}`}
@@ -2342,9 +2318,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3.5 bg-gray-50 p-4 rounded-2xl border border-gray-150">
+                                    <div className="grid grid-cols-2 gap-3.5 bg-gray-50 p-4 rounded-2xl border border-gray-200">
                                         {/* 大包装订货信息 */}
-                                        <div className="col-span-2 text-[10px] text-gray-550 font-black tracking-wider border-b border-gray-200 pb-1.5 flex items-center gap-1">
+                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pb-1.5 flex items-center gap-1">
                                             <span>🛒</span> 进货大包装规格
                                         </div>
 
@@ -2375,7 +2351,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         </div>
 
                                         {/* 换算出成规格 */}
-                                        <div className="col-span-2 text-[10px] text-gray-550 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center gap-1">
+                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center gap-1">
                                             <span>🔢</span> 包装内细分总含量 (Capacity Count)
                                         </div>
 
@@ -2409,7 +2385,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         </div>
 
                                         {/* 每碟菜用量/模式选择 */}
-                                        <div className="col-span-2 text-[10px] text-gray-550 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center justify-between">
+                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center justify-between">
                                             <span className="flex items-center gap-1">🍽️ 菜品单份（碟）制作消耗量</span>
                                             
                                             <div className="flex bg-gray-200 p-0.5 rounded-lg border border-gray-300">
@@ -2417,7 +2393,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                     type="button"
                                                     disabled={useFormulaSync}
                                                     onClick={() => setIsMultiSize(false)}
-                                                    className={`text-[9px] px-2 py-1 rounded font-black transition-all ${useFormulaSync ? 'opacity-50 cursor-not-allowed' : ''} ${!isMultiSize ? 'bg-white text-gray-850 shadow-sm' : 'text-gray-500'}`}
+                                                    className={`text-[9px] px-2 py-1 rounded font-black transition-all ${useFormulaSync ? 'opacity-50 cursor-not-allowed' : ''} ${!isMultiSize ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
                                                 >
                                                     单规格
                                                 </button>
@@ -2449,7 +2425,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 </div>
                                                 <div>
                                                     <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block font-mono">单位</label>
-                                                    <div className="w-full p-2 bg-gray-100 border border-gray-200 rounded-lg text-sm font-bold text-center text-gray-550 select-none h-[38px] flex items-center justify-center">
+                                                    <div className="w-full p-2 bg-gray-100 border border-gray-200 rounded-lg text-sm font-bold text-center text-gray-600 select-none h-[38px] flex items-center justify-center">
                                                         {capacityUnit}
                                                     </div>
                                                 </div>
@@ -2464,7 +2440,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                         <input 
                                                             type="number"
                                                             step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-850'}`}
+                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
                                                             value={dishQtyS}
                                                             disabled={useFormulaSync}
                                                             onChange={e => setDishQtyS(e.target.value === '' ? '' : parseFloat(e.target.value))}
@@ -2482,7 +2458,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                         <input 
                                                             type="number"
                                                             step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-850'}`}
+                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
                                                             value={dishQtyM}
                                                             disabled={useFormulaSync}
                                                             onChange={e => setDishQtyM(e.target.value === '' ? '' : parseFloat(e.target.value))}
@@ -2500,7 +2476,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                         <input 
                                                             type="number"
                                                             step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-850'}`}
+                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
                                                             value={dishQtyL}
                                                             disabled={useFormulaSync}
                                                             onChange={e => setDishQtyL(e.target.value === '' ? '' : parseFloat(e.target.value))}
@@ -2529,7 +2505,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                     <div className="grid grid-cols-2 gap-3.5">
                                                         <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-sm">
                                                             <span className="text-[9px] text-gray-400 font-bold block">单件（只/克）核算价</span>
-                                                            <span className="font-mono font-black text-xs text-[#1A1A1A]">
+                                                            <span className="font-mono font-black text-xs text-[#111111]">
                                                                 RM {singleUnitCost.toFixed(4)} <span className="text-[9px] text-gray-500">/{capacityUnit}</span>
                                                             </span>
                                                         </div>
@@ -2573,7 +2549,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                     <div className="space-y-2.5">
                                                         <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-sm">
                                                             <span className="text-[9px] text-gray-400 font-bold block">基础单件（只/克）核算价</span>
-                                                            <span className="font-mono font-black text-xs text-[#1A1A1A]">
+                                                            <span className="font-mono font-black text-xs text-[#111111]">
                                                                 RM {singleUnitCost.toFixed(4)} <span className="text-[9px] text-gray-500">/{capacityUnit}</span>
                                                             </span>
                                                         </div>
@@ -2605,7 +2581,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     <div className="pt-2 flex gap-3">
                                         <button 
                                             onClick={handleSaveProfile}
-                                            className="flex-1 py-3 bg-[#1A1A1A] hover:bg-black text-[#FFD700] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all min-h-[44px]"
+                                            className="flex-1 py-3 bg-[#111111] hover:bg-black text-[#FFD200] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all min-h-[44px]"
                                         >
                                             <Save size={14} /> 保存为换算模板
                                         </button>
@@ -2618,7 +2594,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             {/* ==================================================== */}
                             <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
                                 <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-                                    <h4 className="font-black text-base text-[#1A1A1A] flex items-center gap-1.5">
+                                    <h4 className="font-black text-base text-[#111111] flex items-center gap-1.5">
                                         <span className="text-xl">🧮</span> 厨房耗损与漏损对账审计 (Reconciliation Panel)
                                     </h4>
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">步骤 2</span>
@@ -2703,15 +2679,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             let alertTitle = '👍 损耗正常 (Excellent)';
                                             let alertDesc = '厨房用料与账面销售完全匹配，正常损耗率在 5% 以内。请继续保持精细化备餐。';
                                             if (variancePct > 5 && variancePct <= 15) {
-                                                alertColor = 'bg-yellow-50 border-yellow-250 text-yellow-800';
+                                                alertColor = 'bg-yellow-50 border-yellow-300 text-yellow-800';
                                                 alertTitle = '⚠️ 有微量物料损耗 (Moderate Loss)';
                                                 alertDesc = '食材存在 5% - 15% 的中度损耗。可能原因：备餐切配边角料多、解冻带冰水偏多或出餐打秤轻微超标，建议提醒后厨装盘质量。';
                                             } else if (variancePct > 15) {
-                                                alertColor = 'bg-rose-50 border-rose-200 text-rose-850';
+                                                alertColor = 'bg-rose-50 border-rose-200 text-rose-900';
                                                 alertTitle = '🚨 发现厨房严重泄漏流失！(Severe Leakage)';
                                                 alertDesc = '物料耗损率已超 15%！说明当日食材很大去向不明。建议严查：厨房偷吃带走、备餐废弃严重、死秤克数超标、或者存在逃单、飞单漏单行为！';
                                             } else if (variancePct < -5) {
-                                                alertColor = 'bg-blue-50 border-blue-200 text-blue-850';
+                                                alertColor = 'bg-blue-50 border-blue-200 text-blue-900';
                                                 alertTitle = '🧐 食材节省 (Under-portioned / Under-used)';
                                                 alertDesc = '物料消耗比销售理论数量更低。可能原因：后厨出餐克数偏小，请审核菜品规格与装盘质量。';
                                             }
@@ -2732,11 +2708,11 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                 <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
                                                                     <span>⚡</span> 智能配方超联动中 (Active Live Sync)
                                                                 </h6>
-                                                                <p className="text-[9.5px] text-indigo-750 font-medium">
+                                                                <p className="text-[9.5px] text-indigo-800 font-medium">
                                                                     对账数据已穿透并实时匹配 <strong>{live.menuName}</strong> 的规格用量配比。
                                                                 </p>
                                                             </div>
-                                                            <span className="text-[8px] bg-indigo-650 text-white font-extrabold px-1.5 py-1 rounded shadow-sm select-none shrink-0 uppercase tracking-wider font-mono">
+                                                            <span className="text-[8px] bg-indigo-700 text-white font-extrabold px-1.5 py-1 rounded shadow-sm select-none shrink-0 uppercase tracking-wider font-mono">
                                                                 LIVE
                                                             </span>
                                                         </div>
@@ -2751,7 +2727,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                             <div className="flex bg-white rounded-lg border border-indigo-200 overflow-hidden min-h-[44px]">
                                                                 <input 
                                                                     type="number"
-                                                                    className="w-full p-2 font-black text-sm text-center text-[#1A1A1A] outline-none"
+                                                                    className="w-full p-2 font-black text-sm text-center text-[#111111] outline-none"
                                                                     value={actualBulkConsumed}
                                                                     onChange={e => setActualBulkConsumed(e.target.value === '' ? '' : parseFloat(e.target.value))}
                                                                     placeholder={`如: 开箱 / 订购了多少 ${p.bulkUnit}`}
@@ -2775,10 +2751,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                 <span className="text-[9px] text-emerald-600 font-bold block mb-1">请输入 POS 导出的各规格销量：</span>
                                                                 <div className="grid grid-cols-3 gap-2">
                                                                     <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center">
-                                                                        <span className="text-[9px] text-gray-550 font-bold block mb-1">S小碟销量</span>
+                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">S小碟销量</span>
                                                                         <input 
                                                                             type="number"
-                                                                            className="w-full p-1 border border-gray-250 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
+                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
                                                                             value={soldS}
                                                                             onChange={e => setSoldS(e.target.value === '' ? '' : parseInt(e.target.value))}
                                                                             placeholder="0"
@@ -2786,10 +2762,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                         <span className="text-[7.5px] text-gray-400 block mt-1">{live.dishQtyS} {live.capacityUnit}/碟</span>
                                                                     </div>
                                                                     <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center font-bold">
-                                                                        <span className="text-[9px] text-gray-555 font-bold block mb-1">M中碟销量</span>
+                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">M中碟销量</span>
                                                                         <input 
                                                                             type="number"
-                                                                            className="w-full p-1 border border-gray-255 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
+                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
                                                                             value={soldM}
                                                                             onChange={e => setSoldM(e.target.value === '' ? '' : parseInt(e.target.value))}
                                                                             placeholder="0"
@@ -2797,10 +2773,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                         <span className="text-[7.5px] text-gray-400 block mt-1">{live.dishQtyM} {live.capacityUnit}/碟</span>
                                                                     </div>
                                                                     <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center font-bold">
-                                                                        <span className="text-[9px] text-gray-555 font-bold block mb-1">L大碟销量</span>
+                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">L大碟销量</span>
                                                                         <input 
                                                                             type="number"
-                                                                            className="w-full p-1 border border-gray-255 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
+                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
                                                                             value={soldL}
                                                                             onChange={e => setSoldL(e.target.value === '' ? '' : parseInt(e.target.value))}
                                                                             placeholder="0"
@@ -2811,15 +2787,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                             </div>
                                                         ) : (
                                                             <div>
-                                                                <div className="flex bg-white rounded-lg border border-emerald-250 overflow-hidden min-h-[44px]">
+                                                                <div className="flex bg-white rounded-lg border border-emerald-300 overflow-hidden min-h-[44px]">
                                                                     <input 
                                                                         type="number"
-                                                                        className="w-full p-2 font-black text-sm text-center text-[#1A1A1A] outline-none"
+                                                                        className="w-full p-2 font-black text-sm text-center text-[#111111] outline-none"
                                                                         value={actualDishesSold}
                                                                         onChange={e => setActualDishesSold(e.target.value === '' ? '' : parseFloat(e.target.value))}
                                                                         placeholder="请输入今日销售总碟数"
                                                                     />
-                                                                    <span className="p-2.5 bg-emerald-50 text-[10px] font-black flex items-center justify-center text-emerald-800 border-l border-emerald-150 shrink-0 select-none">
+                                                                    <span className="p-2.5 bg-emerald-50 text-[10px] font-black flex items-center justify-center text-emerald-800 border-l border-emerald-200 shrink-0 select-none">
                                                                         碟
                                                                     </span>
                                                                 </div>
@@ -2835,7 +2811,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                 
                                                                 <div className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
                                                                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">到货量理论可制</span>
-                                                                    <span className="font-mono font-bold text-xs text-[#1A1A1A] block font-semibold leading-relaxed">
+                                                                    <span className="font-mono font-bold text-xs text-[#111111] block font-semibold leading-relaxed">
                                                                         {p.isMultiSize ? (
                                                                             <span>
                                                                                 S: {Math.floor(p.capacityCount * actualConsumedNum / (live.dishQtyS || 1))} 碟<br/>
@@ -2859,10 +2835,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                                                                 <div className="bg-red-50/55 border border-red-100 p-3 rounded-xl col-span-2 md:col-span-1">
                                                                     <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest block mb-0.5">异常损耗流失 (A-B)</span>
-                                                                    <span className="font-mono font-black text-sm text-red-650 block">
+                                                                    <span className="font-mono font-black text-sm text-red-700 block">
                                                                         {varianceQty > 0 ? `⚠️ ${varianceQty.toFixed(2)}` : varianceQty.toFixed(2)} {p.bulkUnit}
                                                                     </span>
-                                                                    <span className="text-[9px] text-red-550 block mt-1 leading-normal font-bold">
+                                                                    <span className="text-[9px] text-red-600 block mt-1 leading-normal font-bold">
                                                                         折合流失 RM {lossCost.toFixed(2)}
                                                                     </span>
                                                                 </div>
@@ -2871,7 +2847,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                             {/* 🚨 损耗率警告条 */}
                                                             <div className="bg-gray-100 p-3 rounded-xl flex items-center justify-between border border-gray-200">
                                                                 <div>
-                                                                    <span className="text-[10px] text-gray-550 font-bold block uppercase tracking-wider">当日物料逸损率 (Loss Rate)</span>
+                                                                    <span className="text-[10px] text-gray-600 font-bold block uppercase tracking-wider">当日物料逸损率 (Loss Rate)</span>
                                                                     <p className="text-[10px] text-gray-400 leading-normal">
                                                                         大部分食材行业标准浪费常介于 ±5% 内
                                                                     </p>
@@ -2902,8 +2878,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                     </p>
                                                                 )}
                                                             </div>
-
-
 
                                                             {/* 🚨 损耗率警告条 */}
                                                             <div className="bg-gray-100 p-3 rounded-xl flex items-center justify-between border border-gray-200">
@@ -2974,7 +2948,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                                         lossCost: lossCost
                                                                     }, p.stockId, actualConsumedNum);
                                                                 }}
-                                                                className="w-full py-3 bg-[#1A1A1A] hover:bg-black text-[#FFD700] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md min-h-[44px]"
+                                                                className="w-full py-3 bg-[#111111] hover:bg-black text-[#FFD200] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md min-h-[44px]"
                                                             >
                                                                 💾 归档当日对账记录 (Archive Report)
                                                             </button>
@@ -2995,14 +2969,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             {/* 历史审计记录归档 (Persistence Timeline Area) */}
                             {/* ==================================================== */}
                             <div className="col-span-1 lg:col-span-2 bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
-                                <h4 className="font-black text-base text-[#1A1A1A] flex items-center gap-2">
+                                <h4 className="font-black text-base text-[#111111] flex items-center gap-2">
                                     <span>📨</span> 历史物料稽账与稽核归档史 (Audit Archives History)
                                 </h4>
                                 {auditLogs.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-xs text-left">
                                             <thead>
-                                                <tr className="border-b border-gray-200 text-gray-450 font-bold uppercase text-[9px] tracking-wider">
+                                                <tr className="border-b border-gray-200 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
                                                     <th className="py-2">审计日期</th>
                                                     <th className="py-2">物料换算模板</th>
                                                     <th className="py-2 text-center">实际原料领发</th>
@@ -3012,7 +2986,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                     <th className="py-2 text-right">操作</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100 font-medium text-gray-750">
+                                            <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
                                                 {auditLogs.map(log => {
                                                     const consumedVal = typeof log.actualConsumed === 'number' 
                                                         ? log.actualConsumed.toFixed(2) 
@@ -3025,7 +2999,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                     return (
                                                         <tr key={log.id} className="hover:bg-gray-50/50">
                                                             <td className="py-3 font-mono font-bold text-gray-400">{log.date}</td>
-                                                            <td className="py-3 font-bold text-[#1A1A1A]">{log.profileName}</td>
+                                                            <td className="py-3 font-bold text-[#111111]">{log.profileName}</td>
                                                             <td className="py-3 text-center font-bold text-indigo-700">
                                                                 {consumedVal} <span className="text-[10px] text-indigo-400">{log.bulkUnit || ''}</span>
                                                             </td>
@@ -3033,14 +3007,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                             <td className="py-3 text-center animate-pulse">
                                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                                                                     log.variancePct > 15 ? 'bg-red-100 text-red-700' : 
-                                                                    log.variancePct > 5 ? 'bg-yellow-100 text-yellow-850' : 
+                                                                    log.variancePct > 5 ? 'bg-yellow-100 text-yellow-900' : 
                                                                     log.variancePct < -5 ? 'bg-blue-100 text-blue-700' :
                                                                     'bg-green-100 text-green-700'
                                                                 }`}>
                                                                     {log.variancePct.toFixed(2)}%
                                                                 </span>
                                                             </td>
-                                                            <td className="py-3 text-right font-mono font-black text-red-650">
+                                                            <td className="py-3 text-right font-mono font-black text-red-700">
                                                                 RM {log.lossCost.toFixed(2)}
                                                             </td>
                                                             <td className="py-3 text-right">
@@ -3073,7 +3047,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {/* EDIT 视图 - 编辑菜品 */}
             {/* ====================================================== */}
             {viewMode === 'EDIT' && (
-                <div className="flex-grow flex flex-col md:flex-row bg-[#F5F7FA] overflow-y-auto md:overflow-hidden h-full relative">
+                <div className="flex-grow flex flex-col md:flex-row bg-[#F6F7FB] overflow-y-auto md:overflow-hidden h-full relative">
 
                     {/* ============ 左栏: 菜品基本信息 ============ */}
                     <div className="w-full md:w-1/3 bg-white border-b md:border-r md:border-b-0 border-gray-200 p-6 flex flex-col shrink-0 z-20 md:h-full md:overflow-y-auto">
@@ -3088,13 +3062,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             )}
                         </div>
 
-                        <h3 className="font-black text-2xl text-[#1A1A1A] mb-6">{editingId ? '编辑菜品' : '新增菜品'}</h3>
+                        <h3 className="font-black text-2xl text-[#111111] mb-6">{editingId ? '编辑菜品' : '新增菜品'}</h3>
 
                         <div className="space-y-5">
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Code / ID (菜品编号)</label>
                                 <input 
-                                    className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD700] uppercase font-mono" 
+                                    className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD200] uppercase font-mono" 
                                     value={newId} 
                                     onChange={e => setNewId(e.target.value.toUpperCase().replace(/\s+/g, ''))} 
                                     placeholder="e.g. A01" 
@@ -3103,7 +3077,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Name (菜名)</label>
-                                <input className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD700]" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Hokkien Mee" />
+                                <input className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD200]" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Hokkien Mee" />
                             </div>
 
                             <div>
@@ -3124,12 +3098,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Options (选项)</label>
-                                <input className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD700]" value={newOptions} onChange={e => setNewOptions(e.target.value)} placeholder="e.g. 少辣, 加蛋, 走青 (Comma separated)" />
+                                <input className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-[#FFD200]" value={newOptions} onChange={e => setNewOptions(e.target.value)} placeholder="e.g. 少辣, 加蛋, 走青 (Comma separated)" />
                             </div>
                         </div>
 
                         <div className="mt-auto pt-6 hidden md:block pb-[env(safe-area-inset-bottom)]">
-                            <button onClick={handleSaveItem} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                            <button onClick={handleSaveItem} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
                                 <Save size={20} /> 保存菜品 (Save)
                             </button>
                         </div>
@@ -3141,17 +3115,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                             {/* --- 规格 Tab 切换栏 --- */}
                             <div className="flex justify-between items-center gap-3 flex-wrap">
-                                <h4 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2">
-                                    <Box size={18} className="text-[#FFD700]" />
+                                <h4 className="font-black text-lg text-[#111111] flex items-center gap-2">
+                                    <Box size={18} className="text-[#FFD200]" />
                                     规格与配方
                                 </h4>
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                    <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200 overflow-x-auto scrollbar-hide flex-grow sm:flex-grow-0 max-w-full">
+                                <div className="flex items-center gap-2 w-full md:w-auto">
+                                    <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200 overflow-x-auto scrollbar-hide flex-grow md:flex-grow-0 max-w-full">
                                         {newVariants.map((v, idx) => (
                                             <button
                                                 key={idx}
                                                 onClick={() => { setActiveVariantTab(idx); setExpandedIngIdx(null); }}
-                                                className={`px-4 py-2.5 min-h-[44px] rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 ${activeVariantTab === idx ? 'bg-[#1A1A1A] text-[#FFD700]' : 'text-gray-500 hover:bg-gray-50'}`}
+                                                className={`px-4 py-2.5 min-h-[44px] rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 ${activeVariantTab === idx ? 'bg-[#111111] text-[#FFD200]' : 'text-gray-500 hover:bg-gray-50'}`}
                                             >
                                                 {v.label || `Var ${idx + 1}`}
                                             </button>
@@ -3174,11 +3148,11 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                             {/* --- 6 列规格指标卡 (Label | Price | Overhead | Cost | Profit | GP%) --- */}
                             <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 pb-6 border-b border-gray-100">
+ <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 pb-6 border-b border-gray-100">
                                     {/* 规格名 */}
                                     <div>
                                         <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block tracking-wider">规格名</label>
-                                        <input className="w-full p-2.5 bg-gray-50 rounded-lg text-base font-bold outline-none border focus:border-[#FFD700]" value={currentVariant?.label || ''} onChange={e => updateVariantField(activeVariantTab, 'label', e.target.value)} />
+                                        <input className="w-full p-2.5 bg-gray-50 rounded-lg text-base font-bold outline-none border focus:border-[#FFD200]" value={currentVariant?.label || ''} onChange={e => updateVariantField(activeVariantTab, 'label', e.target.value)} />
                                     </div>
                                     {/* 卖价 */}
                                     <div>
@@ -3188,7 +3162,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             <input
                                                 type="number"
                                                 step="0.50"
-                                                className="w-full p-2.5 pl-9 bg-gray-50 rounded-lg text-base font-bold outline-none border focus:border-[#FFD700]"
+                                                className="w-full p-2.5 pl-9 bg-gray-50 rounded-lg text-base font-bold outline-none border focus:border-[#FFD200]"
                                                 value={currentVariant?.price || ''}
                                                 onChange={e => updateVariantField(activeVariantTab, 'price', parseFloat(e.target.value) || 0)}
                                                 onClick={e => (e.target as HTMLInputElement).select()}
@@ -3204,7 +3178,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 min="0"
                                                 max="100"
                                                 step="0.5"
-                                                className="w-full p-2.5 pr-8 bg-amber-50 rounded-lg text-base font-bold outline-none border border-amber-200 focus:border-[#FFD700] text-center text-amber-900"
+                                                className="w-full p-2.5 pr-8 bg-amber-50 rounded-lg text-base font-bold outline-none border border-amber-200 focus:border-[#FFD200] text-center text-amber-900"
                                                 value={currentVariant?.overheadMarginPercent ?? 0}
                                                 onChange={e => {
                                                     const val = parseFloat(e.target.value) || 0;
@@ -3271,21 +3245,21 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                                 {/* --- 食材配方区 --- */}
                                 <div className="mt-6 space-y-4">
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                        <h5 className="font-bold text-sm text-[#1A1A1A] flex items-center gap-2">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                        <h5 className="font-bold text-sm text-[#111111] flex items-center gap-2">
                                             <Box size={16} /> 配方食材 (Ingredients)
                                             {currentVariant?.recipe && currentVariant.recipe.length > 0 && (
-                                                <span className="bg-[#FFD700] text-black text-[10px] px-2 py-0.5 rounded-full font-black">{currentVariant.recipe.length}</span>
+                                                <span className="bg-[#FFD200] text-black text-[10px] px-2 py-0.5 rounded-full font-black">{currentVariant.recipe.length}</span>
                                             )}
                                         </h5>
-                                        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                                            <button onClick={syncRecipeToAll} className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-indigo-100 transition-colors flex items-center gap-1 flex-1 sm:flex-none justify-center active:scale-95">
-                                                <Layers size={12} /> <span className="hidden sm:inline">同步到所有规格</span><span className="sm:hidden">同步</span>
+                                        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                            <button onClick={syncRecipeToAll} className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-indigo-100 transition-colors flex items-center gap-1 flex-1 md:flex-none justify-center active:scale-95">
+                                                <Layers size={12} /> <span className="hidden md:inline">同步到所有规格</span><span className="md:hidden">同步</span>
                                             </button>
-                                            <button onClick={() => setShowCopyModal(true)} className="text-[10px] bg-orange-50 text-orange-600 px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-orange-100 transition-colors flex items-center gap-1 flex-1 sm:flex-none justify-center active:scale-95">
-                                                <BookOpen size={12} /> <span className="hidden sm:inline">从其他菜品复制</span><span className="sm:hidden">复制</span>
+                                            <button onClick={() => setShowCopyModal(true)} className="text-[10px] bg-orange-50 text-orange-600 px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-orange-100 transition-colors flex items-center gap-1 flex-1 md:flex-none justify-center active:scale-95">
+                                                <BookOpen size={12} /> <span className="hidden md:inline">从其他菜品复制</span><span className="md:hidden">复制</span>
                                             </button>
-                                            <button onClick={() => setShowStockSelector(true)} className="text-[10px] bg-[#FFD700] text-black px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-yellow-400 transition-colors flex items-center gap-1 flex-1 sm:flex-none justify-center shadow-sm active:scale-95">
+                                            <button onClick={() => setShowStockSelector(true)} className="text-[10px] bg-[#FFD200] text-black px-3 py-2.5 min-h-[44px] rounded-lg font-bold hover:bg-yellow-400 transition-colors flex items-center gap-1 flex-1 md:flex-none justify-center shadow-sm active:scale-95">
                                                 <Plus size={12} /> 添加原料
                                             </button>
                                         </div>
@@ -3299,7 +3273,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2.5">
+                                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-2.5">
                                                 {currentVariant.recipe.map((ing, i) => renderIngredientCard(ing, i))}
                                             </div>
                                             {renderPieceUnitsDatalist()}
@@ -3315,7 +3289,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         <Film size={18} className="text-orange-600" />
                                     </div>
                                     <div>
-                                        <h5 className="font-black text-base text-[#1A1A1A]">做法 & 视频 (Method & Video)</h5>
+                                        <h5 className="font-black text-base text-[#111111]">做法 & 视频 (Method & Video)</h5>
                                         <p className="text-[10px] text-gray-400">规格层级 — 每个规格独立做法</p>
                                     </div>
                                 </div>
@@ -3332,7 +3306,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             value={currentVariant?.totalTime || ''}
                                             onChange={e => updateVariantField(activeVariantTab, 'totalTime', parseFloat(e.target.value) || 0)}
                                             placeholder="如: 30"
-                                            className="w-full sm:w-32 p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] font-bold"
+                                            className="w-full md:w-32 p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
                                         />
                                     </div>
 
@@ -3346,7 +3320,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             onChange={e => updateVariantField(activeVariantTab, 'method', e.target.value)}
                                             placeholder={"1. 大火热锅下油\n2. 加入虾爆炒至变色\n3. 加入面条快炒\n4. 调味，加蛋液炒匀\n5. 撒葱花起锅"}
                                             rows={6}
-                                            className="w-full p-3 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] resize-y leading-relaxed font-mono"
+                                            className="w-full p-3 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed font-mono"
                                         />
                                         <p className="text-[9px] text-gray-400 mt-1">建议每行一个步骤，方便后厨阅读</p>
                                     </div>
@@ -3387,7 +3361,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             onChange={e => updateVariantField(activeVariantTab, 'variantNote', e.target.value)}
                                             placeholder="如: L 大份要用 2 号大锅，火候要更猛"
                                             rows={2}
-                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD700] resize-y leading-relaxed"
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
                                         />
                                     </div>
                                 </div>
@@ -3398,7 +3372,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
                     {/* ============ 移动端底部保存条 ============ */}
                     <div className="md:hidden fixed bottom-0 left-0 w-full px-4 pt-3 pb-[max(env(safe-area-inset-bottom,20px),1rem)] bg-white/95 backdrop-blur-md border-t border-gray-200 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-                        <button onClick={handleSaveItem} className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                        <button onClick={handleSaveItem} className="w-full py-3.5 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
                             <Save size={20} /> 保存菜品 (Save)
                         </button>
                     </div>
@@ -3451,7 +3425,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-2">
                                 新增分类
                             </label>
-                            <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="flex flex-col md:flex-row gap-2">
                                 <input
                                     type="text"
                                     value={newCategoryLabel}
@@ -3638,10 +3612,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         {grouped[group].map(s => (
                                             <button key={s.id} onClick={() => addIngredientToVariant(s)} className="w-full text-left p-3.5 min-h-[56px] hover:bg-gray-50 rounded-xl flex justify-between items-center group border-b border-gray-50 last:border-0 active:scale-[0.99] active:bg-yellow-50 transition-all">
                                                 <div>
-                                                    <div className="font-bold text-sm text-[#1A1A1A]">{s.name}</div>
+                                                    <div className="font-bold text-sm text-[#111111]">{s.name}</div>
                                                     <div className="text-[10px] text-gray-400">Unit: {getBaseUnit(s)} • Cost: RM {getCostPerBaseUnit(s).toFixed(2)}</div>
                                                 </div>
-                                                <Plus size={18} className="text-gray-300 group-hover:text-[#FFD700]" />
+                                                <Plus size={18} className="text-gray-300 group-hover:text-[#FFD200]" />
                                             </button>
                                         ))}
                                     </div>
@@ -3660,7 +3634,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                     <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[85dvh]">
                         <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
                             <div>
-                                <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2"><BookOpen size={18} className="text-orange-500" /> 复制配方</h3>
+                                <h3 className="font-black text-lg text-[#111111] flex items-center gap-2"><BookOpen size={18} className="text-orange-500" /> 复制配方</h3>
                                 <p className="text-xs text-gray-500">Copy ingredients from another dish</p>
                             </div>
                             <button onClick={() => setShowCopyModal(false)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-all"><X size={20} /></button>
@@ -3694,7 +3668,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 <Utensils size={14} />
                                             </div>
                                             <div className="min-w-0">
-                                                <div className="font-bold text-sm text-[#1A1A1A] truncate">{item.name}</div>
+                                                <div className="font-bold text-sm text-[#111111] truncate">{item.name}</div>
                                                 <div className="text-[10px] text-gray-400 font-mono">ID: {item.id} • {item.variants?.[0]?.recipe?.length || 0} 项配方</div>
                                             </div>
                                         </div>
@@ -3719,7 +3693,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-4 ${confirmModal.danger ? 'bg-red-100' : 'bg-yellow-100'}`}>
                             {confirmModal.danger ? <AlertTriangle size={28} className="text-red-600" /> : <Info size={28} className="text-yellow-600" />}
                         </div>
-                        <h3 className="font-black text-xl mb-2 text-center text-[#1A1A1A]">{confirmModal.title}</h3>
+                        <h3 className="font-black text-xl mb-2 text-center text-[#111111]">{confirmModal.title}</h3>
                         <p className="text-sm text-gray-600 mb-6 text-center leading-relaxed whitespace-pre-line">{confirmModal.message}</p>
                         <div className="grid grid-cols-2 gap-3">
                             <button
@@ -3734,7 +3708,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     setConfirmModal(null);
                                     fn();
                                 }}
-                                className={`py-3.5 min-h-[48px] rounded-xl font-bold text-sm active:scale-95 transition-all text-white ${confirmModal.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1A1A1A] hover:bg-black'}`}
+                                className={`py-3.5 min-h-[48px] rounded-xl font-bold text-sm active:scale-95 transition-all text-white ${confirmModal.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#111111] hover:bg-black'}`}
                             >
                                 {confirmModal.confirmText || '确认'}
                             </button>
@@ -3771,7 +3745,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         />
                         <div className="mt-4 text-center">
                             <h3 className="text-base md:text-lg font-black text-white tracking-wide">{previewImage.name}</h3>
-                            <p className="text-xs text-gray-450 mt-1 font-mono font-semibold">点击空白处或右上角关闭 (Tap anywhere to close)</p>
+                            <p className="text-xs text-gray-500 mt-1 font-mono font-semibold">点击空白处或右上角关闭 (Tap anywhere to close)</p>
                         </div>
                     </div>
                 </div>
@@ -3788,11 +3762,11 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             {infoModal.icon === 'error' && <AlertTriangle size={28} className="text-red-600" />}
                             {(!infoModal.icon || infoModal.icon === 'info') && <Info size={28} className="text-blue-600" />}
                         </div>
-                        <h3 className="font-black text-xl mb-2 text-center text-[#1A1A1A]">{infoModal.title}</h3>
+                        <h3 className="font-black text-xl mb-2 text-center text-[#111111]">{infoModal.title}</h3>
                         <p className="text-sm text-gray-600 mb-6 text-center leading-relaxed whitespace-pre-line">{infoModal.message}</p>
                         <button
                             onClick={() => setInfoModal(null)}
-                            className="w-full py-3.5 min-h-[48px] bg-[#1A1A1A] text-[#FFD700] rounded-xl font-bold text-sm active:scale-95 transition-all"
+                            className="w-full py-3.5 min-h-[48px] bg-[#111111] text-[#FFD200] rounded-xl font-bold text-sm active:scale-95 transition-all"
                         >
                             知道了
                         </button>

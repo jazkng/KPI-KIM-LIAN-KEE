@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ShieldAlert, Check, RefreshCw, KeyRound } from 'lucide-react';
+import { X, ShieldAlert, RefreshCw, KeyRound } from 'lucide-react';
 import { Employee, OrgLevel } from '../../../types';
 import { getOrgLevel, getOrgLevelLabel } from '../../../utils/orgAccess';
 

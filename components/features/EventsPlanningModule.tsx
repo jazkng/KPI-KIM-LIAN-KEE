@@ -1,13 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Target, Megaphone, Calendar, Vote, ThumbsUp, ThumbsDown, 
-    TrendingUp, Award, Layout, Plus, Trash2, CheckCircle2, 
-    AlertCircle, Users, BarChart3, X, ChevronRight, MessageSquare, Clock, Edit3, DollarSign, PieChart, Flag, Zap, Lightbulb, Calculator, 
-    Smartphone, Coffee, Utensils, Star, Flame, Heart, TrendingDown, MapPin,
-    Layers, Bike, Globe, Camera, Gift, Truck, ShoppingBag, Video, Smile, ChevronDown, ChevronUp,
+    Award, Layout, Plus, Trash2, CheckCircle2, 
+    Users, X, Clock, DollarSign, Flag, Zap, Calculator, 
+    Smartphone, Utensils, Star, Flame, Heart, TrendingDown, MapPin,
+    Layers, Bike, Camera, Gift, Truck, ShoppingBag, Video, Smile, ChevronDown, ChevronUp,
     Wrench, Crown, Home, Box, Briefcase, Bus, Activity, Store,
-    Play, CheckSquare, Square, MessageCircle
+    CheckSquare, Square, MessageCircle
 } from 'lucide-react';
 import { Proposal, OKR, MarketingCampaign, StoreEvent, Employee, ProposalComment, EventChecklistItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
@@ -18,10 +18,7 @@ interface EventsPlanningModuleProps {
     currentEmployee?: Employee | null;
     defaultTab?: string; // 👈 把这行加上，让红波浪线消失！
 }
-
-// --- UTILS ---
-const formatMoney = (n: number) => `RM ${n.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-const INPUT_STYLE = "w-full p-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-[#1A1A1A] outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700] transition-all placeholder:font-normal placeholder:text-gray-400";
+const INPUT_STYLE = "w-full p-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-[#111111] outline-none focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200] transition-all placeholder:font-normal placeholder:text-gray-400";
 const LABEL_STYLE = "text-[10px] font-bold text-gray-400 uppercase mb-1.5 block tracking-wide ml-1";
 
 // --- REFINED PROFESSIONAL TEMPLATES (10 ITEMS EACH) ---
@@ -149,7 +146,7 @@ const EVENT_TEMPLATES = [
 
 export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onClose, currentEmployee }) => {
     const [activeTab, setActiveTab] = useState<'VOTING' | 'OKR' | 'MARKETING' | 'EVENTS'>('VOTING');
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
     
     // UI State for Collapsible Templates
     const [showTemplates, setShowTemplates] = useState(false);
@@ -431,16 +428,15 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
         await DataManager.saveEvent(updated);
     };
 
-
     return (
         <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
             {/* Main Container */}
-            <div className="bg-[#F5F7FA] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* Header */}
-                <div className="bg-[#1A1A1A] px-4 pb-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] md:p-5 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
+                <div className="bg-[#111111] px-4 pb-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] md:p-5 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200]">
                     <div className="flex items-center gap-2.5 md:gap-4 min-w-0">
-                        <div className="bg-[#FFD700] text-black p-2 md:p-3 rounded-xl md:rounded-2xl shadow-lg shrink-0"><Layout size={20} className="md:w-6 md:h-6"/></div>
+                        <div className="bg-[#FFD200] text-black p-2 md:p-3 rounded-xl md:rounded-2xl shadow-lg shrink-0"><Layout size={20} className="md:w-6 md:h-6"/></div>
                         <div className="min-w-0">
                             <h3 className="font-serif font-black text-base md:text-xl tracking-wide truncate">战略与决策中心</h3>
                             <p className="text-[8px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 truncate">STRATEGY & DIGITAL BOARDROOM</p>
@@ -463,7 +459,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`min-h-[44px] pb-2 md:pb-3 px-2 text-[11px] md:text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-4 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                            className={`min-h-[44px] pb-2 md:pb-3 px-2 text-[11px] md:text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-4 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-[#111111] text-[#111111]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                         >
                             <tab.icon size={16}/> {tab.label}
                         </button>
@@ -471,22 +467,21 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                 </div>
 
                 {/* Content */}
-                <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-[#F5F7FA]">
+                <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-[#F6F7FB]">
                     
                     {/* --- 1. VOTING (BOARDROOM) --- */}
                     {activeTab === 'VOTING' && (
                         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-2xl font-black text-[#1A1A1A]">股东提案与表决</h2>
+                                    <h2 className="text-2xl font-black text-[#111111]">股东提案与表决</h2>
                                     <p className="text-xs text-gray-500 font-bold mt-1">需 3/4 票数通过 (Majority 75% Required)</p>
                                 </div>
-                                <button onClick={() => { setNewProposal({ type: 'POLICY', budget: 0 }); setIsProposalModal(true); }} className="bg-[#1A1A1A] text-[#FFD700] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg hover:scale-105 transition-transform"><Plus size={16}/> 发起新提案</button>
+                                <button onClick={() => { setNewProposal({ type: 'POLICY', budget: 0 }); setIsProposalModal(true); }} className="bg-[#111111] text-[#FFD200] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg hover:scale-105 transition-transform"><Plus size={16}/> 发起新提案</button>
                             </div>
 
                             <div className="grid grid-cols-1 gap-4">
                                 {proposals.length === 0 ? <div className="text-center py-20 text-gray-400 font-bold">暂无提案</div> : proposals.map(p => {
-                                    const totalVotes = p.votes.approvals.length + p.votes.rejections.length;
                                     const hasVoted = p.votes.approvals.includes(currentUserId) || p.votes.rejections.includes(currentUserId);
                                     const isOpen = activeProposalId === p.id;
 
@@ -503,7 +498,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                                     </div>
                                                     <button onClick={() => handleDeleteProposal(p.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
                                                 </div>
-                                                <h3 className="text-lg font-black text-[#1A1A1A] mb-2">{p.title}</h3>
+                                                <h3 className="text-lg font-black text-[#111111] mb-2">{p.title}</h3>
                                                 <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">{p.description}</p>
                                                 
                                                 <div className="mt-auto flex items-center justify-between">
@@ -600,8 +595,8 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                     {activeTab === 'OKR' && (
                         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-right-4">
                             <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-black text-[#1A1A1A]">季度目标 (Objectives & Key Results)</h2>
-                                <button onClick={() => { setNewOKR({ quarter: '2024 Q3', keyResults: [] }); setIsOKRModal(true); }} className="bg-[#1A1A1A] text-[#FFD700] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增目标</button>
+                                <h2 className="text-2xl font-black text-[#111111]">季度目标 (Objectives & Key Results)</h2>
+                                <button onClick={() => { setNewOKR({ quarter: '2024 Q3', keyResults: [] }); setIsOKRModal(true); }} className="bg-[#111111] text-[#FFD200] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增目标</button>
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -609,8 +604,8 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                     <div key={okr.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm relative overflow-hidden group">
                                         <div className="flex justify-between items-start mb-4">
                                             <div>
-                                                <span className="bg-[#1A1A1A] text-[#FFD700] text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">{okr.quarter}</span>
-                                                <h3 className="font-black text-lg text-[#1A1A1A] mt-2 leading-tight">{okr.objective}</h3>
+                                                <span className="bg-[#111111] text-[#FFD200] text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">{okr.quarter}</span>
+                                                <h3 className="font-black text-lg text-[#111111] mt-2 leading-tight">{okr.objective}</h3>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
                                                 <button onClick={() => handleDeleteOKR(okr.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
@@ -627,12 +622,11 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
 
                                         <div className="space-y-4">
                                             {okr.keyResults.map((kr, idx) => {
-                                                const krProgress = (kr.current / kr.target) * 100;
                                                 return (
                                                     <div key={idx} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                                                         <div className="flex justify-between text-xs font-bold mb-1">
                                                             <span className="text-gray-600">{kr.label}</span>
-                                                            <span className="text-[#1A1A1A]">{kr.current} / {kr.target} {kr.unit}</span>
+                                                            <span className="text-[#111111]">{kr.current} / {kr.target} {kr.unit}</span>
                                                         </div>
                                                         <input 
                                                             type="range" 
@@ -656,8 +650,8 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                     {activeTab === 'MARKETING' && (
                         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4">
                             <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-black text-[#1A1A1A]">营销战役 (Campaigns & ROI)</h2>
-                                <button onClick={() => { setNewCampaign({ platform: 'FACEBOOK' }); setIsCampaignModal(true); }} className="bg-[#1A1A1A] text-[#FFD700] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增战役</button>
+                                <h2 className="text-2xl font-black text-[#111111]">营销战役 (Campaigns & ROI)</h2>
+                                <button onClick={() => { setNewCampaign({ platform: 'FACEBOOK' }); setIsCampaignModal(true); }} className="bg-[#111111] text-[#FFD200] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增战役</button>
                             </div>
 
                             <div className="grid grid-cols-1 gap-4">
@@ -669,7 +663,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                         
                                         <div className="flex-grow text-center md:text-left">
                                             <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                                                <h3 className="font-black text-lg text-[#1A1A1A]">{camp.name}</h3>
+                                                <h3 className="font-black text-lg text-[#111111]">{camp.name}</h3>
                                                 <button onClick={() => toggleCampaignStatus(camp)} className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase cursor-pointer hover:opacity-80 transition-opacity ${camp.status === 'ACTIVE' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-gray-100 text-gray-500'}`}>
                                                     {camp.status}
                                                 </button>
@@ -682,11 +676,11 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                         <div className="grid grid-cols-3 gap-6 w-full md:w-auto bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                             <div className="text-center">
                                                 <p className="text-[10px] text-gray-400 font-bold uppercase">Budget</p>
-                                                <p className="text-sm font-black text-[#1A1A1A]">RM {camp.budget}</p>
+                                                <p className="text-sm font-black text-[#111111]">RM {camp.budget}</p>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[10px] text-gray-400 font-bold uppercase">Spend</p>
-                                                <p className="text-sm font-black text-[#1A1A1A]">RM {camp.spend}</p>
+                                                <p className="text-sm font-black text-[#111111]">RM {camp.spend}</p>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[10px] text-gray-400 font-bold uppercase">ROI</p>
@@ -703,8 +697,8 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                     {activeTab === 'EVENTS' && (
                         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-right-4">
                             <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-black text-[#1A1A1A]">活动日历 (Event Calendar)</h2>
-                                <button onClick={() => { setNewEvent({ type: 'PROMO' }); setIsEventModal(true); }} className="bg-[#1A1A1A] text-[#FFD700] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增活动</button>
+                                <h2 className="text-2xl font-black text-[#111111]">活动日历 (Event Calendar)</h2>
+                                <button onClick={() => { setNewEvent({ type: 'PROMO' }); setIsEventModal(true); }} className="bg-[#111111] text-[#FFD200] px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg"><Plus size={16}/> 新增活动</button>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -721,14 +715,14 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                                         <button onClick={() => handleDeleteEvent(evt.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
                                                     </div>
                                                 </div>
-                                                <h3 className="text-lg font-black text-[#1A1A1A] mb-2 leading-tight min-h-[3rem]">{evt.name}</h3>
-                                                <div className="bg-[#1A1A1A] text-white inline-block px-3 py-1 rounded-lg text-xs font-mono font-bold shadow-md w-fit mb-4">
+                                                <h3 className="text-lg font-black text-[#111111] mb-2 leading-tight min-h-[3rem]">{evt.name}</h3>
+                                                <div className="bg-[#111111] text-white inline-block px-3 py-1 rounded-lg text-xs font-mono font-bold shadow-md w-fit mb-4">
                                                     {evt.date}
                                                 </div>
                                                 
                                                 {/* Checklist Preview / Toggle */}
                                                 <div className="mt-auto">
-                                                    <button onClick={() => setActiveEventId(isOpen ? null : evt.id)} className="text-xs font-bold text-gray-500 flex items-center gap-1 hover:text-[#1A1A1A]">
+                                                    <button onClick={() => setActiveEventId(isOpen ? null : evt.id)} className="text-xs font-bold text-gray-500 flex items-center gap-1 hover:text-[#111111]">
                                                         {isOpen ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} 
                                                         任务清单 ({evt.checklist?.filter(t => t.done).length || 0}/{evt.checklist?.length || 0})
                                                     </button>
@@ -774,7 +768,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
             {isProposalModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-lg h-[90vh] md:h-auto md:max-h-[90vh] rounded-t-[2rem] md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 md:zoom-in-95 overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#1A1A1A]">发起提案</h3><button onClick={() => setIsProposalModal(false)}><X/></button></div>
+                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#111111]">发起提案</h3><button onClick={() => setIsProposalModal(false)}><X/></button></div>
                         
                         {/* Templates - Collapsible */}
                         <div className="mb-6 bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
@@ -789,11 +783,11 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                         <button 
                                             key={idx} 
                                             onClick={() => setNewProposal({ ...t as any, deadline: new Date().toISOString().split('T')[0] })} 
-                                            className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-left hover:border-[#FFD700] hover:shadow-md transition-all flex items-center gap-3 group"
+                                            className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-left hover:border-[#FFD200] hover:shadow-md transition-all flex items-center gap-3 group"
                                         >
-                                            <div className="bg-gray-100 p-2 rounded-lg text-gray-600 group-hover:text-[#1A1A1A]"><t.icon size={18}/></div>
+                                            <div className="bg-gray-100 p-2 rounded-lg text-gray-600 group-hover:text-[#111111]"><t.icon size={18}/></div>
                                             <div>
-                                                <p className="text-xs font-black text-[#1A1A1A]">{t.title}</p>
+                                                <p className="text-xs font-black text-[#111111]">{t.title}</p>
                                                 <p className="text-[9px] text-gray-400 line-clamp-1">{t.description}</p>
                                             </div>
                                         </button>
@@ -810,7 +804,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                 <div><label className={LABEL_STYLE}>Deadline</label><input type="date" className={INPUT_STYLE} value={newProposal.deadline} onChange={e => setNewProposal({...newProposal, deadline: e.target.value})}/></div>
                             </div>
                             <div><label className={LABEL_STYLE}>Description</label><textarea className={`${INPUT_STYLE} h-24 resize-none`} value={newProposal.description || ''} onChange={e => setNewProposal({...newProposal, description: e.target.value})} placeholder="Details..."/></div>
-                            <button onClick={handleCreateProposal} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">正式发起投票</button>
+                            <button onClick={handleCreateProposal} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">正式发起投票</button>
                         </div>
                     </div>
                 </div>
@@ -819,7 +813,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
             {isOKRModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-lg h-[90vh] md:h-auto md:max-h-[90vh] rounded-t-[2rem] md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 md:zoom-in-95 overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#1A1A1A]">设定 OKR</h3><button onClick={() => setIsOKRModal(false)}><X/></button></div>
+                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#111111]">设定 OKR</h3><button onClick={() => setIsOKRModal(false)}><X/></button></div>
                         
                         {/* Templates - Collapsible */}
                         <div className="mb-6 bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
@@ -837,7 +831,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                             className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-left hover:border-blue-400 hover:shadow-md transition-all flex items-center gap-3 group"
                                         >
                                             <div className="bg-blue-50 p-2 rounded-lg text-blue-600 group-hover:text-blue-800"><t.icon size={18}/></div>
-                                            <p className="text-xs font-black text-[#1A1A1A]">{t.objective}</p>
+                                            <p className="text-xs font-black text-[#111111]">{t.objective}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -858,7 +852,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={handleCreateOKR} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">部署 OKR</button>
+                            <button onClick={handleCreateOKR} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">部署 OKR</button>
                         </div>
                     </div>
                 </div>
@@ -867,7 +861,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
             {isCampaignModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-md h-[90vh] md:h-auto md:max-h-[90vh] rounded-t-[2rem] md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 md:zoom-in-95 overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#1A1A1A]">新增营销战役</h3><button onClick={() => setIsCampaignModal(false)}><X/></button></div>
+                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#111111]">新增营销战役</h3><button onClick={() => setIsCampaignModal(false)}><X/></button></div>
                         
                         {/* Templates - Collapsible */}
                         <div className="mb-6 bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
@@ -885,7 +879,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                             className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-left hover:border-pink-400 hover:shadow-md transition-all flex items-center gap-3 group"
                                         >
                                             <div className="bg-pink-50 p-2 rounded-lg text-pink-600 group-hover:text-pink-800"><t.icon size={18}/></div>
-                                            <p className="text-xs font-black text-[#1A1A1A]">{t.name}</p>
+                                            <p className="text-xs font-black text-[#111111]">{t.name}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -927,7 +921,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                 <div><label className={LABEL_STYLE}>Start Date</label><input type="date" className={INPUT_STYLE} value={newCampaign.startDate} onChange={e => setNewCampaign({...newCampaign, startDate: e.target.value})} /></div>
                                 <div><label className={LABEL_STYLE}>End Date</label><input type="date" className={INPUT_STYLE} value={newCampaign.endDate} onChange={e => setNewCampaign({...newCampaign, endDate: e.target.value})} /></div>
                             </div>
-                            <button onClick={handleCreateCampaign} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">开启营销计划</button>
+                            <button onClick={handleCreateCampaign} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">开启营销计划</button>
                         </div>
                     </div>
                 </div>
@@ -936,7 +930,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
             {isEventModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-sm h-[90vh] md:h-auto md:max-h-[90vh] rounded-t-[2rem] md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 md:zoom-in-95 overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#1A1A1A]">新增活动</h3><button onClick={() => setIsEventModal(false)}><X/></button></div>
+                        <div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#111111]">新增活动</h3><button onClick={() => setIsEventModal(false)}><X/></button></div>
                         
                         {/* Templates - Collapsible */}
                         <div className="mb-6 bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
@@ -954,7 +948,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                                             className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-left hover:border-rose-400 hover:shadow-md transition-all flex items-center gap-3 group"
                                         >
                                             <div className="bg-rose-50 p-2 rounded-lg text-rose-600 group-hover:text-rose-800"><t.icon size={18}/></div>
-                                            <p className="text-xs font-black text-[#1A1A1A]">{t.name}</p>
+                                            <p className="text-xs font-black text-[#111111]">{t.name}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -965,7 +959,7 @@ export const EventsPlanningModule: React.FC<EventsPlanningModuleProps> = ({ onCl
                             <div><label className={LABEL_STYLE}>Event Name</label><input className={INPUT_STYLE} value={newEvent.name || ''} onChange={e => setNewEvent({...newEvent, name: e.target.value})} placeholder="e.g. Staff Party"/></div>
                             <div><label className={LABEL_STYLE}>Date</label><input type="date" className={INPUT_STYLE} value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} /></div>
                             <div><label className={LABEL_STYLE}>Type</label><select className={INPUT_STYLE} value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value as any})}><option value="PROMO">Promotion (促销)</option><option value="HOLIDAY">Holiday (节日)</option><option value="TEAM_BUILDING">Team Building (团建)</option></select></div>
-                            <button onClick={handleCreateEvent} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">添加到日历</button>
+                            <button onClick={handleCreateEvent} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-2 mb-safe">添加到日历</button>
                         </div>
                     </div>
                 </div>

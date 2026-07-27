@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import ExcelJS from "exceljs";
-import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import {
@@ -14,10 +12,8 @@ import {
   Plus,
   MinusCircle,
   Building2,
-  Info,
   RotateCcw,
   Printer,
-  FileDown,
   Loader2,
   Wallet,
   Banknote,
@@ -32,18 +28,15 @@ import {
   ChevronRight,
   RefreshCw,
   LockOpen,
-  Landmark,
   Ban,
   History,
-  FileText,
-} from "lucide-react";
+  } from "lucide-react";
 import {
   Employee,
   PayrollRecord,
   ExpenseItem,
   RosterStatus,
-  AttendanceRecord,
-} from "../../../types";
+  } from "../../../types";
 import { 
   DataManager,
   DEFAULT_ATTENDANCE_SETTINGS,
@@ -61,7 +54,6 @@ import { db } from "../../../firebaseConfig";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
 import { applyResolvedStylesForPdf } from "../../../utils/pdfStyleResolver";
-
 
 // --- INTERFACES ---
 
@@ -485,11 +477,10 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   const [showAdvanceHistory, setShowAdvanceHistory] = useState(false);
 
   // 👑 人脸打卡机导入状态
-  const [isFaceImportOpen, setIsFaceImportOpen] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [importPreviews, setImportPreviews] = useState<any[]>([]);
-  const [isSavingImport, setIsSavingImport] = useState(false);
+  const [, ] = useState(false);
+  const [, ] = useState(false);
+  const [, ] = useState<string | null>(null);
+  const [, ] = useState(false);
   const [editingAdvanceItem, setEditingAdvanceItem] =
     useState<ExpenseItem | null>(null);
   const [editAdvForm, setEditAdvForm] = useState({
@@ -1275,1198 +1266,6 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       await DataManager.saveConfig(currentConfig);
     } catch (e) {
       console.error("Save pdfPenaltyMode config failed:", e);
-    }
-  };
-
-  const findMatchedEmployee = (
-    excelName: string,
-    systemEmployees: Employee[],
-  ) => {
-    const cleanExcel = excelName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!cleanExcel) return null;
-
-    // 精确匹配
-    let match = systemEmployees.find(
-      (e) => e.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanExcel,
-    );
-    if (match) return match;
-
-    // 包含匹配
-    match = systemEmployees.find((e) => {
-      const sysClean = e.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      return sysClean.includes(cleanExcel) || cleanExcel.includes(sysClean);
-    });
-    return match || null;
-  };
-
-  const determineImportedStatus = (
-    dateStr: string,
-    clockInTimeStr: string,
-  ): "COMPLETED" | "COMPLETED_LATE" => {
-    const [hh, mm] = clockInTimeStr.split(":").map(Number);
-    const clockInDate = new Date(
-      `${dateStr}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`,
-    );
-
-    const d = new Date(`${dateStr}T00:00:00`);
-    const dow = d.getDay(); // 0=Sun, 6=Sat
-    const isWeekend = dow === 0 || dow === 6;
-    const startHour = isWeekend ? 11 : 15;
-    const startMinute = 0; // 营业时间：平日 15:00 / 周末 11:00
-
-    const shiftStart = new Date(
-      `${dateStr}T${String(startHour).padStart(2, "0")}:${String(startMinute).padStart(2, "0")}:00`,
-    );
-    const lateMinutes = Math.max(
-      0,
-      Math.floor((clockInDate.getTime() - shiftStart.getTime()) / 60000),
-    );
-    return lateMinutes > 10 ? "COMPLETED_LATE" : "COMPLETED";
-  };
-
-  const constructPunchTimes = (
-    dateStr: string,
-    firstTime: string,
-    lastTime: string,
-  ) => {
-    const [inH, inM] = firstTime.split(":").map(Number);
-    const clockInISO = `${dateStr}T${String(inH).padStart(2, "0")}:${String(inM).padStart(2, "0")}:00`;
-
-    let clockOutISO = "";
-    let durationMinutes = 0;
-    if (lastTime && lastTime !== firstTime) {
-      const [outH, outM] = lastTime.split(":").map(Number);
-      const clockInVal = inH * 60 + inM;
-      const clockOutVal = outH * 60 + outM;
-
-      if (clockOutVal < clockInVal) {
-        // 跨凌晨班
-        const nextDate = new Date(`${dateStr}T00:00:00`);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split("T")[0];
-        clockOutISO = `${nextDateStr}T${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}:00`;
-      } else {
-        clockOutISO = `${dateStr}T${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}:00`;
-      }
-      durationMinutes = Math.max(
-        0,
-        Math.floor(
-          (new Date(clockOutISO).getTime() - new Date(clockInISO).getTime()) /
-            60000,
-        ),
-      );
-    } else {
-      clockOutISO = clockInISO;
-      durationMinutes = 0;
-    }
-
-    return { clockInISO, clockOutISO, durationMinutes };
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsParsing(true);
-    setParseError(null);
-    setImportPreviews([]);
-
-    try {
-      const isPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
-      const reader = new FileReader();
-      
-      reader.onload = async (evt) => {
-        try {
-          const arrayBuffer = evt.target?.result as ArrayBuffer;
-
-          if (isPdf) {
-            // Configure the PDF worker
-            
-
-            const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
-            const pdf = await loadingTask.promise;
-            const numPages = pdf.numPages;
-
-            // Helper to extract time strings "HH:MM"
-            const extractTimes = (cellText: string): string[] => {
-              const times: string[] = [];
-              if (!cellText) return times;
-              const timeRegex = /\b([0-2]?\d):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM|am|pm)?\b/gi;
-              let match;
-              while ((match = timeRegex.exec(cellText)) !== null) {
-                let hour = parseInt(match[1], 10);
-                const minute = match[2];
-                const ampm = match[4];
-                if (ampm) {
-                  if (ampm.toLowerCase() === "pm" && hour < 12) {
-                    hour += 12;
-                  } else if (ampm.toLowerCase() === "am" && hour === 12) {
-                    hour = 0;
-                  }
-                }
-                times.push(`${String(hour).padStart(2, "0")}:${minute}`);
-              }
-              return times;
-            };
-
-            const allParsedEmployees: Map<string, { scannerId: string; scannerName: string; daysMap: Map<number, Set<string>> }> = new Map();
-
-            for (let p = 1; p <= numPages; p++) {
-              const page = await pdf.getPage(p);
-              const textContent = await page.getTextContent();
-              const items = textContent.items as any[];
-              if (!items || items.length === 0) continue;
-
-              const pageItems = items.map(item => ({
-                str: String(item.str || "").trim(),
-                x: item.transform[4],
-                y: item.transform[5],
-                width: item.width || 0,
-                height: item.height || 0
-              })).filter(item => item.str.length > 0);
-
-              // Reconstruct horizontal lines of text for the page to find page-level day headers (e.g. List of Logs page header)
-              const pageLines: { y: number; items: typeof pageItems; text: string }[] = [];
-              pageItems.forEach(item => {
-                let foundLine = pageLines.find(l => Math.abs(l.y - item.y) < 10);
-                if (foundLine) {
-                  foundLine.items.push(item);
-                } else {
-                  pageLines.push({ y: item.y, items: [item], text: "" });
-                }
-              });
-              pageLines.sort((a, b) => b.y - a.y);
-              
-              let pageDayXMap: { [dayNum: number]: number } = {};
-              let hasPageDayHeader = false;
-
-              for (const line of pageLines) {
-                const tempMap: { [dayNum: number]: number } = {};
-                let consecDays = 0;
-                line.items.forEach(item => {
-                  const tokens = item.str.trim().split(/\s+/);
-                  if (tokens.length === 1) {
-                    const val = tokens[0];
-                    const match = val.match(/^0?([1-9]|[12]\d|3[01])$/);
-                    if (match) {
-                      const day = Number(match[1]);
-                      tempMap[day] = item.x;
-                      consecDays++;
-                    }
-                  } else {
-                    // Proportionally estimate X of each token
-                    const itemWidth = item.width || 0;
-                    const textLen = item.str.length || 1;
-                    let currentIdx = 0;
-                    tokens.forEach(token => {
-                      const match = token.match(/^0?([1-9]|[12]\d|3[01])$/);
-                      if (match) {
-                        const day = Number(match[1]);
-                        const charOffset = item.str.indexOf(token, currentIdx);
-                        if (charOffset !== -1) {
-                          currentIdx = charOffset + token.length;
-                        }
-                        const pct = charOffset / textLen;
-                        const estimatedX = item.x + pct * itemWidth;
-                        tempMap[day] = estimatedX;
-                        consecDays++;
-                      }
-                    });
-                  }
-                });
-                if (consecDays >= 12) {
-                  pageDayXMap = tempMap;
-                  hasPageDayHeader = true;
-                  break;
-                }
-              }
-
-              // Helper to extract day number from row (handling potential noise, border chars, etc.)
-              const extractDayFromRow = (rowItems: typeof pageItems, rowStr: string): number | null => {
-                // 1. Try matching day + weekday anywhere in the row (e.g., "10 We" or "09 Tu")
-                const dayWeekMatch = rowStr.match(/\b(0?[1-9]|[1-2]\d|3[01])\s*(Mo|Tu|We|Th|Fr|Sa|Su)\b/i);
-                if (dayWeekMatch) {
-                  return parseInt(dayWeekMatch[1], 10);
-                }
-
-                // 2. Try looking at the first 3 items sorted by x. Find any item that is purely a number 1-31
-                const sorted = [...rowItems].sort((a, b) => a.x - b.x);
-                for (let i = 0; i < Math.min(3, sorted.length); i++) {
-                  const val = sorted[i].str.trim();
-                  if (/^\d+$/.test(val)) {
-                    const num = parseInt(val, 10);
-                    if (num >= 1 && num <= 31) {
-                      return num;
-                    }
-                  }
-                }
-                return null;
-              };
-
-              // Let's identify the employee block headers on this page
-              const rawHeadersList: { id: string; name: string; x: number; y: number }[] = [];
-
-              // 1. Search for headers with No and Name in the same or adjacent items
-              pageItems.forEach((item) => {
-                const txt = item.str;
-                const idMatch = txt.match(/No\s*[:：]?\s*(\d+)/i) || txt.match(/工号\s*[:：]?\s*(\d+)/i) || txt.match(/ID\s*[:：]?\s*(\d+)/i);
-                if (idMatch) {
-                  const empId = idMatch[1];
-                  const nameMatch = txt.match(/Name\s*[:：]?\s*([^:：\r\n]+)/i) || txt.match(/姓名\s*[:：]?\s*([^:：\r\n]+)/);
-                  let empName = "";
-                  if (nameMatch) {
-                    const rawName = nameMatch[1].trim();
-                    empName = rawName.split(/\s+(?:Dept|部门|工号|No|ID|Date)\b/i)[0].trim();
-                  }
-
-                  if (!empName) {
-                    // Search nearby elements with similar Y coordinate
-                    const sameRowItems = pageItems.filter(other => Math.abs(other.y - item.y) < 10 && other !== item);
-                    sameRowItems.sort((a, b) => a.x - b.x);
-                    const jointStr = sameRowItems.map(o => o.str).join(" ");
-                    const rowNameMatch = jointStr.match(/Name\s*[:：]?\s*([^:：\r\n]+)/i) || jointStr.match(/姓名\s*[:：]?\s*([^:：\r\n]+)/);
-                    if (rowNameMatch) {
-                      const rawName = rowNameMatch[1].trim();
-                      empName = rawName.split(/\s+(?:Dept|部门|工号|No|ID|Date)\b/i)[0].trim();
-                    } else {
-                      // Try to extract an alphabetical word as possible name
-                      const possibleNameItem = sameRowItems.find(o => 
-                        /[a-zA-Z\u4e00-\u9fa5]+/.test(o.str) && 
-                        !o.str.toLowerCase().includes("dept") && 
-                        !o.str.toLowerCase().includes("no") && 
-                        !o.str.toLowerCase().includes("admin") && 
-                        !o.str.toLowerCase().includes("boh")
-                      );
-                      if (possibleNameItem) {
-                        empName = possibleNameItem.str;
-                      }
-                    }
-                  }
-
-                  // Clean the name from punctuation
-                  empName = empName.replace(/^[:：\s]+/, "").trim();
-
-                  rawHeadersList.push({
-                    id: empId,
-                    name: empName || `员工 ${empId}`,
-                    x: item.x,
-                    y: item.y
-                  });
-                }
-              });
-
-              // 2. Separate item fallback sweep e.g. "No:" and then "1015" (Always runs to maximize coverage)
-              for (let i = 0; i < pageItems.length; i++) {
-                const item = pageItems[i];
-                const txt = item.str.trim();
-                if (/^(No|ID|工号|No\.)$/i.test(txt)) {
-                  const nextItems = pageItems.filter(o => Math.abs(o.y - item.y) < 10 && o.x > item.x);
-                  nextItems.sort((a, b) => a.x - b.x);
-                  if (nextItems.length > 0) {
-                    // Find first item in nextItems that contains a numeric ID
-                    const possibleIdItem = nextItems.find(o => {
-                      const clean = o.str.replace(/^[:：\s]+/, "").trim();
-                      return /^\d{3,8}$/.test(clean);
-                    });
-                    if (possibleIdItem) {
-                      const empId = possibleIdItem.str.replace(/^[:：\s]+/, "").trim();
-                      let empName = "";
-                      
-                      // Look for Name / 姓名 label to locate the correct name
-                      const nameLabelIdx = nextItems.findIndex(o => /^(Name|姓名)$/i.test(o.str.replace(/^[:：\s]+/, "")));
-                      if (nameLabelIdx !== -1) {
-                        const afterNameItems = nextItems.slice(nameLabelIdx + 1);
-                        const nameItem = afterNameItems.find(o => 
-                          /[a-zA-Z\u4e00-\u9fa5]+/.test(o.str) && 
-                          !o.str.toLowerCase().includes("dept") && 
-                          !o.str.toLowerCase().includes("no") && 
-                          !o.str.toLowerCase().includes("admin") && 
-                          !o.str.toLowerCase().includes("boh")
-                        );
-                        if (nameItem) {
-                          empName = nameItem.str;
-                        }
-                      }
-                      
-                      empName = empName.replace(/^[:：\s]+/, "").trim();
-                      rawHeadersList.push({
-                        id: empId,
-                        name: empName || `员工 ${empId}`,
-                        x: item.x,
-                        y: item.y
-                      });
-                    }
-                  }
-                }
-              }
-
-              // 3. Deduplicate extracted headers by employee ID
-              const uniqueHeadersMap = new Map<string, { id: string; name: string; x: number; y: number }>();
-              rawHeadersList.forEach(h => {
-                const cleanId = String(h.id).trim();
-                if (!uniqueHeadersMap.has(cleanId)) {
-                  uniqueHeadersMap.set(cleanId, h);
-                } else {
-                  const existing = uniqueHeadersMap.get(cleanId)!;
-                  const existingIsGeneric = existing.name.includes("员工") || existing.name.includes("Date") || existing.name.includes("2026");
-                  const newIsBetter = !(h.name.includes("员工") || h.name.includes("Date") || h.name.includes("2026"));
-                  if (existingIsGeneric && newIsBetter) {
-                    uniqueHeadersMap.set(cleanId, h);
-                  }
-                }
-              });
-
-              const headers = Array.from(uniqueHeadersMap.values());
-
-              if (headers.length === 0) continue;
-
-              // Check layout type
-              const hasSideBySide = headers.some(h1 => 
-                headers.some(h2 => h1 !== h2 && Math.abs(h1.y - h2.y) < 30)
-              );
-
-              if (hasSideBySide) {
-                // --- Side-by-Side Horizontal Columns (Pages 5-11) ---
-                headers.sort((a, b) => a.x - b.x);
-
-                // Calculate vertical splitting midpoints for columns
-                const midpoints: number[] = [];
-                for (let hIdx = 0; hIdx < headers.length - 1; hIdx++) {
-                  midpoints.push((headers[hIdx].x + headers[hIdx + 1].x) / 2);
-                }
-
-                for (let i = 0; i < headers.length; i++) {
-                  const header = headers[i];
-                  const xStart = (i === 0) ? 0 : midpoints[i - 1];
-                  const xEnd = (i === headers.length - 1) ? Infinity : midpoints[i];
-
-                  const colItems = pageItems.filter(item => item.x >= xStart && item.x < xEnd);
-
-                  // Group by rows
-                  const rows: { y: number; items: typeof colItems }[] = [];
-                  colItems.forEach(item => {
-                    let foundRow = rows.find(r => Math.abs(r.y - item.y) < 10);
-                    if (foundRow) {
-                      foundRow.items.push(item);
-                    } else {
-                      rows.push({ y: item.y, items: [item] });
-                    }
-                  });
-
-                  rows.sort((a, b) => b.y - a.y);
-
-                  const key = header.id ? `id_${header.id}` : `name_${header.name.toLowerCase()}`;
-                  if (!allParsedEmployees.has(key)) {
-                    allParsedEmployees.set(key, {
-                      scannerName: header.name,
-                      scannerId: header.id,
-                      daysMap: new Map()
-                    });
-                  }
-                  const empData = allParsedEmployees.get(key)!;
-
-                  rows.forEach(r => {
-                    r.items.sort((a, b) => a.x - b.x);
-                    const rowStr = r.items.map(o => o.str).join(" ");
-                    const dayNum = extractDayFromRow(r.items, rowStr);
-
-                    if (dayNum !== null) {
-                      const times = extractTimes(rowStr);
-                      if (times.length > 0) {
-                        if (!empData.daysMap.has(dayNum)) {
-                          empData.daysMap.set(dayNum, new Set());
-                        }
-                        times.forEach(t => empData.daysMap.get(dayNum)!.add(t));
-                      }
-                    }
-                  });
-                }
-              } else {
-                // --- Vertical Multi-Row Grid (Pages 2-4) ---
-                headers.sort((a, b) => b.y - a.y);
-
-                for (let i = 0; i < headers.length; i++) {
-                  const header = headers[i];
-                  const yStart = header.y;
-                  const yEnd = (i < headers.length - 1) ? headers[i + 1].y : -Infinity;
-
-                  const empItems = pageItems.filter(item => item.y < yStart && item.y > yEnd);
-
-                  const rows: { y: number; items: typeof empItems }[] = [];
-                  empItems.forEach(item => {
-                    let foundRow = rows.find(r => Math.abs(r.y - item.y) < 10);
-                    if (foundRow) {
-                      foundRow.items.push(item);
-                    } else {
-                      rows.push({ y: item.y, items: [item] });
-                    }
-                  });
-
-                  // Detect block-level day header if page-level header is not present
-                  let blockDayXMap: { [dayNum: number]: number } = {};
-                  let maxConsecDays = 0;
-                  let bestDayRowY = -1;
-
-                  rows.forEach(r => {
-                    const tempMap: { [dayNum: number]: number } = {};
-                    let consecDays = 0;
-                    r.items.forEach(item => {
-                      const tokens = item.str.trim().split(/\s+/);
-                      if (tokens.length === 1) {
-                        const val = tokens[0];
-                        const match = val.match(/^0?([1-9]|[12]\d|3[01])$/);
-                        if (match) {
-                          const day = Number(match[1]);
-                          tempMap[day] = item.x;
-                          consecDays++;
-                        }
-                      } else {
-                        const itemWidth = item.width || 0;
-                        const textLen = item.str.length || 1;
-                        let currentIdx = 0;
-                        tokens.forEach(token => {
-                          const match = token.match(/^0?([1-9]|[12]\d|3[01])$/);
-                          if (match) {
-                            const day = Number(match[1]);
-                            const charOffset = item.str.indexOf(token, currentIdx);
-                            if (charOffset !== -1) {
-                              currentIdx = charOffset + token.length;
-                            }
-                            const pct = charOffset / textLen;
-                            const estimatedX = item.x + pct * itemWidth;
-                            tempMap[day] = estimatedX;
-                            consecDays++;
-                          }
-                        });
-                      }
-                    });
-                    if (consecDays > maxConsecDays && consecDays >= 5) {
-                      maxConsecDays = consecDays;
-                      blockDayXMap = tempMap;
-                      bestDayRowY = r.y;
-                    }
-                  });
-
-                  const key = header.id ? `id_${header.id}` : `name_${header.name.toLowerCase()}`;
-                  if (!allParsedEmployees.has(key)) {
-                    allParsedEmployees.set(key, {
-                      scannerName: header.name,
-                      scannerId: header.id,
-                      daysMap: new Map()
-                    });
-                  }
-                  const empData = allParsedEmployees.get(key)!;
-
-                  // Determine active day columns (prefer page-level if found, otherwise block-level)
-                  const activeDayXMap = hasPageDayHeader ? pageDayXMap : (maxConsecDays >= 5 ? blockDayXMap : null);
-
-                  if (activeDayXMap) {
-                    // Iterate through items that contain times and map them to their closest day columns
-                    empItems.forEach(item => {
-                      const txt = item.str.trim();
-                      // Skip headers/labels
-                      if (txt.toLowerCase().includes("no") || txt.toLowerCase().includes("name") || txt.toLowerCase().includes("dept")) return;
-                      
-                      // Proportionally estimate X coordinate of each matched time in a combined string
-                      const timesWithCoords: { time: string; x: number }[] = [];
-                      const timeRegex = /\b([0-2]?\d):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM|am|pm)?\b/gi;
-                      let match;
-                      const itemWidth = item.width || 0;
-                      const textLen = item.str.length || 1;
-                      
-                      while ((match = timeRegex.exec(txt)) !== null) {
-                        let hour = parseInt(match[1], 10);
-                        const minute = match[2];
-                        const ampm = match[4];
-                        if (ampm) {
-                          if (ampm.toLowerCase() === "pm" && hour < 12) {
-                            hour += 12;
-                          } else if (ampm.toLowerCase() === "am" && hour === 12) {
-                            hour = 0;
-                          }
-                        }
-                        const timeStr = `${String(hour).padStart(2, "0")}:${minute}`;
-                        const charOffset = match.index;
-                        const pct = charOffset / textLen;
-                        const estimatedX = item.x + pct * itemWidth;
-                        timesWithCoords.push({ time: timeStr, x: estimatedX });
-                      }
-
-                      timesWithCoords.forEach(({ time, x }) => {
-                        let closestDayNum = -1;
-                        let minDistance = Infinity;
-
-                        Object.entries(activeDayXMap).forEach(([dStr, dayX]) => {
-                          const dayNum = Number(dStr);
-                          const dist = Math.abs(x - dayX);
-                          if (dist < minDistance) {
-                            minDistance = dist;
-                            closestDayNum = dayNum;
-                          }
-                        });
-
-                        // Make distance tolerance generous (e.g., 40px) to accommodate alignment
-                        if (closestDayNum !== -1 && minDistance < 40) {
-                          if (!empData.daysMap.has(closestDayNum)) {
-                            empData.daysMap.set(closestDayNum, new Set());
-                          }
-                          empData.daysMap.get(closestDayNum)!.add(time);
-                        }
-                      });
-                    });
-                  } else {
-                    // Fallback to row-by-row parsing (day prefix at the beginning of each row)
-                    rows.forEach(r => {
-                      r.items.sort((a, b) => a.x - b.x);
-                      const rowStr = r.items.map(o => o.str).join(" ");
-                      const dayNum = extractDayFromRow(r.items, rowStr);
-
-                      if (dayNum !== null) {
-                        const times = extractTimes(rowStr);
-                        if (times.length > 0) {
-                          if (!empData.daysMap.has(dayNum)) {
-                            empData.daysMap.set(dayNum, new Set());
-                          }
-                          times.forEach(t => empData.daysMap.get(dayNum)!.add(t));
-                        }
-                      }
-                    });
-                  }
-                }
-              }
-            }
-
-            // Assemble the unified previews list
-            const parsedResult: any[] = [];
-            allParsedEmployees.forEach((empData) => {
-              const rowsList: { day: number; times: string[] }[] = [];
-              empData.daysMap.forEach((timesSet, dayNum) => {
-                // 👑 核心修复：严禁使用 alphabetical 字母排序！对于跨凌晨班 (比如 14:23 进，01:22 出)，字母排序会把 01:22 排在前面从而导致进出反了。这里直接保持 PDF 原生从左到右的打卡时间顺序。
-                const rawOrderTimes = Array.from(timesSet);
-                rowsList.push({
-                  day: dayNum,
-                  times: rawOrderTimes
-                });
-              });
-
-              rowsList.sort((a, b) => a.day - b.day);
-
-              if (rowsList.length > 0) {
-                parsedResult.push({
-                  scannerName: empData.scannerName,
-                  scannerId: empData.scannerId,
-                  rows: rowsList
-                });
-              }
-            });
-
-            const finalMatches = parsedResult.map((item) => {
-              let matchedSystemEmp: Employee | null = null;
-              if (item.scannerId) {
-                const cleanScannerId = String(item.scannerId).trim();
-                matchedSystemEmp = employees.find(
-                  (e) => String(e.id).trim() === cleanScannerId
-                ) || null;
-              }
-
-              if (!matchedSystemEmp && item.scannerName) {
-                matchedSystemEmp = findMatchedEmployee(
-                  item.scannerName,
-                  employees,
-                );
-              }
-
-              return {
-                scannerName: item.scannerName,
-                scannerId: item.scannerId,
-                systemEmployee: matchedSystemEmp,
-                rawRows: item.rows,
-                selected: !!matchedSystemEmp,
-              };
-            });
-
-            setImportPreviews(finalMatches);
-          } else {
-            // Excel parsing logic
-            const workbook = XLSX.read(arrayBuffer, { type: "array" });
-
-            // Helper to extract time strings "HH:MM"
-            const extractTimes = (cellText: string): string[] => {
-              const times: string[] = [];
-              if (!cellText) return times;
-              const timeRegex = /\b([0-2]?\d):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM|am|pm)?\b/gi;
-              let match;
-              while ((match = timeRegex.exec(cellText)) !== null) {
-                let hour = parseInt(match[1], 10);
-                const minute = match[2];
-                const ampm = match[4];
-                if (ampm) {
-                  if (ampm.toLowerCase() === "pm" && hour < 12) {
-                    hour += 12;
-                  } else if (ampm.toLowerCase() === "am" && hour === 12) {
-                    hour = 0;
-                  }
-                }
-                times.push(`${String(hour).padStart(2, "0")}:${minute}`);
-              }
-              return times;
-            };
-
-            // Helper to extract day of the month (1-31) based on target selectedMonth (e.g., "2026-07")
-            const extractDayFromCell = (cellText: string, targetMonth: string): number | null => {
-              if (!cellText) return null;
-              const clean = cellText.trim();
-              
-              // 1. Check full date formats like YYYY-MM-DD or DD/MM/YYYY
-              const dateMatch = clean.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/) || 
-                                clean.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-              if (dateMatch) {
-                let year = 0, month = 0, day = 0;
-                if (clean.includes("-") || clean.includes("/")) {
-                  const parts = clean.split(/[-/]/).map(Number);
-                  if (parts.length >= 3) {
-                    if (parts[0] > 1000) {
-                      // YYYY-MM-DD or YYYY-DD-MM
-                      year = parts[0];
-                      month = parts[1];
-                      day = parts[2];
-                    } else if (parts[2] > 1000) {
-                      // DD-MM-YYYY or MM-DD-YYYY
-                      year = parts[2];
-                      const [tYear, tMonth] = targetMonth.split("-").map(Number);
-                      if (parts[1] === tMonth) {
-                        month = parts[1];
-                        day = parts[0];
-                      } else if (parts[0] === tMonth) {
-                        month = parts[0];
-                        day = parts[1];
-                      } else {
-                        month = parts[1];
-                        day = parts[0];
-                      }
-                    }
-                  }
-                }
-                if (year && month && day) {
-                  const targetYear = parseInt(targetMonth.split("-")[0], 10);
-                  const targetMonthNum = parseInt(targetMonth.split("-")[1], 10);
-                  if (year === targetYear && month === targetMonthNum) {
-                    if (day >= 1 && day <= 31) return day;
-                  }
-                }
-              }
-
-              // 2. Matches raw standalone number 1 to 31
-              if (/^\d+$/.test(clean)) {
-                const num = Number(clean);
-                if (num >= 1 && num <= 31) return num;
-              }
-
-              // 3. ISO string prefix
-              if (clean.startsWith(targetMonth)) {
-                const match = clean.match(/^\d{4}[-/]\d{1,2}[-/](\d{1,2})/);
-                if (match) {
-                  const day = Number(match[1]);
-                  if (day >= 1 && day <= 31) return day;
-                }
-              }
-
-              return null;
-            };
-
-            // Group all parsed records by employee key
-            const allParsedEmployees: Map<string, { scannerId: string; scannerName: string; daysMap: Map<number, Set<string>> }> = new Map();
-
-            // Check if there is a dedicated Logs sheet
-            const hasLogsSheet = workbook.SheetNames.some(name => {
-              const n = name.toLowerCase().trim();
-              return n === "logs" || n.includes("logs") || n === "log";
-            });
-
-            workbook.SheetNames.forEach((sheetName) => {
-              const lowerSheetName = sheetName.toLowerCase().trim();
-              const isLogsSheet = lowerSheetName === "logs" || lowerSheetName.includes("logs") || lowerSheetName === "log";
-
-              // If a dedicated "Logs" sheet exists, we ONLY parse the "Logs" sheet(s) to avoid mixing with "Summary", etc.
-              if (hasLogsSheet && !isLogsSheet) {
-                return;
-              }
-
-              const sheet = workbook.Sheets[sheetName];
-              // Read sheet as 2D array of formatted strings
-              const sheetRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: false, defval: "" });
-              if (!sheetRows || sheetRows.length === 0) return;
-
-              if (isLogsSheet) {
-                // --- SPECIALLY DESIGNED 3-ROW DAILY LOGS PARSER ---
-                for (let r = 0; r < sheetRows.length; r++) {
-                  const row = sheetRows[r];
-                  if (!row) continue;
-                  const rowJoined = row.map(v => String(v || "").trim()).join(" ");
-
-                  const idMatch = rowJoined.match(/No\s*[:：\s]\s*(\d+)/i) || rowJoined.match(/工号\s*[:：\s]\s*(\d+)/i);
-                  if (idMatch) {
-                    const empId = idMatch[1];
-                    const nameMatch = rowJoined.match(/Name\s*[:：\s]\s*([^\s\t\r\n]+(?:\s+[^\s\t\r\n]+)*)/i) || rowJoined.match(/姓名\s*[:：\s]\s*([^\s\t\r\n]+)/);
-                    const empName = nameMatch ? nameMatch[1].trim() : `员工 ${empId}`;
-
-                    const dayRow = sheetRows[r + 1];
-                    const timesRow = sheetRows[r + 2];
-
-                    if (dayRow && timesRow) {
-                      const dayColMap: { [colIdx: number]: number } = {};
-                      for (let c = 0; c < dayRow.length; c++) {
-                        const val = String(dayRow[c] || "").trim();
-                        const match = val.match(/^0?([1-9]|[12]\d|3[01])日?$/);
-                        if (match) {
-                          dayColMap[c] = Number(match[1]);
-                        }
-                      }
-
-                      const key = empId ? `id_${empId}` : `name_${empName.toLowerCase()}`;
-                      if (!allParsedEmployees.has(key)) {
-                        allParsedEmployees.set(key, {
-                          scannerName: empName,
-                          scannerId: empId,
-                          daysMap: new Map()
-                        });
-                      }
-                      const empData = allParsedEmployees.get(key)!;
-
-                      if (empName && (!empData.scannerName || empData.scannerName.startsWith("员工 "))) {
-                        empData.scannerName = empName;
-                      }
-                      if (empId && !empData.scannerId) {
-                        empData.scannerId = empId;
-                      }
-
-                      Object.entries(dayColMap).forEach(([cStr, dayNum]) => {
-                        const colIdx = Number(cStr);
-                        const cellText = String(timesRow[colIdx] || "").trim();
-                        const times = extractTimes(cellText);
-                        if (times.length > 0) {
-                          if (!empData.daysMap.has(dayNum)) {
-                            empData.daysMap.set(dayNum, new Set());
-                          }
-                          times.forEach(t => empData.daysMap.get(dayNum)!.add(t));
-                        }
-                      });
-                    }
-                    r += 2;
-                  }
-                }
-                return;
-              }
-
-              // Step A: Check for horizontal monthly day header (days 1-31 spread across columns)
-              let dayColumnMap: { [colIdx: number]: number } = {};
-              let idColIdx = -1;
-              let nameColIdx = -1;
-
-              for (let r = 0; r < Math.min(15, sheetRows.length); r++) {
-                const rCells = sheetRows[r];
-                if (!rCells) continue;
-                let consecDays = 0;
-                const tempMap: { [colIdx: number]: number } = {};
-                let tempIdCol = -1;
-                let tempNameCol = -1;
-
-                for (let c = 0; c < rCells.length; c++) {
-                  const txt = String(rCells[c] || "").trim();
-                  const match = txt.match(/^0?([1-9]|[12]\d|3[01])日?$/);
-                  if (match) {
-                    const day = Number(match[1]);
-                    tempMap[c] = day;
-                    consecDays++;
-                  }
-
-                  if (/^(工号|No|ID|No\.|编号|人员编号|卡号|Employee\s*ID)$/i.test(txt)) {
-                    tempIdCol = c;
-                  }
-
-                  if (/^(姓名|Name|员工|员工姓名|姓名\(Name\))$/i.test(txt)) {
-                    tempNameCol = c;
-                  }
-                }
-
-                if (consecDays >= 10) {
-                  dayColumnMap = tempMap;
-                  if (tempIdCol !== -1) idColIdx = tempIdCol;
-                  if (tempNameCol !== -1) nameColIdx = tempNameCol;
-                  break;
-                }
-              }
-
-              const hasDayColumns = Object.keys(dayColumnMap).length > 0;
-
-              if (hasDayColumns) {
-                // --- 1. HORIZONTAL GRID LAYOUT ---
-                sheetRows.forEach((row) => {
-                  if (!row) return;
-                  const cellStrings = row.map(v => String(v || "").trim());
-                  
-                  let extractedId = "";
-                  let extractedName = "";
-
-                  if (idColIdx !== -1 && cellStrings[idColIdx]) {
-                    extractedId = cellStrings[idColIdx];
-                  }
-                  if (nameColIdx !== -1 && cellStrings[nameColIdx]) {
-                    extractedName = cellStrings[nameColIdx];
-                  }
-
-                  // Fallback scan if headers missed it
-                  if (!extractedId || !extractedName) {
-                    for (let c = 0; c < Math.min(6, cellStrings.length); c++) {
-                      if (dayColumnMap[c] !== undefined) continue;
-                      const val = cellStrings[c];
-                      if (!val || val.length < 1) continue;
-                      if (/^(Name|姓名|员工|员工姓名|姓名\(Name\)|Dept|部门|班组|No|工号|ID|No\.)$/i.test(val)) continue;
-
-                      if (/^\d{2,8}$/.test(val) && !extractedId) {
-                        extractedId = val;
-                      } else if (/[a-zA-Z\u4e00-\u9fa5]/.test(val) && !extractedName) {
-                        extractedName = val;
-                      }
-                    }
-                  }
-
-                  if (extractedId || extractedName) {
-                    const key = extractedId ? `id_${extractedId}` : `name_${extractedName.toLowerCase()}`;
-                    if (!allParsedEmployees.has(key)) {
-                      allParsedEmployees.set(key, {
-                        scannerName: extractedName || `员工 ${extractedId}`,
-                        scannerId: extractedId,
-                        daysMap: new Map()
-                      });
-                    }
-                    const empData = allParsedEmployees.get(key)!;
-                    if (extractedName && (!empData.scannerName || empData.scannerName.startsWith("员工 "))) {
-                      empData.scannerName = extractedName;
-                    }
-                    if (extractedId && !empData.scannerId) {
-                      empData.scannerId = extractedId;
-                    }
-
-                    Object.entries(dayColumnMap).forEach(([cStr, dayNum]) => {
-                      const colIdx = Number(cStr);
-                      if (colIdx === idColIdx || colIdx === nameColIdx) return;
-                      const cellText = cellStrings[colIdx];
-                      const times = extractTimes(cellText);
-                      if (times.length > 0) {
-                        if (!empData.daysMap.has(dayNum)) {
-                          empData.daysMap.set(dayNum, new Set());
-                        }
-                        times.forEach(t => empData.daysMap.get(dayNum)!.add(t));
-                      }
-                    });
-                  }
-                });
-
-              } else {
-                // --- 2. CARD-STYLE OR FLAT ROW LOG LAYOUT ---
-                let currentEmpName = "";
-                let currentEmpId = "";
-                let cardStyleActive = false;
-
-                sheetRows.forEach((row) => {
-                  if (!row) return;
-                  const cellStrings = row.map(v => String(v || "").trim());
-                  const rowJoined = cellStrings.join(" ");
-
-                  // A. Check for Employee card header
-                  const nameRegexes = [
-                    /Name\s*[:：]\s*([^\s\t\r\n]+(?:\s+[^\s\t\r\n]+)*)/i,
-                    /姓名\s*[:：]\s*([^\s\t\r\n]+)/,
-                  ];
-
-                  let foundName = "";
-                  for (const regex of nameRegexes) {
-                    const match = rowJoined.match(regex);
-                    if (match && match[1]) {
-                      foundName = match[1].trim();
-                      break;
-                    }
-                  }
-
-                  if (!foundName) {
-                    for (let colIdx = 1; colIdx < cellStrings.length; colIdx++) {
-                      const val = cellStrings[colIdx] || "";
-                      if (/^(Name|姓名)$/i.test(val.trim())) {
-                        const nextVal1 = cellStrings[colIdx + 1] || "";
-                        const nextVal2 = cellStrings[colIdx + 2] || "";
-                        const possibleName = (
-                          nextVal1.replace(/^[:：\s]+/, "") ||
-                          nextVal2.replace(/^[:：\s]+/, "")
-                        ).trim();
-                        if (
-                          possibleName &&
-                          possibleName.length > 1 &&
-                          !/^(Dept|No|ID|Department|班组)$/i.test(possibleName)
-                        ) {
-                          foundName = possibleName;
-                          break;
-                        }
-                      }
-                    }
-                  }
-
-                  let foundId = "";
-                  for (let colIdx = 0; colIdx < cellStrings.length; colIdx++) {
-                    const val = cellStrings[colIdx] || "";
-                    if (/^(No|ID|工号|No\.|人员编号|卡号)$/i.test(val.trim())) {
-                      const nextVal1 = cellStrings[colIdx + 1] || "";
-                      const nextVal2 = cellStrings[colIdx + 2] || "";
-                      const possibleId = (
-                        nextVal1.replace(/^[:：\s]+/, "") ||
-                        nextVal2.replace(/^[:：\s]+/, "")
-                      ).trim();
-                      if (possibleId && /^\d+$/.test(possibleId)) {
-                        foundId = possibleId;
-                        break;
-                      }
-                    }
-                  }
-
-                  if (!foundId) {
-                    const idMatch =
-                      rowJoined.match(/No\s*[:：\s]\s*(\d+)/i) ||
-                      rowJoined.match(/ID\s*[:：\s]\s*(\d+)/i) ||
-                      rowJoined.match(/工号\s*[:：\s]\s*(\d+)/i);
-                    if (idMatch) foundId = idMatch[1];
-                  }
-
-                  if (foundName || foundId) {
-                    currentEmpName = foundName || `员工 ${foundId}`;
-                    currentEmpId = foundId;
-                    cardStyleActive = true;
-                    return;
-                  }
-
-                  // B. If Card-style is active, check if this row defines day and times
-                  if (cardStyleActive && currentEmpName) {
-                    const firstCell = cellStrings[1] || "";
-                    const secondCell = cellStrings[2] || "";
-
-                    const isFirstCellDay =
-                      /^\d+$/.test(firstCell) &&
-                      Number(firstCell) >= 1 &&
-                      Number(firstCell) <= 31;
-                    const isSecondCellDay =
-                      /^\d+$/.test(secondCell) &&
-                      Number(secondCell) >= 1 &&
-                      Number(secondCell) <= 31;
-
-                    const rowTimes = extractTimes(rowJoined);
-
-                    if ((isFirstCellDay || isSecondCellDay) && rowTimes.length > 0) {
-                      const dayNum = isFirstCellDay ? Number(firstCell) : Number(secondCell);
-                      const key = currentEmpId ? `id_${currentEmpId}` : `name_${currentEmpName.toLowerCase()}`;
-                      if (!allParsedEmployees.has(key)) {
-                        allParsedEmployees.set(key, {
-                          scannerName: currentEmpName,
-                          scannerId: currentEmpId,
-                          daysMap: new Map()
-                        });
-                      }
-                      const empData = allParsedEmployees.get(key)!;
-                      if (!empData.daysMap.has(dayNum)) {
-                        empData.daysMap.set(dayNum, new Set());
-                      }
-                      rowTimes.forEach(t => empData.daysMap.get(dayNum)!.add(t));
-                      return;
-                    }
-                  }
-
-                  // C. Flat Row-by-Row Transaction Log layout fallback
-                  let extractedDay = null;
-                  let extractedTime = null;
-                  let extractedId = "";
-                  let extractedName = "";
-
-                  const rowTimes = extractTimes(rowJoined);
-                  if (rowTimes.length > 0) {
-                    extractedTime = rowTimes[0];
-                  }
-
-                  if (extractedTime) {
-                    for (let i = 0; i < cellStrings.length; i++) {
-                      const d = extractDayFromCell(cellStrings[i], selectedMonth);
-                      if (d !== null) {
-                        extractedDay = d;
-                        break;
-                      }
-                    }
-
-                    if (extractedDay !== null) {
-                      for (let i = 0; i < Math.min(6, cellStrings.length); i++) {
-                        const val = cellStrings[i];
-                        if (!val || val.length < 1) continue;
-                        if (/^(Name|姓名|员工|员工姓名|姓名\(Name\)|Dept|部门|班组|No|工号|ID|No\.)$/i.test(val)) continue;
-                        
-                        const isDateOrTimeCell = val.includes(":") || val.includes("-") || val.includes("/") || Number(val) === extractedDay;
-                        if (isDateOrTimeCell) continue;
-
-                        if (/^\d{2,8}$/.test(val)) {
-                          extractedId = val;
-                        } else if (/[a-zA-Z\u4e00-\u9fa5]/.test(val) && val.length >= 2) {
-                          extractedName = val;
-                        }
-                      }
-
-                      if (extractedId || extractedName) {
-                        const key = extractedId ? `id_${extractedId}` : `name_${extractedName.toLowerCase()}`;
-                        if (!allParsedEmployees.has(key)) {
-                          allParsedEmployees.set(key, {
-                            scannerName: extractedName || `员工 ${extractedId}`,
-                            scannerId: extractedId,
-                            daysMap: new Map()
-                          });
-                        }
-                        const empData = allParsedEmployees.get(key)!;
-                        if (extractedName && (!empData.scannerName || empData.scannerName.startsWith("员工 "))) {
-                          empData.scannerName = extractedName;
-                        }
-                        if (extractedId && !empData.scannerId) {
-                          empData.scannerId = extractedId;
-                        }
-
-                        if (!empData.daysMap.has(extractedDay)) {
-                          empData.daysMap.set(extractedDay, new Set());
-                        }
-                        rowTimes.forEach(t => empData.daysMap.get(extractedDay)!.add(t));
-                      }
-                    }
-                  }
-                });
-              }
-            });
-
-            // Assemble the unified previews list
-            const parsedResult: any[] = [];
-            allParsedEmployees.forEach((empData) => {
-              const rowsList: { day: number; times: string[] }[] = [];
-              empData.daysMap.forEach((timesSet, dayNum) => {
-                // 👑 核心修复：严禁使用 alphabetical 字母排序！对于跨凌晨班 (比如 14:23 进，01:22 出)，字母排序会把 01:22 排在前面从而导致进出反了。这里直接保持 Excel 原生从左到右的打卡时间顺序。
-                const rawOrderTimes = Array.from(timesSet);
-                rowsList.push({
-                  day: dayNum,
-                  times: rawOrderTimes
-                });
-              });
-
-              rowsList.sort((a, b) => a.day - b.day);
-
-              if (rowsList.length > 0) {
-                parsedResult.push({
-                  scannerName: empData.scannerName,
-                  scannerId: empData.scannerId,
-                  rows: rowsList
-                });
-              }
-            });
-
-            const finalMatches = parsedResult.map((item) => {
-              // Primarily match strictly by Employee ID
-              let matchedSystemEmp: Employee | null = null;
-              if (item.scannerId) {
-                const cleanScannerId = String(item.scannerId).trim();
-                matchedSystemEmp = employees.find(
-                  (e) => String(e.id).trim() === cleanScannerId
-                ) || null;
-              }
-
-              // Fallback to name matching if ID is not present/matched
-              if (!matchedSystemEmp && item.scannerName) {
-                matchedSystemEmp = findMatchedEmployee(
-                  item.scannerName,
-                  employees,
-                );
-              }
-
-              return {
-                scannerName: item.scannerName,
-                scannerId: item.scannerId,
-                systemEmployee: matchedSystemEmp,
-                rawRows: item.rows,
-                selected: !!matchedSystemEmp,
-              };
-            });
-
-            setImportPreviews(finalMatches);
-          }
-        } catch (err) {
-          console.error("Error reading file", err);
-          setParseError(isPdf ? "解析 PDF 考勤报表失败，请确保文件格式正确。" : "解析 Excel 文件失败，请确保格式正确且没有损坏。");
-        } finally {
-          setIsParsing(false);
-        }
-      };
-
-      reader.readAsArrayBuffer(file);
-    } catch (e) {
-      console.error("File upload error", e);
-      setParseError("读取文件错误，请重试。");
-      setIsParsing(false);
-    }
-  };
-
-  const handleSaveImport = async () => {
-    const selectedPreviews = importPreviews.filter(
-      (p) => p.selected && p.systemEmployee,
-    );
-    if (selectedPreviews.length === 0) {
-      alert("请确保至少选择了一名匹配员工");
-      return;
-    }
-
-    setIsSavingImport(true);
-    try {
-      let totalSaved = 0;
-      for (const preview of selectedPreviews) {
-        const emp = preview.systemEmployee;
-        for (const row of preview.rawRows) {
-          const dateStr = `${selectedMonth}-${String(row.day).padStart(2, "0")}`;
-          const times = row.times;
-          if (times.length === 0) continue;
-
-          const firstTime = times[0];
-          const lastTime = times[times.length - 1];
-          const { clockInISO, clockOutISO, durationMinutes } =
-            constructPunchTimes(dateStr, firstTime, lastTime);
-
-          const status = determineImportedStatus(dateStr, firstTime);
-
-          const record: AttendanceRecord = {
-            id: `attendance_${emp.id}_${dateStr}_face`, // 🤖 独立后缀保存，绝对安全
-            employeeId: emp.id,
-            employeeName: emp.name,
-            date: dateStr,
-            clockIn: clockInISO,
-            clockOut: clockOutISO,
-            durationMinutes: durationMinutes,
-            status: status,
-            source: "face_machine",
-            notes: `人脸打卡机导入 (工号: ${preview.scannerId || "N/A"})`,
-            allTimes: times, // 保存所有打卡时间
-          };
-
-          await DataManager.saveAttendance(record);
-          totalSaved++;
-        }
-      }
-
-      alert(
-        `🎉 成功导入了 ${selectedPreviews.length} 名员工，共 ${totalSaved} 条打卡记录！\n系统已自动覆盖合并。`,
-      );
-      setIsFaceImportOpen(false);
-      setImportPreviews([]);
-      loadPayrollForMonth();
-    } catch (err) {
-      console.error("Error saving import", err);
-      alert("保存打卡记录失败: " + (err as Error).message);
-    } finally {
-      setIsSavingImport(false);
     }
   };
 
@@ -3697,10 +2496,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   };
 
   const inputClassName =
-    "w-full p-4 !bg-white border-2 border-gray-200 rounded-xl text-lg font-black text-black outline-none focus:border-[#1A1A1A] focus:ring-4 focus:ring-black/5 transition-all text-right shadow-sm disabled:bg-gray-50 disabled:text-gray-400 touch-manipulation";
-
-  // 👑 手机输入优化：值为 0 时显示空字符串，让 placeholder 显示 "0.00"
-  const num = (v: number) => (v === 0 ? "" : v);
+    "w-full p-4 !bg-white border-2 border-gray-200 rounded-xl text-lg font-black text-black outline-none focus:border-[#111111] focus:ring-4 focus:ring-black/5 transition-all text-right shadow-sm disabled:bg-gray-50 disabled:text-gray-400 touch-manipulation";
 
   const renderEmployeeCard = (emp: Employee) => {
     const entry = payrollData[emp.id];
@@ -3727,7 +2523,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           setShowPayConfirm(false);
           setShowAdvanceHistory(false);
         }}
-        className={`w-full bg-white rounded-xl md:rounded-2xl p-3 md:p-4 shadow-sm border hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 group cursor-pointer active:scale-[0.99] ${emp.isArchived ? "border-red-200 bg-red-50/10" : isSelected ? "border-[#1A1A1A] ring-1 ring-[#1A1A1A]" : entry.isPaid ? "border-emerald-300 bg-emerald-50/20" : "border-gray-200 hover:border-[#FFD700]"}`}
+        className={`w-full bg-white rounded-xl md:rounded-2xl p-3 md:p-4 shadow-sm border hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 group cursor-pointer active:scale-[0.99] ${emp.isArchived ? "border-red-200 bg-red-50/10" : isSelected ? "border-[#111111] ring-1 ring-[#111111]" : entry.isPaid ? "border-emerald-300 bg-emerald-50/20" : "border-gray-200 hover:border-[#FFD200]"}`}
       >
         <div className="flex items-center gap-2 md:gap-4 w-full md:w-1/3">
           <div
@@ -3740,14 +2536,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             aria-checked={isSelected}
           >
             {isSelected ? (
-              <CheckSquare size={20} className="text-[#1A1A1A]" />
+              <CheckSquare size={20} className="text-[#111111]" />
             ) : (
               <Square size={20} />
             )}
           </div>
           {/* 💡 优化：加入空字符串保底，避免 charAt(0) 和 split('(') 报错 */}
           <div
-            className={`w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center font-black text-sm text-gray-400 border-2 shadow-sm overflow-hidden shrink-0 ${emp.isArchived ? "bg-red-100 border-red-200 grayscale" : entry.isPaid ? "bg-emerald-100 border-emerald-300 text-emerald-600" : "bg-gray-100 border-white group-hover:border-[#FFD700]"}`}
+            className={`w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center font-black text-sm text-gray-400 border-2 shadow-sm overflow-hidden shrink-0 ${emp.isArchived ? "bg-red-100 border-red-200 grayscale" : entry.isPaid ? "bg-emerald-100 border-emerald-300 text-emerald-600" : "bg-gray-100 border-white group-hover:border-[#FFD200]"}`}
           >
             {emp.avatar ? (
               <img src={emp.avatar} className="w-full h-full object-cover" />
@@ -3758,7 +2554,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           <div className="text-left min-w-0">
             <div className="flex items-center gap-2">
               <h4
-                className={`font-bold truncate text-sm md:text-base ${emp.isArchived ? "text-red-700" : "text-[#1A1A1A]"}`}
+                className={`font-bold truncate text-sm md:text-base ${emp.isArchived ? "text-red-700" : "text-[#111111]"}`}
               >
                 {emp.name || "Unknown"}
               </h4>
@@ -3863,10 +2659,10 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#F8F9FA]">
+    <div className="h-full flex flex-col bg-[#F6F7FB]">
       {/* Header */}
       <div
-        className="bg-[#1A1A1A] text-white shadow-lg z-20"
+        className="bg-[#111111] text-white shadow-lg z-20"
         style={{
           paddingTop: "8px",
           paddingBottom: "10px",
@@ -3877,7 +2673,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         {/* Row 1: Title + Month Selector */}
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="bg-[#FFD700] text-black p-1.5 md:p-3 rounded-lg md:rounded-xl shadow-gold shrink-0">
+            <div className="bg-[#FFD200] text-black p-1.5 md:p-3 rounded-lg md:rounded-xl shadow-gold shrink-0">
               <DollarSign size={18} />
             </div>
             <div className="min-w-0">
@@ -3911,7 +2707,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               <ChevronLeft size={18} />
             </button>
             <div className="flex items-center gap-1.5 px-2 border-x border-white/10 mx-0.5">
-              <Calendar size={14} className="text-[#FFD700] hidden sm:block" />
+              <Calendar size={14} className="text-[#FFD200] hidden md:block" />
               <input
                 type="month"
                 value={selectedMonth}
@@ -3934,13 +2730,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         <div className="flex bg-white/10 rounded-xl p-1 mt-2.5 max-w-sm border border-white/5 shadow-inner">
           <button
             onClick={() => setCurrentMode("CALC")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
           >
             🧮 薪酬核算 (Calc)
           </button>
           <button
             onClick={() => setCurrentMode("HISTORY")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD700] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
           >
             📜 支薪历史 (History)
           </button>
@@ -4008,7 +2804,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   <select
                     value={latePenaltyMode}
                     onChange={(e) => handleSetLatePenaltyMode(e.target.value as any)}
-                    className="bg-zinc-800 text-white text-[10px] font-black rounded px-1.5 py-0.5 outline-none border border-zinc-700 focus:border-[#FFD700] cursor-pointer"
+                    className="bg-zinc-800 text-white text-[10px] font-black rounded px-1.5 py-0.5 outline-none border border-zinc-700 focus:border-[#FFD200] cursor-pointer"
                   >
                     <option value="FULL">实扣 100% (Deduct 100%)</option>
                     <option value="HALF">减半 50% (Deduct 50%)</option>
@@ -4031,9 +2827,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       >
         {currentMode === "HISTORY" ? (
           <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="bg-white rounded-2xl p-4 border border-gray-150 shadow-sm flex justify-between items-center">
+            <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm flex justify-between items-center">
               <div>
-                <h3 className="font-sans font-black text-sm md:text-base text-[#1A1A1A]">
+                <h3 className="font-sans font-black text-sm md:text-base text-[#111111]">
                   📜 支薪历史与出账日志
                 </h3>
                 <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
@@ -4042,7 +2838,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
               <button
                 onClick={loadAllHistory}
-                className="bg-[#1A1A1A] hover:bg-black text-[#FFD700] px-3.5 py-2 rounded-xl text-xs font-black active:scale-95 transition-transform flex items-center gap-1.5 shadow-sm min-h-[44px] select-none"
+                className="bg-[#111111] hover:bg-black text-[#FFD200] px-3.5 py-2 rounded-xl text-xs font-black active:scale-95 transition-transform flex items-center gap-1.5 shadow-sm min-h-[44px] select-none"
                 disabled={isHistLoading}
               >
                 <RefreshCw
@@ -4058,7 +2854,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <Loader2 size={32} className="animate-spin text-gray-400" />
               </div>
             ) : allHistoryRecords.length === 0 ? (
-              <div className="bg-white border border-gray-150 rounded-2xl p-16 text-center text-gray-400">
+              <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center text-gray-400">
                 <History size={48} className="mx-auto mb-3 opacity-25" />
                 <p className="text-xs font-black text-gray-500">
                   暂无支薪历史存档数据
@@ -4121,14 +2917,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                           <div className="text-[9px] text-gray-400 font-bold uppercase block mb-0.5">
                             Company Cost
                           </div>
-                          <div className="text-sm md:text-base font-mono font-black text-[#1A1A1A]">
+                          <div className="text-sm md:text-base font-mono font-black text-[#111111]">
                             RM{" "}
                             {Number(record.totalAmount || 0).toLocaleString(
                               undefined,
                               { minimumFractionDigits: 2 },
                             )}
                           </div>
-                          <div className="text-[10px] font-black text-[#FFD700] bg-[#1A1A1A] inline-block px-1.5 py-0.5 rounded-md mt-1 scale-90 origin-right">
+                          <div className="text-[10px] font-black text-[#FFD200] bg-[#111111] inline-block px-1.5 py-0.5 rounded-md mt-1 scale-90 origin-right">
                             {isExpanded ? "收起 ▲" : "详情 ▼"}
                           </div>
                         </div>
@@ -4149,14 +2945,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                   <h4 className="font-black text-xs md:text-sm text-blue-950 leading-tight">
                                     {detail.employeeName}
                                   </h4>
-                                  <div className="text-[10px] text-gray-450 mt-1 font-mono">
+                                  <div className="text-[10px] text-gray-500 mt-1 font-mono">
                                     Basic: {detail.basicSalary?.toFixed(2)} |
                                     Net: {detail.netPay?.toFixed(2)}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0">
                                   <div className="text-right">
-                                    <div className="text-xs md:text-sm font-black font-mono text-[#1A1A1A]">
+                                    <div className="text-xs md:text-sm font-black font-mono text-[#111111]">
                                       RM {detail.netPay?.toFixed(2)}
                                     </div>
                                     <span
@@ -4177,7 +2973,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                         handlePrintSingleSlip();
                                       }, 250);
                                     }}
-                                    className="bg-gray-100 hover:bg-[#1A1A1A] hover:text-[#FFD700] p-2.5 rounded-xl text-gray-600 transition-all active:scale-90 min-h-[38px] select-none"
+                                    className="bg-gray-100 hover:bg-[#111111] hover:text-[#FFD200] p-2.5 rounded-xl text-gray-600 transition-all active:scale-90 min-h-[38px] select-none"
                                     title="打印 A4 Payslip 薪资单"
                                   >
                                     <Printer size={14} />
@@ -4200,7 +2996,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0">
                                   <div className="text-right">
-                                    <div className="text-xs md:text-sm font-black font-mono text-[#1A1A1A]">
+                                    <div className="text-xs md:text-sm font-black font-mono text-[#111111]">
                                       RM {detail.amount?.toFixed(2)}
                                     </div>
                                     <span className="text-[8px] border px-1.5 py-0.2 rounded font-mono font-bold uppercase inline-block scale-90 bg-orange-50 text-orange-700 border-orange-200">
@@ -4228,14 +3024,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               >
                 {selectedEmpIds.size === displayEmployees.length &&
                 displayEmployees.length > 0 ? (
-                  <CheckSquare size={14} className="text-[#1A1A1A]" />
+                  <CheckSquare size={14} className="text-[#111111]" />
                 ) : (
                   <Square size={14} />
                 )}
                 Select All
               </button>
               {selectedEmpIds.size > 0 && (
-                <span className="text-xs font-bold text-[#1A1A1A]">
+                <span className="text-xs font-bold text-[#111111]">
                   {selectedEmpIds.size} Selected
                 </span>
               )}
@@ -4335,7 +3131,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             <span className="block text-[10px] text-gray-400 font-bold uppercase mb-0.5">
                               已付工资 (Paid)
                             </span>
-                            <span className="font-mono text-xl font-black text-[#1A1A1A]">
+                            <span className="font-mono text-xl font-black text-[#111111]">
                               {exp.amount.toFixed(2)}
                             </span>
                           </div>
@@ -4371,7 +3167,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     <X size={14} />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                   {Object.entries(deptBreakdown)
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([dept, data]) => (
@@ -4381,7 +3177,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       >
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <div className="text-xs font-black text-[#1A1A1A]">
+                            <div className="text-xs font-black text-[#111111]">
                               {dept}
                             </div>
                             <div className="text-[9px] text-gray-400 font-bold">
@@ -4392,7 +3188,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             <div className="text-[9px] text-gray-400 uppercase font-bold">
                               Net Pay
                             </div>
-                            <div className="text-sm font-mono font-black text-[#1A1A1A]">
+                            <div className="text-sm font-mono font-black text-[#111111]">
                               RM{" "}
                               {data.net.toLocaleString(undefined, {
                                 minimumFractionDigits: 2,
@@ -4443,12 +3239,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 className="flex items-center justify-between gap-2 cursor-pointer active:scale-[0.99] transition-transform select-none"
               >
                 {/* 移动端: 2x2 网格，间距均匀 */}
-                <div className="sm:hidden grid grid-cols-2 gap-x-4 gap-y-1 flex-1 min-w-0">
+                <div className="md:hidden grid grid-cols-2 gap-x-4 gap-y-1 flex-1 min-w-0">
                   <div className="flex justify-between items-baseline">
                     <span className="text-[9px] text-gray-400 font-bold">
                       总薪资
                     </span>
-                    <span className="text-xs font-mono text-[#1A1A1A] font-black">
+                    <span className="text-xs font-mono text-[#111111] font-black">
                       RM{" "}
                       {(
                         grandTotals.net + grandTotals.allAdvances
@@ -4491,12 +3287,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 </div>
 
                 {/* 桌面端: 保持原有横排 */}
-                <div className="hidden sm:flex items-center gap-6 overflow-x-auto flex-nowrap min-w-0 flex-1">
+                <div className="hidden md:flex items-center gap-6 overflow-x-auto flex-nowrap min-w-0 flex-1">
                   <div className="shrink-0">
                     <span className="block text-[9px] text-gray-400 uppercase font-bold leading-none mb-0.5">
                       Total Salary (总薪资)
                     </span>
-                    <span className="text-xl font-mono text-[#1A1A1A] font-black leading-tight">
+                    <span className="text-xl font-mono text-[#111111] font-black leading-tight">
                       RM{" "}
                       {(grandTotals.paid + grandTotals.unpaid).toLocaleString(
                         undefined,
@@ -4550,15 +3346,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
 
               {/* 💳 操作按钮区 — 移动端排版优化 */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 sm:items-center w-full">
-                <div className="flex flex-col items-start w-full sm:w-auto">
-                  <div className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-2 rounded-lg border border-gray-200 w-full sm:w-auto">
+              <div className="flex flex-col md:flex-row gap-3 md:gap-2 md:items-center w-full">
+                <div className="flex flex-col items-start w-full md:w-auto">
+                  <div className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-2 rounded-lg border border-gray-200 w-full md:w-auto">
                     <CalendarDays size={14} className="text-gray-400 shrink-0" />
                     <input
                       type="date"
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
-                      className="bg-transparent font-black text-[#1A1A1A] outline-none w-full sm:w-36 p-0 text-center sm:text-left"
+                      className="bg-transparent font-black text-[#111111] outline-none w-full md:w-36 p-0 text-center md:text-left"
                       style={{ fontSize: "16px", minHeight: "36px" }}
                     />
                   </div>
@@ -4567,7 +3363,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   </span>
                 </div>
 
-                <div className="flex gap-1.5 w-full sm:flex-1">
+                <div className="flex gap-1.5 w-full md:flex-1">
                   {isPosted ? (
                     <>
                       <button
@@ -4576,7 +3372,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         className="flex-1 bg-red-50 text-red-600 border border-red-100 px-2 py-2.5 md:py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1"
                       >
                         <LockOpen size={13} />{" "}
-                        <span className="hidden sm:inline">撤销</span>结账
+                        <span className="hidden md:inline">撤销</span>结账
                       </button>
                       {!isStatutoryPaid ? (
                         <button
@@ -4585,7 +3381,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                           className="flex-1 bg-blue-600 text-white border border-blue-600 px-2 py-2.5 md:py-3 rounded-xl font-bold shadow-md active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1"
                         >
                           <Building2 size={13} /> 缴
-                          <span className="hidden sm:inline">政府</span>费用
+                          <span className="hidden md:inline">政府</span>费用
                         </button>
                       ) : (
                         <button
@@ -4600,7 +3396,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     <button
                       onClick={() => setShowBatchPayConfirm(true)}
                       disabled={isLoading}
-                      className="flex-1 bg-[#1A1A1A] text-[#FFD700] px-3 py-2.5 md:py-3 rounded-xl font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs disabled:opacity-50"
+                      className="flex-1 bg-[#111111] text-[#FFD200] px-3 py-2.5 md:py-3 rounded-xl font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs disabled:opacity-50"
                     >
                       {isLoading ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -4655,7 +3451,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-xl text-[#1A1A1A]">
+              <h3 className="font-black text-xl text-[#111111]">
                 发放预支薪水 (Advance)
               </h3>
               <button onClick={() => setIsAdvanceModalOpen(false)}>
@@ -4763,7 +3559,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       {/* === CALCULATOR MODAL === */}
       {editingEmpId && editingEntry && editingEmp && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#F8F9FA] w-full h-[100dvh] md:max-w-3xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 border border-gray-200 relative">
+          <div className="bg-[#F6F7FB] w-full h-[100dvh] md:max-w-3xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 border border-gray-200 relative">
             {/* iOS-style drag handle (仅手机显示) */}
             <div
               className="md:hidden flex justify-center pt-3 pb-1.5 bg-white shrink-0"
@@ -4777,10 +3573,10 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             {/* Header */}
             <div className="bg-white p-4 md:p-5 pt-2 md:pt-5 flex justify-between items-center shrink-0 border-b border-gray-200">
               <div>
-                <h3 className="font-bold text-lg text-[#1A1A1A] flex items-center gap-2">
+                <h3 className="font-bold text-lg text-[#111111] flex items-center gap-2">
                   <Calculator
                     size={20}
-                    className="text-[#FFD700] fill-current stroke-black"
+                    className="text-[#FFD200] fill-current stroke-black"
                   />{" "}
                   薪资计算器
                 </h3>
@@ -4820,26 +3616,26 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
 
             {/* 👑 Mobile High-contrast Segmented Control for Calculator Tabs */}
-            <div className="md:hidden shrink-0 bg-white border-b border-gray-150 px-4 py-2.5 flex justify-center">
+            <div className="md:hidden shrink-0 bg-white border-b border-gray-200 px-4 py-2.5 flex justify-center">
               <div className="flex bg-gray-100 rounded-xl p-1 w-full max-w-md border border-gray-200/50 shadow-inner">
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('EARNINGS')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'EARNINGS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'EARNINGS' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   💵 收入 (Earn)
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('DEDUCTIONS')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'DEDUCTIONS' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'DEDUCTIONS' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   🛑 扣除 (Deduct)
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('STATUTORY')}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'STATUTORY' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 min-h-[44px] select-none active:scale-[0.98] ${mobileModalTab === 'STATUTORY' ? 'bg-[#111111] text-[#FFD200] shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                 >
                   🏛️ 政府/其它 (Govt)
                 </button>
@@ -4859,7 +3655,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         : "新入职/天数计算 (Joiner Pro-rate)"}
                     </h4>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex flex-col md:flex-row md:items-end gap-3">
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-1">
                         <label className="text-[9px] font-bold text-blue-500 uppercase">
@@ -4888,7 +3684,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         placeholder="e.g. 15"
                       />
                     </div>
-                    <div className="sm:w-52">
+                    <div className="md:w-52">
                       <label className="text-[9px] font-bold text-blue-500 uppercase mb-1 block">
                         Calculation Basis
                       </label>
@@ -4947,8 +3743,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <h4 className="text-xs font-black text-green-700 uppercase mb-4 flex items-center gap-2 tracking-widest pl-2">
                   <Plus size={14} /> 收入 (Earnings)
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="col-span-full sm:col-span-2 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="col-span-full md:col-span-2 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
                     <div>
                       <label className="text-[9px] font-bold text-gray-400 uppercase mb-1 block">
                         Monthly Rate (档案底薪)
@@ -4981,7 +3777,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         onChange={(v) =>
                           updateEntry(editingEmpId, { basic: v })
                         }
-                        className="w-full p-3 bg-white border-2 border-green-200 rounded-xl font-black text-[#1A1A1A] outline-none focus:border-green-500 text-right shadow-sm"
+                        className="w-full p-3 bg-white border-2 border-green-200 rounded-xl font-black text-[#111111] outline-none focus:border-green-500 text-right shadow-sm"
                         decimals={true}
                       />
                     </div>
@@ -5083,7 +3879,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <h4 className="text-xs font-black text-red-700 uppercase mb-4 flex items-center gap-2 tracking-widest pl-2">
                   <MinusCircle size={14} /> 扣除 (Deductions)
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="input-label text-[10px] font-bold text-gray-400 uppercase block">
@@ -5146,7 +3942,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     />
                   </div>
 
-                  <div className="relative sm:col-span-2 md:col-span-1">
+ <div className="relative md:col-span-1">
                     <div className="flex justify-between items-center mb-1">
                       <label className="input-label text-[10px] font-bold text-gray-400 uppercase block">
                         Advance/Loan (预支)
@@ -5226,8 +4022,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 )}
 
                 <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex items-center justify-between sm:justify-start gap-4 min-w-[120px]">
+                  <div className="flex flex-col md:flex-row md:items-center gap-4 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className="flex items-center justify-between md:justify-start gap-4 min-w-[120px]">
                       <span className="text-xs font-black text-gray-600">
                         EPF (KWSP)
                       </span>
@@ -5302,7 +4098,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
                     {editingEntry.hasSOCSO ? (
                       <div className="space-y-3">
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex flex-col md:flex-row gap-2">
                           <div className="w-24 pt-2 text-[10px] font-bold text-gray-500 uppercase">
                             SOCSO
                           </div>
@@ -5338,7 +4134,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex flex-col md:flex-row gap-2">
                           <div className="w-24 pt-2 text-[10px] font-bold text-gray-500 uppercase">
                             EIS
                           </div>
@@ -5394,7 +4190,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   备注 (Note)
                 </label>
                 <textarea
-                  className="w-full p-4 bg-[#FFFFFF] border border-gray-200 rounded-xl outline-none resize-none h-24 focus:border-[#1A1A1A] transition-colors"
+                  className="w-full p-4 bg-[#FFFFFF] border border-gray-200 rounded-xl outline-none resize-none h-24 focus:border-[#111111] transition-colors"
                   style={{ fontSize: "16px" }}
                   placeholder="Optional..."
                   value={editingEntry.note}
@@ -5459,7 +4255,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSetPdfPenaltyMode('SHOW_AND_DEDUCT')}
-                    className={`py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_AND_DEDUCT' ? 'bg-[#FFD700] text-black border-[#FFD700] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    className={`py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_AND_DEDUCT' ? 'bg-[#FFD200] text-black border-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                   >
                     实发也扣除
                     <span className="block font-normal text-[8px] text-gray-400 mt-0.5">Deduct 100%</span>
@@ -5488,14 +4284,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <div className="text-[10px] text-gray-400 uppercase font-bold">
                   NET PAY (实发)
                 </div>
-                <div className="text-2xl sm:text-4xl font-mono font-black text-[#1A1A1A] drop-shadow-sm tabular-nums tracking-tight">
+                <div className="text-2xl md:text-4xl font-mono font-black text-[#111111] drop-shadow-sm tabular-nums tracking-tight">
                   RM{" "}
                   {getTotals(editingEntry).netPay.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                   })}
                 </div>
               </div>
-              <div className="flex gap-1.5 flex-wrap sm:flex-nowrap">
+              <div className="flex gap-1.5 flex-wrap md:flex-nowrap">
                 {!showPayConfirm ? (
                   <>
                     <button
@@ -5503,7 +4299,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         setEditingEmpId(null);
                         setShowAdvanceHistory(false);
                       }}
-                      className="flex-1 sm:flex-initial bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-1 active:scale-95 transition-transform min-h-[44px]"
+                      className="flex-1 md:flex-initial bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-1 active:scale-95 transition-transform min-h-[44px]"
                     >
                       <X size={15} /> 关闭
                     </button>
@@ -5511,7 +4307,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     <button
                       onClick={handlePrintSingleSlip}
                       disabled={isGeneratingPdf}
-                      className="flex-1 sm:flex-initial bg-white border border-gray-200 text-gray-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm hover:bg-gray-50 flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
+                      className="flex-1 md:flex-initial bg-white border border-gray-200 text-gray-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm hover:bg-gray-50 flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
                     >
                       {isGeneratingPdf ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -5541,7 +4337,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     {!editingEntry.isPaid && (
                       <button
                         onClick={handleSaveSingleDraft}
-                        className="flex-grow bg-[#1A1A1A] text-[#FFD700] py-3 px-3 rounded-xl font-black text-xs md:text-sm shadow-lg hover:bg-black transition-colors flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
+                        className="flex-grow bg-[#111111] text-[#FFD200] py-3 px-3 rounded-xl font-black text-xs md:text-sm shadow-lg hover:bg-black transition-colors flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
                       >
                         <Save size={18} /> 保存 (Save)
                       </button>
@@ -5557,7 +4353,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         type="date"
                         value={paymentDate}
                         onChange={(e) => setPaymentDate(e.target.value)}
-                        className="p-3 border border-gray-300 rounded-lg font-bold text-[#1A1A1A] outline-none w-full"
+                        className="p-3 border border-gray-300 rounded-lg font-bold text-[#111111] outline-none w-full"
                         style={{ fontSize: "16px", minHeight: "48px" }}
                       />
                       <span className="text-[9px] text-gray-500 mt-1 ml-1 block leading-tight font-medium">
@@ -5600,7 +4396,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-1.5">
+              <h3 className="font-black text-lg text-[#111111] flex items-center gap-1.5">
                 ✏️ 修改预支 (Edit Advance)
               </h3>
               <button
@@ -6397,7 +5193,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             {/* Print Header */}
             <div className="border-b-4 border-black flex justify-between items-start pb-3 mb-6">
               <div>
-                <h1 className="text-2xl font-black uppercase tracking-wider text-[#1A1A1A]">KIM LIAN KEE (金莲记)</h1>
+                <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111]">KIM LIAN KEE (金莲记)</h1>
                 <p className="text-[11px] text-gray-500 font-black tracking-widest mt-1 uppercase">Monthly Attendance Record • 员工月度打卡表</p>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[11px] text-gray-700 mt-3">
                   <div><span className="text-gray-400 font-bold uppercase">Name (姓名):</span> <span className="font-black">{editingEmp.name}</span></div>
@@ -6417,7 +5213,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             {/* Table */}
             <div className="border border-black overflow-hidden rounded mb-4">
               <table className="w-full border-collapse text-center text-[10.5px]">
-                <thead className="bg-[#1A1A1A] text-white">
+                <thead className="bg-[#111111] text-white">
                   <tr className="border-b border-black">
                     <th className="p-2 border-r border-black font-black w-24">日期 / 星期<br/>(Date / Day)</th>
                     <th className="p-2 border-r border-black font-black" colSpan={2}>上午 (AM)<br/><span className="text-[9px] font-normal">Check In / Out</span></th>
@@ -6529,8 +5325,6 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
             {/* Summary statistics */}
             {(() => {
-              const [yr, mo] = selectedMonth.split("-").map(Number);
-              const daysInMonth = new Date(yr, mo, 0).getDate();
               const workedDaysCount = editingAttendance.filter(r => (r.allTimes && r.allTimes.length > 0) || r.clockIn).length;
               const lateDaysCount = editingAttendance.filter(r => r.status === 'LATE' || r.status === 'COMPLETED_LATE').length;
               return (

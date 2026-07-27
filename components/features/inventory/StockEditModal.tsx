@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
-    Edit3, X, Scale, Calculator, Box, ArrowRightLeft,
-    Trash2, Link as LinkIcon, Package, Loader2, Save,
+    Edit3, X, Trash2, Link as LinkIcon, Package, Loader2, Save,
     Camera, Image as ImageIcon, Info, Percent, Coins, Layers, Check
 } from 'lucide-react';
 import { CATEGORY_SECTIONS, INPUT_STYLE, LABEL_STYLE } from './inventoryConstants';
@@ -111,111 +110,6 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
             }
             return pu;
         });
-    };
-
-    const validateForm = (): boolean => {
-        const errors: Record<string, string> = {};
-        
-        // 1. baseUnit cannot be empty
-        if (!baseUnit.trim()) {
-            errors.baseUnit = "系统库存单位不能为空 (Base unit required)";
-        }
-        
-        // 2. displayToBaseRatio must be > 0
-        if ((editingItem.displayToBaseRatio ?? 0) <= 0) {
-            errors.displayToBaseRatio = "盘点单位比例必须大于 0 (Ratio must be > 0)";
-        }
-        
-        // 8. Display Unit with Base Unit same check displayToBaseRatio must be 1
-        if (editingItem.displayUnit && isDisplaySameAsBase(editingItem.displayUnit, baseUnit)) {
-            if ((editingItem.displayToBaseRatio ?? 1) !== 1) {
-                errors.displayToBaseRatio = "盘点单位与系统单位相同时，换算比例必须为 1";
-            }
-        }
-        
-        // Purchase specs validation
-        const usedNames = new Set<string>();
-        
-        purchaseUnits.forEach((pu) => {
-            const unitNameNorm = normalizeUnitName(pu.unitName);
-            
-            // 3. purchaseUnit.unitName cannot be empty
-            if (!pu.unitName.trim()) {
-                errors[`pu_${pu.id}_name`] = "采购单位名称不能为空 (Unit name required)";
-            }
-            
-            // 4. pricePerUnit cannot be < 0
-            if ((pu.pricePerUnit ?? 0) < 0) {
-                errors[`pu_${pu.id}_price`] = "采购单价不能为负数 (Price cannot be negative)";
-            }
-            
-            // 10. No two purchase specs can have the same unit name
-            if (pu.unitName.trim()) {
-                if (usedNames.has(unitNameNorm)) {
-                    errors[`pu_${pu.id}_name`] = `不能存在两个完全相同的采购单位名称: ${pu.unitName.trim().toUpperCase()}`;
-                } else {
-                    usedNames.add(unitNameNorm);
-                }
-            }
-            
-            const mode = pu.conversionMode || 'FIXED';
-            if (mode === 'FIXED') {
-                // 5. FIXED mode toDisplayRatio must be > 0
-                if ((pu.toDisplayRatio ?? 0) <= 0) {
-                    errors[`pu_${pu.id}_ratio`] = "固定换算比例必须大于 0";
-                }
-                
-                // 9. No NaN, Infinity, 0 or negative conversions
-                if (isNaN(pu.toDisplayRatio ?? 0) || !isFinite(pu.toDisplayRatio ?? 0)) {
-                    errors[`pu_${pu.id}_ratio`] = "换算比例不能是无效数字";
-                }
-                if (isNaN(pu.toBaseRatio) || !isFinite(pu.toBaseRatio) || pu.toBaseRatio <= 0) {
-                    errors[`pu_${pu.id}_toBase`] = "基础换算比例不能是无效数字且必须大于0";
-                }
-                
-                // 7. When purchase unit === display unit, toDisplayRatio must be 1
-                if (editingItem.displayUnit && isPurchaseSameAsDisplay(pu.unitName, editingItem.displayUnit)) {
-                    if (pu.toDisplayRatio !== 1) {
-                        errors[`pu_${pu.id}_ratio`] = "采购与盘点单位相同时，折合盘点比例必须为 1";
-                    }
-                    const expectedBase = editingItem.displayToBaseRatio ?? 1;
-                    if (Math.abs(pu.toBaseRatio - expectedBase) > 0.0001) {
-                        errors[`pu_${pu.id}_toBase`] = `采购与盘点单位相同时，折合基础比例应为 ${expectedBase}`;
-                    }
-                } else {
-                    // 6. FIXED mode toBaseRatio must be equal to: toDisplayRatio * displayToBaseRatio
-                    const expectedBaseRatio = (pu.toDisplayRatio ?? 1) * (editingItem.displayToBaseRatio ?? 1);
-                    if (Math.abs(pu.toBaseRatio - expectedBaseRatio) > 0.01) {
-                        errors[`pu_${pu.id}_toBase`] = `换算结果不一致：折合基础应等于 [折合盘点] × [盘点比例] = ${expectedBaseRatio}`;
-                    }
-                }
-            } else {
-                // ACTUAL_WEIGHT mode
-                if (isNaN(pu.toBaseRatio) || !isFinite(pu.toBaseRatio) || pu.toBaseRatio <= 0) {
-                    errors[`pu_${pu.id}_toBase`] = "预估重量必须大于 0";
-                }
-                if (editingItem.displayUnit && isPurchaseSameAsDisplay(pu.unitName, editingItem.displayUnit)) {
-                    if (pu.toDisplayRatio !== 1) {
-                        errors[`pu_${pu.id}_ratio`] = "采购与盘点单位相同时，折合盘点比例必须为 1";
-                    }
-                }
-            }
-        });
-        
-        setValidationErrors(errors);
-        return Object.keys(errors).length === 0;
-    };
-
-    const handlePreSave = () => {
-        if (!editingItem || !editingItem.name) {
-            setValidationErrors(prev => ({ ...prev, name: "请输入物品名称 (Name required)" }));
-            return;
-        }
-        if (validateForm()) {
-            onSave();
-        } else {
-            alert("❌ 请先修正页面中的换算或单位错误后再保存。");
-        }
     };
 
     // State trackers for unit migration helper
@@ -630,7 +524,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         {/* Yellow Warning Card (Unit Migration Helper) */}
                         {baseUnit !== originalBaseUnit && (
                             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-3 shadow-xs animate-in slide-in-from-top-2 duration-150">
-                                <div className="flex gap-2 text-yellow-850">
+                                <div className="flex gap-2 text-yellow-900">
                                     <Info size={18} className="shrink-0 mt-0.5 text-yellow-600" />
                                     <div>
                                         <h5 className="font-bold text-xs text-yellow-800">⚠️ 警告：检测到库存基础单位变更</h5>
@@ -878,7 +772,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                         <div key={pu.id} className={`p-4 bg-[#F6F7FB] rounded-xl border relative space-y-3 shadow-xs transition-all duration-200 ${isErroneousSameUnit ? 'border-red-300 ring-1 ring-red-100 bg-red-50/20' : 'border-[#E5E7EB]'}`}>
                                             {/* Header Inputs Row - Fully Optimized with flex-wrap and HIG-compliant tap targets */}
                                             <div className="flex flex-col gap-2">
-                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                <div className="flex flex-col md:flex-row gap-2">
                                                     <div className="flex items-center gap-2 flex-1">
                                                         <div className="w-24 shrink-0">
                                                             <input 
@@ -939,7 +833,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                         <button
                                                             type="button"
                                                             onClick={() => updatePurchaseUnit(pu.id, 'isDefaultPurchase', !pu.isDefaultPurchase)}
-                                                            className={`flex-1 sm:flex-initial p-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1 h-[44px] px-3 ${
+                                                            className={`flex-1 md:flex-initial p-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1 h-[44px] px-3 ${
                                                                 pu.isDefaultPurchase 
                                                                     ? 'bg-[#111111] border-[#111111] text-[#FFD200]' 
                                                                     : 'bg-white border-[#E5E7EB] text-gray-400 hover:text-gray-600'
@@ -993,13 +887,13 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                             )}
 
                                             {/* Mode Selector - Stretch buttons equally on mobile */}
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-b border-gray-200/50 py-2.5 text-xs">
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-t border-b border-gray-200/50 py-2.5 text-xs">
                                                 <span className="font-bold text-gray-400">换算模式:</span>
-                                                <div className="flex gap-1.5 w-full sm:w-auto">
+                                                <div className="flex gap-1.5 w-full md:w-auto">
                                                     <button
                                                         type="button"
                                                         onClick={() => updatePurchaseUnit(pu.id, 'conversionMode', 'FIXED')}
-                                                        className={`flex-1 sm:flex-initial px-3 py-2 rounded-lg border text-[10px] font-black transition-all h-[36px] flex items-center justify-center ${
+                                                        className={`flex-1 md:flex-initial px-3 py-2 rounded-lg border text-[10px] font-black transition-all h-[36px] flex items-center justify-center ${
                                                             mode === 'FIXED'
                                                                 ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-xs'
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
@@ -1010,7 +904,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                     <button
                                                         type="button"
                                                         onClick={() => updatePurchaseUnit(pu.id, 'conversionMode', 'ACTUAL_WEIGHT')}
-                                                        className={`flex-1 sm:flex-initial px-3 py-2 rounded-lg border text-[10px] font-black transition-all h-[36px] flex items-center justify-center ${
+                                                        className={`flex-1 md:flex-initial px-3 py-2 rounded-lg border text-[10px] font-black transition-all h-[36px] flex items-center justify-center ${
                                                             mode === 'ACTUAL_WEIGHT'
                                                                 ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-xs'
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
@@ -1067,7 +961,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                             </div>
                                                         ) : (
                                                             // Full Three-tier Conversion Input - Wrapped and centered nicely for mobile
-                                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white p-3 rounded-xl border border-[#E5E7EB] text-xs">
+                                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white p-3 rounded-xl border border-[#E5E7EB] text-xs">
                                                                 <span className="font-extrabold text-gray-400 shrink-0">三级单位关系:</span>
                                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                                     <span className="font-black text-emerald-600">
@@ -1099,7 +993,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                         )
                                                     ) : (
                                                         // No Display Unit defined or display unit same as base
-                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-3 rounded-xl border border-[#E5E7EB] text-xs">
+                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 bg-white p-3 rounded-xl border border-[#E5E7EB] text-xs">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-extrabold text-gray-400">1 {pu.unitName || '包装'} =</span>
                                                                 <input 
@@ -1118,7 +1012,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                                 <span className="font-extrabold text-[#111111]">{baseUnit}</span>
                                                             </div>
                                                             
-                                                            <div className="text-left sm:text-right border-t sm:border-t-0 border-gray-100 pt-1.5 sm:pt-0 mt-1 sm:mt-0">
+                                                            <div className="text-left md:text-right border-t md:border-t-0 border-gray-100 pt-1.5 md:pt-0 mt-1 md:mt-0">
                                                                 <span className="text-[10px] text-gray-400 block font-bold">折合成本 (Base Cost)</span>
                                                                 <span className="font-black text-emerald-600 text-xs font-mono">
                                                                     RM {costPerBase.toFixed(4)} / {baseUnit}

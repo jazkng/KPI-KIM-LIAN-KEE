@@ -1,18 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
     FileText, Plus, Search, X, Save, Trash2, Calendar, Download, 
-    Sparkles, RefreshCw, Printer, AlertCircle, CheckCircle2, User, Phone, 
-    FileSignature, Coins, Receipt, HelpCircle, ArrowLeft, ArrowLeftRight, HardDrive,
-    ExternalLink, FileCheck, Loader2, ChevronDown, SlidersHorizontal
+    Sparkles, RefreshCw, Printer, User, Coins, Receipt, ArrowLeft, ArrowLeftRight, ChevronDown, SlidersHorizontal
 } from 'lucide-react';
 import { SelfIssuedVoucher, SelfVoucherItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
-
-import { numberToWords, COMPANY_INFO } from '../../utils/paymentVoucherUtils';
 
 // Preset default voucher values for quick-fill
 const QUICK_CONTENT_PRESETS = [
@@ -58,7 +54,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
         typeof window === 'undefined' ? 1 : Math.min(1, Math.max(0.45, (window.innerWidth - 24) / 595))
     );
     const [capturedImgUrl, setCapturedImgUrl] = useState<string | null>(null);
-    const [isGeneratingImg, setIsGeneratingImg] = useState(false);
+    const [, ] = useState(false);
 
     // Filter controls
     const [startDate, setStartDate] = useState<string>('');
@@ -109,7 +105,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     }[]>([]);
 
     // Starred Payee List Persistence
-    const [savedPayees, setSavedPayees] = useState<{name: string, phone: string, type: 'INDIVIDUAL' | 'AGENT' | 'DRIVER' | 'INFORMAL_VENDOR'}[]>(() => {
+    const [savedPayees, ] = useState<{name: string, phone: string, type: 'INDIVIDUAL' | 'AGENT' | 'DRIVER' | 'INFORMAL_VENDOR'}[]>(() => {
         try {
             const stored = localStorage.getItem('klk_starred_payees');
             return stored ? JSON.parse(stored) : [];
@@ -119,9 +115,8 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     });
 
     // Google Drive integration state
-    const [driveState, setDriveState] = useState<'IDLE' | 'GENERATING' | 'SHARING' | 'SUCCESS' | 'ERROR'>('IDLE');
-    const [driveToken, setDriveToken] = useState<string | null>(null);
-    const [driveError, setDriveError] = useState<string | null>(null);
+    const [, ] = useState<'IDLE' | 'GENERATING' | 'SHARING' | 'SUCCESS' | 'ERROR'>('IDLE');
+    const [, ] = useState<string | null>(null);
 
     // Initial load
     useEffect(() => {
@@ -147,108 +142,6 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
         window.addEventListener('resize', updateMobilePreviewScale);
         return () => window.removeEventListener('resize', updateMobilePreviewScale);
     }, []);
-
-    const toggleStarPayee = (name: string, phone: string, type: 'INDIVIDUAL' | 'AGENT' | 'DRIVER' | 'INFORMAL_VENDOR') => {
-        if (!name.trim()) return;
-        const index = savedPayees.findIndex(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
-        let updated = [...savedPayees];
-        if (index > -1) {
-            updated.splice(index, 1);
-        } else {
-            updated.push({ name: name.trim(), phone: phone.trim(), type });
-        }
-        setSavedPayees(updated);
-        localStorage.setItem('klk_starred_payees', JSON.stringify(updated));
-    };
-
-    const isPayeeStarred = (name: string) => {
-        if (!name) return false;
-        return savedPayees.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
-    };
-
-    const handleSaveToDrive = async (voucher: SelfIssuedVoucher) => {
-        setDriveError(null);
-        setDriveState('GENERATING');
-        
-        try {
-            // Step 1: Generate A5 PDF Blob just like download handler
-            const captureNode = document.getElementById(`a5-capture-global`);
-            if (!captureNode) {
-                throw new Error("找不到 A5 页面渲染节点，请确保凭单在预览中显示。");
-            }
-            
-            await new Promise((resolve) => setTimeout(resolve, 300));
-            
-            const canvas = await html2canvas(captureNode, {
-                scale: 2.2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: 595,
-                windowHeight: 842,
-                onclone: (clonedDoc) => {
-                    const clonedEl = clonedDoc.getElementById('a5-capture-global');
-                    const originalEl = document.getElementById('a5-capture-global');
-                    if (originalEl && clonedEl) {
-                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
-                    }
-                }
-            });
-            
-            const imgData = canvas.toDataURL('image/jpeg', 0.95);
-            const pdf = new jsPDF('p', 'mm', 'a5');
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
-            
-            const pdfBlob = pdf.output('blob');
-            const safePayee = voucher.payeeName.replace(/[\s\W]+/g, '_');
-            const fileName = `VOUCHER_${voucher.voucherNo}_${safePayee}.pdf`;
-
-            // Step 2: Create a native Shareable File object
-            const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-            setDriveState('SHARING');
-
-            // Step 3: Check if browser supports Web Share API with Files
-            const canShare = navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] });
-
-            if (canShare) {
-                // Trigger the system native share sheet!
-                await navigator.share({
-                    files: [pdfFile],
-                    title: fileName,
-                    text: `金莲记甲洞(Kim Lian Kee Kepong) - 自制凭单号: ${voucher.voucherNo}`
-                });
-                setDriveState('SUCCESS');
-                setTimeout(() => setDriveState('IDLE'), 3000);
-            } else {
-                // Fallback for Desktop/Non-supporting browsers: Download automatically
-                const downloadUrl = URL.createObjectURL(pdfBlob);
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(downloadUrl);
-
-                setDriveState('SUCCESS');
-                setDriveError("电脑端已自动下载！请直接将 PDF 文件拖拽存入您的 Google Drive。");
-                setTimeout(() => {
-                    setDriveState('IDLE');
-                    setDriveError(null);
-                }, 7000);
-            }
-        } catch (uploadErr: any) {
-            console.error(uploadErr);
-            setDriveState('ERROR');
-            setDriveError("生成凭单 PDF 失败: " + (uploadErr.message || uploadErr));
-            setTimeout(() => setDriveState('IDLE'), 4000);
-        }
-    };
 
     const loadVouchers = async () => {
         const list = await DataManager.getSelfIssuedVouchers();
@@ -558,49 +451,6 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
             alert("PDF生成错误: " + (e?.message || e?.toString() || JSON.stringify(e)));
         } finally {
             setIsExporting(null);
-        }
-    };
-
-    // Generate high-resolution image for mobile saving
-    const handleGenerateMobileImage = async (voucher: SelfIssuedVoucher) => {
-        setIsGeneratingImg(true);
-        setPreviewVoucher(voucher);
-        setCapturedImgUrl(null); // Reset
-        try {
-            const captureNode = document.getElementById(`a5-capture-global`);
-            if (!captureNode) {
-                alert("找不到导出节点，请稍候重试！");
-                return;
-            }
-
-            // Wait a tiny bit for layout stability
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            const canvas = await html2canvas(captureNode, {
-                scale: 2.5, // Even higher resolution for crisp mobile long-press image saving
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: 595,
-                windowHeight: 842,
-                onclone: (clonedDoc) => {
-                    const clonedEl = clonedDoc.getElementById('a5-capture-global');
-                    const originalEl = document.getElementById('a5-capture-global');
-                    if (originalEl && clonedEl) {
-                        applyResolvedStylesForPdf(originalEl as HTMLElement, clonedEl as HTMLElement);
-                    }
-                }
-            });
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.95);
-            setCapturedImgUrl(imgData);
-        } catch (e: any) {
-            console.error("Mobile Image Generation Error: ", e);
-            alert("生成图片错误: " + (e?.message || e?.toString() || JSON.stringify(e)));
-        } finally {
-            setIsGeneratingImg(false);
         }
     };
 
@@ -1028,92 +878,14 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
             case 'PAYMENT_VOUCHER': return { text: '极简黑 (员工薪资)', color: 'bg-slate-100 text-slate-800 border-slate-300', icon: Coins };
             case 'DELIVERY_RECEIPT': return { text: '交易绿 (运输)', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: ArrowLeftRight };
             case 'CASH_VOUCHER': return { text: '经典黄 (个人/Agent)', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: Receipt };
-            case 'PURCHASE_RECEIPT': return { text: '双色收据 (供应商未开单)', color: 'bg-green-100 text-green-850 border-green-200', icon: FileText };
+            case 'PURCHASE_RECEIPT': return { text: '双色收据 (供应商未开单)', color: 'bg-green-100 text-green-900 border-green-200', icon: FileText };
             default: return { text: '内部自制票据', color: 'bg-gray-100 text-gray-800 border-gray-200', icon: FileText };
-        }
-    };
-
-    // Style colors and properties mapper for A4 templates
-    const getStyleConfig = (style: string) => {
-        switch (style) {
-            case 'VINTAGE_GOLD':
-                return {
-                    bgClass: 'bg-[#FDFBF7]',
-                    borderClass: 'border-2 border-[#D4AF37]',
-                    textTitleClass: 'text-[#8B6508] font-serif',
-                    accentColor: '#D4AF37', // Gold 
-                    headerBg: 'bg-[#F5ECE1]',
-                    tableHeaderBg: 'bg-[#F0E2D1] text-[#6E470B]',
-                    stampText: 'KIM LIAN KEE PAID',
-                    stampColor: 'border-red-500/70 text-red-500/70',
-                    fontSans: 'font-serif',
-                };
-            case 'MODERN_DARK':
-                return {
-                    bgClass: 'bg-[#ffffff]',
-                    borderClass: 'border-2 border-slate-800',
-                    textTitleClass: 'text-slate-900 font-sans tracking-wider',
-                    accentColor: '#1E293B', // Slate gray
-                    headerBg: 'bg-slate-100',
-                    tableHeaderBg: 'bg-slate-800 text-[#ffffff]',
-                    stampText: 'APPROVED & ISSUED',
-                    stampColor: 'border-blue-600/70 text-blue-600/70',
-                    fontSans: 'font-sans',
-                };
-            case 'TRADITIONAL_CARBON':
-                return {
-                    bgClass: 'bg-[#FFF8FA]', // Carbon pink tint
-                    borderClass: 'border-2 border-dashed border-pink-400',
-                    textTitleClass: 'text-pink-800 font-mono font-bold uppercase',
-                    accentColor: '#EC4899', // Pink
-                    headerBg: 'bg-pink-50',
-                    tableHeaderBg: 'bg-pink-100 text-pink-900',
-                    stampText: 'CASH RECEIVED / PAID',
-                    stampColor: 'border-cyan-500/80 text-cyan-500/80',
-                    fontSans: 'font-mono',
-                };
-            case 'CASH_BILL_GREEN':
-                return {
-                    bgClass: 'bg-[#FCFFF9]',
-                    borderClass: 'border-2 border-[#094F2B]',
-                    textTitleClass: 'text-[#094F2B] font-sans font-bold',
-                    accentColor: '#094F2B', // Forest green
-                    headerBg: 'bg-[#8BC43F]/20',
-                    tableHeaderBg: 'bg-[#094F2B] text-[#ffffff]',
-                    stampText: 'VERIFIED PAID',
-                    stampColor: 'border-[#094F2B]/65 text-[#094F2B]/65',
-                    fontSans: 'font-sans',
-                };
-            case 'EMERALD_CLEAN':
-                return {
-                    bgClass: 'bg-[#F4FAF6]',
-                    borderClass: 'border-2 border-emerald-600',
-                    textTitleClass: 'text-emerald-900 font-sans font-bold',
-                    accentColor: '#059669', // Emerald
-                    headerBg: 'bg-emerald-50',
-                    tableHeaderBg: 'bg-emerald-700 text-[#ffffff]',
-                    stampText: 'KIM LIAN KEE PAID',
-                    stampColor: 'border-emerald-500 text-emerald-500',
-                    fontSans: 'font-sans',
-                };
-            default:
-                return {
-                    bgClass: 'bg-[#ffffff]',
-                    borderClass: 'border border-gray-300',
-                    textTitleClass: 'text-gray-900 font-sans',
-                    accentColor: '#4b5563',
-                    headerBg: 'bg-gray-100',
-                    tableHeaderBg: 'bg-gray-100 text-gray-800',
-                    stampText: 'PROCESSED',
-                    stampColor: 'border-red-400 text-red-400',
-                    fontSans: 'font-sans',
-                };
         }
     };
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* Compact mobile-first header */}
                 <header className="shrink-0 bg-[#FFFFFF] border-b border-[#E5E7EB] safe-area-top">
@@ -1132,7 +904,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                                 <h1 className="text-[16px] md:text-xl font-black tracking-tight text-[#111111] truncate">自制账单</h1>
-                                <span className="px-2 py-0.5 rounded-full bg-[#FFF8D6] text-[#7A6100] text-[9px] font-extrabold whitespace-nowrap hidden sm:inline-block">A5 凭单</span>
+                                <span className="px-2 py-0.5 rounded-full bg-[#FFF8D6] text-[#7A6100] text-[9px] font-extrabold whitespace-nowrap hidden md:inline-block">A5 凭单</span>
                             </div>
                             <p className="text-[10px] md:text-[11px] text-[#6B7280] truncate">补录无原始单据的支出与对账记录</p>
                         </div>
@@ -1199,7 +971,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 setEndDate('');
                                                 setSelectedCompanyFilter('ALL');
                                             }}
-                                            className="text-[9px] font-extrabold text-red-605 text-red-650 hover:underline"
+                                            className="text-[9px] font-extrabold text-red-600 text-red-700 hover:underline"
                                         >
                                             重置 Reset
                                         </button>
@@ -1217,7 +989,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                     />
                                 </div>
                                 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[10px]">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
                                     {/* Company selector */}
                                     <div className="flex flex-col gap-1">
                                         <span className="font-bold text-[#6B7280]">公司</span>
@@ -1287,7 +1059,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <button
                                                     type="button"
                                                     onClick={handleOpenBatchPrintModal}
-                                                    className="bg-[#1A1A1A] hover:bg-black text-[#FFD700] px-2.5 py-1 rounded-lg font-extrabold text-[9px] active:scale-95 transition-all flex items-center gap-1"
+                                                    className="bg-[#111111] hover:bg-black text-[#FFD200] px-2.5 py-1 rounded-lg font-extrabold text-[9px] active:scale-95 transition-all flex items-center gap-1"
                                                 >
                                                     <Printer size={10}/>
                                                     <span>批量打印 ({selectedVoucherIds.length})</span>
@@ -1473,7 +1245,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </h4>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl border border-gray-200 gap-1 text-[10px]">
+                                        <div className="hidden md:flex bg-gray-100 p-1 rounded-xl border border-gray-200 gap-1 text-[10px]">
                                             <span className="px-2 py-0.5 bg-[#ffffff] rounded-lg shadow-xs font-bold text-slate-800">
                                                 样式Style: {previewVoucher.templateStyle}
                                             </span>
@@ -1516,7 +1288,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             <div className="flex-grow flex flex-col items-center justify-center text-center p-8 text-[#9ca3af]">
                                 <div className="p-6 bg-slate-50 border-2 border-dashed border-gray-200 rounded-[2rem] max-w-sm flex flex-col items-center shadow-inner">
                                     <span className="text-4xl animate-bounce mb-3">📄</span>
-                                    <h4 className="font-black text-[#1A1A1A] text-sm">选择左侧凭单，在此即时看单</h4>
+                                    <h4 className="font-black text-[#111111] text-sm">选择左侧凭单，在此即时看单</h4>
                                     <p className="text-[11px] text-[#9ca3af] mt-2 leading-relaxed">
                                         预览器将使用真实的 A5 网格重配比例。支持**仿古金殿风**、**现代硬朗风**、以及**复写票据风**等多套模具，点击即可转换为正规 A5 PDF，完美符合备查凭证。
                                     </p>
@@ -1588,20 +1360,20 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                 {/* BULK SMART GENERATOR OVERLAY */}
                 {isBulkGeneratorOpen && (
-                    <div className="fixed inset-0 bg-black/75 z-[210] flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-md animate-in fade-in duration-150" onClick={() => setIsBulkGeneratorOpen(false)}>
+                    <div className="fixed inset-0 bg-black/75 z-[210] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-md animate-in fade-in duration-150" onClick={() => setIsBulkGeneratorOpen(false)}>
                         <div 
-                            className="bg-[#ffffff] w-full sm:max-w-xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[100vh] sm:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+                            className="bg-[#ffffff] w-full md:max-w-xl md:rounded-3xl shadow-2xl flex flex-col max-h-[100vh] md:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom md:zoom-in-95 duration-200"
                             onClick={e => e.stopPropagation()}
                             style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
                         >
                             {/* Modal Header */}
-                            <div className="bg-[#1A1A1A] p-4 text-[#ffffff] flex justify-between items-center border-b-4 border-amber-400 shrink-0 safe-area-top">
+                            <div className="bg-[#111111] p-4 text-[#ffffff] flex justify-between items-center border-b-4 border-amber-400 shrink-0 safe-area-top">
                                 <div className="flex items-center gap-2 text-left">
                                     <div className="bg-amber-400 text-black p-1.5 rounded-lg">
                                         <Sparkles size={20} className="animate-pulse" />
                                     </div>
                                     <div>
-                                        <h3 className="font-serif font-black text-sm sm:text-base tracking-wide text-[#ffffff]">⚡ 智能对账补充凭单批量快速生成器</h3>
+                                        <h3 className="font-serif font-black text-sm md:text-base tracking-wide text-[#ffffff]">⚡ 智能对账补充凭单批量快速生成器</h3>
                                         <p className="text-[10px] text-[#9ca3af]">Bulk Self-Issued Voucher Smart Generator</p>
                                     </div>
                                 </div>
@@ -1625,7 +1397,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             onClick={() => setBulkGenDateMode('AUTO')}
                                             className={`py-2 rounded-lg font-bold transition-all text-center text-xs active:scale-95 ${
                                                 bulkGenDateMode === 'AUTO'
-                                                ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm'
+                                                ? 'bg-[#111111] text-[#FFD200] shadow-sm'
                                                 : 'text-[#6b7280] hover:text-gray-800 hover:bg-gray-50'
                                             }`}
                                         >
@@ -1636,7 +1408,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                             onClick={() => setBulkGenDateMode('MANUAL')}
                                             className={`py-2 rounded-lg font-bold transition-all text-center text-xs active:scale-95 ${
                                                 bulkGenDateMode === 'MANUAL'
-                                                ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm'
+                                                ? 'bg-[#111111] text-[#FFD200] shadow-sm'
                                                 : 'text-[#6b7280] hover:text-gray-800 hover:bg-gray-50'
                                             }`}
                                         >
@@ -1663,7 +1435,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <button 
                                                     type="button" 
                                                     onClick={() => setBulkGenCount(prev => Math.max(1, prev - 1))}
-                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
+                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-200 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
                                                 >
                                                     -
                                                 </button>
@@ -1678,7 +1450,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                 <button 
                                                     type="button" 
                                                     onClick={() => setBulkGenCount(prev => Math.min(31, prev + 1))}
-                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-150 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
+                                                    className="w-8 h-8 rounded-lg bg-[#ffffff] shadow-xs border border-gray-200 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 min-w-[32px] min-h-[32px]"
                                                 >
                                                     +
                                                 </button>
@@ -1961,7 +1733,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         </label>
 
                                         {bulkGenEnableFluctuation && (
-                                            <div className="flex items-center gap-3 bg-[#ffffff] p-2 rounded-xl border border-gray-150 animate-in slide-in-from-top-1">
+                                            <div className="flex items-center gap-3 bg-[#ffffff] p-2 rounded-xl border border-gray-200 animate-in slide-in-from-top-1">
                                                 <span className="text-[10px] font-bold text-[#6b7280] shrink-0">波动限度 Range:</span>
                                                 <input 
                                                     type="range" 
@@ -2001,7 +1773,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                             {bulkPreviewItems.map((item, index) => (
-                                                <div key={item.id} className="bg-[#ffffff] p-3 rounded-xl border border-gray-200 flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between text-xs shadow-xs">
+                                                <div key={item.id} className="bg-[#ffffff] p-3 rounded-xl border border-gray-200 flex flex-col md:flex-row gap-2.5 items-start md:items-center justify-between text-xs shadow-xs">
                                                     <div className="flex items-center gap-1.5 shrink-0">
                                                         <span className="font-mono text-[10px] text-[#9ca3af] font-black w-5 text-center">#{index + 1}</span>
                                                         <input 
@@ -2017,7 +1789,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                         />
                                                     </div>
 
-                                                    <div className="flex items-center gap-2 flex-grow w-full sm:w-auto">
+                                                    <div className="flex items-center gap-2 flex-grow w-full md:w-auto">
                                                         {/* Qty edit */}
                                                         <div className="flex items-center gap-1 w-20 shrink-0">
                                                             <span className="text-[10px] text-[#9ca3af] font-bold shrink-0">数:</span>
@@ -2060,7 +1832,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                                     </div>
 
                                                     {/* Amount & Delete */}
-                                                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t sm:border-t-0 border-gray-100 pt-2 sm:pt-0 shrink-0">
+                                                    <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto border-t md:border-t-0 border-gray-100 pt-2 md:pt-0 shrink-0">
                                                         <div className="text-right">
                                                             <span className="text-[9px] text-[#9ca3af] font-bold block leading-none">总计 Amount</span>
                                                             <span className="font-mono text-xs font-black text-amber-600 leading-normal">
@@ -2138,7 +1910,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             </div>
 
                             {/* Modal Footer */}
-                            <div className="p-4 border-t border-gray-150 bg-gray-50 flex gap-3 shrink-0">
+                            <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3 shrink-0">
                                 <button 
                                     type="button" 
                                     onClick={() => setIsBulkGeneratorOpen(false)}
@@ -2150,7 +1922,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                     type="button" 
                                     onClick={handleBulkGenerate}
                                     disabled={isSaving}
-                                    className="flex-1 py-3 bg-[#1A1A1A] hover:bg-black text-[#FFD700] font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 min-h-[44px]"
+                                    className="flex-1 py-3 bg-[#111111] hover:bg-black text-[#FFD200] font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 min-h-[44px]"
                                 >
                                     {isSaving ? (
                                         <>
@@ -2330,7 +2102,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         };
                                         return (
                                             <div key={v.id} className="batch-print-page bg-[#ffffff] p-6 shadow-md rounded-2xl border border-stone-200 relative max-w-[595px] mx-auto overflow-hidden">
-                                                <div className="flex justify-between items-center border-b pb-2 mb-4 text-[10px] text-gray-450 font-mono print:hidden">
+                                                <div className="flex justify-between items-center border-b pb-2 mb-4 text-[10px] text-gray-500 font-mono print:hidden">
                                                     <span>批量对账打印 (Batch Print Proof)</span>
                                                     <span>单号 Ref: {v.voucherNo}</span>
                                                 </div>
@@ -2354,7 +2126,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                     >
                         {/* Drawer Header */}
                         <div 
-                            className="bg-[#1A1A1A] px-4 py-3 flex justify-between items-center text-[#ffffff] shrink-0 border-b border-[#FFD200]" 
+                            className="bg-[#111111] px-4 py-3 flex justify-between items-center text-[#ffffff] shrink-0 border-b border-[#FFD200]" 
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="min-w-0">
@@ -2397,7 +2169,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
                         {/* Bottom Action Footer Sheet (Apple HIG Compliant, >=44px controls) */}
                         <div 
-                            className="bg-[#1A1A1A] px-4 pt-3 border-t border-white/10 space-y-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]" 
+                            className="bg-[#111111] px-4 pt-3 border-t border-white/10 space-y-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]" 
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="flex justify-between items-center text-xs font-mono px-1">
@@ -2441,7 +2213,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                         onClick={() => setCapturedImgUrl(null)}
                     >
                         <div 
-                            className="bg-[#ffffff] rounded-3xl p-5 md:p-6 shadow-2xl max-w-sm sm:max-w-md w-full flex flex-col items-center space-y-4 animate-in slide-in-from-bottom"
+                            className="bg-[#ffffff] rounded-3xl p-5 md:p-6 shadow-2xl max-w-sm md:max-w-md w-full flex flex-col items-center space-y-4 animate-in slide-in-from-bottom"
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="flex justify-between items-center w-full pb-2 border-b border-gray-100">
@@ -2462,7 +2234,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 <span className="text-[11px] block font-black text-amber-900 mb-1">
                                     💡 手机端保存/分享说明:
                                 </span>
-                                <p className="text-[10px] text-amber-850 font-medium leading-relaxed">
+                                <p className="text-[10px] text-amber-900 font-medium leading-relaxed">
                                     我们已将凭单转为高清 A5 尺寸图像。请在手机屏幕上<strong>【长按下方图片】</strong>即可：
                                     <strong className="text-red-700 font-extrabold block mt-1">
                                         👉 选择【发送给朋友】(直接微信/WhatsApp发送) <br/>
@@ -2487,7 +2259,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                             
                             <button
                                 onClick={() => setCapturedImgUrl(null)}
-                                className="w-full py-3 bg-[#1A1A1A] hover:bg-black text-[#ffffff] font-black text-xs rounded-xl transition-all active:scale-95"
+                                className="w-full py-3 bg-[#111111] hover:bg-black text-[#ffffff] font-black text-xs rounded-xl transition-all active:scale-95"
                             >
                                 返回预览
                             </button>
@@ -2520,14 +2292,14 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                 )}
 
                                 <div className="bg-[#ffffff] rounded-2xl border border-[#E5E7EB] shadow-sm p-4 space-y-4">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">收款人 / Payee *</label>
-                                            <input value={editingVoucher.payeeName || ''} onChange={e => setEditingVoucher({...editingVoucher, payeeName:e.target.value})} placeholder="司机、员工或临时供应商名称" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm font-semibold outline-none focus:border-[#FFD200] focus:bg-[#ffffff]"/>
+                                            <input value={editingVoucher.payeeName || ''} onChange={e => setEditingVoucher({...editingVoucher, payeeName:e.target.value})} placeholder="司机、员工或临时供应商名称" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-sm font-semibold outline-none focus:border-[#FFD200] focus:bg-[#ffffff]"/>
                                         </div>
                                         <div>
                                             <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">日期 / Date</label>
-                                            <input type="date" value={editingVoucher.date || ''} onChange={e => { const date=e.target.value; setEditingVoucher({...editingVoucher,date,voucherNo:generateSequenceNoForDate(date)}); }} className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm font-semibold outline-none focus:border-[#FFD200]"/>
+                                            <input type="date" value={editingVoucher.date || ''} onChange={e => { const date=e.target.value; setEditingVoucher({...editingVoucher,date,voucherNo:generateSequenceNoForDate(date)}); }} className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-sm font-semibold outline-none focus:border-[#FFD200]"/>
                                         </div>
                                     </div>
 
@@ -2540,7 +2312,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         <div className="space-y-3">
                                             <div>
                                                 <label className="text-[11px] font-bold text-[#4b5563] block mb-1.5">支出说明 / Purpose *</label>
-                                                <input value={voucherItems[0]?.description || ''} onChange={e => handleItemChange(0,'description',e.target.value)} placeholder="例如：甲洞至半山芭送货费" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-sm outline-none focus:border-[#FFD200]"/>
+                                                <input value={voucherItems[0]?.description || ''} onChange={e => handleItemChange(0,'description',e.target.value)} placeholder="例如：甲洞至半山芭送货费" className="w-full h-12 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-sm outline-none focus:border-[#FFD200]"/>
                                                 <div className="flex gap-1.5 overflow-x-auto mt-2 pb-1">
                                                     {QUICK_CONTENT_PRESETS.map((preset,idx)=><button key={idx} type="button" onClick={()=>handleQuickPresetFill(0,preset)} className="shrink-0 px-3 py-1.5 rounded-lg bg-[#FFF8D6] text-[#5F4B00] text-[10px] font-bold border border-[#FFD200]/40">{preset.description.split('/')[0].trim()}</button>)}
                                                 </div>
@@ -2557,7 +2329,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         <div className="space-y-3">
                                             {voucherItems.map((item,idx)=><div key={idx} className="rounded-2xl border border-[#E5E7EB] p-3 bg-[#ffffff] space-y-3">
                                                 <div className="flex justify-between items-center"><span className="text-xs font-black">项目 {idx+1}</span><button disabled={voucherItems.length<=1} onClick={()=>handleRemoveItemRow(idx)} className="w-11 h-11 rounded-lg bg-red-50 text-red-500 flex items-center justify-center disabled:opacity-30"><Trash2 size={14}/></button></div>
-                                                <input value={item.description} onChange={e=>handleItemChange(idx,'description',e.target.value)} placeholder="项目说明" className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs outline-none focus:border-[#FFD200]"/>
+                                                <input value={item.description} onChange={e=>handleItemChange(idx,'description',e.target.value)} placeholder="项目说明" className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs outline-none focus:border-[#FFD200]"/>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <input type="number" value={item.qty} onChange={e=>handleItemChange(idx,'qty',e.target.value)} placeholder="数量" className="h-11 px-2 rounded-xl border border-[#E5E7EB] text-xs text-center"/>
                                                     <input value={item.unit || ''} onChange={e=>handleItemChange(idx,'unit',e.target.value)} placeholder="单位" className="h-11 px-2 rounded-xl border border-[#E5E7EB] text-xs text-center"/>
@@ -2580,14 +2352,14 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                                         <span className="flex items-center gap-2 text-xs font-black text-[#111111]"><SlidersHorizontal size={15}/> 更多资料与财务设置</span>
                                         <ChevronDown size={17} className={`transition-transform ${showAdvancedFields?'rotate-180':''}`}/>
                                     </button>
-                                    {showAdvancedFields && <div className="p-4 pt-0 border-t border-[#E5E7EB] grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单类型</label><select value={editingVoucher.voucherType || 'PURCHASE_RECEIPT'} onChange={e=>{const vt=e.target.value as any;setEditingVoucher({...editingVoucher,voucherType:vt,voucherNo:generateSequenceNoForDate(editingVoucher.date || new Date().toISOString().split('T')[0],vt)});}} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-bold"><option value="PURCHASE_RECEIPT">临时采购</option><option value="DELIVERY_RECEIPT">司机及运输费</option><option value="PAYMENT_VOUCHER">员工或个人代付</option><option value="CASH_VOUCHER">一般现金支出</option><option value="CASH_BILL">自开收入收据</option></select></div>
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">付款方式</label><select value={editingVoucher.paymentMethod || 'CASH'} onChange={e=>setEditingVoucher({...editingVoucher,paymentMethod:e.target.value as any})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-bold"><option value="CASH">现金</option><option value="ONLINE_TRANSFER">银行转账</option></select></div>
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">联系电话 / 车牌号</label><input value={editingVoucher.payeePhone || ''} onChange={e=>setEditingVoucher({...editingVoucher,payeePhone:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单编号</label><input value={editingVoucher.voucherNo || ''} onChange={e=>setEditingVoucher({...editingVoucher,voucherNo:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-mono font-bold"/></div>
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">制单人</label><input value={editingVoucher.preparedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,preparedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
-                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">批准人</label><input value={editingVoucher.approvedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,approvedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs"/></div>
-                                        <div className="sm:col-span-2"><label className="text-[10px] font-bold text-[#6b7280] block mb-1">备注</label><textarea rows={2} value={editingVoucher.notes || ''} onChange={e=>setEditingVoucher({...editingVoucher,notes:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] text-xs" placeholder="仅填写必要的内部说明"/></div>
+                                    {showAdvancedFields && <div className="p-4 pt-0 border-t border-[#E5E7EB] grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单类型</label><select value={editingVoucher.voucherType || 'PURCHASE_RECEIPT'} onChange={e=>{const vt=e.target.value as any;setEditingVoucher({...editingVoucher,voucherType:vt,voucherNo:generateSequenceNoForDate(editingVoucher.date || new Date().toISOString().split('T')[0],vt)});}} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs font-bold"><option value="PURCHASE_RECEIPT">临时采购</option><option value="DELIVERY_RECEIPT">司机及运输费</option><option value="PAYMENT_VOUCHER">员工或个人代付</option><option value="CASH_VOUCHER">一般现金支出</option><option value="CASH_BILL">自开收入收据</option></select></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">付款方式</label><select value={editingVoucher.paymentMethod || 'CASH'} onChange={e=>setEditingVoucher({...editingVoucher,paymentMethod:e.target.value as any})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs font-bold"><option value="CASH">现金</option><option value="ONLINE_TRANSFER">银行转账</option></select></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">联系电话 / 车牌号</label><input value={editingVoucher.payeePhone || ''} onChange={e=>setEditingVoucher({...editingVoucher,payeePhone:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">凭单编号</label><input value={editingVoucher.voucherNo || ''} onChange={e=>setEditingVoucher({...editingVoucher,voucherNo:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs font-mono font-bold"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">制单人</label><input value={editingVoucher.preparedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,preparedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs"/></div>
+                                        <div><label className="text-[10px] font-bold text-[#6b7280] block mb-1">批准人</label><input value={editingVoucher.approvedBy || ''} onChange={e=>setEditingVoucher({...editingVoucher,approvedBy:e.target.value})} className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs"/></div>
+                                        <div className="md:col-span-2"><label className="text-[10px] font-bold text-[#6b7280] block mb-1">备注</label><textarea rows={2} value={editingVoucher.notes || ''} onChange={e=>setEditingVoucher({...editingVoucher,notes:e.target.value})} className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] text-xs" placeholder="仅填写必要的内部说明"/></div>
                                     </div>}
                                 </div>
                             </div>

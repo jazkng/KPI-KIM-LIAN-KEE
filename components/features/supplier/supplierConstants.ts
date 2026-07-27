@@ -64,7 +64,7 @@ export const CATEGORY_MAP: Record<string, string> = {
     'GAS': 'FUEL', 'FUEL': 'FUEL', 'CHARCOAL': 'FUEL', 'OIL': 'FUEL', 'DIESEL': 'FUEL', 'PETROL': 'FUEL'
 };
 
-export const SUP_INPUT_STYLE = "w-full p-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-bold text-[#1A1A1A] outline-none focus:bg-white focus:border-[#FFD700] focus:ring-4 focus:ring-[#FFD700]/10 transition-all placeholder:font-normal placeholder:text-gray-400";
+export const SUP_INPUT_STYLE = "w-full p-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-bold text-[#111111] outline-none focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all placeholder:font-normal placeholder:text-gray-400";
 export const SUP_LABEL_STYLE = "text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 block ml-1";
 
 export interface SupplierReceivedItem extends PurchaseOrderItem {

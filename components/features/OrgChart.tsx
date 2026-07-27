@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { X, UserCircle2, Building2, Medal, ZoomIn, ZoomOut, Maximize2, Download, ArrowLeft } from 'lucide-react';
+import { UserCircle2, Building2, Medal, ZoomIn, ZoomOut, Maximize2, Download, ArrowLeft } from 'lucide-react';
 import { Employee, OrgLevel } from '../../types';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { DataManager } from '../../utils/dataManager';

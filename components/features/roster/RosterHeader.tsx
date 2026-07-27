@@ -1,8 +1,7 @@
 import React from 'react';
 import { 
-    Calendar, Users, Clock, SlidersHorizontal, 
-    Save, Send, RefreshCw, Download, Settings,
-    FileSpreadsheet, ToggleLeft, ToggleRight, CheckSquare
+    Calendar, Clock, SlidersHorizontal, 
+    Save, Send, RefreshCw, Download, ToggleLeft, ToggleRight, CheckSquare
 } from 'lucide-react';
 
 interface RosterHeaderProps {

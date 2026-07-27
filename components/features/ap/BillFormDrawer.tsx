@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { X, Link as LinkIcon, Clipboard, Loader2, Save, Trash2, Tag, ExternalLink, MessageSquare, Layers, Scissors, FileText, DollarSign, User } from 'lucide-react';
+import { X, Link as LinkIcon, Clipboard, Loader2, Save, Trash2, Tag, ExternalLink, MessageSquare, Layers, Scissors, FileText, DollarSign } from 'lucide-react';
 import { ExpenseItem, Supplier, Employee, MarketingSubCategory, AdChannel, MARKETING_SUBCAT_LABELS, MARKETING_SUBCAT_EMOJIS, AD_CHANNEL_LABELS, AD_CHANNEL_EMOJIS, BeverageSubCategory, BEVERAGE_SUBCAT_LABELS, BEVERAGE_SUBCAT_EMOJIS, SeafoodSubCategory, SEAFOOD_SUBCAT_LABELS, SEAFOOD_SUBCAT_EMOJIS } from '../../../types';
-import { ACCOUNTING_CATEGORIES, FLAT_CATEGORIES, getGoogleDriveEmbedUrl, getParticularsOptions } from './apConstants';
+import { ACCOUNTING_CATEGORIES, getGoogleDriveEmbedUrl, getParticularsOptions } from './apConstants';
 
 interface BillFormDrawerProps {
     isOpen: boolean;
@@ -95,7 +95,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                 <div className="md:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 -mt-1 sticky top-0"></div>
 
                 <div className="flex justify-between items-center mb-6 pb-2 border-b border-gray-100">
-                    <h3 className="font-serif font-black text-lg md:text-xl text-[#1A1A1A] flex items-center gap-2">
+                    <h3 className="font-serif font-black text-lg md:text-xl text-[#111111] flex items-center gap-2">
                         {editingBill.id ? '📝 编辑应付账款' : '➕ 录入全新账单'}
                         {hasPreview && <span className="bg-emerald-100 text-emerald-800 text-[9px] px-2 py-0.5 rounded-full font-serif font-bold animate-pulse">📄 已关联对账凭单</span>}
                     </h3>
@@ -124,7 +124,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             </label>
                             <input 
                                 list="suppliers_list" 
-                                className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-[#FFD700]" 
+                                className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-[#FFD200]" 
                                 value={editingBill.company || ''} 
                                 onChange={e => setEditingBill(prev => ({ ...prev, company: e.target.value }))} 
                                 placeholder="Type name..." 
@@ -181,7 +181,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             </label>
                             <input
                                 type="text"
-                                className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-[#FFD700]"
+                                className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-[#FFD200]"
                                 value={editingBill.invoiceRef || ''}
                                 onChange={e => setEditingBill(prev => ({ ...prev, invoiceRef: e.target.value }))}
                                 placeholder="例如: INV-2026-0451"
@@ -196,7 +196,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                 </label>
                                 <input 
                                     type="number" 
-                                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none focus:bg-white focus:ring-2 focus:ring-[#FFD700]" 
+                                    className="w-full p-3 bg-gray-50 rounded-xl font-black text-lg outline-none focus:bg-white focus:ring-2 focus:ring-[#FFD200]" 
                                     value={editingBill.totalBillAmount || ''} 
                                     onChange={e => setEditingBill(prev => ({...prev, totalBillAmount: parseFloat(e.target.value) || 0}))} 
                                     placeholder="0.00" 
@@ -297,7 +297,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                     <Layers size={12}/> Category (会计科目 - 必选)
                                 </label>
                                 <select
-                                    className="w-full p-3 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD700] text-[#1A1A1A]"
+                                    className="w-full p-3 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200] text-[#111111]"
                                     value={editingBill.category || ''}
                                     onChange={e => {
                                         const newCat = e.target.value;
@@ -354,7 +354,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                                     particulars: autoParticulars || prev.particulars
                                                 }));
                                             }}
-                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#1A1A1A]"
+                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#111111]"
                                         >
                                             <option value="">— 请选择水吧细分 —</option>
                                             {(Object.keys(BEVERAGE_SUBCAT_LABELS) as BeverageSubCategory[]).map(k => (
@@ -393,7 +393,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                                     particulars: autoParticulars || prev.particulars
                                                 }));
                                             }}
-                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#1A1A1A]"
+                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#111111]"
                                         >
                                             <option value="">— 请选择海鲜细分 —</option>
                                             {(Object.keys(SEAFOOD_SUBCAT_LABELS) as SeafoodSubCategory[]).map(k => (
@@ -425,7 +425,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                                     adChannel: sub === 'AD_OUTPUT' ? prev.adChannel : undefined
                                                 }));
                                             }}
-                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#1A1A1A]"
+                                            className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#111111]"
                                         >
                                             <option value="">— 请选择营销类型 —</option>
                                             {(Object.keys(MARKETING_SUBCAT_LABELS) as MarketingSubCategory[]).map(k => (
@@ -442,7 +442,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                             <select
                                                 value={editingBill.adChannel || ''}
                                                 onChange={e => setEditingBill(prev => ({ ...prev, adChannel: (e.target.value as AdChannel) || undefined }))}
-                                                className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#1A1A1A]"
+                                                className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 text-[#111111]"
                                             >
                                                 <option value="">— 请选择渠道 —</option>
                                                 {(Object.keys(AD_CHANNEL_LABELS) as AdChannel[]).map(k => (
@@ -576,7 +576,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                             <button 
                                                 type="button" 
                                                 onClick={() => setEditingBill(prev => ({...prev, paymentMethod: 'BANK_TRANSFER'}))} 
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border ${editingBill.paymentMethod === 'BANK_TRANSFER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-orange-200 hover:bg-orange-50'}`}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border ${editingBill.paymentMethod === 'BANK_TRANSFER' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-orange-200 hover:bg-orange-50'}`}
                                             >
                                                 🏦 Bank 转账
                                             </button>
@@ -620,7 +620,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                                     id="form_generate_pv"
                                                     checked={generatePV}
                                                     onChange={e => setGeneratePV(e.target.checked)}
-                                                    className="w-4 h-4 text-amber-600 border-amber-350 rounded focus:ring-amber-500 cursor-pointer mt-0.5"
+                                                    className="w-4 h-4 text-amber-600 border-amber-400 rounded focus:ring-amber-500 cursor-pointer mt-0.5"
                                                 />
                                                 <label htmlFor="form_generate_pv" className="text-xs font-black text-amber-950 cursor-pointer flex flex-col">
                                                     <span>同时自动生成付款核销凭单 (Generate PV)</span>
@@ -657,7 +657,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                         </label>
                                         <input 
                                             type="number" 
-                                            className="w-full p-2.5 bg-white border border-orange-250 rounded-xl text-xs font-black text-orange-950 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                                            className="w-full p-2.5 bg-white border border-orange-300 rounded-xl text-xs font-black text-orange-950 focus:outline-none focus:ring-2 focus:ring-orange-200"
                                             value={editingBill.amount || ''} 
                                             onChange={e => setEditingBill(prev => ({...prev, amount: parseFloat(e.target.value) || 0}))} 
                                             placeholder="输入已支付的部分金额"
@@ -669,7 +669,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                             <button 
                                                 type="button" 
                                                 onClick={() => setEditingBill(prev => ({...prev, paymentMethod: 'BANK_TRANSFER'}))} 
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border ${editingBill.paymentMethod === 'BANK_TRANSFER' ? 'bg-[#1A1A1A] text-[#FFD700] border-[#1A1A1A] shadow-md' : 'bg-white text-gray-500 border-orange-200 hover:bg-orange-50'}`}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border ${editingBill.paymentMethod === 'BANK_TRANSFER' ? 'bg-[#111111] text-[#FFD200] border-[#111111] shadow-md' : 'bg-white text-gray-500 border-orange-200 hover:bg-orange-50'}`}
                                             >
                                                 🏦 Bank 转账
                                             </button>
@@ -720,7 +720,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             <button 
                                 onClick={onSave} 
                                 disabled={isSaving} 
-                                className="flex-grow bg-[#1A1A1A] text-[#FFD700] py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2"
+                                className="flex-grow bg-[#111111] text-[#FFD200] py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2"
                             >
                                 {isSaving ? <Loader2 size={20} className="animate-spin"/> : <Save size={20}/>} 保存账单
                             </button>
@@ -769,7 +769,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                         <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                             <Trash2 size={32}/>
                         </div>
-                        <h3 className="font-black text-xl text-[#1A1A1A] mb-2">确认删除此账单?</h3>
+                        <h3 className="font-black text-xl text-[#111111] mb-2">确认删除此账单?</h3>
                         <p className="text-xs text-gray-500 font-bold mb-6">此操作无法撤销。如果属于结算单条目，将会通过事务安全剔除。</p>
                         <div className="grid grid-cols-2 gap-3">
                             <button onClick={() => setShowDeleteConfirm(false)} className="py-3 bg-gray-100 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-200">

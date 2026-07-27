@@ -1,7 +1,7 @@
 import React from 'react';
 import { Package, X, Search, Box, Trash2, Link as LinkIcon } from 'lucide-react';
 import { CatalogItem, StockItem, UomOption } from '../../../types';
-import { SUP_INPUT_STYLE, SUP_LABEL_STYLE, DEFAULT_UOMS } from './supplierConstants';
+import { SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
 
 interface ProductEditModalProps {
     productForm: Partial<CatalogItem>;
@@ -91,10 +91,10 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     }, [productForm, linkedStock, purchaseOptions]);
 
     return (
-        <div className="fixed inset-0 bg-[#1A1A1A]/80 z-[160] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-[#111111]/80 z-[160] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-md rounded-[2rem] p-6 md:p-8 shadow-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-black flex items-center gap-2 text-[#1A1A1A]">
+                    <h3 className="text-xl font-black flex items-center gap-2 text-[#111111]">
                         <div className="p-2 bg-gray-100 rounded-xl text-gray-700"><Package size={20}/></div>
                         {productForm.id ? '编辑商品' : '新增供应商品'}
                     </h3>
@@ -196,7 +196,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                     </div>
 
                     {productForm.pricingMode === 'WEIGHT_BASED' ? (
-                        <div className="bg-[#F5F7FA] p-4 rounded-2xl border border-gray-200/50 space-y-4">
+                        <div className="bg-[#F6F7FB] p-4 rounded-2xl border border-gray-200/50 space-y-4">
                             <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
                                 ⚖️ 称重计价配置 (Weight Based Config)
                             </h4>
@@ -353,7 +353,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 
                     {linkedStock && (
                         productForm.pricingMode === 'WEIGHT_BASED' ? (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5 font-bold text-[#1A1A1A]">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5 font-bold text-[#111111]">
                                 <p className="text-[10px] uppercase text-amber-800 tracking-wider">称重商品成本与库存逻辑 (Weight-Based Logic)</p>
                                 <div className="flex justify-between">
                                     <span className="text-gray-500">下单单位 (Order Unit):</span>
@@ -368,14 +368,14 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                     <span>RM {(productForm.pricePerBillingUnit || 0).toFixed(2)} / {productForm.billingUnit || 'kg'}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-amber-200/50 pt-1.5 mt-1.5">
-                                    <span className="text-gray-650">预计基础成本 (Estimated Base Cost):</span>
+                                    <span className="text-gray-700">预计基础成本 (Estimated Base Cost):</span>
                                     <span className="text-amber-950 font-black">
                                         RM {(productForm.pricePerBillingUnit || 0).toFixed(4)} / {linkedStock.baseUnit}
                                     </span>
                                 </div>
                             </div>
                         ) : (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5 font-bold text-[#1A1A1A]">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5 font-bold text-[#111111]">
                                 <p className="text-[10px] uppercase text-amber-800 tracking-wider">换算与成本预览 (Unit Conversion & Cost Preview)</p>
                                 <div className="flex justify-between">
                                     <span className="text-gray-500">配对采购单位:</span>
@@ -386,7 +386,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                     <span>RM {normalizedForm.pricePerPurchaseUnit.toFixed(2)} / {normalizedForm.purchaseUnitName}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-amber-200/50 pt-1.5 mt-1.5">
-                                    <span className="text-gray-650">单只/克成本 (Cost Per Base Unit):</span>
+                                    <span className="text-gray-700">单只/克成本 (Cost Per Base Unit):</span>
                                     <span className="text-amber-950 font-black">
                                         ≈ RM {normalizedForm.costPerBaseUnit.toFixed(4)} / {normalizedForm.baseUnit}
                                     </span>
@@ -398,21 +398,21 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
                         <div className="flex justify-between items-center mb-3">
                             <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">多单位换算 (Smart Units)</h4>
-                            <button onClick={addUomOption} className="text-[10px] bg-white border border-gray-200 px-2.5 py-1 rounded-md font-bold text-[#1A1A1A] hover:bg-gray-100">+ Add</button>
+                            <button onClick={addUomOption} className="text-[10px] bg-white border border-gray-200 px-2.5 py-1 rounded-md font-bold text-[#111111] hover:bg-gray-100">+ Add</button>
                         </div>
                         <div className="space-y-2">
                             {productUoms?.map((opt, idx) => (
                                 <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
-                                    <input className="w-20 p-2 text-xs border border-gray-200 rounded-lg font-bold outline-none focus:border-[#FFD700]" placeholder="Unit Name" value={opt.value} onChange={e => updateUomOption(idx, 'value', e.target.value)} />
+                                    <input className="w-20 p-2 text-xs border border-gray-200 rounded-lg font-bold outline-none focus:border-[#FFD200]" placeholder="Unit Name" value={opt.value} onChange={e => updateUomOption(idx, 'value', e.target.value)} />
                                     <span className="text-xs font-bold text-gray-400">=</span>
-                                    <input type="number" className="w-16 p-2 text-xs border border-gray-200 rounded-lg font-bold text-center outline-none focus:border-[#FFD700]" value={opt.ratio} onChange={e => updateUomOption(idx, 'ratio', parseFloat(e.target.value))} />
+                                    <input type="number" className="w-16 p-2 text-xs border border-gray-200 rounded-lg font-bold text-center outline-none focus:border-[#FFD200]" value={opt.ratio} onChange={e => updateUomOption(idx, 'ratio', parseFloat(e.target.value))} />
                                     <span className="text-[10px] text-gray-500 font-bold">{productForm.unit || 'Base'}</span>
                                     <button onClick={() => removeUomOption(idx)} className="ml-auto text-red-400 p-1.5 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    <button onClick={onSave} className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] font-black rounded-xl text-sm mt-4 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95 transition-all">保存商品 (Save Item)</button>
+                    <button onClick={onSave} className="w-full py-3.5 bg-[#111111] text-[#FFD200] font-black rounded-xl text-sm mt-4 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95 transition-all">保存商品 (Save Item)</button>
                 </div>
             </div>
         </div>

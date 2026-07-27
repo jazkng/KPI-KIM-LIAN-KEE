@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    X, Award, Users, ChefHat, Coffee, User, Wrench, 
-    Clock, AlertTriangle, CheckCircle2, Lock, Search,
+    X, Award, Users, Clock, CheckCircle2, Lock, Search,
     TrendingUp, Shield, Calendar, Loader2, Info, ChevronRight,
     HelpCircle
 } from 'lucide-react';
@@ -9,7 +8,6 @@ import { Employee, QuarterKey } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { 
     JOB_METRICS, 
-    JobCategory,
     GRADE_TIERS
 } from './assessmentConfig';
 import { 
@@ -67,15 +65,6 @@ const StatusBadge: React.FC<{ status: QuarterlyStatus }> = ({ status }) => {
 function Ban_Icon(props: any) {
     return <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>;
 }
-
-/** 部门图标 */
-const DepartmentIcon: React.FC<{ dept: string; size?: number }> = ({ dept, size = 16 }) => {
-    if (dept === 'KITCHEN') return <ChefHat size={size}/>;
-    if (dept === 'BAR') return <Coffee size={size}/>;
-    if (dept === 'FLOOR') return <User size={size}/>;
-    if (dept === 'LOGISTICS') return <Wrench size={size}/>;
-    return <Users size={size}/>;
-};
 
 // ============================================================================
 // 主组件
@@ -381,17 +370,6 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
     };
 
     // ============================================================================
-    // 筛选 & 搜索
-    // ============================================================================
-    const filteredTargets = useMemo(() => {
-        if (!searchTerm) return assessableTargets;
-        const s = searchTerm.toLowerCase();
-        return assessableTargets.filter(e => 
-            e.name.toLowerCase().includes(s) || e.id.includes(s)
-        );
-    }, [assessableTargets, searchTerm]);
-
-    // ============================================================================
     // 五级组织职级在评测列表中的兼容分组：L1 / L2-L4 / L5
     // ============================================================================
     const groupedByLevel = useMemo(() => {
@@ -522,9 +500,9 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Lock size={32} className="text-gray-400"/>
                     </div>
-                    <h3 className="font-black text-xl text-[#1A1A1A] mb-2">无评分权限</h3>
+                    <h3 className="font-black text-xl text-[#111111] mb-2">无评分权限</h3>
                     <p className="text-sm text-gray-500 font-bold mb-6">
-                        您当前的职级为 <span className="text-[#1A1A1A]">{currentEmployee ? getOrgLevelLabel(currentEmployee) : '未识别'}</span>，暂无权限使用评测系统。
+                        您当前的职级为 <span className="text-[#111111]">{currentEmployee ? getOrgLevelLabel(currentEmployee) : '未识别'}</span>，暂无权限使用评测系统。
                     </p>
                     <p className="text-xs text-gray-400 mb-6 leading-relaxed">
                         L1–L4 可按照组织上下级与指定评测关系进行评分，L5 没有评分权。<br/>
@@ -532,7 +510,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     </p>
                     <button 
                         onClick={onClose} 
-                        className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-lg active:scale-95 transition-transform"
+                        className="w-full py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black shadow-lg active:scale-95 transition-transform"
                     >
                         返回
                     </button>
@@ -546,19 +524,19 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
     // ============================================================================
     return (
         <div className="fixed inset-0 bg-black/80 z-[120] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-6xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-6xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* ========== Header ========== */}
-                <div className="bg-[#1A1A1A] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] md:px-5 md:pb-5 md:pt-[max(env(safe-area-inset-top),1.25rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
+                <div className="bg-[#111111] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] md:px-5 md:pb-5 md:pt-[max(env(safe-area-inset-top),1.25rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200]">
                     <div className="flex items-center gap-3">
-                        <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg"><Award size={20}/></div>
+                        <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg"><Award size={20}/></div>
                         <div>
                             <h3 className="font-serif font-black text-lg tracking-wide">季度评测</h3>
                             <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Quarterly Assessment</p>
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => setShowGuide(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-[#FFD700]">
+                        <button onClick={() => setShowGuide(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-[#FFD200]">
                             <HelpCircle size={22}/>
                         </button>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -571,13 +549,13 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                 <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-5">
                     
                     {/* ---- 季度信息 Banner ---- */}
-                    <div className={`rounded-2xl p-5 border-2 ${inWindow ? 'bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] border-[#FFD700] text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
+                    <div className={`rounded-2xl p-5 border-2 ${inWindow ? 'bg-gradient-to-br from-[#111111] to-[#2A2A2A] border-[#FFD200] text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
                         <div className="flex items-start justify-between mb-3">
                             <div>
-                                <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${inWindow ? 'text-[#FFD700]' : 'text-gray-400'}`}>
+                                <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${inWindow ? 'text-[#FFD200]' : 'text-gray-400'}`}>
                                     {inWindow ? '📋 当前评分期' : '⏸ 评分窗口未开启'}
                                 </div>
-                                <h2 className={`text-2xl font-black ${inWindow ? 'text-white' : 'text-[#1A1A1A]'}`}>
+                                <h2 className={`text-2xl font-black ${inWindow ? 'text-white' : 'text-[#111111]'}`}>
                                     {formatQuarter(currentQuarter)}
                                 </h2>
                                 <p className={`text-xs font-bold mt-1 ${inWindow ? 'text-white/60' : 'text-gray-500'}`}>
@@ -586,7 +564,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             </div>
                             {inWindow && (
                                 <div className="text-right">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[#FFD700]">剩余</div>
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-[#FFD200]">剩余</div>
                                     <div className="text-3xl font-black text-white font-mono">{remainingDays}</div>
                                     <div className="text-[10px] font-bold text-white/60 uppercase">天</div>
                                 </div>
@@ -599,7 +577,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     <Calendar size={14} className="text-gray-400"/>
                                     <span className="font-black">下次评分期</span>
                                 </div>
-                                <p className="font-bold text-[#1A1A1A]">
+                                <p className="font-bold text-[#111111]">
                                     {nextWindowStart.getFullYear()} 年 {nextWindowStart.getMonth() + 1} 月 1 日 — 15 日
                                 </p>
                             </div>
@@ -612,9 +590,9 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <div className="p-1.5 bg-blue-50 rounded-lg text-blue-600"><TrendingUp size={14}/></div>
-                                    <h4 className="text-xs font-black text-[#1A1A1A] uppercase tracking-widest">我的评分任务</h4>
+                                    <h4 className="text-xs font-black text-[#111111] uppercase tracking-widest">我的评分任务</h4>
                                 </div>
-                                <div className="text-xs font-black text-[#1A1A1A]">
+                                <div className="text-xs font-black text-[#111111]">
                                     {myProgress.completed} / {myProgress.total}
                                 </div>
                             </div>
@@ -632,11 +610,11 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
 
                     {/* ---- 老板看全店进度 ---- */}
                     {isOwner && globalProgress && (
-                        <div className="bg-[#1A1A1A] text-white rounded-2xl p-5 border border-gray-800 shadow-lg">
+                        <div className="bg-[#111111] text-white rounded-2xl p-5 border border-gray-800 shadow-lg">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-[#FFD700]/20 rounded-lg text-[#FFD700]"><Users size={14}/></div>
-                                    <h4 className="text-xs font-black text-[#FFD700] uppercase tracking-widest">全店进度 (Owner View)</h4>
+                                    <div className="p-1.5 bg-[#FFD200]/20 rounded-lg text-[#FFD200]"><Users size={14}/></div>
+                                    <h4 className="text-xs font-black text-[#FFD200] uppercase tracking-widest">全店进度 (Owner View)</h4>
                                 </div>
                                 <div className="text-xs font-black text-white">
                                     {globalProgress.completed} / {globalProgress.total}
@@ -644,7 +622,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             </div>
                             <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                                 <div 
-                                    className="h-full rounded-full bg-[#FFD700] transition-all"
+                                    className="h-full rounded-full bg-[#FFD200] transition-all"
                                     style={{ width: `${globalProgress.percent}%` }}
                                 />
                             </div>
@@ -655,7 +633,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     )}
 
                     {/* ---- 搜索和关系配置工具栏 ---- */}
-                    <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+                    <div className="flex flex-col md:flex-row gap-3 items-stretch">
                         <div className="relative flex-grow">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
                             <input 
@@ -663,7 +641,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                 placeholder="搜索员工姓名或 ID..." 
                                 value={searchTerm} 
                                 onChange={e => setSearchTerm(e.target.value)} 
-                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD700] transition-all"
+                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD200] transition-all"
                                 style={{ fontSize: '16px', minHeight: '44px' }}
                             />
                         </div>
@@ -678,7 +656,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                         setSelectedTargets((firstL2.assessmentTargets || []).filter(id => eligibleIds.has(id)));
                                     }
                                 }}
-                                className="flex items-center justify-center gap-2 px-4 py-3 bg-[#FFD700] text-black font-black rounded-xl shadow-sm hover:bg-[#FFE44D] active:scale-95 transition-all text-xs"
+                                className="flex items-center justify-center gap-2 px-4 py-3 bg-[#FFD200] text-black font-black rounded-xl shadow-sm hover:bg-[#FFE44D] active:scale-95 transition-all text-xs"
                                 style={{ minHeight: '44px' }}
                                 id="btn-config-assessment-relations"
                             >
@@ -696,7 +674,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     ) : employees.filter(e => !e.isArchived).length === 0 ? (
                         <div className="py-20 text-center bg-white rounded-2xl border border-gray-200">
                             <Lock size={40} className="mx-auto text-gray-300 mb-3"/>
-                            <p className="font-black text-sm text-[#1A1A1A] mb-1">无在职人员信息</p>
+                            <p className="font-black text-sm text-[#111111] mb-1">无在职人员信息</p>
                             <p className="text-xs text-gray-400 font-bold">请检查档案或联系管理员</p>
                         </div>
                     ) : (
@@ -704,15 +682,15 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             {/* L2-L4：管理与带队层 */}
                             {groupedByLevel[2].length > 0 && (
                                 <div className="space-y-3" id="level-2-management-section">
-                                    <div className="bg-[#1A1A1A]/5 p-3 rounded-xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <div className="bg-[#111111]/5 p-3 rounded-xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-1">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm">💼</span>
                                             <div>
-                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">L2–L4：管理与带队层</h5>
+                                                <h5 className="text-xs font-black text-[#111111] tracking-wider">L2–L4：管理与带队层</h5>
                                                 <p className="text-[9px] text-gray-500 font-bold">负责日常运营工作考核，可评价组织职级低于自己的员工</p>
                                             </div>
                                         </div>
-                                        <span className="text-[10px] font-black text-gray-400 sm:self-center">
+                                        <span className="text-[10px] font-black text-gray-400 md:self-center">
                                             {groupedByLevel[2].length} 人
                                         </span>
                                     </div>
@@ -733,15 +711,15 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             {/* L5：执行员工 */}
                             {groupedByLevel[3].length > 0 && (
                                 <div className="space-y-3" id="level-3-staff-section">
-                                    <div className="bg-[#1A1A1A]/5 p-3 rounded-xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <div className="bg-[#111111]/5 p-3 rounded-xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-1">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm">👥</span>
                                             <div>
-                                                <h5 className="text-xs font-black text-[#1A1A1A] tracking-wider">L5：执行员工 / 被评人</h5>
+                                                <h5 className="text-xs font-black text-[#111111] tracking-wider">L5：执行员工 / 被评人</h5>
                                                 <p className="text-[9px] text-gray-500 font-bold">接受直属上级的日常评分与技能季度考核</p>
                                             </div>
                                         </div>
-                                        <span className="text-[10px] font-black text-gray-400 sm:self-center">
+                                        <span className="text-[10px] font-black text-gray-400 md:self-center">
                                             {groupedByLevel[3].length} 人
                                         </span>
                                     </div>
@@ -762,7 +740,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             {/* 兼职豁免区 */}
                             {groupedByLevel.EXEMPT.length > 0 && (
                                 <div className="space-y-3" id="exempt-staff-section">
-                                    <div className="bg-gray-50 p-3 rounded-xl border border-dashed border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <div className="bg-gray-50 p-3 rounded-xl border border-dashed border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-1">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm">🚫</span>
                                             <div>
@@ -770,7 +748,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                 <p className="text-[9px] text-gray-400 font-bold">兼职及临时职位，已自动豁免本季季度评分</p>
                                             </div>
                                         </div>
-                                        <span className="text-[10px] font-black text-gray-400 sm:self-center">
+                                        <span className="text-[10px] font-black text-gray-400 md:self-center">
                                             {groupedByLevel.EXEMPT.length} 人
                                         </span>
                                     </div>
@@ -804,9 +782,9 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                         <div className="bg-white w-full h-[90vh] md:max-w-3xl md:h-[80vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative animate-in slide-in-from-bottom">
                             
                             {/* Drawer Header */}
-                            <div className="bg-[#1A1A1A] p-4 md:p-5 flex justify-between items-center text-white border-b-4 border-[#FFD700] shrink-0">
+                            <div className="bg-[#111111] p-4 md:p-5 flex justify-between items-center text-white border-b-4 border-[#FFD200] shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <div className="bg-[#FFD700] text-black p-2 rounded-xl"><Users size={18}/></div>
+                                    <div className="bg-[#FFD200] text-black p-2 rounded-xl"><Users size={18}/></div>
                                     <div>
                                         <h4 className="font-serif font-black text-base tracking-wide">⚙️ 评测与账户配置中心</h4>
                                         <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Assessment & Accounts Configuration</p>
@@ -838,39 +816,39 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             <div className="bg-gray-100 p-1.5 flex border-b border-gray-200 shrink-0 gap-1.5">
                                 <button
                                     onClick={() => setConfigTab('RELATIONS')}
-                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
+                                    className={`flex-1 py-2 text-[10px] md:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'RELATIONS' 
-                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
+                                            ? 'bg-white text-[#111111] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    <span className="hidden sm:inline">⚙️ 评分权限与配对</span>
-                                    <span className="sm:hidden">⚙️ 权限配对</span>
+                                    <span className="hidden md:inline">⚙️ 评分权限与配对</span>
+                                    <span className="md:hidden">⚙️ 权限配对</span>
                                 </button>
                                 <button
                                     onClick={() => setConfigTab('MERGE')}
-                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
+                                    className={`flex-1 py-2 text-[10px] md:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'MERGE' 
-                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
+                                            ? 'bg-white text-[#111111] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    <span className="hidden sm:inline">👥 重复账户合并</span>
-                                    <span className="sm:hidden">👥 账号合并</span>
+                                    <span className="hidden md:inline">👥 重复账户合并</span>
+                                    <span className="md:hidden">👥 账号合并</span>
                                 </button>
                                 <button
                                     onClick={() => setConfigTab('EXEMPT')}
-                                    className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
+                                    className={`flex-1 py-2 text-[10px] md:text-xs font-black rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                                         configTab === 'EXEMPT' 
-                                            ? 'bg-white text-[#1A1A1A] shadow-sm' 
+                                            ? 'bg-white text-[#111111] shadow-sm' 
                                             : 'text-gray-500 hover:text-stone-900 hover:bg-white/50'
                                     }`}
                                     style={{ minHeight: '36px' }}
                                 >
-                                    <span className="hidden sm:inline">🚫 忽略评分豁免</span>
-                                    <span className="sm:hidden">🚫 免评设置</span>
+                                    <span className="hidden md:inline">🚫 忽略评分豁免</span>
+                                    <span className="md:hidden">🚫 免评设置</span>
                                 </button>
                             </div>
 
@@ -904,7 +882,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                             style={{ minHeight: '44px' }}
                                                         >
                                                             <div className="min-w-0">
-                                                                <div className="font-black text-xs text-[#1A1A1A] truncate">{e.name}</div>
+                                                                <div className="font-black text-xs text-[#111111] truncate">{e.name}</div>
                                                                 <div className="text-[10px] text-gray-400 font-bold">{e.role || '评分人'}</div>
                                                             </div>
                                                             {isSelected && <ChevronRight size={16} className="text-blue-500 shrink-0"/>}
@@ -949,7 +927,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                                                             该评分人的下级员工 (可评测)
                                                         </div>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                             {getAssignableTargets(selectedRater).map(e => {
                                                                     const isChecked = selectedTargets.includes(e.id);
                                                                     return (
@@ -997,7 +975,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                 </div>
                             ) : configTab === 'MERGE' ? (
                                 <div className="flex-grow min-h-0 flex flex-col p-5 overflow-y-auto bg-gray-50/50 space-y-5">
-                                    <div className="bg-amber-550/10 border border-amber-500/20 rounded-2xl p-4 flex gap-3">
+                                    <div className="bg-amber-600/10 border border-amber-500/20 rounded-2xl p-4 flex gap-3">
                                         <span className="text-xl shrink-0">💡</span>
                                         <div>
                                             <h5 className="text-xs font-black text-amber-800">关于重复档案合并与清理</h5>
@@ -1005,7 +983,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                 如果系统中存在同一个人拥有两个账号（例如：<span className="font-bold">JAKE</span> 和 <span className="font-bold">Jake Ng</span>，或者 <span className="font-bold">AI Ching</span> 和 <span className="font-bold">Evelyn</span>），您可以使用此工具进行一键合并清理：
                                             </p>
                                             <ul className="text-[10px] text-amber-700 font-medium list-disc list-inside mt-1.5 space-y-1">
-                                                <li>被合并的重复档案将被<span className="font-bold text-red-650">永久删除</span>；</li>
+                                                <li>被合并的重复档案将被<span className="font-bold text-red-700">永久删除</span>；</li>
                                                 <li>重复档案关联的<span className="font-bold">评测分数、管理模块权限、违纪警告、薪水记录</span>将自动全部合并转移至保留的正确档案；</li>
                                                 <li>若您当前登录的是被清理的那个重复账号，系统将自动帮您安全切换并登录为正确账号。</li>
                                             </ul>
@@ -1063,15 +1041,15 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     {/* Preview Area */}
                                     {mergeSourceId && mergeTargetId && (
                                         <div className="bg-stone-900 text-white p-4 rounded-2xl space-y-3 border-l-4 border-yellow-500 animate-in fade-in zoom-in-95">
-                                            <h6 className="text-[10px] font-black uppercase tracking-wider text-yellow-450">⚠️ 合并效果预览 (Merge Preview)</h6>
-                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+                                            <h6 className="text-[10px] font-black uppercase tracking-wider text-yellow-500">⚠️ 合并效果预览 (Merge Preview)</h6>
+                                            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
                                                 <div className="flex-1">
                                                     <p className="text-[10px] text-red-400 font-bold uppercase">❌ 将被永久清理删除</p>
                                                     <p className="text-xs font-black mt-0.5">{employees.find(e => e.id === mergeSourceId)?.name}</p>
                                                     <p className="text-[9px] text-white/50">{employees.find(e => e.id === mergeSourceId)?.role}</p>
                                                 </div>
-                                                <div className="flex items-center justify-center text-yellow-450 text-xl font-bold">➡️</div>
-                                                <div className="flex-1 text-right sm:text-right">
+                                                <div className="flex items-center justify-center text-yellow-500 text-xl font-bold">➡️</div>
+                                                <div className="flex-1 text-right md:text-right">
                                                     <p className="text-[10px] text-emerald-400 font-bold uppercase">🌟 将接收数据并保留</p>
                                                     <p className="text-xs font-black mt-0.5">{employees.find(e => e.id === mergeTargetId)?.name}</p>
                                                     <p className="text-[9px] text-white/50">{employees.find(e => e.id === mergeTargetId)?.role}</p>
@@ -1087,7 +1065,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                 <div className="flex-grow min-h-0 flex flex-col p-4 md:p-5 overflow-y-auto bg-gray-50/50 space-y-4 pb-24">
                                     {/* Exemption Intro Card */}
                                     <div className="bg-stone-900 text-white p-4 rounded-2xl border-l-4 border-red-500 space-y-1 shadow-sm">
-                                        <h5 className="text-xs font-black text-[#FFD700] flex items-center gap-1.5">
+                                        <h5 className="text-xs font-black text-[#FFD200] flex items-center gap-1.5">
                                             <span>🚫 忽略评分及免评说明 (Assessment Exemptions)</span>
                                         </h5>
                                         <p className="text-[10px] text-white/80 leading-relaxed font-medium">
@@ -1177,8 +1155,8 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                             )}
 
                             {/* Drawer Footer */}
-                            <div className="p-3 border-t border-gray-250 bg-gray-100 flex flex-row items-center justify-between shrink-0 gap-2 w-full">
-                                <div className="text-[10px] sm:text-xs text-gray-500 font-black truncate max-w-[40%]">
+                            <div className="p-3 border-t border-gray-300 bg-gray-100 flex flex-row items-center justify-between shrink-0 gap-2 w-full">
+                                <div className="text-[10px] md:text-xs text-gray-500 font-black truncate max-w-[40%]">
                                     {configTab === 'RELATIONS' 
                                         ? (selectedRater ? `已选 ${selectedTargets.length} 人` : '未选评分人')
                                         : (configTab === 'MERGE' ? (mergeSourceId && mergeTargetId ? '准备合并' : '配置合并') : '免评配置')
@@ -1190,9 +1168,9 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                             setIsConfigDrawerOpen(false);
                                             setSelectedRater(null);
                                         }}
-                                        className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all border ${
+                                        className={`px-3 py-1.5 text-[11px] md:text-xs font-black rounded-lg active:scale-95 transition-all border ${
                                             configTab === 'EXEMPT' 
-                                                ? 'bg-stone-900 text-[#FFD700] border-stone-900 hover:bg-stone-800 shadow-sm'
+                                                ? 'bg-stone-900 text-[#FFD200] border-stone-900 hover:bg-stone-800 shadow-sm'
                                                 : 'text-gray-600 bg-white border-gray-300 hover:bg-gray-50'
                                         }`}
                                         style={{ minHeight: '38px' }}
@@ -1222,7 +1200,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                                     setSavingConfig(false);
                                                 }
                                             }}
-                                            className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
+                                            className={`px-3 py-1.5 text-[11px] md:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
                                                 selectedRater 
                                                     ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm' 
                                                     : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
@@ -1242,7 +1220,7 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                         <button
                                             disabled={!mergeSourceId || !mergeTargetId || merging}
                                             onClick={handleMergeAccounts}
-                                            className={`px-3 py-1.5 text-[11px] sm:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
+                                            className={`px-3 py-1.5 text-[11px] md:text-xs font-black rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 border ${
                                                 mergeSourceId && mergeTargetId
                                                     ? 'bg-red-600 text-white border-red-600 shadow-sm hover:bg-red-700' 
                                                     : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
@@ -1282,23 +1260,23 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                     <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setShowGuide(false)}>
                         <div className="bg-white w-full max-w-lg rounded-[2rem] p-6 md:p-8 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                             <div className="text-center mb-6">
-                                <div className="w-14 h-14 bg-[#1A1A1A] text-[#FFD700] rounded-full flex items-center justify-center mx-auto mb-3">
+                                <div className="w-14 h-14 bg-[#111111] text-[#FFD200] rounded-full flex items-center justify-center mx-auto mb-3">
                                     <HelpCircle size={28}/>
                                 </div>
-                                <h2 className="text-xl font-black text-[#1A1A1A]">评分系统说明</h2>
+                                <h2 className="text-xl font-black text-[#111111]">评分系统说明</h2>
                             </div>
 
                             <div className="space-y-3 text-sm text-gray-600 leading-relaxed mb-6">
                                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <p className="font-black text-[#1A1A1A] mb-1">📅 季度评测</p>
+                                    <p className="font-black text-[#111111] mb-1">📅 季度评测</p>
                                     <p className="text-xs">每季度评一次，评分窗口为每季首月 1-15 日。Q1 = 1-3月, Q2 = 4-6月, 以此类推。</p>
                                 </div>
                                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <p className="font-black text-[#1A1A1A] mb-1">🎯 4 项指标</p>
+                                    <p className="font-black text-[#111111] mb-1">🎯 4 项指标</p>
                                     <p className="text-xs">每个岗位有 3 项专属核心能力 + 1 项通用纪律底线，共 4 项。不同岗位的指标不同。</p>
                                 </div>
                                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <p className="font-black text-[#1A1A1A] mb-1">🏆 5 档评分</p>
+                                    <p className="font-black text-[#111111] mb-1">🏆 5 档评分</p>
                                     <div className="grid grid-cols-2 gap-2 mt-2 text-[10px]">
                                         {GRADE_TIERS.filter(t => t.label !== 'SSS' && t.label !== 'SS').map(t => (
                                             <div key={t.label} className={`p-2 rounded border ${t.color}`}>
@@ -1309,14 +1287,14 @@ export const EmployeeAssessmentModule: React.FC<EmployeeAssessmentModuleProps> =
                                     </div>
                                 </div>
                                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <p className="font-black text-[#1A1A1A] mb-1">⚠️ C 档必填备注</p>
+                                    <p className="font-black text-[#111111] mb-1">⚠️ C 档必填备注</p>
                                     <p className="text-xs">打 C 档时必须说明具体原因，作为 HR 档案证据。</p>
                                 </div>
                             </div>
 
                             <button 
                                 onClick={() => setShowGuide(false)} 
-                                className="w-full py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-lg active:scale-95"
+                                className="w-full py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black shadow-lg active:scale-95"
                             >
                                 我明白了
                             </button>
@@ -1368,7 +1346,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ emp, rater, quarter, onClic
                 </div>
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                        <h4 className="font-black text-sm text-[#1A1A1A] truncate">{emp.name}</h4>
+                        <h4 className="font-black text-sm text-[#111111] truncate">{emp.name}</h4>
                         <StatusBadge status={status}/>
                     </div>
                     <p className="text-[10px] text-gray-400 font-bold uppercase truncate mt-0.5">

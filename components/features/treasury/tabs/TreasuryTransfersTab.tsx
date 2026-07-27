@@ -25,7 +25,7 @@ export const TreasuryTransfersTab: React.FC<TreasuryTransfersTabProps> = ({
   return (
     <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
       {/* Tab Header Card */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-xs border border-gray-150">
+      <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-xs border border-gray-200">
         <div className="flex items-center gap-2">
           <History size={18} className="text-[#111111]" />
           <h3 className="font-extrabold text-sm md:text-base text-[#111111]">
@@ -55,7 +55,7 @@ export const TreasuryTransfersTab: React.FC<TreasuryTransfersTabProps> = ({
             return (
               <div
                 key={t.id}
-                className="bg-white p-3.5 md:p-4 rounded-2xl border border-gray-150 flex justify-between items-center shadow-xs gap-3 active:bg-gray-50 transition"
+                className="bg-white p-3.5 md:p-4 rounded-2xl border border-gray-200 flex justify-between items-center shadow-xs gap-3 active:bg-gray-50 transition"
               >
                 <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
                   <div

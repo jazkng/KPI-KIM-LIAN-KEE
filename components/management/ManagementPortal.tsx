@@ -8,7 +8,7 @@ import { ManagerDashboard } from '../AdminDashboard';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
 import { MODULE_DEFINITIONS } from '../constants';
 import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
-import { mt, ManagementLang, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../constants/managementTranslations';
+import { mt, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../constants/managementTranslations';
 import { DataManager } from '../../utils/dataManager';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { NotificationCenter } from '../ui/NotificationCenter';
@@ -290,7 +290,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
     }, [allowedModules, employee, lang]);
 
     return (
-        <div className="min-h-screen bg-[#F6F7FB] flex flex-col relative overflow-x-hidden select-none text-stone-850">
+        <div className="min-h-screen bg-[#F6F7FB] flex flex-col relative overflow-x-hidden select-none text-stone-900">
             {!activeModule && activeTabIdx === 0 && (
                 <NotificationCenter
                     employee={employee}

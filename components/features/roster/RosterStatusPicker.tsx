@@ -1,6 +1,6 @@
 import React from 'react';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { X, MessageSquare, ShieldAlert } from 'lucide-react';
+import { X, MessageSquare } from 'lucide-react';
 
 interface RosterStatusPickerProps {
     currentStatus: string;

@@ -359,7 +359,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
     };
 
     return (
-        <div className="h-full overflow-y-auto bg-[#F5F7FA]" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        <div className="h-full overflow-y-auto bg-[#F6F7FB]" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b px-4 md:px-6 py-4">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div>
@@ -373,7 +373,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     <button
                         style={noTap}
                         onClick={openCreate}
-                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#FFD700] text-black font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform"
+                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#FFD200] text-black font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform"
                     >
                         <Plus size={18} /> 新增设备户口
                     </button>
@@ -415,7 +415,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                             value={search}
                             onChange={event => setSearch(event.target.value)}
                             placeholder="搜索设备编号、名称、位置或备注"
-                            className="w-full min-h-[44px] rounded-xl bg-gray-100 border border-transparent focus:border-[#FFD700] focus:bg-white outline-none pl-10 pr-4 font-bold text-sm"
+                            className="w-full min-h-[44px] rounded-xl bg-gray-100 border border-transparent focus:border-[#FFD200] focus:bg-white outline-none pl-10 pr-4 font-bold text-sm"
                         />
                     </div>
                 </div>
@@ -443,7 +443,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                             {search ? '请尝试其他关键词。' : '先建立厨房或等待荧幕的专用设备户口。'}
                         </p>
                         {!search && (
-                            <button onClick={openCreate} className="mt-5 bg-[#FFD700] px-5 py-2.5 min-h-[44px] rounded-xl font-black flex items-center gap-2">
+                            <button onClick={openCreate} className="mt-5 bg-[#FFD200] px-5 py-2.5 min-h-[44px] rounded-xl font-black flex items-center gap-2">
                                 <Plus size={18} /> 新增第一台设备
                             </button>
                         )}
@@ -522,10 +522,10 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     if (event.currentTarget === event.target) closeModal();
                 }}>
                     <div className="bg-white w-full md:max-w-2xl max-h-[94vh] rounded-t-[2rem] md:rounded-[2rem] shadow-2xl flex flex-col overflow-hidden">
-                        <div className="bg-[#1A1A1A] text-white px-5 py-4 flex items-center justify-between border-b-4 border-[#FFD700] shrink-0">
+                        <div className="bg-[#111111] text-white px-5 py-4 flex items-center justify-between border-b-4 border-[#FFD200] shrink-0">
                             <div>
                                 <h5 className="font-black text-lg flex items-center gap-2">
-                                    {modalMode === 'PIN' ? <KeyRound className="text-[#FFD700]" /> : <MonitorSmartphone className="text-[#FFD700]" />}
+                                    {modalMode === 'PIN' ? <KeyRound className="text-[#FFD200]" /> : <MonitorSmartphone className="text-[#FFD200]" />}
                                     {modalMode === 'CREATE' ? '新增设备户口' : modalMode === 'EDIT' ? '编辑设备户口' : '更换设备 PIN'}
                                 </h5>
                                 {editingDevice && <p className="text-xs text-gray-300 font-bold mt-1">{editingDevice.deviceName} · 登入 ID：{editingDevice.deviceCode}</p>}
@@ -586,10 +586,10 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                                                         type="button"
                                                         key={option.id}
                                                         onClick={() => toggleScreen(option.id)}
-                                                        className={`text-left rounded-2xl border-2 p-4 transition-all ${selected ? 'border-[#FFD700] bg-yellow-50' : 'border-gray-200 bg-white'}`}
+                                                        className={`text-left rounded-2xl border-2 p-4 transition-all ${selected ? 'border-[#FFD200] bg-yellow-50' : 'border-gray-200 bg-white'}`}
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${selected ? 'bg-[#FFD700]' : 'bg-gray-100'}`}><option.Icon size={20} /></span>
+                                                            <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${selected ? 'bg-[#FFD200]' : 'bg-gray-100'}`}><option.Icon size={20} /></span>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-black text-sm">{option.label}</p>
                                                                 <p className="text-[11px] text-gray-500 font-bold mt-1 leading-relaxed">{option.description}</p>
@@ -619,7 +619,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
 
                         <div className="border-t bg-white p-4 md:px-6 flex gap-3 shrink-0 safe-area-bottom">
                             <button onClick={closeModal} disabled={saving} className="flex-1 min-h-[48px] rounded-xl bg-gray-100 font-black disabled:opacity-50">取消</button>
-                            <button onClick={handleSave} disabled={saving} className="flex-[2] min-h-[48px] rounded-xl bg-[#FFD700] text-black font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                            <button onClick={handleSave} disabled={saving} className="flex-[2] min-h-[48px] rounded-xl bg-[#FFD200] text-black font-black flex items-center justify-center gap-2 disabled:opacity-60">
                                 {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
                                 {saving ? '保存中...' : modalMode === 'PIN' ? '确认更换 PIN' : '保存设备户口'}
                             </button>
@@ -640,7 +640,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     font-weight: 700;
                     outline: none;
                 }
-                .form-input:focus { border-color: #e3bd00; box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.18); }
+                .form-input:focus { border-color: #e3bd00; box-shadow: 0 0 0 3px rgba(255, 210, 0, 0.18); }
             `}</style>
         </div>
     );

@@ -1,5 +1,5 @@
 
-import { Employee, CatalogItem, StockItem } from '../types';
+import { CatalogItem, StockItem } from '../types';
 
 export const normalizeCatalogItem = (item: CatalogItem, stockList: StockItem[]): CatalogItem => {
   const linkedStock = item.linkedStockId ? stockList.find(s => s.id === item.linkedStockId) : undefined;

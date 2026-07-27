@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Building, Zap, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Home, Banknote, Droplets, Wifi, Gauge, CalendarDays, TrendingUp, ArrowRight, Clock, Edit3, Calculator, BadgeAlert, Layers, ShieldCheck, Copy, AlertOctagon, Link as LinkIcon, PiggyBank, Archive, ArchiveRestore, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Filter, Search, ArrowLeft } from 'lucide-react';
-import { RecurringBill, BillPaymentRecord, RecurringBillCategory, RecurringBillType, ExpenseItem } from '../../types';
+import { Building, Zap, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Banknote, Droplets, Wifi, CalendarDays, ArrowRight, Edit3, Layers, ShieldCheck, Copy, Link as LinkIcon, PiggyBank, Archive, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Search, ArrowLeft } from 'lucide-react';
+import { RecurringBill, BillPaymentRecord, RecurringBillCategory, ExpenseItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { numberToWords, COMPANY_INFO } from '../../utils/paymentVoucherUtils';
@@ -36,7 +36,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     const [activeTab, setActiveTab] = useState<'MONTHLY' | 'YEARLY' | 'HISTORY'>('MONTHLY');
     const [bills, setBills] = useState<RecurringBill[]>([]);
     const [payments, setPayments] = useState<BillPaymentRecord[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
     
     // View State
     const [isAddMode, setIsAddMode] = useState(false);
@@ -584,11 +584,6 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
         return `${prefix}-${dateStr}-${randId}`;
     };
 
-    const getPayeeName = (payment: BillPaymentRecord) => {
-        const b = bills.find(x => x.id === payment.billId);
-        return b?.payableTo || b?.name || payment.name;
-    };
-
     // --- HELPERS ---
     const checkStatus = (bill: RecurringBill) => {
         if (!bill.lastPaidDate) return 'UNPAID';
@@ -727,7 +722,6 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
             });
         }
     };
-
     
     const handleHistoryMonthChange = (delta: number) => {
         const [y, m] = historyMonth.split('-').map(Number);
@@ -761,10 +755,10 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* HEADER */}
-                <div className="sticky top-0 z-50 bg-[#1A1A1A] px-4 py-2.5 flex justify-between items-center text-white shrink-0 border-b border-white/10 safe-area-top">
+                <div className="sticky top-0 z-50 bg-[#111111] px-4 py-2.5 flex justify-between items-center text-white shrink-0 border-b border-white/10 safe-area-top">
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={onClose}
@@ -788,13 +782,13 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 </div>
 
                 {/* TABS */}
-                <div className="bg-white border-b border-gray-150 p-2 flex shrink-0">
+                <div className="bg-white border-b border-gray-200 p-2 flex shrink-0">
                     <div className="bg-gray-100 p-1 rounded-xl flex w-full gap-1">
                         <button 
                             onClick={() => setActiveTab('MONTHLY')} 
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
                                 activeTab === 'MONTHLY' 
-                                    ? 'bg-[#1A1A1A] text-white shadow-xs ring-1 ring-[#FFD700]/30 border-b-2 border-[#FFD700]' 
+                                    ? 'bg-[#111111] text-white shadow-xs ring-1 ring-[#FFD200]/30 border-b-2 border-[#FFD200]' 
                                     : 'text-gray-500 hover:bg-gray-50'
                             }`}
                         >
@@ -804,7 +798,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             onClick={() => setActiveTab('YEARLY')} 
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
                                 activeTab === 'YEARLY' 
-                                    ? 'bg-[#1A1A1A] text-white shadow-xs ring-1 ring-[#FFD700]/30 border-b-2 border-[#FFD700]' 
+                                    ? 'bg-[#111111] text-white shadow-xs ring-1 ring-[#FFD200]/30 border-b-2 border-[#FFD200]' 
                                     : 'text-gray-500 hover:bg-gray-50'
                             }`}
                         >
@@ -814,7 +808,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             onClick={() => setActiveTab('HISTORY')} 
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
                                 activeTab === 'HISTORY' 
-                                    ? 'bg-[#1A1A1A] text-white shadow-xs ring-1 ring-[#FFD700]/30 border-b-2 border-[#FFD700]' 
+                                    ? 'bg-[#111111] text-white shadow-xs ring-1 ring-[#FFD200]/30 border-b-2 border-[#FFD200]' 
                                     : 'text-gray-500 hover:bg-gray-50'
                             }`}
                         >
@@ -835,7 +829,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 {/* Unpaid Card - Large (Red) */}
                                 <div className="md:col-span-2 bg-red-50 border border-red-100 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
                                     <div>
-                                        <span className="text-[10px] font-extrabold text-red-650 tracking-wider uppercase">待缴账单 (UNPAID)</span>
+                                        <span className="text-[10px] font-extrabold text-red-700 tracking-wider uppercase">待缴账单 (UNPAID)</span>
                                         <div className="text-2xl md:text-3xl font-mono font-black text-red-700 mt-1 leading-none">
                                             RM {billsSummary.unpaidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </div>
@@ -880,18 +874,18 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         placeholder="搜索固定账单名称、账户或缴付商..." 
                                         value={billSearch} 
                                         onChange={e => setBillSearch(e.target.value)} 
-                                        className="w-full pl-9 pr-14 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] focus:bg-white transition-all shadow-xs placeholder-gray-450"
+                                        className="w-full pl-9 pr-14 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] focus:bg-white transition-all shadow-xs placeholder-gray-500"
                                         style={{ minHeight: '40px' }}
                                     />
                                     {billSearch && (
-                                        <button onClick={() => setBillSearch('')} className="absolute right-3 top-0 text-gray-450 hover:text-gray-600 text-xs font-bold h-10 flex items-center select-none">
+                                        <button onClick={() => setBillSearch('')} className="absolute right-3 top-0 text-gray-500 hover:text-gray-600 text-xs font-bold h-10 flex items-center select-none">
                                             清除
                                         </button>
                                     )}
                                 </div>
                                 <button 
                                     onClick={() => startAdd(activeTab)} 
-                                    className="w-10 h-10 bg-[#FFD700] hover:bg-[#EEC600] text-black active:scale-95 transition-all rounded-xl flex items-center justify-center shadow-xs shrink-0"
+                                    className="w-10 h-10 bg-[#FFD200] hover:bg-[#EEC600] text-black active:scale-95 transition-all rounded-xl flex items-center justify-center shadow-xs shrink-0"
                                     title={`添加${activeTab === 'MONTHLY' ? '月度账单' : '年度执照'}`}
                                     style={{ minWidth: '40px', minHeight: '40px' }}
                                 >
@@ -899,7 +893,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                 {filteredBills.length === 0 ? (
                                     <div className="col-span-full bg-white border border-dashed border-stone-200 rounded-2xl py-12 px-4 text-center">
                                         <div className="w-12 h-12 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -929,12 +923,12 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                 }}
                                                 className={`bg-white border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 relative shadow-xs hover:shadow-sm cursor-pointer select-none h-[165px] min-h-[165px] ${
                                                     isSelected
-                                                        ? 'border-[#FFD700] ring-2 ring-[#FFD700]/20 bg-[#FFD700]/5'
+                                                        ? 'border-[#FFD200] ring-2 ring-[#FFD200]/20 bg-[#FFD200]/5'
                                                         : status === 'PAID' 
                                                             ? 'border-emerald-100 bg-white' 
                                                             : overdue 
                                                                 ? 'border-rose-200 bg-white' 
-                                                                : 'border-gray-150'
+                                                                : 'border-gray-200'
                                                 }`}
                                             >
                                                 {/* Top Row: Category Flag & Controls */}
@@ -949,7 +943,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                                 }`}
                                                             >
                                                                 {isSelected && (
-                                                                    <div className="w-1.5 h-1.5 bg-[#FFD700] rounded-xs" />
+                                                                    <div className="w-1.5 h-1.5 bg-[#FFD200] rounded-xs" />
                                                                 )}
                                                             </div>
                                                         )}
@@ -961,15 +955,15 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                     {/* Status Badge */}
                                                     <div className="shrink-0">
                                                         {status === 'PAID' ? (
-                                                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none flex items-center gap-0.5 whitespace-nowrap">
+                                                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none flex items-center gap-0.5 whitespace-nowrap">
                                                                 <CheckCircle2 size={8} strokeWidth={4}/> PAID
                                                             </span>
                                                         ) : overdue ? (
-                                                            <span className="bg-rose-50 text-rose-700 border border-rose-150 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none flex items-center gap-0.5 whitespace-nowrap animate-pulse">
+                                                            <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none flex items-center gap-0.5 whitespace-nowrap animate-pulse">
                                                                 <AlertTriangle size={8}/> OVERDUE
                                                             </span>
                                                         ) : (
-                                                            <span className="bg-amber-50 text-amber-700 border border-amber-150 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none whitespace-nowrap">
+                                                            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md select-none whitespace-nowrap">
                                                                 UNPAID
                                                             </span>
                                                         )}
@@ -1071,7 +1065,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         {status === 'UNPAID' ? (
                                                             <button 
                                                                 onClick={() => openPayModal(bill)} 
-                                                                className="h-8 bg-[#FFD700] hover:bg-[#EEC600] text-black active:scale-95 font-extrabold text-[10px] px-3.5 rounded-xl transition-all shadow-xs flex items-center gap-0.5"
+                                                                className="h-8 bg-[#FFD200] hover:bg-[#EEC600] text-black active:scale-95 font-extrabold text-[10px] px-3.5 rounded-xl transition-all shadow-xs flex items-center gap-0.5"
                                                             >
                                                                 <DollarSign size={10} strokeWidth={3}/> Pay
                                                             </button>
@@ -1082,13 +1076,13 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                                         href={latestPay.linkUrl} 
                                                                         target="_blank" 
                                                                         rel="noreferrer" 
-                                                                        className="w-8 h-8 bg-blue-50 border border-blue-150 hover:bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center" 
+                                                                        className="w-8 h-8 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center" 
                                                                         title="Receipt"
                                                                     >
                                                                         <Clipboard size={12}/>
                                                                     </a>
                                                                 )}
-                                                                <div className="bg-emerald-50 text-emerald-800 border border-emerald-150 px-2.5 h-8 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-0.5">
+                                                                <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 h-8 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-0.5">
                                                                     Paid 🧾
                                                                 </div>
                                                             </div>
@@ -1114,7 +1108,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                     {activeTab === 'HISTORY' && (
                         <div className="space-y-4">
                             {/* History Controls */}
-                            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
                                 <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
                                     {/* Month Navigator */}
                                     <button 
@@ -1152,8 +1146,8 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         {showAllHistory ? 'All Time' : 'By Month'}
                                     </button>
                                 </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-                                    <div className="relative flex-grow sm:w-44">
+                                <div className="flex items-center gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
+                                    <div className="relative flex-grow md:w-44">
                                         <Search className="absolute left-3 top-2.5 text-gray-400" size={13}/>
                                         <input 
                                             type="text" 
@@ -1185,7 +1179,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             </div>
                             
                             {/* Month Summary */}
-                            <div className="bg-white rounded-2xl border border-gray-150 p-4 flex items-center justify-between shadow-2xs">
+                            <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between shadow-2xs">
                                 <div className="text-[11px] font-black uppercase text-gray-400 tracking-wider flex items-center gap-2">
                                     <span>{showAllHistory ? 'All History Records' : `${historyMonth} Monthly Spending`}</span>
                                     {selectedPaymentIds.length > 0 && (
@@ -1243,7 +1237,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                     <div className="flex gap-1 mt-1">
                                                         <button 
                                                             onClick={() => openVoucherModal(p)} 
-                                                            className="w-7 h-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-150 rounded-lg flex items-center justify-center transition-all"
+                                                            className="w-7 h-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 rounded-lg flex items-center justify-center transition-all"
                                                             title="Voucher / Receipt"
                                                         >
                                                             <FileCheck size={11}/>
@@ -1279,7 +1273,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 
                                 {/* Desktop: Table layout */}
                                 <table className="w-full text-left hidden md:table bg-white">
-                                    <thead className="bg-gray-50/70 text-[10px] text-gray-400 font-extrabold uppercase border-b border-gray-150 select-none tracking-wider">
+                                    <thead className="bg-gray-50/70 text-[10px] text-gray-400 font-extrabold uppercase border-b border-gray-200 select-none tracking-wider">
                                         <tr>
                                             <th className="p-3 w-12 text-center">
                                                 <input 
@@ -1341,7 +1335,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                             <div className="flex items-center justify-center gap-1.5">
                                                                 <button 
                                                                     onClick={() => openVoucherModal(p)} 
-                                                                    className="h-7 px-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 rounded-lg transition-all flex items-center gap-1 font-bold text-[10px]" 
+                                                                    className="h-7 px-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all flex items-center gap-1 font-bold text-[10px]" 
                                                                     title="Voucher / Receipt"
                                                                 >
                                                                     <FileCheck size={11}/>
@@ -1390,9 +1384,9 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 {/* ADD/EDIT MODAL */}
                 {isAddMode && (
                     <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                        <div className="bg-white w-full max-w-lg rounded-2xl p-6 sm:p-7 md:p-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+ <div className="bg-white w-full max-w-lg rounded-2xl p-6 md:p-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="font-extrabold text-lg text-[#1A1A1A] flex items-center gap-2">
+                                <h3 className="font-extrabold text-lg text-[#111111] flex items-center gap-2">
                                     <Layers size={18} className="text-stone-700"/>
                                     {billForm.id ? '编辑固定账单 (Edit Bill) ' : '新增固定账单 (New Bill) '}
                                 </h3>
@@ -1401,9 +1395,9 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             
                             <div className="space-y-5">
                                 <div>
-                                    <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1.5 block">账单名称 (Bill Name)</label>
+                                    <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">账单名称 (Bill Name)</label>
                                     <input 
-                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none focus:border-[#FFD700]" 
+                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none focus:border-[#FFD200]" 
                                         value={billForm.name || ''} 
                                         onChange={e => setBillForm({...billForm, name: e.target.value})} 
                                         placeholder="例如：TNB 电费账单、水费、员工宿舍租金..." 
@@ -1412,7 +1406,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 
                                 <div className="grid grid-cols-2 gap-3.5">
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1 block">对应分类 (category)</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1 block">对应分类 (category)</label>
                                         <select 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
                                             value={billForm.category || 'OTHER'} 
@@ -1422,7 +1416,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1 block">标准款额 (Standard RM)</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1 block">标准款额 (Standard RM)</label>
                                         <input 
                                             type="number" 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
@@ -1435,7 +1429,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                 <div className="grid grid-cols-3 gap-3.5">
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1 block">周期类别</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1 block">周期类别</label>
                                         <select 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none animate-in duration-200" 
                                             value={billForm.type || 'MONTHLY'} 
@@ -1446,7 +1440,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1 block">预计截止日</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1 block">预计截止日</label>
                                         <input 
                                             type="number" 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
@@ -1457,7 +1451,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     </div>
                                     {billForm.type === 'YEARLY' && (
                                         <div className="animate-in slide-in-from-right duration-200">
-                                            <label className="text-[10px] font-extrabold text-stone-450 uppercase mb-1 block">截止月份 (Month)</label>
+                                            <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1 block">截止月份 (Month)</label>
                                             <input 
                                                 type="number" 
                                                 className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
@@ -1469,9 +1463,9 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 mb-1 block">收款商官方公司 (Pay To)</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 mb-1 block">收款商官方公司 (Pay To)</label>
                                         <input 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
                                             value={billForm.payableTo || ''} 
@@ -1480,7 +1474,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-extrabold text-stone-450 mb-1 block">收款账户 (Account Number)</label>
+                                        <label className="text-[10px] font-extrabold text-stone-500 mb-1 block">收款账户 (Account Number)</label>
                                         <input 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold font-mono text-xs md:text-sm outline-none" 
                                             value={billForm.accountNumber || ''} 
@@ -1492,26 +1486,26 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                 {/* Advanced Option divider */}
                                 <div className="border-t border-stone-100 pt-3.5 space-y-3 mt-1">
-                                    <div className="text-xs font-black text-stone-850 flex items-center gap-1.5 select-none">
-                                        <div className="w-1.5 h-3 bg-[#FFD700] rounded-sm"></div>
+                                    <div className="text-xs font-black text-stone-900 flex items-center gap-1.5 select-none">
+                                        <div className="w-1.5 h-3 bg-[#FFD200] rounded-sm"></div>
                                         <span>高级与备忘配置 (Advanced & Alerting Config)</span>
                                     </div>
                                     
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                                         <div>
-                                            <label className="text-[10px] font-bold text-stone-450 mb-1 block">官方缴费网址 (Portal URL)</label>
+                                            <label className="text-[10px] font-bold text-stone-500 mb-1 block">官方缴费网址 (Portal URL)</label>
                                             <input 
-                                                className="w-full p-2.5 bg-stone-50 border border-stone-150 rounded-xl font-bold text-xs outline-none focus:border-[#FFD700]" 
+                                                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs outline-none focus:border-[#FFD200]" 
                                                 value={billForm.paymentLink || ''} 
                                                 onChange={e => setBillForm({...billForm, paymentLink: e.target.value})} 
                                                 placeholder="https://www.mytnb.com.my" 
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-stone-450 mb-1 block">已有押金 (Deposit Balance)</label>
+                                            <label className="text-[10px] font-bold text-stone-500 mb-1 block">已有押金 (Deposit Balance)</label>
                                             <input 
                                                 type="number" 
-                                                className="w-full p-2.5 bg-stone-50 border border-stone-150 rounded-xl font-bold text-xs outline-none focus:border-[#FFD700]" 
+                                                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs outline-none focus:border-[#FFD200]" 
                                                 value={billForm.depositAmount || ''} 
                                                 onChange={e => setBillForm({...billForm, depositAmount: parseFloat(e.target.value) || 0})} 
                                                 placeholder="RM" 
@@ -1519,22 +1513,22 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                                         <div>
-                                            <label className="text-[10px] font-bold text-stone-450 mb-1 block">额度偏高警戒值 (Warning ceiling)</label>
+                                            <label className="text-[10px] font-bold text-stone-500 mb-1 block">额度偏高警戒值 (Warning ceiling)</label>
                                             <input 
                                                 type="number" 
-                                                className="w-full p-2.5 bg-stone-50 border border-stone-150 rounded-xl font-bold text-xs outline-none focus:border-[#FFD700]" 
+                                                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs outline-none focus:border-[#FFD200]" 
                                                 value={billForm.softLimit || ''} 
                                                 onChange={e => setBillForm({...billForm, softLimit: parseFloat(e.target.value) || 0})} 
                                                 placeholder="超出此额将标记报警红字" 
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-stone-450 mb-1 block text-stone-450">截止前提醒天数 (Alert days)</label>
+                                            <label className="text-[10px] font-bold text-stone-500 mb-1 block text-stone-500">截止前提醒天数 (Alert days)</label>
                                             <input 
                                                 type="number" 
-                                                className="w-full p-2.5 bg-stone-50 border border-stone-150 rounded-xl font-bold text-xs outline-none focus:border-[#FFD700]" 
+                                                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs outline-none focus:border-[#FFD200]" 
                                                 value={billForm.reminderDays || ''} 
                                                 onChange={e => setBillForm({...billForm, reminderDays: parseInt(e.target.value) || 3})} 
                                                 placeholder="3 天" 
@@ -1546,7 +1540,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 <button 
                                     onClick={handleSaveBill} 
                                     style={{ minHeight: '48px' }}
-                                    className="w-full py-3.5 bg-stone-900 text-[#FFD700] hover:bg-black rounded-xl font-black text-sm shadow-md transition-all active:scale-[0.98] mt-5 uppercase tracking-wider"
+                                    className="w-full py-3.5 bg-stone-900 text-[#FFD200] hover:bg-black rounded-xl font-black text-sm shadow-md transition-all active:scale-[0.98] mt-5 uppercase tracking-wider"
                                 >
                                     💾 保存账单信息 (Save Bill Outline)
                                 </button>
@@ -1570,12 +1564,12 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         <div className="flex gap-3.5 items-center">
                                             <div className="w-full">
                                                 <span className="text-[9px] font-bold text-stone-400 block mb-0.5">上次 Prev</span>
-                                                <input type="number" placeholder="Prev" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD700]" value={meterReadings.prev} onChange={e => setMeterReadings({...meterReadings, prev: e.target.value})} />
+                                                <input type="number" placeholder="Prev" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD200]" value={meterReadings.prev} onChange={e => setMeterReadings({...meterReadings, prev: e.target.value})} />
                                             </div>
                                             <ArrowRight size={14} className="text-stone-400 shrink-0 mt-3"/>
                                             <div className="w-full">
                                                 <span className="text-[9px] font-bold text-stone-400 block mb-0.5">本次 Curr</span>
-                                                <input type="number" placeholder="Curr" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD700]" value={meterReadings.curr} onChange={e => setMeterReadings({...meterReadings, curr: e.target.value})} />
+                                                <input type="number" placeholder="Curr" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD200]" value={meterReadings.curr} onChange={e => setMeterReadings({...meterReadings, curr: e.target.value})} />
                                             </div>
                                         </div>
                                         {payUsage && <p className="text-right text-[11px] font-black text-stone-900 mt-2 bg-stone-100 py-1 px-2 rounded">用额 Usage: {payUsage}</p>}
@@ -1586,7 +1580,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">Amount (支付款额 - RM)</label>
                                     <input 
                                         type="number" 
-                                        className="w-full p-3.5 bg-stone-50 border border-stone-200 rounded-xl font-black text-2xl outline-none focus:border-[#FFD700] transition-all" 
+                                        className="w-full p-3.5 bg-stone-50 border border-stone-200 rounded-xl font-black text-2xl outline-none focus:border-[#FFD200] transition-all" 
                                         value={payAmount || ''} 
                                         onChange={e => setPayAmount(parseFloat(e.target.value) || 0)} 
                                     />
@@ -1596,7 +1590,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">Date (交易日期)</label>
                                     <input 
                                         type="date" 
-                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD700] transition-all" 
+                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD200] transition-all" 
                                         value={payDate} 
                                         onChange={e => setPayDate(e.target.value)} 
                                     />
@@ -1605,7 +1599,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 <div>
                                     <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">Reference / Receipt No. (收据参考号)</label>
                                     <input 
-                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD700] transition-all" 
+                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD200] transition-all" 
                                         value={payRef} 
                                         onChange={e => setPayRef(e.target.value)} 
                                         placeholder="例如：RECP-99786..." 
@@ -1617,7 +1611,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     <select 
                                         value={payMethod} 
                                         onChange={e => setPayMethod(e.target.value as any)} 
-                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD700] transition-all"
+                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-sm outline-none focus:border-[#FFD200] transition-all"
                                     >
                                         <option value="BANK_TRANSFER">Bank Transfer (银行转账)</option>
                                         <option value="CASH">Cash (现金支付)</option>
@@ -1635,7 +1629,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     <div className="flex gap-2">
                                         <input 
                                             type="text" 
-                                            className="flex-grow p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] transition-all" 
+                                            className="flex-grow p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] transition-all" 
                                             value={payLink} 
                                             onChange={e => setPayLink(e.target.value)} 
                                             placeholder="https://drive.google.com/..." 
@@ -1709,7 +1703,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 <div className="space-y-3">
                                     {/* Document Type Selector */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">文书类型 Document Type</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">文书类型 Document Type</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button 
                                                 onClick={() => handleVoucherTypeChange('PV')}
@@ -1728,7 +1722,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                     {/* Editable Document Title */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">文书标题 Voucher Title</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">文书标题 Voucher Title</label>
                                         <input 
                                             type="text" 
                                             value={voucherTitle} 
@@ -1739,7 +1733,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                     {/* Editable Serial No */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">凭单编号 Document No.</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">凭单编号 Document No.</label>
                                         <input 
                                             type="text" 
                                             value={voucherNo} 
@@ -1750,7 +1744,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                     {/* Editable Payee/Payor */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">
                                             {voucherType === 'PV' ? '收款人 Payable To' : '付款人 Received From'}
                                         </label>
                                         <input 
@@ -1764,7 +1758,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     {/* Prepared By / Checked By / Approved By Signatories */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">制单人 Prepared By</label>
+                                            <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">制单人 Prepared By</label>
                                             <input 
                                                 type="text" 
                                                 value={voucherPreparedBy} 
@@ -1773,7 +1767,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">审核人 Checked By</label>
+                                            <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">审核人 Checked By</label>
                                             <input 
                                                 type="text" 
                                                 value={voucherCheckedBy} 
@@ -1784,7 +1778,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">批准人 Approved By</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">批准人 Approved By</label>
                                         <input 
                                             type="text" 
                                             value={voucherApprovedBy} 
@@ -1849,7 +1843,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     )}
 
                                     {/* Document Header Section */}
-                                    <div className="border-b-2 border-stone-900 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div className="border-b-2 border-stone-900 pb-5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div className="space-y-1">
                                             <h1 className="font-extrabold text-xl tracking-tight text-stone-950 uppercase">
                                                 {COMPANY_INFO.name}
@@ -1867,18 +1861,18 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                     {/* Core Details Grid */}
                                     <div className="space-y-5 mb-8 text-xs">
-                                        <div className="grid grid-cols-2 gap-4 border-b border-stone-150 pb-3">
+                                        <div className="grid grid-cols-2 gap-4 border-b border-stone-200 pb-3">
                                             <div>
                                                 <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">对账日期 DATE</span>
-                                                <span className="text-xs font-mono font-black text-stone-850">{voucherPayment.date}</span>
+                                                <span className="text-xs font-mono font-black text-stone-900">{voucherPayment.date}</span>
                                             </div>
                                             <div>
                                                 <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">单据编号 RECEIPT NO</span>
-                                                <span className="text-xs font-mono font-black text-stone-850">{voucherNo}</span>
+                                                <span className="text-xs font-mono font-black text-stone-900">{voucherNo}</span>
                                             </div>
                                         </div>
 
-                                        <div className="border-b border-stone-150 pb-3">
+                                        <div className="border-b border-stone-200 pb-3">
                                             <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">款项用途与对账内容 CONTENT / PARTICULARS</span>
                                             <div className="text-xs font-black text-stone-900 mt-0.5">
                                                 {bills.find(b => b.id === voucherPayment.billId)?.name || voucherPayment.name} ({voucherPayment.category})
@@ -1891,13 +1885,13 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                         <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 flex items-center justify-between gap-4">
                                             <div className="min-w-0">
-                                                <span className="text-[9px] font-black uppercase text-stone-450 block tracking-wider">支付总额 AMOUNT</span>
+                                                <span className="text-[9px] font-black uppercase text-stone-500 block tracking-wider">支付总额 AMOUNT</span>
                                                 <span className="text-[10px] font-black text-stone-800 uppercase tracking-tight italic mt-0.5 block truncate">
                                                     {numberToWords(voucherPayment.amount)} ONLY
                                                 </span>
                                             </div>
                                             <div className="text-right shrink-0">
-                                                <span className="text-base font-mono font-black text-stone-950 bg-stone-150 px-4 py-1.5 rounded-xl border border-stone-200 block">
+                                                <span className="text-base font-mono font-black text-stone-950 bg-stone-200 px-4 py-1.5 rounded-xl border border-stone-200 block">
                                                     RM {voucherPayment.amount.toFixed(2)}
                                                 </span>
                                             </div>
@@ -1931,12 +1925,12 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 {selectedPaymentIds.length > 0 && (
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-white rounded-2xl px-5 py-3.5 shadow-2xl flex items-center justify-between gap-5 z-[110] border border-stone-800 animate-in slide-in-from-bottom duration-300 w-[92%] max-w-lg">
                         <div className="text-xs font-black">
-                            已选择 <span className="text-[#FFD700] font-mono text-sm">{selectedPaymentIds.length}</span> 项付款记录
+                            已选择 <span className="text-[#FFD200] font-mono text-sm">{selectedPaymentIds.length}</span> 项付款记录
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <button 
                                 onClick={() => setSelectedPaymentIds([])}
-                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-white rounded-xl text-[11px] font-black transition-all cursor-pointer"
+                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-800 text-stone-300 hover:text-white rounded-xl text-[11px] font-black transition-all cursor-pointer"
                                 style={{ minHeight: '36px' }}
                             >
                                 取消
@@ -1957,12 +1951,12 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 {selectedBillIds.length > 0 && (
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-950 text-white rounded-2xl px-5 py-3.5 shadow-2xl flex items-center justify-between gap-5 z-[110] border border-stone-800 animate-in slide-in-from-bottom duration-300 w-[92%] max-w-lg">
                         <div className="text-xs font-black">
-                            已选择 <span className="text-[#FFD700] font-mono text-sm">{selectedBillIds.length}</span> 项待缴账单
+                            已选择 <span className="text-[#FFD200] font-mono text-sm">{selectedBillIds.length}</span> 项待缴账单
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <button 
                                 onClick={() => setSelectedBillIds([])}
-                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-white rounded-xl text-[11px] font-black transition-all cursor-pointer"
+                                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-800 text-stone-300 hover:text-white rounded-xl text-[11px] font-black transition-all cursor-pointer"
                                 style={{ minHeight: '36px' }}
                             >
                                 取消
@@ -2001,7 +1995,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                             {/* GLOBAL METHOD */}
                             <div className="bg-stone-50 border border-stone-100 rounded-2xl p-4 mb-4 shrink-0">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                                     <div>
                                         <span className="text-xs font-extrabold text-stone-700 block">统一付款方式 (Global Payment Method)</span>
                                         <span className="text-[10px] text-stone-400 font-medium">应用于以下所有待缴项目</span>
@@ -2053,7 +2047,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                 <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-bold">项目 #{idx + 1}</span>
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                 {/* Amount */}
                                                 <div>
                                                     <span className="text-[9px] font-extrabold text-stone-500 block mb-1">实付金额 (Amount RM)</span>
@@ -2061,7 +2055,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         type="number" 
                                                         value={item.amount || ''} 
                                                         onChange={e => updateBulkItemAmount(item.billId, e.target.value)}
-                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold font-mono outline-none focus:border-[#FFD700] text-stone-900"
+                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold font-mono outline-none focus:border-[#FFD200] text-stone-900"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
@@ -2072,7 +2066,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         type="date" 
                                                         value={item.date} 
                                                         onChange={e => updateBulkItemDate(item.billId, e.target.value)}
-                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] text-stone-900"
+                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] text-stone-900"
                                                     />
                                                 </div>
                                                 {/* Ref */}
@@ -2082,7 +2076,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         type="text" 
                                                         value={item.ref} 
                                                         onChange={e => updateBulkItemRef(item.billId, e.target.value)}
-                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] text-stone-900"
+                                                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] text-stone-900"
                                                         placeholder="例如: txn_1029384"
                                                     />
                                                 </div>
@@ -2165,7 +2159,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 <div className="space-y-3">
                                     {/* Document Type Selector */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">文书类型 Document Type</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">文书类型 Document Type</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button 
                                                 onClick={() => handleBatchVoucherTypeChange('PV')}
@@ -2184,7 +2178,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                     {/* Editable Document Title */}
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">文书标题 Voucher Title</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">文书标题 Voucher Title</label>
                                         <input 
                                             type="text" 
                                             value={batchVoucherTitle} 
@@ -2196,7 +2190,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     {/* Signatories */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">制单人 Prepared By</label>
+                                            <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">制单人 Prepared By</label>
                                             <input 
                                                 type="text" 
                                                 value={batchVoucherPreparedBy} 
@@ -2205,7 +2199,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">审核人 Checked By</label>
+                                            <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">审核人 Checked By</label>
                                             <input 
                                                 type="text" 
                                                 value={batchVoucherCheckedBy} 
@@ -2216,7 +2210,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-black text-stone-450 uppercase mb-1 block">批准人 Approved By</label>
+                                        <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">批准人 Approved By</label>
                                         <input 
                                             type="text" 
                                             value={batchVoucherApprovedBy} 
@@ -2264,7 +2258,6 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                 <div id="printable-batch-vouchers" className="w-full max-w-2xl mx-auto space-y-6">
                                     {payments.filter(p => selectedPaymentIds.includes(p.id)).map((p) => {
                                         const currentVoucherNo = getVoucherNo(p, batchVoucherType);
-                                        const currentPayee = getPayeeName(p);
                                         return (
                                             <div 
                                                 key={p.id} 
@@ -2283,7 +2276,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                 )}
 
                                                 {/* Document Header Section */}
-                                                <div className="border-b-2 border-stone-900 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                <div className="border-b-2 border-stone-900 pb-5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                                     <div className="space-y-1">
                                                         <h1 className="font-extrabold text-xl tracking-tight text-stone-950 uppercase">
                                                             {COMPANY_INFO.name}
@@ -2301,18 +2294,18 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                                 {/* Core Details Grid */}
                                                 <div className="space-y-5 mb-8 text-xs">
-                                                    <div className="grid grid-cols-2 gap-4 border-b border-stone-150 pb-3">
+                                                    <div className="grid grid-cols-2 gap-4 border-b border-stone-200 pb-3">
                                                         <div>
                                                             <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">对账日期 DATE</span>
-                                                            <span className="text-xs font-mono font-black text-stone-850">{p.date}</span>
+                                                            <span className="text-xs font-mono font-black text-stone-900">{p.date}</span>
                                                         </div>
                                                         <div>
                                                             <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">单据编号 RECEIPT NO</span>
-                                                            <span className="text-xs font-mono font-black text-stone-850">{currentVoucherNo}</span>
+                                                            <span className="text-xs font-mono font-black text-stone-900">{currentVoucherNo}</span>
                                                         </div>
                                                     </div>
 
-                                                    <div className="border-b border-stone-150 pb-3">
+                                                    <div className="border-b border-stone-200 pb-3">
                                                         <span className="text-[9px] font-black uppercase text-stone-400 block tracking-wider mb-0.5">款项用途与对账内容 CONTENT / PARTICULARS</span>
                                                         <div className="text-xs font-black text-stone-900 mt-0.5">
                                                             {bills.find(b => b.id === p.billId)?.name || p.name} ({p.category})
@@ -2325,13 +2318,13 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
                                                     <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 flex items-center justify-between gap-4">
                                                         <div className="min-w-0">
-                                                            <span className="text-[9px] font-black uppercase text-stone-455 block tracking-wider">支付总额 AMOUNT</span>
+                                                            <span className="text-[9px] font-black uppercase text-stone-500 block tracking-wider">支付总额 AMOUNT</span>
                                                             <span className="text-[10px] font-black text-stone-800 uppercase tracking-tight italic mt-0.5 block truncate">
                                                                 {numberToWords(p.amount)} ONLY
                                                             </span>
                                                         </div>
                                                         <div className="text-right shrink-0">
-                                                            <span className="text-base font-mono font-black text-stone-950 bg-stone-150 px-4 py-1.5 rounded-xl border border-stone-200 block">
+                                                            <span className="text-base font-mono font-black text-stone-950 bg-stone-200 px-4 py-1.5 rounded-xl border border-stone-200 block">
                                                                 RM {p.amount.toFixed(2)}
                                                             </span>
                                                         </div>

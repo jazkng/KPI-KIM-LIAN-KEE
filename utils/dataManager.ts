@@ -7,7 +7,6 @@ import {
     StoreConfig, AttendanceRecord, SystemBackup, TreasuryConfig, FundTransfer,
     WarrantyRecord, InventoryLog, InventoryTask,
     Proposal, OKR, MarketingCampaign, StoreEvent,
-    MisconductRecord, WarningRecord,
     TaskCompletion,
     StockPriceEntry, StockPriceHistory,
     SelfIssuedVoucher, AppLanguage, LogStatus, OperationalLogReply,
@@ -978,9 +977,6 @@ export class DataManager {
         const poBatch = writeBatch(db);
         const poSnap = await getDocs(collection(db, 'purchase_orders'));
         let poCount = 0;
-
-        // 统一不区分大小写的名字清单
-        const allTargetLowerNames = Array.from(namesToQuery).map(n => n.toLowerCase().trim());
 
         poSnap.forEach(d => {
             const po = d.data() as PurchaseOrder;

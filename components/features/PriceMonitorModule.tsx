@@ -23,8 +23,7 @@ import {
   Truck,
   X,
   Minus,
-  WalletCards,
-} from 'lucide-react';
+  } from 'lucide-react';
 import { DataManager } from '../../utils/dataManager';
 import { StockPriceHistory } from '../../types';
 
@@ -794,8 +793,6 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
     filterCategory !== 'ALL' ||
     dateRange !== DEFAULT_RANGE;
 
-  const topRiskItem = items[0];
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-0 backdrop-blur-md md:p-4">
       <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#F6F7FB] font-sans text-[#111111] shadow-2xl md:h-[92vh] md:max-w-5xl md:rounded-[2rem]">
@@ -861,7 +858,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:min-w-[420px]">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:min-w-[420px]">
                   <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-[9px] font-black uppercase tracking-wider text-white/45">
                       监控物品

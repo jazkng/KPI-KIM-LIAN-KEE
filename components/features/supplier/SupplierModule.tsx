@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-    Truck, Plus, Search, Phone, Edit3, Trash2, X, Save, FileText, 
-    Package, CheckCircle2, Send, ArrowLeft, Box,
+    Truck, Plus, Search, Phone, Edit3, Trash2, X, FileText, 
+    Package, Send, ArrowLeft, Box,
     FileDown, Receipt, UserCircle, ChevronUp, ChevronDown,
     User, ClipboardCheck,
     Loader2, MessageCircle,
@@ -10,7 +10,6 @@ import {
 import { Supplier, CatalogItem, PurchaseOrder, StockItem, PurchaseOrderItem, UomOption, ExpenseItem } from '../../../types';
 import { normalizeCatalogItem } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
-import { SUPPLIER_TAG_OPTIONS } from '../../../constants/suppliers';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
@@ -22,7 +21,7 @@ import {
     toPositiveNumber
 } from '../../../utils/unitConversion';
 
-import { collection, getDocs, query, where, limit, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, query, where, limit, doc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from '../../../firebaseConfig';
 import { ModuleGuideButton } from '../../ui/ModuleGuide';
 
@@ -36,8 +35,7 @@ import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './Suppli
 
 // 共用常量
 import { 
-    ITEMS_PER_PAGE, DEFAULT_UOMS, INVENTORY_CATEGORIES, ACCOUNTING_CATEGORIES_OPTIONS,
-    CATEGORY_MAP, SUP_INPUT_STYLE, SUP_LABEL_STYLE, SupplierReceivedItem 
+    ITEMS_PER_PAGE, DEFAULT_UOMS, CATEGORY_MAP, SUP_LABEL_STYLE, SupplierReceivedItem 
 } from './supplierConstants';
 
 interface SupplierModuleProps {
@@ -69,9 +67,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
     const [isBillFormOpen, setIsBillFormOpen] = useState(false);
     const [newBill, setNewBill] = useState<Partial<ExpenseItem>>({});
-
-    const [availableTags, setAvailableTags] = useState(SUPPLIER_TAG_OPTIONS);
-    const [newTagName, setNewTagName] = useState('');
 
     const [isEditingSupplier, setIsEditingSupplier] = useState(false);
     const [supplierForm, setSupplierForm] = useState<Partial<Supplier>>({});
@@ -114,7 +109,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     const [cleaningLogs, setCleaningLogs] = useState<string[]>([]);
     const [manualSourceId, setManualSourceId] = useState('');
     const [manualTargetId, setManualTargetId] = useState('');
-    const [groupTargets, setGroupTargets] = useState<Record<string, string>>({});
 
     const detectedDuplicateGroups = useMemo(() => {
         const groups: Record<string, Supplier[]> = {};
@@ -1171,8 +1165,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 </div>
                 <div className="hidden md:flex gap-3 items-center">
                     <div className="flex bg-white/10 p-1 rounded-xl backdrop-blur-sm border border-white/5">
-                        <button onClick={() => { setMainTab('SUPPLIERS'); setView('LIST'); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${mainTab === 'SUPPLIERS' ? 'bg-[#FFD700] text-[#1A1A1A] shadow-md' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}><UserCircle size={16}/> 供应商</button>
-                        <button onClick={() => { setMainTab('POS'); setView('LIST'); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${mainTab === 'POS' ? 'bg-[#FFD700] text-[#1A1A1A] shadow-md' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}><FileText size={16}/> 采购单</button>
+                        <button onClick={() => { setMainTab('SUPPLIERS'); setView('LIST'); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${mainTab === 'SUPPLIERS' ? 'bg-[#FFD200] text-[#111111] shadow-md' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}><UserCircle size={16}/> 供应商</button>
+                        <button onClick={() => { setMainTab('POS'); setView('LIST'); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${mainTab === 'POS' ? 'bg-[#FFD200] text-[#111111] shadow-md' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}><FileText size={16}/> 采购单</button>
                     </div>
                     <div className="w-px h-8 bg-white/20 mx-2"></div>
                     <ModuleGuideButton module="SUPPLIER" />
@@ -1219,9 +1213,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
                             <div className="relative w-full md:w-96">
                                 <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
-                                <input type="text" placeholder="搜索供应商名称 / 编号 / 标签..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-gray-50/80 border border-gray-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#FFD700] focus:ring-4 focus:ring-[#FFD700]/10 transition-all outline-none"/>
+                                <input type="text" placeholder="搜索供应商名称 / 编号 / 标签..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-gray-50/80 border border-gray-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none"/>
                             </div>
-                            <div className="hidden md:flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0 font-sans">
+                            <div className="hidden md:flex flex-col md:flex-row gap-2.5 w-full md:w-auto shrink-0 font-sans">
                                 <button 
                                     onClick={handleOpenCleanMergeModal}
                                     className="w-full md:w-auto bg-amber-50 border border-amber-200 hover:bg-amber-100/80 text-amber-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 min-h-[44px] cursor-pointer shadow-sm relative"
@@ -1248,15 +1242,15 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 </button>
                                 <button 
                                     onClick={handleOpenAddSupplier} 
-                                    className="w-full md:w-auto bg-[#1A1A1A] text-[#FFD700] px-5 py-2.5 rounded-xl font-bold text-sm shadow-[0_4px_12px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-95 min-h-[44px]"
+                                    className="w-full md:w-auto bg-[#111111] text-[#FFD200] px-5 py-2.5 rounded-xl font-bold text-sm shadow-[0_4px_12px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-95 min-h-[44px]"
                                 >
                                     <Plus size={16}/> 录入新供应商
                                 </button>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {filteredSuppliers.map(sup => (
-                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className="relative bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-sm hover:shadow-[0_8px_30px_rgba(255,215,0,0.15)] hover:border-[#FFD700]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full overflow-hidden">
+                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className="relative bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-sm hover:shadow-[0_8px_30px_rgba(255,210,0,0.15)] hover:border-[#FFD200]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full overflow-hidden">
                                     <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
                                     <div className="absolute top-2 right-2 p-2 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"><Truck size={48}/></div>
                                     <div className="flex items-start justify-between gap-2 mb-3 relative z-10">
@@ -1290,9 +1284,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         {filteredSuppliers.length === 0 && (
                             <div className="col-span-full py-20 text-center flex flex-col items-center justify-center bg-white rounded-[2rem] border border-gray-100 shadow-sm mt-4">
                                 <div className="bg-gray-50 p-6 rounded-full mb-4 ring-8 ring-gray-50/50"><Truck size={48} className="text-gray-300"/></div>
-                                <h3 className="font-black text-lg text-[#1A1A1A] mb-1">未找到相关供应商</h3>
+                                <h3 className="font-black text-lg text-[#111111] mb-1">未找到相关供应商</h3>
                                 <p className="text-sm text-gray-400 font-medium mb-6">您可以尝试更换搜索词，或立即新增一个。</p>
-                                <button onClick={handleOpenAddSupplier} className="bg-[#1A1A1A] text-[#FFD700] px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-black active:scale-95 flex items-center gap-2"><Plus size={16}/> 立即录入</button>
+                                <button onClick={handleOpenAddSupplier} className="bg-[#111111] text-[#FFD200] px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-black active:scale-95 flex items-center gap-2"><Plus size={16}/> 立即录入</button>
                             </div>
                         )}
                     </div>
@@ -1302,7 +1296,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 {view === 'DETAIL' && selectedSupplier && (
                     <div className="max-w-6xl mx-auto space-y-5 animate-in fade-in slide-in-from-right-8">
                         <div className="bg-white rounded-[2rem] p-5 md:p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-[#FFD700]/10 to-transparent rounded-full blur-3xl pointer-events-none -translate-y-1/4 translate-x-1/4"></div>
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-[#FFD200]/10 to-transparent rounded-full blur-3xl pointer-events-none -translate-y-1/4 translate-x-1/4"></div>
                             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                                 <div className="flex gap-4 w-full md:flex-1 min-w-0 items-center">
                                     <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 shadow-inner flex items-center justify-center shrink-0"><Truck size={28} className="text-[#8B0000]" /></div>
@@ -1312,7 +1306,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest shrink-0 ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{selectedSupplier.status}</span>
                                             {selectedSupplier.restDayNote && (<span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-800 text-[9px] font-bold shrink-0"><CalendarOff size={10}/> {selectedSupplier.restDayNote}</span>)}
                                         </div>
-                                        <h1 className="text-xl md:text-3xl font-black text-[#1A1A1A] truncate group-hover:text-[#8B0000] transition-colors" title={selectedSupplier.name}>{selectedSupplier.name}</h1>
+                                        <h1 className="text-xl md:text-3xl font-black text-[#111111] truncate group-hover:text-[#8B0000] transition-colors" title={selectedSupplier.name}>{selectedSupplier.name}</h1>
                                         <div className="text-[11px] md:text-xs text-gray-500 flex flex-wrap items-center gap-y-1.5 gap-x-4 mt-1.5 font-medium">
                                             <span className="flex items-center gap-1.5 shrink-0"><User size={14} className="text-gray-400"/>对接客商: {selectedSupplier.contactPerson || '未登记'}</span>
                                             {selectedSupplier.contact && (
@@ -1335,8 +1329,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-gray-100">
-                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100/50"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Payment</p><p className="font-black text-sm text-[#1A1A1A]">{selectedSupplier.paymentTerm || 'COD'}</p></div>
-                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100/50"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Min Order</p><p className="font-mono font-black text-sm text-[#1A1A1A]">RM {selectedSupplier.minOrderValue || 0}</p></div>
+                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100/50"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Payment</p><p className="font-black text-sm text-[#111111]">{selectedSupplier.paymentTerm || 'COD'}</p></div>
+                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100/50"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Min Order</p><p className="font-mono font-black text-sm text-[#111111]">RM {selectedSupplier.minOrderValue || 0}</p></div>
                                 <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100/50"><p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest mb-1">Total Spent</p><p className="font-mono font-black text-base text-blue-700">RM {billStats.total.toFixed(2)}</p></div>
                                 <div className={`p-3 rounded-xl border ${billStats.outstanding > 0 ? 'bg-rose-50/50 border-rose-200' : 'bg-emerald-50/50 border-emerald-200'}`}><p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${billStats.outstanding > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>Outstanding</p><p className={`font-mono font-black text-base ${billStats.outstanding > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>RM {billStats.outstanding.toFixed(2)}</p></div>
                             </div>
@@ -1357,7 +1351,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         {selectedSupplier.bankAccounts && selectedSupplier.bankAccounts.length > 0 ? (
                                             <div className="space-y-3">
                                                 {selectedSupplier.bankAccounts.map((b, bIdx) => {
-                                                    const bankString = `${b.bankName || ''} ${b.accountName || ''} ${b.accountNo || ''}`;
                                                     return (
                                                         <div key={bIdx} className="bg-white/5 hover:bg-white/10 p-2.5 rounded-xl border border-white/5 flex items-center justify-between transition-colors">
                                                             <div className="space-y-0.5 flex-1 min-w-0 pr-2">
@@ -1365,12 +1358,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                     <span className="px-1.5 py-0.5 bg-amber-400/20 text-amber-400 rounded text-[9px] font-black uppercase tracking-wider">{b.bankName || '未填银行'}</span>
                                                                     <span className="text-[10px] text-white/40 font-bold truncate">户名: {b.accountName || '--'}</span>
                                                                 </div>
-                                                                <p className="font-mono font-black text-xs text-[#FFD700] tracking-wider break-all">{b.accountNo || '无卡号'}</p>
+                                                                <p className="font-mono font-black text-xs text-[#FFD200] tracking-wider break-all">{b.accountNo || '无卡号'}</p>
                                                             </div>
                                                             {b.accountNo && (
                                                                 <button 
                                                                     onClick={() => copyToClipboard(b.accountNo, `bank_${bIdx}`)}
-                                                                    className="px-2 py-1.5 text-[9px] font-black uppercase text-[#121212] bg-[#FFD700] hover:bg-amber-300 rounded-lg active:scale-95 transition-all shadow-sm shrink-0"
+                                                                    className="px-2 py-1.5 text-[9px] font-black uppercase text-[#121212] bg-[#FFD200] hover:bg-amber-300 rounded-lg active:scale-95 transition-all shadow-sm shrink-0"
                                                                 >
                                                                     {copiedText === `bank_${bIdx}` ? '已复制' : '📋 复制'}
                                                                 </button>
@@ -1384,11 +1377,11 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                 <div className="flex items-start justify-between bg-white/5 p-2 rounded-xl border border-white/5">
                                                     <div className="space-y-1 flex-1">
                                                         <p className="text-[10px] text-gray-400 font-bold">对账单转账参考:</p>
-                                                        <p className="font-mono font-black text-xs text-[#FFD700] tracking-wide break-all">{selectedSupplier.bankAccount}</p>
+                                                        <p className="font-mono font-black text-xs text-[#FFD200] tracking-wide break-all">{selectedSupplier.bankAccount}</p>
                                                     </div>
                                                     <button 
                                                         onClick={() => copyToClipboard(selectedSupplier.bankAccount || '', 'legacy_bank')}
-                                                        className="ml-2 px-2 py-1 text-[9px] font-black uppercase text-[#121212] bg-[#FFD700] hover:bg-amber-300 rounded-lg active:scale-95 transition-all shadow-sm shrink-0"
+                                                        className="ml-2 px-2 py-1 text-[9px] font-black uppercase text-[#121212] bg-[#FFD200] hover:bg-amber-300 rounded-lg active:scale-95 transition-all shadow-sm shrink-0"
                                                     >
                                                         {copiedText === 'legacy_bank' ? '已复制' : '📋 复制'}
                                                     </button>
@@ -1408,10 +1401,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
                                 {/* 工商执照与物流规格 */}
                                 <div className="md:col-span-6 grid grid-cols-2 gap-3">
-                                    <div className="bg-white border border-gray-150 p-3 rounded-2xl flex flex-col justify-between">
+                                    <div className="bg-white border border-gray-200 p-3 rounded-2xl flex flex-col justify-between">
                                         <div>
                                             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">SSM 注册编号</span>
-                                            <span className="text-xs font-mono font-black text-[#1A1A1A] block truncate">{selectedSupplier.ssmNumber || 'N/A (无记录)'}</span>
+                                            <span className="text-xs font-mono font-black text-[#111111] block truncate">{selectedSupplier.ssmNumber || 'N/A (无记录)'}</span>
                                         </div>
                                         {selectedSupplier.ssmNumber && (
                                             <button 
@@ -1423,7 +1416,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         )}
                                     </div>
 
-                                    <div className="bg-white border border-gray-150 p-3 rounded-2xl flex flex-col justify-between">
+                                    <div className="bg-white border border-gray-200 p-3 rounded-2xl flex flex-col justify-between">
                                         <div>
                                             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">SST 税收代码</span>
                                             <span className="text-xs font-mono font-black text-blue-900 block truncate">{selectedSupplier.sstNumber || '免征/未注册'}</span>
@@ -1438,11 +1431,11 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         )}
                                     </div>
 
-                                    <div className="bg-white border border-gray-150 p-3 rounded-2xl col-span-2">
+                                    <div className="bg-white border border-gray-200 p-3 rounded-2xl col-span-2">
                                         <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-1">常规物流与配送排程 (Delivery Schedule)</span>
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs">🚚</span>
-                                            <p className="text-xs font-bold text-[#1A1A1A] leading-normal">
+                                            <p className="text-xs font-bold text-[#111111] leading-normal">
                                                 {selectedSupplier.deliverySchedule || '未指定排程 (配合 Rest Days 进行下单)'}
                                             </p>
                                         </div>
@@ -1452,7 +1445,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 {/* 底部地理定位一键导航与备注信息 */}
                                 <div className="md:col-span-12 space-y-3 mt-1.5">
                                     {selectedSupplier.address && (
-                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-2xl p-3.5 border border-gray-200/60 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-2xl p-3.5 border border-gray-200/60 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
                                             <div className="flex items-start gap-2.5 min-w-0 flex-1">
                                                 <span className="text-lg mt-0.5 select-none shrink-0">📍</span>
                                                 <div className="min-w-0">
@@ -1471,7 +1464,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
                                     {selectedSupplier.note && (
                                         <div className="bg-rose-50/20 border border-dotted border-rose-200 rounded-2xl p-3.5">
-                                            <span className="text-[9px] font-bold text-rose-505 uppercase tracking-widest block mb-1">财务结算/收发票特别条款备忘 (Special Remarks)</span>
+                                            <span className="text-[9px] font-bold text-rose-500 uppercase tracking-widest block mb-1">财务结算/收发票特别条款备忘 (Special Remarks)</span>
                                             <p className="text-xs text-rose-900 font-bold leading-relaxed">{selectedSupplier.note}</p>
                                         </div>
                                     )}
@@ -1481,25 +1474,25 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
                         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
                             <div className="flex border-b border-gray-100 bg-gray-50/80 p-1.5 gap-1.5">
-                                <button onClick={() => setActiveDetailTab('CATALOG')} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'CATALOG' ? 'bg-white text-[#1A1A1A] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-700'}`}><Package size={16}/> 产品目录</button>
-                                <button onClick={() => setActiveDetailTab('BILLS')} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'BILLS' ? 'bg-white text-[#1A1A1A] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-700'}`}><Receipt size={16}/> 历史账单</button>
+                                <button onClick={() => setActiveDetailTab('CATALOG')} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'CATALOG' ? 'bg-white text-[#111111] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-700'}`}><Package size={16}/> 产品目录</button>
+                                <button onClick={() => setActiveDetailTab('BILLS')} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'BILLS' ? 'bg-white text-[#111111] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-700'}`}><Receipt size={16}/> 历史账单</button>
                             </div>
 
                             {activeDetailTab === 'CATALOG' && (
                                 <div className="p-4 md:p-6">
                                     <div className="flex justify-between items-center mb-6">
-                                        <h3 className="font-black text-base md:text-lg text-[#1A1A1A] flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-[#1A1A1A] text-[#FFD700] flex items-center justify-center shadow-md"><ShoppingBag size={16}/></div>供应目录</h3>
-                                        <button onClick={handleAddProduct} className="px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95"><Plus size={14}/> 添加商品</button>
+                                        <h3 className="font-black text-base md:text-lg text-[#111111] flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-[#111111] text-[#FFD200] flex items-center justify-center shadow-md"><ShoppingBag size={16}/></div>供应目录</h3>
+                                        <button onClick={handleAddProduct} className="px-4 py-2.5 bg-[#111111] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95"><Plus size={14}/> 添加商品</button>
                                     </div>
                                     {(!selectedSupplier.catalog || selectedSupplier.catalog.length === 0) ? (
                                         <div className="py-16 text-center border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50/50"><Package size={40} className="mx-auto text-gray-300 mb-3"/><p className="text-gray-400 font-bold text-sm">目录为空</p></div>
                                     ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                             {selectedSupplier.catalog.map(rawItem => {
                                                 const item = normalizeCatalogItem(rawItem, allStockList);
                                                 const linkedStock = item.linkedStockId ? allStockList.find(s => s.id === item.linkedStockId) : undefined;
                                                 return (
-                                                    <div key={item.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-[#FFD700] hover:shadow-md transition-all flex flex-col group relative">
+                                                    <div key={item.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-[#FFD200] hover:shadow-md transition-all flex flex-col group relative">
                                                         <div className="flex justify-between items-start mb-2">
                                                             <div className="text-[10px] text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{item.supplierCode || 'NO-CODE'}</div>
                                                             <div className="flex items-center gap-1">
@@ -1507,7 +1500,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
                                                             </div>
                                                         </div>
-                                                        <h4 className="font-bold text-sm text-[#1A1A1A] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
+                                                        <h4 className="font-bold text-sm text-[#111111] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
                                                         
                                                         {linkedStock && (
                                                             <div className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1 mb-2 inline-flex items-center gap-1">
@@ -1516,7 +1509,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                             </div>
                                                         )}
                                                         
-                                                        <div className="font-mono text-base font-black text-[#1A1A1A] mb-1">
+                                                        <div className="font-mono text-base font-black text-[#111111] mb-1">
                                                             RM {(item.pricePerPurchaseUnit ?? item.price).toFixed(2)}
                                                             <span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.purchaseUnitName || item.unit}</span>
                                                         </div>
@@ -1535,7 +1528,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                         )}
 
                                                         <div className="mt-auto pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
-                                                            <button onClick={() => addToCart(item)} className="flex-1 bg-[#1A1A1A] text-white py-2 rounded-xl text-xs font-bold hover:bg-[#FFD700] hover:text-black active:scale-95 flex items-center justify-center gap-1 shadow-sm min-h-[36px]"><Plus size={12}/> 1 {item.purchaseUnitName || item.unit}</button>
+                                                            <button onClick={() => addToCart(item)} className="flex-1 bg-[#111111] text-white py-2 rounded-xl text-xs font-bold hover:bg-[#FFD200] hover:text-black active:scale-95 flex items-center justify-center gap-1 shadow-sm min-h-[36px]"><Plus size={12}/> 1 {item.purchaseUnitName || item.unit}</button>
                                                             {item.uomOptions?.filter(u => u.ratio > 1).map((uom, idx) => (
                                                                 <button key={idx} onClick={() => addToCart(item, uom)} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 rounded-xl text-[10px] font-bold hover:bg-gray-50 active:scale-95 min-h-[36px]">+ 1 {uom.value}</button>
                                                             ))}
@@ -1552,7 +1545,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 <div className="flex flex-col h-full animate-in fade-in">
                                     <div className="bg-white px-6 py-3 border-b border-gray-100 flex items-center justify-between gap-3 sticky top-0 z-10 flex-wrap">
                                         <div className="flex items-center gap-2">
-                                            <button onClick={handleOpenBillForm} className="px-3 py-1.5 bg-[#1A1A1A] text-[#FFD700] rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm active:scale-95 min-h-[36px]"><Plus size={12}/> 录入账单</button>
+                                            <button onClick={handleOpenBillForm} className="px-3 py-1.5 bg-[#111111] text-[#FFD200] rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm active:scale-95 min-h-[36px]"><Plus size={12}/> 录入账单</button>
                                             <button 
                                                 onClick={handleExportUnpaidBillsPDF} 
                                                 disabled={isExportingUnpaidBills}
@@ -1601,7 +1594,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-full">{group.count} 笔</span>
                                                             </div>
                                                             <div className="flex items-center gap-2.5">
-                                                                <span className="font-mono font-black text-[#1A1A1A] text-xs">RM {group.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                <span className="font-mono font-black text-[#111111] text-xs">RM {group.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                 {isExpanded ? <ChevronUp size={14} className="text-indigo-400 shrink-0" /> : <ChevronDown size={14} className="text-gray-400 shrink-0" />}
                                                             </div>
                                                         </button>
@@ -1642,7 +1635,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                             </span>
                                                                         </div>
                                                                         <div className="flex-1 text-right">
-                                                                            <div className="font-mono font-black text-xs text-[#1A1A1A]">RM {(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</div>
+                                                                            <div className="font-mono font-black text-xs text-[#111111]">RM {(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</div>
                                                                             {bill.outstandingAmount && bill.outstandingAmount > 0 ? (
                                                                                 <div className="text-[9px] text-rose-500 font-bold mt-0.5 leading-none">未付: RM {bill.outstandingAmount.toFixed(2)}</div>
                                                                             ) : (
@@ -1668,7 +1661,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 {mainTab === 'POS' && view === 'LIST' && (
                     <div className="max-w-6xl mx-auto space-y-5 animate-in fade-in slide-in-from-bottom-4">
                         <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                            <h3 className="font-black text-base text-[#1A1A1A] flex items-center gap-2"><div className="p-2 bg-[#FFD700] rounded-xl"><ClipboardCheck size={18}/></div> 采购单历史</h3>
+                            <h3 className="font-black text-base text-[#111111] flex items-center gap-2"><div className="p-2 bg-[#FFD200] rounded-xl"><ClipboardCheck size={18}/></div> 采购单历史</h3>
                             <div className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">Total: {purchaseOrders.length}</div>
                         </div>
                         {purchaseOrders.length === 0 ? (
@@ -1676,18 +1669,18 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {purchaseOrders.map(po => (
-                                    <div key={po.id} className="bg-white p-4 rounded-[1.5rem] border border-gray-100 shadow-sm hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-[#FFD700]/50 transition-all flex flex-col group relative">
+                                    <div key={po.id} className="bg-white p-4 rounded-[1.5rem] border border-gray-100 shadow-sm hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-[#FFD200]/50 transition-all flex flex-col group relative">
                                         <div className="flex justify-between items-start mb-3">
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] tracking-widest shadow-sm ${po.status === 'RECEIVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : po.status === 'CANCELLED' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>{po.status === 'RECEIVED' ? 'RCV' : po.status === 'CANCELLED' ? 'CNL' : 'ORD'}</div>
-                                                <div><div className="font-mono font-black text-sm text-[#1A1A1A]">{po.id}</div><div className="text-[10px] font-bold text-gray-400">{po.date.split('T')[0]}</div></div>
+                                                <div><div className="font-mono font-black text-sm text-[#111111]">{po.id}</div><div className="text-[10px] font-bold text-gray-400">{po.date.split('T')[0]}</div></div>
                                             </div>
                                         </div>
-                                        <div className="font-bold text-[#1A1A1A] text-sm flex items-center gap-2 mb-3 bg-gray-50 p-2 rounded-lg border border-gray-100"><Truck size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{po.supplierName}</span></div>
+                                        <div className="font-bold text-[#111111] text-sm flex items-center gap-2 mb-3 bg-gray-50 p-2 rounded-lg border border-gray-100"><Truck size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{po.supplierName}</span></div>
                                         <div className="flex justify-between items-end mt-auto pt-3 border-t border-gray-100">
                                             <div><p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Est. Amount</p><p className="font-mono font-black text-base text-blue-700">RM {po.totalEstimated.toFixed(2)}</p></div>
                                             <div className="flex gap-1.5">
-                                                {po.status === 'ORDERED' && (<button onClick={() => initiateReceivePO(po)} className="bg-[#1A1A1A] text-[#FFD700] px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-black shadow-md active:scale-95">入库收货</button>)}
+                                                {po.status === 'ORDERED' && (<button onClick={() => initiateReceivePO(po)} className="bg-[#111111] text-[#FFD200] px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-black shadow-md active:scale-95">入库收货</button>)}
                                                 <button onClick={() => sendWhatsappPO(po)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><Send size={14}/></button>
                                                 <button onClick={() => handleExportPO_PDF(po)} disabled={isGeneratingPdf && printingPO?.id === po.id} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200">{isGeneratingPdf && printingPO?.id === po.id ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>}</button>
                                                 <button onClick={() => setDeletePOCandidate(po.id)} className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100"><Trash2 size={14}/></button>
@@ -1715,16 +1708,16 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 >
                                     <div>
                                         {/* Header */}
-                                        <div className="flex justify-between items-start border-b-4 border-[#1A1A1A] pb-5 mb-8">
+                                        <div className="flex justify-between items-start border-b-4 border-[#111111] pb-5 mb-8">
                                             <div>
-                                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#1A1A1A] mb-1">采购订单</h1>
+                                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111] mb-1">采购订单</h1>
                                                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Purchase Order</p>
                                                 <p className="text-[9px] text-gray-400 font-bold mt-2 font-mono">
                                                     订单日期 Date: {printingPO.date.split('T')[0]}
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-xl font-black text-[#1A1A1A]">KIM LIAN KEE (KEPONG)</p>
+                                                <p className="text-xl font-black text-[#111111]">KIM LIAN KEE (KEPONG)</p>
                                                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1">金莲记（甲洞）</p>
                                                 <p className="text-[9px] text-gray-400 font-mono">PO No: {printingPO.id}</p>
                                             </div>
@@ -1734,12 +1727,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         <div className="grid grid-cols-2 gap-8 mb-8">
                                             <div>
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">供应商 Supplier</p>
-                                                <p className="text-sm font-black text-[#1A1A1A]">{printingPO.supplierName}</p>
+                                                <p className="text-sm font-black text-[#111111]">{printingPO.supplierName}</p>
                                                 <p className="text-[10px] text-gray-500 font-mono mt-1">ID: {printingPO.supplierId}</p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">收货方 Deliver To</p>
-                                                <p className="text-sm font-black text-[#1A1A1A]">KIM LIAN KEE (KEPONG) SDN BHD</p>
+                                                <p className="text-sm font-black text-[#111111]">KIM LIAN KEE (KEPONG) SDN BHD</p>
                                                 <p className="text-[10px] text-gray-500 mt-1">No. 52, Jalan Metro Perdana Barat 13, Kepong, KL</p>
                                             </div>
                                         </div>
@@ -1747,7 +1740,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         {/* Items Table */}
                                         <table className="w-full text-left text-[10px] border-collapse mb-8">
                                             <thead>
-                                                <tr className="bg-[#1A1A1A] text-white font-black text-[9px]">
+                                                <tr className="bg-[#111111] text-white font-black text-[9px]">
                                                     <th className="p-2 text-left rounded-l-lg">序号 No.</th>
                                                     <th className="p-2 text-left">商品名称 Item Description</th>
                                                     <th className="p-2 text-right">数量 Qty</th>
@@ -1764,13 +1757,13 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                         <tr key={idx} className="hover:bg-gray-50/50">
                                                             <td className="p-2 text-left font-mono font-bold text-gray-500">{itemNo}</td>
                                                             <td className="p-2">
-                                                                <div className="font-bold text-[#1A1A1A]">{item.name}</div>
+                                                                <div className="font-bold text-[#111111]">{item.name}</div>
                                                                 {item.supplierCode && <span className="text-[8px] font-mono bg-gray-100 text-gray-600 px-1 py-0.5 rounded">Code: {item.supplierCode}</span>}
                                                             </td>
                                                             <td className="p-2 text-right font-mono font-bold">{item.orderQty}</td>
                                                             <td className="p-2 text-center font-bold text-gray-600">{item.unit}</td>
                                                             <td className="p-2 text-right font-mono font-bold">{(item.cost || 0).toFixed(2)}</td>
-                                                            <td className="p-2 text-right font-mono font-black text-[#1A1A1A]">{subtotal.toFixed(2)}</td>
+                                                            <td className="p-2 text-right font-mono font-black text-[#111111]">{subtotal.toFixed(2)}</td>
                                                         </tr>
                                                     );
                                                 })}
@@ -1781,7 +1774,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     {/* Footer (Legend / Signature) */}
                                     <div>
                                         {i === Math.ceil(printingPO.items.length / ITEMS_PER_PAGE) - 1 && (
-                                            <div className="border-t border-gray-150 pt-4 mb-8 flex justify-between items-end">
+                                            <div className="border-t border-gray-200 pt-4 mb-8 flex justify-between items-end">
                                                 <div>
                                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Estimated Amount</p>
                                                     <p className="text-xl font-mono font-black text-blue-700">RM {printingPO.totalEstimated.toFixed(2)}</p>
@@ -1840,7 +1833,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         </div>
                         <div>
                             <p className="text-[9px] font-black text-rose-800 uppercase tracking-widest mb-1">未付款总额 Outstanding</p>
-                            <p className="text-lg font-black text-red-650 font-mono">RM {supplierPrintBills.reduce((acc,b)=>acc+(b.outstandingAmount||0),0).toFixed(2)}</p>
+                            <p className="text-lg font-black text-red-700 font-mono">RM {supplierPrintBills.reduce((acc,b)=>acc+(b.outstandingAmount||0),0).toFixed(2)}</p>
                         </div>
                     </div>
 
@@ -1869,15 +1862,15 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         </div>
                                     </td>
                                     <td className="p-2.5 text-right font-mono font-bold">{(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</td>
-                                    <td className="p-2.5 text-right font-mono text-orange-650 font-bold">{(bill.creditNote || 0).toFixed(2)}</td>
-                                    <td className="p-2.5 text-right font-mono font-black text-red-650 bg-red-50/30">{(bill.outstandingAmount || 0).toFixed(2)}</td>
+                                    <td className="p-2.5 text-right font-mono text-orange-700 font-bold">{(bill.creditNote || 0).toFixed(2)}</td>
+                                    <td className="p-2.5 text-right font-mono font-black text-red-700 bg-red-50/30">{(bill.outstandingAmount || 0).toFixed(2)}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
 
                     {/* ✍️ 签名确认区域 */}
-                    <div className="mt-16 pt-8 border-t border-gray-150 flex justify-between gap-12">
+                    <div className="mt-16 pt-8 border-t border-gray-200 flex justify-between gap-12">
                         <div className="flex-1">
                             <p className="text-[9px] font-black uppercase text-rose-900 tracking-wider">✍️ 供应商代表签字 &amp; 盖章 Supplier Signature &amp; Stamp</p>
                             <div className="w-full border-b border-dashed border-gray-300 mt-14"></div>
@@ -1927,12 +1920,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             {deleteSupplierId && (<DeleteSupplierModal onConfirm={executeDeleteSupplier} onCancel={() => setDeleteSupplierId(null)} />)}
 
             {isExportModalOpen && (
-                <div id="supplier-export-pdf-modal" className="fixed inset-0 bg-[#1A1A1A]/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
+                <div id="supplier-export-pdf-modal" className="fixed inset-0 bg-[#111111]/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
                     <div className="bg-white w-full max-w-2xl rounded-[2rem] overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[85vh]">
                         {/* Title bar */}
-                        <div className="bg-[#1A1A1A] text-white p-5 border-b-4 border-[#FFD700] flex justify-between items-center shrink-0">
+                        <div className="bg-[#111111] text-white p-5 border-b-4 border-[#FFD200] flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-3">
-                                <span className="bg-[#FFD700] p-1.5 rounded-lg text-black"><FileDown size={18}/></span>
+                                <span className="bg-[#FFD200] p-1.5 rounded-lg text-black"><FileDown size={18}/></span>
                                 <div>
                                     <h3 className="font-serif font-black text-base md:text-lg tracking-wide text-white">选择要导出的供应商</h3>
                                     <p className="text-[10px] text-gray-400 font-mono tracking-wider mt-0.5">SELECT SUPPLIERS FOR PDF COMPILATION</p>
@@ -1942,29 +1935,29 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         </div>
 
                         {/* Search & Select tools */}
-                        <div className="p-4 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-center shrink-0">
-                            <div className="relative w-full sm:flex-1">
+                        <div className="p-4 bg-gray-50 border-b border-gray-100 flex flex-col md:flex-row gap-3 items-center shrink-0">
+                            <div className="relative w-full md:flex-1">
                                 <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
                                 <input 
                                     type="text" 
                                     placeholder="搜索供应商或编号以筛选列表..." 
                                     value={exportSearchTerm} 
                                     onChange={e => setExportSearchTerm(e.target.value)} 
-                                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD700]/30 focus:border-[#FFD700] transition-all"
+                                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200]/30 focus:border-[#FFD200] transition-all"
                                 />
                             </div>
-                            <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                            <div className="flex gap-2 w-full md:w-auto shrink-0">
                                 <button 
                                     onClick={handleSelectAllExport}
                                     type="button"
-                                    className="flex-1 sm:flex-none px-3 py-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-[11px] font-black pointer-events-auto active:scale-95 transition-all text-gray-700"
+                                    className="flex-1 md:flex-none px-3 py-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-[11px] font-black pointer-events-auto active:scale-95 transition-all text-gray-700"
                                 >
                                     全选 ({filteredExportSuppliers.length})
                                 </button>
                                 <button 
                                     onClick={handleDeselectAllExport}
                                     type="button"
-                                    className="flex-1 sm:flex-none px-3 py-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-[11px] font-black pointer-events-auto active:scale-95 transition-all text-gray-700"
+                                    className="flex-1 md:flex-none px-3 py-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-[11px] font-black pointer-events-auto active:scale-95 transition-all text-gray-700"
                                 >
                                     清空
                                 </button>
@@ -1990,12 +1983,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                 type="checkbox" 
                                                 checked={isChecked}
                                                 onChange={() => handleToggleSelectExport(sup.id)}
-                                                className="w-5 h-5 rounded border-gray-300 text-[#1A1A1A] focus:ring-[#FFD700] font-black scale-105 shrink-0"
+                                                className="w-5 h-5 rounded border-gray-300 text-[#111111] focus:ring-[#FFD200] font-black scale-105 shrink-0"
                                             />
                                             <div className="min-w-0 flex-grow">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-[10px] font-black bg-[#1A1A1A] text-[#FFD700] px-1.5 py-0.5 rounded-md">{sup.id}</span>
-                                                    <h4 className="font-bold text-xs text-[#1A1A1A] truncate group-hover:text-blue-700 transition-colors">{sup.name}</h4>
+                                                    <span className="font-mono text-[10px] font-black bg-[#111111] text-[#FFD200] px-1.5 py-0.5 rounded-md">{sup.id}</span>
+                                                    <h4 className="font-bold text-xs text-[#111111] truncate group-hover:text-blue-700 transition-colors">{sup.name}</h4>
                                                 </div>
                                                 <p className="text-[10px] font-mono text-gray-400 mt-1 flex items-center gap-1">
                                                     <span>映射码:</span>
@@ -2009,15 +2002,15 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         </div>
 
                         {/* Bottom Actions footer */}
-                        <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
+                        <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-3 shrink-0">
                             <div className="text-[11px] font-bold text-gray-500">
                                 已选中 <span className="text-[#8B0000] font-black text-xs">{selectedExportIds.length}</span> 个供应商对账实体进行打包编译
                             </div>
-                            <div className="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
+                            <div className="flex gap-2 w-full md:w-auto shrink-0 justify-end">
                                 <button 
                                     onClick={() => setIsExportModalOpen(false)}
                                     type="button"
-                                    className="flex-1 sm:flex-none px-4 py-2 border border-gray-200 bg-white hover:bg-gray-100 rounded-xl text-xs font-bold transition-all"
+                                    className="flex-1 md:flex-none px-4 py-2 border border-gray-200 bg-white hover:bg-gray-100 rounded-xl text-xs font-bold transition-all"
                                 >
                                     取消
                                 </button>
@@ -2025,7 +2018,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     onClick={handleConfirmExport}
                                     type="button"
                                     disabled={selectedExportIds.length === 0}
-                                    className="flex-1 sm:flex-none px-5 py-2.5 bg-[#1A1A1A] text-[#FFD700] hover:bg-black disabled:bg-gray-200 disabled:text-gray-400 rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer min-h-[40px]"
+                                    className="flex-1 md:flex-none px-5 py-2.5 bg-[#111111] text-[#FFD200] hover:bg-black disabled:bg-gray-200 disabled:text-gray-400 rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer min-h-[40px]"
                                 >
                                     <FileDown size={14}/> 确认生成 PDF 凭据
                                 </button>
@@ -2036,10 +2029,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             )}
 
             {isCleanModalOpen && (
-                <div id="supplier-consolidation-hub-modal" className="fixed inset-0 bg-[#1A1A1A]/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in zoom-in-95 duration-200 font-sans">
+                <div id="supplier-consolidation-hub-modal" className="fixed inset-0 bg-[#111111]/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in zoom-in-95 duration-200 font-sans">
                     <div className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
                         {/* Header */}
-                        <div className="bg-[#1A1A1A] text-white p-5 border-b border-[#FFD700]/50 shrink-0 flex justify-between items-center">
+                        <div className="bg-[#111111] text-white p-5 border-b border-[#FFD200]/50 shrink-0 flex justify-between items-center">
                             <div>
                                 <h3 className="font-serif font-black text-base flex items-center gap-2 text-white">🔠 集团商户去重与大写规范中心</h3>
                                 <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono mt-0.5">Enterprise Supplier Cleansing Hub</p>
@@ -2084,7 +2077,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <div id="consolidation-log-console" className="bg-gray-950 text-green-400 font-mono text-[11px] p-3.5 rounded-xl max-h-40 overflow-y-auto space-y-1 border border-gray-800 shadow-inner">
                                         {cleaningLogs.map((log, idx) => (
                                             <div key={idx} className="leading-relaxed flex items-start gap-1">
-                                                <span className="text-[#FFD700] shrink-0 select-none">❯</span>
+                                                <span className="text-[#FFD200] shrink-0 select-none">❯</span>
                                                 <span className="break-all">{log}</span>
                                             </div>
                                         ))}
@@ -2093,9 +2086,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                             )}
 
                             {/* Batch Global Action Board */}
-                            <div className="bg-[#FFD700]/5 rounded-2xl p-4 border border-[#FFD700]/30 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="bg-[#FFD200]/5 rounded-2xl p-4 border border-[#FFD200]/30 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="space-y-1 text-center md:text-left">
-                                    <h4 className="font-black text-sm text-[#1A1A1A]">⚡ 全局一键智能清洗合并法 (推荐)</h4>
+                                    <h4 className="font-black text-sm text-[#111111]">⚡ 全局一键智能清洗合并法 (推荐)</h4>
                                     <p className="text-[11px] text-gray-500 font-bold leading-relaxed">
                                         执行后系统将自动找出所有同名大小写拼写分叉的供应商，无损将其所有的应付账款、日结对账记录、采购单(PO)、付款凭证(PV)刷新归并到唯一的主商家下，并彻底转换为大写拼写。
                                     </p>
@@ -2159,7 +2152,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         }
                                     }}
                                     disabled={isCleaning || (detectedDuplicateGroups.length === 0 && lowercaseSingleSuppliers.length === 0)}
-                                    className="w-full md:w-auto shrink-0 bg-[#8B0000] hover:bg-rose-950 disabled:bg-gray-150 disabled:text-gray-400 text-white px-5 py-3 rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all min-h-[44px] cursor-pointer"
+                                    className="w-full md:w-auto shrink-0 bg-[#8B0000] hover:bg-rose-950 disabled:bg-gray-200 disabled:text-gray-400 text-white px-5 py-3 rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all min-h-[44px] cursor-pointer"
                                 >
                                     🚀 一键跑批标准大写清洗
                                 </button>
@@ -2175,7 +2168,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             id="select-merge-source"
                                             value={manualSourceId} 
                                             onChange={e => setManualSourceId(e.target.value)} 
-                                            className="w-full bg-gray-50 border border-gray-200 text-[#1A1A1A] text-xs font-bold rounded-xl px-3 py-2.5 outline-none focus:bg-white focus:border-[#FFD700] min-h-[44px]"
+                                            className="w-full bg-gray-50 border border-gray-200 text-[#111111] text-xs font-bold rounded-xl px-3 py-2.5 outline-none focus:bg-white focus:border-[#FFD200] min-h-[44px]"
                                         >
                                             <option value="">-- 请选择被销毁的源商家 --</option>
                                             {suppliers.map(s => (
@@ -2189,7 +2182,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             id="select-merge-target"
                                             value={manualTargetId} 
                                             onChange={e => setManualTargetId(e.target.value)} 
-                                            className="w-full bg-gray-50 border border-gray-200 text-[#1A1A1A] text-xs font-bold rounded-xl px-3 py-2.5 outline-none focus:bg-white focus:border-[#FFD700] min-h-[44px]"
+                                            className="w-full bg-gray-50 border border-gray-200 text-[#111111] text-xs font-bold rounded-xl px-3 py-2.5 outline-none focus:bg-white focus:border-[#FFD200] min-h-[44px]"
                                         >
                                             <option value="">-- 请选择保留的主商家 --</option>
                                             {suppliers.map(s => (
@@ -2202,7 +2195,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <button
                                         onClick={runManualMerge}
                                         disabled={isCleaning || !manualSourceId || !manualTargetId}
-                                        className="w-full sm:w-auto px-5 py-2.5 bg-gray-900 text-[#FFD700] rounded-xl text-xs font-black hover:bg-black disabled:bg-gray-150 disabled:text-gray-400 active:scale-95 transition-all min-h-[44px]"
+                                        className="w-full md:w-auto px-5 py-2.5 bg-gray-900 text-[#FFD200] rounded-xl text-xs font-black hover:bg-black disabled:bg-gray-200 disabled:text-gray-400 active:scale-95 transition-all min-h-[44px]"
                                     >
                                         🔗 确认合并所选两家
                                     </button>
@@ -2226,7 +2219,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                 <div key={gIdx} className="border border-gray-200 rounded-2xl p-3.5 space-y-3 bg-white shadow-sm">
                                                     <div className="flex justify-between items-start border-b border-gray-100 pb-2">
                                                         <div>
-                                                            <h5 className="font-black text-xs text-[#1A1A1A]">{normalizedName}</h5>
+                                                            <h5 className="font-black text-xs text-[#111111]">{normalizedName}</h5>
                                                             <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1.5 mt-0.5">
                                                                 <span className="bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-black">发现 {group.length} 个重合档案</span>
                                                             </p>
@@ -2279,20 +2272,20 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 ) : (
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                                         {lowercaseSingleSuppliers.map(s => (
-                                            <div key={s.id} className="flex justify-between items-center p-3 rounded-xl border border-gray-150 bg-white shadow-sm gap-2">
+                                            <div key={s.id} className="flex justify-between items-center p-3 rounded-xl border border-gray-200 bg-white shadow-sm gap-2">
                                                 <div>
                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="font-mono bg-gray-100 text-[#1A1A1A] px-1.5 py-0.5 rounded text-[9px] font-black">{s.id}</span>
+                                                        <span className="font-mono bg-gray-100 text-[#111111] px-1.5 py-0.5 rounded text-[9px] font-black">{s.id}</span>
                                                         <span className="font-bold text-xs text-rose-900">{s.name}</span>
                                                     </div>
                                                     <p className="text-[10px] text-gray-400 font-bold mt-1 flex items-center gap-1">
                                                         <span>系统将格式化为:</span> 
-                                                        <span className="font-mono bg-emerald-50 text-emerald-750 px-1.5 py-0.2 rounded font-black">{s.name.toUpperCase()}</span>
+                                                        <span className="font-mono bg-emerald-50 text-emerald-800 px-1.5 py-0.2 rounded font-black">{s.name.toUpperCase()}</span>
                                                     </p>
                                                 </div>
                                                 <button
                                                     onClick={() => runSingleCapitalize(s)}
-                                                    className="px-3.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-250 hover:bg-emerald-100 rounded-xl text-[11px] font-black active:scale-95 transition-all min-h-[36px] cursor-pointer"
+                                                    className="px-3.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-[11px] font-black active:scale-95 transition-all min-h-[36px] cursor-pointer"
                                                 >
                                                     🔠 转大写
                                                 </button>
@@ -2304,7 +2297,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         </div>
 
                         {/* Footer Buttons */}
-                        <div className="p-5 bg-gray-50 border-t border-[#FFD700]/30 shrink-0 flex justify-end gap-3">
+                        <div className="p-5 bg-gray-50 border-t border-[#FFD200]/30 shrink-0 flex justify-end gap-3">
                             <button
                                 onClick={() => { setIsCleanModalOpen(false); setCleaningLogs([]); }}
                                 disabled={isCleaning}
@@ -2319,7 +2312,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
             {/* 📱 手机端底栏固定操作栏 (Sticky Bottom Actions Bar) - 适配 iOS & HIG & Safe Areas */}
             {!isCleanModalOpen && !isExportModalOpen && !isEditingSupplier && !isEditingProduct && !isBillFormOpen && !isReceiveModalOpen && (
-                <div id="sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#1A1A1A]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans">
+                <div id="sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#111111]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans">
                     {view === 'LIST' && mainTab === 'SUPPLIERS' && (
                         <div className="flex items-center justify-between w-full gap-2 font-sans">
                             {/* 洗数规范 */}
@@ -2331,7 +2324,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 <span className="text-[14px]">🔠</span>
                                 <span className="text-[9px] font-black text-amber-400 tracking-wider">重名洗数</span>
                                 {(detectedDuplicateGroups.length > 0 || lowercaseSingleSuppliers.length > 0) && (
-                                    <span className="absolute -top-1.5 -right-1 bg-red-650 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center animate-pulse shadow-sm">
+                                    <span className="absolute -top-1.5 -right-1 bg-red-700 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center animate-pulse shadow-sm">
                                         {(detectedDuplicateGroups.length + lowercaseSingleSuppliers.length)}
                                     </span>
                                 )}
@@ -2351,7 +2344,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                             <button 
                                 id="btn-mobile-add-supplier"
                                 onClick={handleOpenAddSupplier}
-                                className="flex-[2] min-h-[44px] bg-[#FFD700] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
+                                className="flex-[2] min-h-[44px] bg-[#FFD200] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
                             >
                                 <Plus size={16} className="stroke-[3]" />
                                 <span>录入新供商</span>
@@ -2368,7 +2361,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                             <button 
                                 id="btn-mobile-goto-suppliers"
                                 onClick={() => { setMainTab('SUPPLIERS'); }}
-                                className="px-5 min-h-[44px] bg-[#FFD700] text-[#1A1A1A] rounded-xl flex items-center justify-center gap-1.5 shadow-md font-black text-xs cursor-pointer animate-pulse"
+                                className="px-5 min-h-[44px] bg-[#FFD200] text-[#111111] rounded-xl flex items-center justify-center gap-1.5 shadow-md font-black text-xs cursor-pointer animate-pulse"
                             >
                                 <Plus size={15} />
                                 <span>前往选购下单</span>
@@ -2385,7 +2378,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 className="flex-1 min-h-[44px] bg-white/5 border border-white/10 active:bg-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer"
                             >
                                 <ArrowLeft size={14} className="text-gray-300" />
-                                <span className="text-[9px] font-black text-gray-350 tracking-wider">返回列表</span>
+                                <span className="text-[9px] font-black text-gray-400 tracking-wider">返回列表</span>
                             </button>
 
                             {/* 录入账单 */}
@@ -2402,7 +2395,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                             <button 
                                 id="btn-mobile-add-product"
                                 onClick={() => { setActiveDetailTab('CATALOG'); handleAddProduct(); }}
-                                className="flex-[2] min-h-[44px] bg-[#FFD700] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
+                                className="flex-[2] min-h-[44px] bg-[#FFD200] text-black active:bg-[#FFE44D] rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer font-black text-xs"
                             >
                                 <Plus size={16} className="stroke-[3]" />
                                 <span>添加商品</span>
@@ -2415,7 +2408,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     );
 
     if (isModal) {
-        return (<div className="fixed inset-0 bg-[#1A1A1A]/80 z-[80] flex items-center justify-center p-0 md:p-6 backdrop-blur-md animate-in zoom-in duration-300">{MainContent}</div>);
+        return (<div className="fixed inset-0 bg-[#111111]/80 z-[80] flex items-center justify-center p-0 md:p-6 backdrop-blur-md animate-in zoom-in duration-300">{MainContent}</div>);
     }
     return MainContent;
 };

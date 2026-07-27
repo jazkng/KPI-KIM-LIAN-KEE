@@ -23,7 +23,7 @@ export const AssignModal: React.FC<AssignModalProps> = ({
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-5">
-                    <h3 className="font-black text-xl text-[#1A1A1A]">指派常驻任务</h3>
+                    <h3 className="font-black text-xl text-[#111111]">指派常驻任务</h3>
                     <button onClick={onClose}><X size={20}/></button>
                 </div>
                 <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl mb-4 text-xs text-indigo-700">
@@ -52,7 +52,7 @@ export const AssignModal: React.FC<AssignModalProps> = ({
                         {FREQ_OPTIONS.map(opt => (
                             <button key={opt.value} onClick={() => onFrequencyChange(opt.value)}
                                 className={`p-3 rounded-xl border-2 text-center transition-all ${assignFrequency === opt.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                                <div className="font-black text-sm text-[#1A1A1A]">{opt.label}</div>
+                                <div className="font-black text-sm text-[#111111]">{opt.label}</div>
                                 <div className="text-[10px] text-gray-400">{opt.desc}</div>
                             </button>
                         ))}

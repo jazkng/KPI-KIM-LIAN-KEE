@@ -1,7 +1,7 @@
 // components/AdminDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, BookOpen, CalendarOff, ClipboardCheck, Package, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
+import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
@@ -24,7 +24,6 @@ import { MenuManagement } from './features/MenuManagement';
 import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule'; // NEW IMPORT
 import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
 import { SelfInvoiceModule } from './features/SelfInvoiceModule';
-import { KitchenAlertDisplay } from './features/kitchen/KitchenAlertDisplay';
 import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
 
 const defaultBossEmployee: Employee = {
@@ -303,12 +302,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       }
   };
 
-  // Permission helper - check if user has permission for an action
-  const hasPermission = (module: AppModule): boolean => {
-      if (!allowedModules || allowedModules.length === 0) return true; // Boss mode - all access
-      return allowedModules.includes(module);
-  };
-
   return (
     <div className={`${isManagementStaff ? 'mobile-screen bg-[#F6F7FB]' : 'max-w-5xl mx-auto'} pb-32 pt-[env(safe-area-inset-top,0px)] md:pt-0`}>
       {/* MANAGEMENT STATS PANEL (Only for management staff) */}
@@ -368,7 +361,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       )}
       
       {/* HEADER */}
-      <div className={`admin-dashboard-header ${isManagementStaff ? 'bg-white border-b border-stone-200 text-[#111111]' : 'bg-[#1A1A1A] border-b-4 border-[#FFD700] text-white'} p-4 md:p-6 sticky top-0 z-30 shadow-sm`}>
+      <div className={`admin-dashboard-header ${isManagementStaff ? 'bg-white border-b border-stone-200 text-[#111111]' : 'bg-[#111111] border-b-4 border-[#FFD200] text-white'} p-4 md:p-6 sticky top-0 z-30 shadow-sm`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 md:gap-3">
             {onBack && (
@@ -377,7 +370,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                  </button>
             )}
             <div>
-                <h2 className={`text-lg md:text-xl font-serif font-black tracking-wide ${isManagementStaff ? 'text-[#111111]' : 'text-[#FFD700]'}`}>
+                <h2 className={`text-lg md:text-xl font-serif font-black tracking-wide ${isManagementStaff ? 'text-[#111111]' : 'text-[#FFD200]'}`}>
                     {isSingleMode ? getPageTitle() : (lang === 'my' ? 'စီမံခန့်ခွဲသူ မျက်နှာပြင်' : '管理层控制台')}
                 </h2>
                 {!isSingleMode && (
@@ -394,7 +387,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       {!isSingleMode && availableTabs.length > 0 ? (
         <div className={`flex p-3 md:p-4 gap-2 overflow-x-auto ${isManagementStaff ? 'bg-stone-50 border-b border-stone-200' : 'bg-[#F5F5F5] border-b border-gray-200'} scrollbar-hide`}>
             {availableTabs.map(tab => {
-                const isPermitted = hasPermission(tab.key as AppModule);
                 const isActive = activeTab === tab.key;
                 return (
                 <button 
@@ -402,7 +394,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                     onClick={() => setActiveTab(tab.key as any)} 
                     className={`flex-none min-w-[80px] md:min-w-[100px] py-2.5 md:py-3 px-2 rounded-lg flex flex-col items-center justify-center gap-1 md:gap-1.5 font-bold transition-all active:scale-95 text-[10px] md:text-xs ${
                         isActive 
-                            ? (isManagementStaff ? 'bg-[#FFD200] text-[#111111] shadow-xs border-b-2 border-stone-950 font-black' : 'bg-[#1A1A1A] text-[#FFD700] shadow-md border-b-4 border-[#C70000]') 
+                            ? (isManagementStaff ? 'bg-[#FFD200] text-[#111111] shadow-xs border-b-2 border-stone-950 font-black' : 'bg-[#111111] text-[#FFD200] shadow-md border-b-4 border-[#C70000]') 
                             : (isManagementStaff ? 'bg-white text-stone-500 border border-stone-200 hover:bg-stone-50' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100')
                     }`}
                 >

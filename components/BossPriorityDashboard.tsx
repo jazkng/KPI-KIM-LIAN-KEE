@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-    Users, Crown, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
-    ClipboardCheck, Layout, Box, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
-    AlertTriangle, ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Bell, ChevronRight, TrendingDown, RefreshCw, Sparkles, UserCheck, DollarSign, LogOut,
-    Activity, CalendarClock, CircleDollarSign, Gauge, ArrowUpRight, ListChecks, Store, Boxes, Receipt, UserRoundCheck
+    FileBarChart, CreditCard, Wallet, ShieldCheck,
+    AlertTriangle, TrendingUp, Award, ChevronRight, RefreshCw, CalendarClock, Gauge, Store
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Employee, SettlementRecord, ExpenseItem } from '../types';
@@ -38,23 +35,6 @@ interface BossPriorityDashboardProps {
 }
 
 type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE';
-
-interface ToDoItem {
-    id: string;
-    title: string;
-    count: number;
-    amount?: number;
-    description: string;
-    severity: 'EMERGENCY' | 'WARNING' | 'NORMAL';
-    category: 'SALES' | 'FINANCE' | 'INVENTORY' | 'PEOPLE' | 'OPERATIONS';
-    decisionLevel: 'BOSS' | 'MANAGEMENT' | 'WATCH';
-    score: number;
-    impactLabel?: string;
-    deadlineLabel?: string;
-    ownerLabel: string;
-    actionLabel: string;
-    onClick: () => void;
-}
 
 const normalizeDateOnly = (value: unknown): string => {
     const datePart = String(value || '').split('T')[0];
@@ -90,14 +70,14 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     // States for holding loaded database values
     const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
     const [pendingPOCount, setPendingPOCount] = useState<number>(0);
-    const [lowStockCount, setLowStockCount] = useState<number | null>(null);
+    const [, setLowStockCount] = useState<number | null>(null);
     const [criticalLowStockCount, setCriticalLowStockCount] = useState<number | null>(null);
     const [absentCount, setAbsentCount] = useState<number | null>(null);
     const [pendingBillsCount, setPendingBillsCount] = useState<number | null>(null);
     const [pendingBillsAmount, setPendingBillsAmount] = useState<number | null>(null);
     const [overdueBillsCount, setOverdueBillsCount] = useState<number | null>(null);
     const [overdueBillsAmount, setOverdueBillsAmount] = useState<number | null>(null);
-    const [unacknowledgedLogsCount, setUnacknowledgedLogsCount] = useState<number | null>(null);
+    const [, setUnacknowledgedLogsCount] = useState<number | null>(null);
     const [unpaidAPCount, setUnpaidAPCount] = useState<number | null>(null);
     const [unpaidAPAmount, setUnpaidAPAmount] = useState<number | null>(null);
     const [dueSoonAPCount, setDueSoonAPCount] = useState<number | null>(null);
@@ -435,213 +415,6 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
         };
     }, [totalUnpaidBillsAmount, unpaidAPAmount, totalUnpaidBillsCount, unpaidAPCount, paymentMetrics.overdueAmount, kpiMetrics.monthTotalSales, kpiMetrics.monthSettlementsCount, monthlyBudget]);
 
-    // Build a scored decision queue. Boss decisions and management follow-up are separated.
-    const toDoItems = useMemo(() => {
-        const list: ToDoItem[] = [];
-
-        if (varianceMetrics.count > 0) {
-            list.push({
-                id: 'settlement_variance',
-                title: '最近30天仍有结算差异',
-                count: varianceMetrics.count,
-                amount: varianceMetrics.amount,
-                description: `${varianceMetrics.count} 笔日结存在差异，合计影响 RM ${varianceMetrics.amount.toFixed(2)}。建议先检查金额最大的记录。`,
-                severity: 'EMERGENCY',
-                category: 'FINANCE',
-                decisionLevel: 'BOSS',
-                score: 100 + Math.min(varianceMetrics.amount / 100, 20),
-                impactLabel: `影响 RM ${varianceMetrics.amount.toFixed(2)}`,
-                deadlineLabel: '今天处理',
-                ownerLabel: '老板 / 财务',
-                actionLabel: '审核差异',
-                onClick: () => onNavigate('SETTLEMENT')
-            });
-        }
-
-        if (paymentMetrics.overdueCount > 0) {
-            list.push({
-                id: 'payments_overdue',
-                title: '付款已经逾期',
-                count: paymentMetrics.overdueCount,
-                amount: paymentMetrics.overdueAmount,
-                description: `${paymentMetrics.overdueCount} 笔供应商或固定支出已经超过到期日，未付金额 RM ${paymentMetrics.overdueAmount.toFixed(2)}。`,
-                severity: 'EMERGENCY',
-                category: 'FINANCE',
-                decisionLevel: 'BOSS',
-                score: 96 + Math.min(paymentMetrics.overdueAmount / 1000, 20),
-                impactLabel: `逾期 RM ${paymentMetrics.overdueAmount.toFixed(2)}`,
-                deadlineLabel: '立即安排',
-                ownerLabel: '老板 / 应付账款',
-                actionLabel: '安排付款',
-                onClick: () => setActiveModal('AP')
-            });
-        }
-
-        if (kpiMetrics.salesDiffPercent !== null && kpiMetrics.salesDiffPercent <= -10) {
-            list.push({
-                id: 'sales_decline',
-                title: '营业额低于上周同日',
-                count: Math.abs(kpiMetrics.salesDiffPercent),
-                description: `最新日结营业额比上周同一天低 ${Math.abs(kpiMetrics.salesDiffPercent)}%。建议检查午市、晚市或外卖渠道变化。`,
-                severity: 'WARNING',
-                category: 'SALES',
-                decisionLevel: 'BOSS',
-                score: 88 + Math.min(Math.abs(kpiMetrics.salesDiffPercent), 20),
-                impactLabel: `同比 -${Math.abs(kpiMetrics.salesDiffPercent)}%`,
-                deadlineLabel: '今日复盘',
-                ownerLabel: '老板 / 店长',
-                actionLabel: '分析营业',
-                onClick: () => setActiveModal('REPORTS')
-            });
-        }
-
-        if (paymentMetrics.dueSoonCount > 0) {
-            const needsBossDecision = paymentMetrics.dueSoonAmount >= 5000;
-            list.push({
-                id: 'payments_due_7d',
-                title: '未来7天需要安排付款',
-                count: paymentMetrics.dueSoonCount,
-                amount: paymentMetrics.dueSoonAmount,
-                description: `${paymentMetrics.dueSoonCount} 笔供应商账单或固定支出将在7天内到期，预计需要 RM ${paymentMetrics.dueSoonAmount.toFixed(2)}。`,
-                severity: needsBossDecision ? 'WARNING' : 'NORMAL',
-                category: 'FINANCE',
-                decisionLevel: needsBossDecision ? 'BOSS' : 'MANAGEMENT',
-                score: 76 + Math.min(paymentMetrics.dueSoonAmount / 1000, 18),
-                impactLabel: `需预留 RM ${paymentMetrics.dueSoonAmount.toFixed(2)}`,
-                deadlineLabel: '未来7天',
-                ownerLabel: needsBossDecision ? '老板 / 财务' : '应付账款',
-                actionLabel: '查看账期',
-                onClick: () => setActiveModal('AP')
-            });
-        }
-
-        if (criticalLowStockCount !== null && criticalLowStockCount > 0) {
-            list.push({
-                id: 'critical_stock',
-                title: '关键物料低于安全库存',
-                count: criticalLowStockCount,
-                description: `${criticalLowStockCount} 款标记为关键物料的库存已经低于安全线，需要优先确认补货。`,
-                severity: 'EMERGENCY',
-                category: 'INVENTORY',
-                decisionLevel: 'MANAGEMENT',
-                score: 92 + Math.min(criticalLowStockCount, 10),
-                impactLabel: `${criticalLowStockCount} 款关键物料`,
-                deadlineLabel: '今天补货',
-                ownerLabel: '管理层 / 采购',
-                actionLabel: '处理补货',
-                onClick: () => onNavigate('INVENTORY_VIEW')
-            });
-        }
-
-        const normalLowStockCount = Math.max(0, (lowStockCount || 0) - (criticalLowStockCount || 0));
-        if (normalLowStockCount > 0) {
-            list.push({
-                id: 'normal_stock',
-                title: '普通物料需要补货',
-                count: normalLowStockCount,
-                description: `${normalLowStockCount} 款普通库存低于补货线，由管理层按采购周期处理。`,
-                severity: 'NORMAL',
-                category: 'INVENTORY',
-                decisionLevel: 'MANAGEMENT',
-                score: 58 + Math.min(normalLowStockCount, 15),
-                deadlineLabel: '按采购周期',
-                ownerLabel: '管理层 / 采购',
-                actionLabel: '查看库存',
-                onClick: () => onNavigate('INVENTORY_VIEW')
-            });
-        }
-
-        if (absentCount !== null && absentCount > 0) {
-            list.push({
-                id: 'employee_absent',
-                title: '今日排班出现缺席',
-                count: absentCount,
-                description: `${absentCount} 名排班员工为MC或缺席状态，请管理层确认是否已经安排顶班。`,
-                severity: 'WARNING',
-                category: 'PEOPLE',
-                decisionLevel: 'MANAGEMENT',
-                score: 72 + Math.min(absentCount * 3, 15),
-                deadlineLabel: '本班次前',
-                ownerLabel: '店长 / HR',
-                actionLabel: '确认顶班',
-                onClick: () => setActiveModal('ATTENDANCE')
-            });
-        }
-
-        if (pendingPOCount > 0) {
-            list.push({
-                id: 'po_ordered',
-                title: '采购单等待收货确认',
-                count: pendingPOCount,
-                description: `${pendingPOCount} 张已下单采购单尚未完成收货与入库确认。`,
-                severity: 'NORMAL',
-                category: 'OPERATIONS',
-                decisionLevel: 'MANAGEMENT',
-                score: 55 + Math.min(pendingPOCount, 12),
-                deadlineLabel: '到货后确认',
-                ownerLabel: '管理层 / 收货人',
-                actionLabel: '进行收货',
-                onClick: () => onNavigate('PROCUREMENT')
-            });
-        }
-
-        if (unacknowledgedLogsCount !== null && unacknowledgedLogsCount > 0) {
-            list.push({
-                id: 'unacknowledged_logs',
-                title: '交接日志尚未阅读',
-                count: unacknowledgedLogsCount,
-                description: `最近30条店面交接日志中，有 ${unacknowledgedLogsCount} 条你尚未阅读；普通记录不会升级为老板紧急事项。`,
-                severity: 'NORMAL',
-                category: 'OPERATIONS',
-                decisionLevel: 'WATCH',
-                score: 38 + Math.min(unacknowledgedLogsCount, 15),
-                deadlineLabel: '24小时内',
-                ownerLabel: '店长 / 管理层',
-                actionLabel: '阅读日志',
-                onClick: () => onNavigate('LOGBOOK_VIEW')
-            });
-        }
-
-        const laterAPCount = Math.max(0, (unpaidAPCount || 0) - (dueSoonAPCount || 0) - (overdueAPCount || 0));
-        if (laterAPCount > 0) {
-            list.push({
-                id: 'ap_later',
-                title: '未到期应付账款',
-                count: laterAPCount,
-                amount: unpaidAPAmount || 0,
-                description: `${laterAPCount} 笔未付款账单尚未进入7天到期窗口，先列入观察，不作为紧急事项。`,
-                severity: 'NORMAL',
-                category: 'FINANCE',
-                decisionLevel: 'WATCH',
-                score: 30,
-                impactLabel: `全部未结 RM ${(unpaidAPAmount || 0).toFixed(2)}`,
-                deadlineLabel: '按账期观察',
-                ownerLabel: '应付账款',
-                actionLabel: '查看账单',
-                onClick: () => setActiveModal('AP')
-            });
-        }
-
-        return list.sort((a, b) => b.score - a.score);
-    }, [varianceMetrics, paymentMetrics, kpiMetrics.salesDiffPercent, criticalLowStockCount, lowStockCount, absentCount, pendingPOCount, unacknowledgedLogsCount, unpaidAPCount, unpaidAPAmount, dueSoonAPCount, overdueAPCount]);
-
-    const bossDecisionItems = useMemo(
-        () => toDoItems.filter(item => item.decisionLevel === 'BOSS').slice(0, 3),
-        [toDoItems],
-    );
-    const bossDecisionCount = useMemo(
-        () => toDoItems.filter(item => item.decisionLevel === 'BOSS').length,
-        [toDoItems],
-    );
-    const managementItems = useMemo(
-        () => toDoItems.filter(item => item.decisionLevel === 'MANAGEMENT'),
-        [toDoItems],
-    );
-    const watchItems = useMemo(
-        () => toDoItems.filter(item => item.decisionLevel === 'WATCH'),
-        [toDoItems],
-    );
-
     // Handle modal render map
     const renderModal = () => {
         const close = () => setActiveModal('NONE');
@@ -668,21 +441,21 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     };
 
     return (
-        <div className="w-full min-h-screen bg-[#F6F7F9] px-4 sm:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+8rem)] md:pb-14" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
-            <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+        <div className="w-full min-h-screen bg-[#F6F7F9] px-4 md:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+8rem)] md:pb-14" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+            <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
                 
                 <div className="flex min-h-[64px] items-center justify-between gap-3 py-1">
                     <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#FFD200] text-[#171717] shadow-[0_8px_20px_rgba(255,210,0,0.22)]">
+                            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#FFD200] text-[#111111] shadow-[0_8px_20px_rgba(255,210,0,0.22)]">
                                 <Gauge size={21} strokeWidth={2.5} />
                             </div>
                             <div className="min-w-0">
-                                <h1 className="truncate text-[19px] sm:text-2xl font-black text-stone-950 tracking-tight">金莲记 ERP 经营看盘</h1>
-                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold text-stone-500">
+                                <h1 className="truncate text-[19px] md:text-2xl font-black text-stone-950 tracking-tight">金莲记 ERP 经营看盘</h1>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] md:text-xs font-semibold text-stone-500">
                                     <span className="truncate">实时经营分析与关键指标汇总</span>
-                                    <span className="sm:hidden shrink-0 text-stone-300">·</span>
-                                    <span className="sm:hidden shrink-0 text-stone-400">
+                                    <span className="md:hidden shrink-0 text-stone-300">·</span>
+                                    <span className="md:hidden shrink-0 text-stone-400">
                                         {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('zh-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
                                     </span>
                                 </div>
@@ -691,7 +464,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                     </div>
                     
                     <div className="flex items-center gap-2.5">
-                        <div className="hidden sm:block text-right">
+                        <div className="hidden md:block text-right">
                             <p className="text-[9px] font-black tracking-wider text-stone-400">最后更新</p>
                             <p className="text-xs font-bold text-stone-600">
                                 {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('zh-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
@@ -724,7 +497,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                     <>
                         {/* 经营结果：统一为主指标 → 异常 → 账款摘要的阅读顺序 */}
                         <section className="space-y-3">
-                            <div className="relative overflow-hidden rounded-[1.75rem] border border-stone-800 bg-[#171717] p-5 text-white shadow-[0_18px_45px_rgba(23,23,23,0.16)] sm:p-6">
+                            <div className="relative overflow-hidden rounded-[1.75rem] border border-stone-800 bg-[#111111] p-5 text-white shadow-[0_18px_45px_rgba(17,17,17,0.16)] md:p-6">
                                 <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-[#FFD200]/10 blur-2xl" />
                                 <div className="relative flex items-start justify-between gap-4">
                                     <div>
@@ -787,7 +560,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                 </button>
                             </div>
 
-                            <button type="button" onClick={() => setActiveModal('AP')} className="w-full rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(28,25,23,0.05)] transition-all active:scale-[0.99] sm:p-5">
+                            <button type="button" onClick={() => setActiveModal('AP')} className="w-full rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(28,25,23,0.05)] transition-all active:scale-[0.99] md:p-5">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0">
                                         <p className="text-[11px] font-black tracking-wide text-stone-500">应付账款总额</p>
@@ -811,7 +584,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                             {/* 左侧：图表区 */}
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="rounded-3xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm">
+                                    <div className="rounded-3xl border border-stone-200 bg-white p-4 md:p-5 shadow-sm">
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center gap-2">
                                                 <TrendingUp size={18} className="text-stone-900" />
@@ -833,7 +606,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
                                                     <RechartsTooltip 
                                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
-                                                        itemStyle={{ color: '#171717' }}
+                                                        itemStyle={{ color: '#111111' }}
                                                         formatter={(value: number) => [`RM ${value.toFixed(2)}`, '营业额']}
                                                     />
                                                     <Area type="monotone" dataKey="Sales" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
@@ -843,7 +616,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                     </div>
 
                                     {/* 2nd Custom Chart: Accounts Payable Aging & Cash Flow Projection */}
-                                    <div className="rounded-3xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm">
+                                    <div className="rounded-3xl border border-stone-200 bg-white p-4 md:p-5 shadow-sm">
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center gap-2">
                                                 <CreditCard size={18} className="text-stone-900" />
@@ -866,7 +639,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
                                                     <RechartsTooltip 
                                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
-                                                        itemStyle={{ color: '#171717' }}
+                                                        itemStyle={{ color: '#111111' }}
                                                         formatter={(value: number) => [`RM ${value.toFixed(2)}`, '欠款金额']}
                                                     />
                                                     <Bar dataKey="金额" radius={[8, 8, 0, 0]} barSize={42}>

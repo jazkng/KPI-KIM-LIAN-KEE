@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+/*
+ * 全站唯一配色 / 断点基准 (Single source of truth)
+ * ------------------------------------------------------------------
+ * 颜色：手机版与电脑版共用同一套色值，请勿再引入 #FFD700 / #1A1A1A /
+ *      #F5F7FA 这类近似色，否则同一个界面在不同模块之间会出现色差。
+ *   品牌金 Gold        #FFD200   （hover 态 #E5C100）
+ *   墨黑   Ink         #111111
+ *   页面底色 Background #F6F7FB
+ *   卡片   Surface     #FFFFFF
+ *   描边   Border      #E5E7EB
+ *   品牌红 Brand red   #8B0000
+ *
+ * 断点：手机 / 电脑的分界统一为 Tailwind 的 `md:` (768px)。
+ *      JS 侧请使用 utils/useIsMobile.ts 中的 useIsMobile() / MOBILE_BREAKPOINT，
+ *      不要再各自写 window.innerWidth 判断，也不要用 `sm:` 做端切换。
+ */
 @theme {
   --color-primary: #FFD200;
   --color-secondary: #111111;
@@ -24,7 +40,7 @@
   --shadow-red: 0 4px 14px 0 rgba(139, 0, 0, 0.3);
 }
 
-/* Custom classes and overrides from index.html */
+/* 全局基础布局（index.html 仅保留首屏防闪所需的最小子集） */
 html,
 body,
 #root {
@@ -100,17 +116,8 @@ body {
   min-height: 100dvh;
 }
 
-.mobile-fullscreen {
-  height: 100vh;
-  height: 100dvh;
-}
-
 .mobile-safe-header {
   padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
-}
-
-.mobile-safe-footer {
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 .mobile-touch-target {
@@ -135,11 +142,6 @@ body {
   .mobile-safe-header {
     padding-top: initial !important;
   }
-
-  .mobile-safe-footer {
-    padding-bottom: initial !important;
-  }
-
 }
 
 button, a, [role="button"] {

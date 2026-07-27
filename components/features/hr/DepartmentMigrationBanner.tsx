@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShieldAlert, ArrowRight, Loader2, CheckCircle, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowRight, Loader2, CheckCircle, SlidersHorizontal, X } from 'lucide-react';
 import { DataManager } from '../../../utils/dataManager';
 import { Employee } from '../../../types';
 
@@ -177,7 +177,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
     return (
         <>
             {/* iOS 顶端极简通知横幅 */}
-            <div className="w-full bg-[#8B0000] text-[#FFD700] px-4 py-3 shadow-md flex items-center justify-between transition-all animate-fade-in text-xs font-bold shrink-0 md:rounded-2xl md:mb-4 border border-[#8B0000]/20">
+            <div className="w-full bg-[#8B0000] text-[#FFD200] px-4 py-3 shadow-md flex items-center justify-between transition-all animate-fade-in text-xs font-bold shrink-0 md:rounded-2xl md:mb-4 border border-[#8B0000]/20">
                 <div className="flex items-center gap-2.5">
                     <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center animate-pulse text-sm">
                         ⚠️
@@ -188,7 +188,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
                 </div>
                 <button 
                     onClick={handleOpenMigration}
-                    className="bg-[#FFD700] hover:bg-yellow-400 active:scale-95 text-[#8B0000] px-3.5 py-1.5 rounded-full font-black tracking-wide shadow-sm transition-transform shrink-0"
+                    className="bg-[#FFD200] hover:bg-yellow-400 active:scale-95 text-[#8B0000] px-3.5 py-1.5 rounded-full font-black tracking-wide shadow-sm transition-transform shrink-0"
                     style={{ minHeight: '32px' }}
                 >
                     立即转换 (Convert)
@@ -198,7 +198,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
             {/* 确认列表弹窗 (Confirmation Dialog - iOS Style) */}
             {showModal && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
-                    <div className="bg-[#F8F9FA] dark:bg-stone-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl border border-white/40 overflow-hidden flex flex-col my-8" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+                    <div className="bg-[#F6F7FB] dark:bg-stone-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl border border-white/40 overflow-hidden flex flex-col my-8" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
                         {/* Header */}
                         <div className="p-6 bg-gradient-to-r from-[#8B0000] to-[#A00000] text-white flex justify-between items-center relative shrink-0">
                             <div>
@@ -238,7 +238,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
                                             return (
                                                 <div 
                                                     key={emp.id}
-                                                    className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                                                    className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm"
                                                 >
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-2">
@@ -294,7 +294,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
                                 </button>
                                 <button
                                     onClick={handleConfirmMigration}
-                                    className="bg-[#1A1A1A] hover:bg-black text-[#FFD700] px-6 py-2.5 rounded-full font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
+                                    className="bg-[#111111] hover:bg-black text-[#FFD200] px-6 py-2.5 rounded-full font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
                                     disabled={isSaving}
                                     style={{ minHeight: '40px' }}
                                 >
