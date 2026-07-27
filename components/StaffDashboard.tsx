@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Crown, BookOpen, Languages, AlertTriangle, User, Calendar, 
   Award, Clock, CheckCircle2, ChevronDown, ChevronUp, Check, LogOut, Shield, 
-  MapPin, Bell, ChevronRight, CheckSquare, Sparkles, AlertOctagon, HelpCircle, 
+  MapPin, ChevronRight, CheckSquare, Sparkles, AlertOctagon, HelpCircle, 
   Smartphone, BookMarked, Settings, UserCheck, ShieldAlert
 } from 'lucide-react';
-import { SOPItem, Employee, RoleGuide, AttendanceRecord, AppModule } from '../types';
+import { SOPItem, Employee, RoleGuide, AttendanceRecord, AppModule, AppLanguage, normalizeLanguage } from '../types';
+import { LanguageSelector } from './ui/LanguageSelector';
 import { ROLE_SOP_DETAILS, MODULE_SYSTEM_TASKS, MODULE_DEFINITIONS } from './constants';
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES } from '../constants/staff';
 import { DataManager, DEFAULT_ATTENDANCE_SETTINGS, getTargetShiftForDate } from '../utils/dataManager';
@@ -16,6 +17,9 @@ import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
 import { KitchenAlertNotifier } from './features/kitchen/KitchenAlertNotifier';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { sortNavigationItems } from '../constants/moduleNavigation';
+import { NotificationCenter } from './ui/NotificationCenter';
+import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 
 import { 
   st, 
@@ -38,10 +42,49 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   // ──────────────────────────────────────────────────────────────────────────
   // STATES
   // ──────────────────────────────────────────────────────────────────────────
-  const [lang, setLang] = useState<'zh' | 'my'>(
-    employee.preferredLanguage === 'my' ? 'my' : 'zh'
-  );
-  
+  // DYNAMIC THREE-LANGUAGE STATE ENGINE (zh_en | en | my)
+  // ──────────────────────────────────────────────────────────────────────────
+  const [lang, setLang] = useState<AppLanguage>(() => {
+    if (employee?.preferredLanguage) {
+      return normalizeLanguage(employee.preferredLanguage);
+    }
+    try {
+      const saved = localStorage.getItem('kepong_erp_session_employee');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.preferredLanguage) return normalizeLanguage(parsed.preferredLanguage);
+      }
+    } catch (e) {}
+    return 'zh_en';
+  });
+
+  useEffect(() => {
+    if (employee?.preferredLanguage) {
+      setLang(normalizeLanguage(employee.preferredLanguage));
+    }
+  }, [employee.preferredLanguage]);
+
+  const handleLanguageSelect = async (newLang: AppLanguage) => {
+    setLang(newLang);
+    
+    try {
+      const savedEmp = localStorage.getItem('kepong_erp_session_employee');
+      if (savedEmp) {
+        const empObj = JSON.parse(savedEmp);
+        empObj.preferredLanguage = newLang;
+        localStorage.setItem('kepong_erp_session_employee', JSON.stringify(empObj));
+      }
+    } catch (e) {
+      console.warn('Failed to update local preferred language', e);
+    }
+    
+    try {
+      await DataManager.updateEmployeePreferredLanguage(employee.id, newLang);
+    } catch (err) {
+      console.error('Failed to persist preferredLanguage in Firestore:', err);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ROSTER' | 'HANDBOOK' | 'PROFILE'>('TODAY');
   const [currentGuide, setCurrentGuide] = useState<RoleGuide>(DEFAULT_ROLE_GUIDES[defaultKey]);
   const [allowedModules, setAllowedModules] = useState<AppModule[]>([]);
@@ -59,9 +102,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   // Selected module for full screen Work Tools (hides bottom bar)
   const [selectedModule, setSelectedModule] = useState<AppModule | null>(null);
   
-  // Notification Tray Open State
-  const [notifOpen, setNotifOpen] = useState(false);
-
   // Collapsible sections for SOP items
   const [expandedSopId, setExpandedSopId] = useState<string | null>(null);
 
@@ -77,40 +117,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     allowedModules || [],
     moduleKey => moduleKey,
   );
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // LANGUAGE TRANSITION & PERSISTENCE ENGINE
-  // ──────────────────────────────────────────────────────────────────────────
-  const handleLanguageToggle = async () => {
-    const nextLang = lang === 'zh' ? 'my' : 'zh';
-    const nextPrefLang = nextLang === 'zh' ? 'zh_en' : 'my';
-    
-    // 1. Instant local visual switch
-    setLang(nextLang);
-    
-    // 2. Synchronously write local cache to survive page reload
-    try {
-      const savedEmp = localStorage.getItem('kepong_erp_session_employee');
-      if (savedEmp) {
-        const empObj = JSON.parse(savedEmp);
-        empObj.preferredLanguage = nextPrefLang;
-        localStorage.setItem('kepong_erp_session_employee', JSON.stringify(empObj));
-      }
-    } catch (e) {
-      console.warn('Failed to update local preferred language', e);
-    }
-    
-    // 3. Asynchronously persist into Firestore
-    try {
-      await DataManager.updateEmployeePreferredLanguage(employee.id, nextPrefLang);
-    } catch (err) {
-      console.error('Failed to persist preferredLanguage in Firestore:', err);
-    }
-  };
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // INITIALIZATION EFFECTS
-  // ──────────────────────────────────────────────────────────────────────────
   
   // 1. Load Modules and Role Guide (Prefer Cloud Config)
   useEffect(() => {
@@ -181,10 +187,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
       try {
         const todayStr = getBusinessDateString();
         
-        // Fetch Attendance
-        const atts = await DataManager.getAttendanceByDate(todayStr);
-        const myAtt = atts.find(a => a.employeeId === employee.id);
-        setAttendanceRecord(myAtt || null);
+        // Fetch only this employee's attendance for the current business date.
+        const myAtt = await DataManager.getAttendanceByEmployeeAndDate(employee.id, todayStr);
+        setAttendanceRecord(myAtt);
 
         // Fetch Roster (3 Days)
         const { roster, notes } = await DataManager.getRosterData();
@@ -219,11 +224,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           checkOutStr: shiftInfo.checkOutStr
         });
 
-        // 4. Check for Assigned Tasks
-        const allTasks = await DataManager.getInventoryTasks();
-        const myTasks = allTasks.filter(task => task.assigneeId === employee.id && task.status === 'PENDING');
-        setHasPendingTasks(myTasks.length > 0);
-
       } catch (err) {
         console.error('Failed to load roster or attendance:', err);
       } finally {
@@ -232,20 +232,32 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     };
 
     fetchAttendanceAndRoster();
+  }, [employee.id, employee.shiftGroup]);
 
-    // Poll for assigned inventory tasks
-    const poller = setInterval(async () => {
-      try {
-        const allTasks = await DataManager.getInventoryTasks();
-        const myTasks = allTasks.filter(task => task.assigneeId === employee.id && task.status === 'PENDING');
-        setHasPendingTasks(myTasks.length > 0);
-      } catch (e) {
-        // quiet fail
+  // 4. Subscribe only to this employee's pending inventory task.
+  // The staff home only needs a yes/no flag, so one matching document is enough.
+  useEffect(() => {
+    setHasPendingTasks(false);
+
+    const pendingTaskQuery = query(
+      collection(db, 'inventory_tasks'),
+      where('assigneeId', '==', employee.id),
+      where('status', '==', 'PENDING'),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(
+      pendingTaskQuery,
+      snapshot => {
+        setHasPendingTasks(!snapshot.empty);
+      },
+      error => {
+        console.error('Pending inventory task listener failed:', error);
       }
-    }, 10000);
+    );
 
-    return () => clearInterval(poller);
-  }, [employee.id, employee.shiftGroup, lang]);
+    return unsubscribe;
+  }, [employee.id]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // HANDLERS
@@ -271,6 +283,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const nextPendingTask = sopItems.find(item => !item.completed);
 
   const isConfirmed = employee.status === 'CONFIRMED';
+
+  const openOperationalLogFromNotification = (logId: string) => {
+    try {
+      localStorage.setItem('klk_notification_log_target', logId);
+    } catch {}
+    if ((allowedModules || []).includes('LOGBOOK')) {
+      setSelectedModule('LOGBOOK');
+    }
+  };
 
   const kitchenAlertNotifier = workModules.includes('KITCHEN_ALERT') ? (
     <KitchenAlertNotifier
@@ -311,9 +332,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             <span>👈</span>
             <span>{st('返回工作台', lang)}</span>
           </button>
-          <div className="text-right">
-            <h4 className="font-black text-xs text-[#111111]">{getStaffModuleLabel(selectedModule, lang, modInfo?.label)}</h4>
-            <p className="text-[9px] text-gray-400 font-bold uppercase">{employee.name}</p>
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <h4 className="font-black text-xs text-[#111111]">{getStaffModuleLabel(selectedModule, lang, modInfo?.label)}</h4>
+              <p className="text-[9px] text-gray-400 font-bold uppercase">{employee.name}</p>
+            </div>
           </div>
         </div>
 
@@ -362,27 +385,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             </div>
             
             <div className="flex items-center gap-2">
-              {/* Notifications bell */}
-              <button 
-                onClick={() => setNotifOpen(!notifOpen)}
-                className="w-9 h-9 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95 transition-all rounded-full flex items-center justify-center relative"
-                style={{ minHeight: '44px' }}
-              >
-                <Bell size={15} className={hasPendingTasks ? "text-[#FFD200] animate-bounce" : "text-gray-300"} />
-                {hasPendingTasks && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                )}
-              </button>
+              {activeTab === 'TODAY' && (
+                <NotificationCenter
+                  employee={employee}
+                  onOpenLog={openOperationalLogFromNotification}
+                  variant="dark"
+                />
+              )}
 
-              {/* Languages switch button */}
-              <button 
-                onClick={handleLanguageToggle}
-                className="bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95 transition-all px-3 py-1.5 rounded-full flex items-center gap-1.5"
-                style={{ minHeight: '44px' }}
-              >
-                <Languages size={13} className="text-[#FFD200]" />
-                <span className="text-[10px] font-black">{lang === 'zh' ? '中文' : 'မြန်မာ'}</span>
-              </button>
+              {/* 3-Way Language Selector */}
+              <LanguageSelector currentLang={lang} onSelectLang={handleLanguageSelect} dark={true} />
             </div>
           </div>
 
@@ -434,46 +446,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
         </div>
       </div>
-
-      {/* ────────────────────────────────────────────────────────────────────────
-          NOTIFICATIONS TRAY DRAWER (Elegant overlay)
-          ──────────────────────────────────────────────────────────────────────── */}
-      {notifOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="font-black text-sm flex items-center gap-2">
-                <Bell size={16} className="text-[#FFD200]" />
-                <span>{st('notifications', lang)}</span>
-              </h3>
-              <button onClick={() => setNotifOpen(false)} className="text-xs text-gray-400 hover:text-black font-bold">关闭 (Close)</button>
-            </div>
-            
-            <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
-              {hasPendingTasks ? (
-                <div className="bg-amber-50 border border-amber-200/50 p-4 rounded-xl flex items-start gap-3">
-                  <span className="text-lg shrink-0">📦</span>
-                  <div>
-                    <h4 className="font-bold text-xs text-[#111111]">{st('inventoryTasks', lang)}</h4>
-                    <p className="text-[10px] text-gray-500 mt-0.5">{st('pendingInvDesc', lang)}</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-center text-xs text-gray-400 py-6">{st('noNotifications', lang)}</p>
-              )}
-
-              {/* Default nice rules as notifications */}
-              <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
-                <span className="text-lg shrink-0">🛡️</span>
-                <div>
-                  <h4 className="font-bold text-xs text-blue-900">{st('safetyReminder', lang)}</h4>
-                  <p className="text-[10px] text-blue-700 mt-0.5">{st('safetyReminderDesc', lang)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ────────────────────────────────────────────────────────────────────────
           TAB VIEWS ROUTER
@@ -575,7 +547,78 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               </div>
             </div>
 
-            {/* 2. Today's Tasks & Progress */}
+            {/* 2. Authorized Work Tools (Grid - touch targets >= 48px) */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="font-black text-sm text-[#111111] flex items-center gap-2">
+                  <Smartphone size={16} className="text-[#FFD200]" />
+                  <span>{st('tools', lang)}</span>
+                </h3>
+                <span className="text-[9px] bg-green-500/10 text-green-600 font-extrabold px-2 py-0.5 rounded-full border border-green-500/20">
+                  {workModules.length} Active
+                </span>
+              </div>
+
+              {(() => {
+                const hasTempInventory = hasPendingTasks && !workModules.includes('INVENTORY_CHECK');
+                const totalActiveCount = workModules.length + (hasTempInventory ? 1 : 0);
+
+                if (totalActiveCount === 0) {
+                  return <p className="text-center text-xs text-gray-400 py-4 italic">{st('unauthorized', lang)}</p>;
+                }
+
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    {workModules.map(modKey => {
+                      const info = MODULE_DEFINITIONS[modKey];
+                      if (!info) return null;
+                      const Icon = info.icon;
+                      return (
+                        <button 
+                          key={modKey}
+                          onClick={() => {
+                            if (modKey === 'AI_ASSISTANT') {
+                              setAiOpen(true);
+                            } else if (MODULE_DEFINITIONS[modKey]?.tab) {
+                              setSelectedModule(modKey);
+                            }
+                          }}
+                          className="bg-gray-50/50 hover:bg-[#FFD200]/5 active:scale-95 border border-gray-100 hover:border-[#FFD200]/40 transition-all p-3.5 rounded-2xl text-left flex flex-col gap-2 relative min-h-[48px] overflow-hidden group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#FFD200] border border-gray-200 shadow-sm">
+                            <Icon size={16} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-xs text-[#111111] truncate group-hover:text-amber-600">{getStaffModuleLabel(modKey, lang, info.label)}</h4>
+                            <p className="text-[9px] text-gray-400 font-bold truncate">{getStaffModuleDesc(modKey, lang, info.desc)}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {hasTempInventory && (
+                      <button 
+                        onClick={() => setSelectedModule('INVENTORY_CHECK')}
+                        className="bg-amber-50/40 hover:bg-[#FFD200]/10 active:scale-95 border border-amber-200/50 hover:border-[#FFD200]/60 transition-all p-3.5 rounded-2xl text-left flex flex-col gap-2 relative min-h-[48px] overflow-hidden group"
+                      >
+                        <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-black tracking-wider uppercase">
+                          {st('tempTasks', lang)}
+                        </span>
+                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-amber-500 border border-amber-200 shadow-sm">
+                          📦
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-xs text-[#111111] truncate">{st('inventoryTasks', lang)}</h4>
+                          <p className="text-[9px] text-amber-600 font-bold truncate">{st('pendingInvAlert', lang)}</p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 3. Today's Tasks & Progress */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -793,77 +836,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                 )}
 
               </div>
-            </div>
-
-            {/* 3. Authorized Work Tools (Grid - touch targets >= 48px) */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h3 className="font-black text-sm text-[#111111] flex items-center gap-2">
-                  <Smartphone size={16} className="text-[#FFD200]" />
-                  <span>{st('tools', lang)}</span>
-                </h3>
-                <span className="text-[9px] bg-green-500/10 text-green-600 font-extrabold px-2 py-0.5 rounded-full border border-green-500/20">
-                  {workModules.length} Active
-                </span>
-              </div>
-
-              {(() => {
-                const hasTempInventory = hasPendingTasks && !workModules.includes('INVENTORY_CHECK');
-                const totalActiveCount = workModules.length + (hasTempInventory ? 1 : 0);
-
-                if (totalActiveCount === 0) {
-                  return <p className="text-center text-xs text-gray-400 py-4 italic">{st('unauthorized', lang)}</p>;
-                }
-
-                return (
-                  <div className="grid grid-cols-2 gap-3">
-                    {workModules.map(modKey => {
-                      const info = MODULE_DEFINITIONS[modKey];
-                      if (!info) return null;
-                      const Icon = info.icon;
-                      return (
-                        <button 
-                          key={modKey}
-                          onClick={() => {
-                            if (modKey === 'AI_ASSISTANT') {
-                              setAiOpen(true);
-                            } else if (MODULE_DEFINITIONS[modKey]?.tab) {
-                              setSelectedModule(modKey);
-                            }
-                          }}
-                          className="bg-gray-50/50 hover:bg-[#FFD200]/5 active:scale-95 border border-gray-100 hover:border-[#FFD200]/40 transition-all p-3.5 rounded-2xl text-left flex flex-col gap-2 relative min-h-[48px] overflow-hidden group"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#FFD200] border border-gray-200 shadow-sm">
-                            <Icon size={16} />
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-xs text-[#111111] truncate group-hover:text-amber-600">{getStaffModuleLabel(modKey, lang, info.label)}</h4>
-                            <p className="text-[9px] text-gray-400 font-bold truncate">{getStaffModuleDesc(modKey, lang, info.desc)}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-
-                    {hasTempInventory && (
-                      <button 
-                        onClick={() => setSelectedModule('INVENTORY_CHECK')}
-                        className="bg-amber-50/40 hover:bg-[#FFD200]/10 active:scale-95 border border-amber-200/50 hover:border-[#FFD200]/60 transition-all p-3.5 rounded-2xl text-left flex flex-col gap-2 relative min-h-[48px] overflow-hidden group"
-                      >
-                        <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-black tracking-wider uppercase">
-                          {st('tempTasks', lang)}
-                        </span>
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-amber-500 border border-amber-200 shadow-sm">
-                          📦
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-xs text-[#111111] truncate">{st('inventoryTasks', lang)}</h4>
-                          <p className="text-[9px] text-amber-600 font-bold truncate">{st('pendingInvAlert', lang)}</p>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
 
             {/* AI Assistant Banner */}

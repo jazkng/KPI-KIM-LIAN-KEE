@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "studio.ai.service_5174.twa",
+      "sha256_cert_fingerprints": [
+        "5D:4C:BC:CE:EA:19:2A:C7:58:CF:4C:AA:E6:CD:13:AE:C8:A1:B5:27:91:D4:C8:BC:8C:9F:30:C3:1D:45:26:2D"
+      ]
+    }
+  }
+]

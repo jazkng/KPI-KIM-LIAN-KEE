@@ -1,0 +1,2273 @@
+// CONTENT TRANSLATIONS
+  "解锁店门与解除警报": {
+    zh: "解锁店门与解除警报",
+    en: "Unlocking store doors and disarming alarms",
+    my: "စတိုးဆိုင်တံခါးများကိုသော့ဖွင့်ခြင်းနှင့်နှိုးစက်များဖြုတ်"
+  },
+  "准时 16:00": {
+    zh: "准时 16:00",
+    en: "On time 16:00",
+    my: "အချိန် 16:00"
+  },
+  "营运": {
+    zh: "营运",
+    en: "Operation",
+    my: "စစ်ဆင်ရေး"
+  },
+  "检查昨晚结算差异": {
+    zh: "检查昨晚结算差异",
+    en: "Check last night's settlement difference",
+    my: "မနေ့ညက ဖြေရှင်းမှု ကွာခြားချက်ကို စစ်ဆေးပါ။"
+  },
+  "查阅 Logbook": {
+    zh: "查阅 Logbook",
+    en: "Check Logbook",
+    my: "မှတ်တမ်းစာအုပ်ကို စစ်ဆေးပါ။"
+  },
+  "财务安全": {
+    zh: "财务安全",
+    en: "financial security",
+    my: "ငွေကြေးလုံခြုံရေး"
+  },
+  "检查员工仪容仪表": {
+    zh: "检查员工仪容仪表",
+    en: "Check employee appearance and appearance",
+    my: "ဝန်ထမ်း၏ အသွင်အပြင်နှင့် အသွင်အပြင်ကို စစ်ဆေးပါ။"
+  },
+  "制服整洁": {
+    zh: "制服整洁",
+    en: "Uniforms neat and tidy",
+    my: "ယူနီဖောင်း သပ်သပ်ရပ်ရပ်"
+  },
+  "品牌形象": {
+    zh: "品牌形象",
+    en: "brand image",
+    my: "အမှတ်တံဆိပ်ပုံ"
+  },
+  "确认今日订位 (Reservations)": {
+    zh: "确认今日订位 (Reservations)",
+    en: "Confirm your reservation today (Reservations)",
+    my: "သင်၏ကြိုတင်မှာယူမှုကို ယနေ့အတည်ပြုပါ (ကြိုတင်မှာယူမှုများ)"
+  },
+  "预留桌位": {
+    zh: "预留桌位",
+    en: "Reserve a table",
+    my: "စားပွဲတစ်ခုကြိုတင်ထားပါ။"
+  },
+  "客户服务": {
+    zh: "客户服务",
+    en: "customer service",
+    my: "ဧည့်ဝန်ဆောင်မှု"
+  },
+  "审核今日 Logbook": {
+    zh: "审核今日 Logbook",
+    en: "Review Today’s Logbook",
+    my: "ယနေ့၏မှတ်တမ်းစာအုပ်ကို ပြန်လည်သုံးသပ်ပါ။"
+  },
+  "无遗漏事项": {
+    zh: "无遗漏事项",
+    en: "Nothing is left out",
+    my: "ဘာမှ မကျန်တော့ဘူး။"
+  },
+  "复盘": {
+    zh: "复盘",
+    en: "Review",
+    my: "သုံးသပ်ချက်"
+  },
+  "监督现金入保险柜": {
+    zh: "监督现金入保险柜",
+    en: "Supervise the deposit of cash into the safe",
+    my: "ငွေသားကို လုံခြုံစွာအပ်နှံခြင်းအား ကြီးကြပ်ပါ။"
+  },
+  "双人核对": {
+    zh: "双人核对",
+    en: "double check",
+    my: "နှစ်ချက်စစ်ဆေးပါ။"
+  },
+  "防盗": {
+    zh: "防盗",
+    en: "Anti-theft",
+    my: "ခိုးမှုတိုက်ဖျက်ရေး"
+  },
+  "检查全店门窗锁闭": {
+    zh: "检查全店门窗锁闭",
+    en: "Check all store doors and windows are locked",
+    my: "ဆိုင်တံခါးများနှင့် ပြတင်းပေါက်များအားလုံးကို သော့ခတ်ထားကြောင်း စစ်ဆေးပါ။"
+  },
+  "确认上锁": {
+    zh: "确认上锁",
+    en: "Confirm lock",
+    my: "လော့ခ်ချခြင်းကို အတည်ပြုပါ။"
+  },
+  "安全": {
+    zh: "安全",
+    en: "Safety",
+    my: "ဘေးကင်းရေး"
+  },
+  "开启防盗系统": {
+    zh: "开启防盗系统",
+    en: "Turn on the anti-theft system",
+    my: "ခိုးမှုဆန့်ကျင်ရေးစနစ်ကို ဖွင့်ပါ။"
+  },
+  "Alarm Active": {
+    zh: "Alarm Active",
+    en: "Alarm Active",
+    my: "နှိုးစက် အသက်ဝင်သည်။"
+  },
+  "安保": {
+    zh: "安保",
+    en: "Security",
+    my: "လုံခြုံရေး"
+  },
+  "开启灯光与冷气": {
+    zh: "开启灯光与冷气",
+    en: "Turn on the lights and air conditioning",
+    my: "မီးလုံးများနှင့် လေအေးပေးစက်များကို ဖွင့်ပါ။"
+  },
+  "全店通亮": {
+    zh: "全店通亮",
+    en: "The whole store is brightly lit",
+    my: "ဆိုင်တစ်ဆိုင်လုံး လင်းထိန်နေသည်။"
+  },
+  "环境": {
+    zh: "环境",
+    en: "environment",
+    my: "ပတ်ဝန်းကျင်"
+  },
+  "分配员工区域 (Sectioning)": {
+    zh: "分配员工区域 (Sectioning)",
+    en: "Assign employee areas (Sectioning)",
+    my: "ဝန်ထမ်းနေရာများ သတ်မှတ်ပေးခြင်း (Sectioning)၊"
+  },
+  "合理调度": {
+    zh: "合理调度",
+    en: "Reasonable scheduling",
+    my: "ကျိုးကြောင်းဆီလျော်စွာ အချိန်ဇယားဆွဲခြင်း။"
+  },
+  "效率": {
+    zh: "效率",
+    en: "efficiency",
+    my: "လုပ်ရည်ကိုင်ရည်"
+  },
+  "检查楼面清洁度": {
+    zh: "检查楼面清洁度",
+    en: "Check floor cleanliness",
+    my: "ကြမ်းပြင်သန့်ရှင်းမှုကို စစ်ဆေးပါ။"
+  },
+  "无异味无垃圾": {
+    zh: "无异味无垃圾",
+    en: "No smell, no garbage",
+    my: "အနံ့မရှိ၊ အမှိုက်မရှိ။"
+  },
+  "卫生": {
+    zh: "卫生",
+    en: "health",
+    my: "ကျန်းမာရေး"
+  },
+  "播放店内音乐": {
+    zh: "播放店内音乐",
+    en: "Play in-store music",
+    my: "စတိုးဆိုင်တွင် သီချင်းဖွင့်ပါ။"
+  },
+  "音量适中": {
+    zh: "音量适中",
+    en: "Moderate volume",
+    my: "အလယ်အလတ်အသံ"
+  },
+  "氛围": {
+    zh: "氛围",
+    en: "atmosphere",
+    my: "လေထု"
+  },
+  "安排员工打扫卫生": {
+    zh: "安排员工打扫卫生",
+    en: "Arrange staff for cleaning",
+    my: "သန့်ရှင်းရေးဝန်ထမ်းများကို စီစဉ်ပေးသည်။"
+  },
+  "分区清洁": {
+    zh: "分区清洁",
+    en: "Partition cleaning",
+    my: "Partition သန့်ရှင်းရေး"
+  },
+  "整洁": {
+    zh: "整洁",
+    en: "tidy",
+    my: "သပ်ရပ်သော"
+  },
+  "关闭非必要电源": {
+    zh: "关闭非必要电源",
+    en: "Turn off non-essential power",
+    my: "မရှိမဖြစ်ပါဝါကိုပိတ်ပါ။"
+  },
+  "招牌/冷气": {
+    zh: "招牌/冷气",
+    en: "Signboard/air conditioner",
+    my: "ဆိုင်းဘုတ်/လေအေးပေးစက်"
+  },
+  "节能": {
+    zh: "节能",
+    en: "Energy saving",
+    my: "စွမ်းအင်ချွေတာခြင်း။"
+  },
+  "检查厕所卫生": {
+    zh: "检查厕所卫生",
+    en: "Check toilet hygiene",
+    my: "အိမ်သာသန့်ရှင်းရေးကို စစ်ဆေးပါ။"
+  },
+  "无积水": {
+    zh: "无积水",
+    en: "No standing water",
+    my: "ရေမရပ်ဘူး။"
+  },
+  "StoreHub 开机登录": {
+    zh: "StoreHub 开机登录",
+    en: "StoreHub power on and log in",
+    my: "StoreHub ပါဝါဖွင့်ပြီး အကောင့်ဝင်ပါ။"
+  },
+  "系统在线": {
+    zh: "系统在线",
+    en: "System online",
+    my: "အွန်လိုင်းစနစ်"
+  },
+  "收银": {
+    zh: "收银",
+    en: "cashier",
+    my: "ငွေကိုင်"
+  },
+  "检查钱箱备用金 (Float)": {
+    zh: "检查钱箱备用金 (Float)",
+    en: "Check Cash Box Fund (Float)",
+    my: "Cash Box Fund (Float) ကို စစ်ဆေးပါ"
+  },
+  "RM 500": {
+    zh: "RM 500",
+    en: "RM 500",
+    my: "RM 500"
+  },
+  "找赎": {
+    zh: "找赎",
+    en: "change",
+    my: "ပြောင်းလဲမှု"
+  },
+  "检查打印纸/收据纸": {
+    zh: "检查打印纸/收据纸",
+    en: "Check printer/receipt paper",
+    my: "ပရင်တာ/ ပြေစာစာရွက်ကို စစ်ဆေးပါ။"
+  },
+  "备足两卷": {
+    zh: "备足两卷",
+    en: "Prepare two volumes",
+    my: "နှစ်တွဲပြင်ဆင်ပါ။"
+  },
+  "耗材": {
+    zh: "耗材",
+    en: "Consumables",
+    my: "လူသုံးကုန်များ"
+  },
+  "开启外卖接单平板": {
+    zh: "开启外卖接单平板",
+    en: "Turn on the tablet for taking takeaway orders",
+    my: "မှာယူသည့်အမှာစာများမှာယူရန်အတွက် တက်ဘလက်ကိုဖွင့်ပါ။"
+  },
+  "Grab/Panda": {
+    zh: "Grab/Panda",
+    en: "Grab/Panda",
+    my: "Grab/Panda"
+  },
+  "外卖": {
+    zh: "外卖",
+    en: "takeout",
+    my: "ထုတ်သည်"
+  },
+  "打印每日结算单 (Settlement)": {
+    zh: "打印每日结算单 (Settlement)",
+    en: "Print daily settlement statement (Settlement)",
+    my: "နေ့စဉ် ငွေစာရင်းရှင်းတမ်း (Settlement) ကို ပုံနှိပ်ပါ"
+  },
+  "数据准确": {
+    zh: "数据准确",
+    en: "Data is accurate",
+    my: "ဒေတာသည် တိကျသည်။"
+  },
+  "财务": {
+    zh: "财务",
+    en: "finance",
+    my: "ဘဏ္ဍာရေး"
+  },
+  "点算现金 (Cash Count)": {
+    zh: "点算现金 (Cash Count)",
+    en: "Cash Count",
+    my: "ငွေသားအရေအတွက်"
+  },
+  "填入系统": {
+    zh: "填入系统",
+    en: "Fill in the system",
+    my: "စနစ်အားဖြည့်ပါ။"
+  },
+  "核对": {
+    zh: "核对",
+    en: "Check",
+    my: "စစ်ဆေးပါ။"
+  },
+  "整理柜台杂物": {
+    zh: "整理柜台杂物",
+    en: "Organize counter clutter",
+    my: "ကောင်တာ ရှုပ်ပွအောင် စုစည်းပါ။"
+  },
+  "桌面整洁": {
+    zh: "桌面整洁",
+    en: "Desktop tidy",
+    my: "Desktop သပ်သပ်ရပ်ရပ်"
+  },
+  "形象": {
+    zh: "形象",
+    en: "image",
+    my: "ပုံ"
+  },
+  "关闭 iPad 与打印机": {
+    zh: "关闭 iPad 与打印机",
+    en: "Turn off iPad and printer",
+    my: "iPad နှင့် printer ကိုပိတ်ပါ။"
+  },
+  "断电": {
+    zh: "断电",
+    en: "power outage",
+    my: "ဓာတ်အားပြတ်တောက်ခြင်း။"
+  },
+  "设备": {
+    zh: "设备",
+    en: "equipment",
+    my: "ပစ္စည်းကိရိယာ"
+  },
+  "检查 iPad 点餐机电量": {
+    zh: "检查 iPad 点餐机电量",
+    en: "Check iPad Ordering Machine Battery",
+    my: "iPad Ordering Machine Battery ကိုစစ်ဆေးပါ။"
+  },
+  "100% Charged": {
+    zh: "100% Charged",
+    en: "100% Charged",
+    my: "100% အားသွင်းထားသည်။"
+  },
+  "工具": {
+    zh: "工具",
+    en: "tool",
+    my: "ကိရိယာ"
+  },
+  "熟悉今日缺货 (86 List)": {
+    zh: "熟悉今日缺货 (86 List)",
+    en: "Familiar with today’s out-of-stock (86 List)",
+    my: "ယနေ့ လက်ကျန်ပစ္စည်းများ (86 စာရင်း)"
+  },
+  "通知全员": {
+    zh: "通知全员",
+    en: "Notify everyone",
+    my: "လူတိုင်းကို အသိပေးပါ။"
+  },
+  "服务": {
+    zh: "服务",
+    en: "Serve",
+    my: "အစေခံ"
+  },
+  "检查招牌灯箱": {
+    zh: "检查招牌灯箱",
+    en: "Check the sign light box",
+    my: "ဆိုင်းဘုတ်မီးပုံးကို စစ်ဆေးပါ။"
+  },
+  "正常亮起": {
+    zh: "正常亮起",
+    en: "Lights up normally",
+    my: "ပုံမှန်အတိုင်း မီးလင်းတယ်။"
+  },
+  "引流": {
+    zh: "引流",
+    en: "drainage",
+    my: "ရေနုတ်မြောင်း"
+  },
+  "整理菜单 (Menu Books)": {
+    zh: "整理菜单 (Menu Books)",
+    en: "Menu Books",
+    my: "မီနူးစာအုပ်များ"
+  },
+  "无破损/归位": {
+    zh: "无破损/归位",
+    en: "No damage/replacement",
+    my: "ပျက်စီးခြင်း/ အစားထိုးခြင်း မရှိပါ။"
+  },
+  "保养": {
+    zh: "保养",
+    en: "maintainance",
+    my: "ထိန်းသိမ်းမှု"
+  },
+  "检查未结单据 (Open Bills)": {
+    zh: "检查未结单据 (Open Bills)",
+    en: "Check Open Bills",
+    my: "Open Bills ကိုစစ်ဆေးပါ။"
+  },
+  "全部清空": {
+    zh: "全部清空",
+    en: "Clear all",
+    my: "အားလုံးကိုရှင်းပါ။"
+  },
+  "防漏单": {
+    zh: "防漏单",
+    en: "Anti-leak sheet",
+    my: "ယိုစိမ့်မှုဆန့်ကျင်စာရွက်"
+  },
+  "关闭区域灯光": {
+    zh: "关闭区域灯光",
+    en: "Turn off area lights",
+    my: "ဧရိယာမီးများပိတ်ပါ။"
+  },
+  "分区执行": {
+    zh: "分区执行",
+    en: "Partition execution",
+    my: "Partition ကို အကောင်အထည်ဖော်ခြင်း။"
+  },
+  "擦拭桌椅 (Wipe Tables)": {
+    zh: "擦拭桌椅 (Wipe Tables)",
+    en: "Wipe Tables",
+    my: "ဇယားများကို ရှင်းလင်းပါ။"
+  },
+  "无油渍": {
+    zh: "无油渍",
+    en: "No oil stains",
+    my: "ဆီအစွန်းအထင်းမရှိပါ။"
+  },
+  "补充调味品 (Chili/Soy)": {
+    zh: "补充调味品 (Chili/Soy)",
+    en: "Additional condiments (Chili/Soy)",
+    my: "နောက်ထပ် ဟင်းခတ်အမွှေးအကြိုင်များ (ငရုတ်သီး/ပဲပိစပ်)"
+  },
+  "满瓶/清洁": {
+    zh: "满瓶/清洁",
+    en: "Full Bottle/Clean",
+    my: "ပုလင်းအပြည့်/သန့်"
+  },
+  "备料": {
+    zh: "备料",
+    en: "Prepare materials",
+    my: "ပစ္စည်းများပြင်ဆင်ပါ။"
+  },
+  "检查餐具筒": {
+    zh: "检查餐具筒",
+    en: "Check the cutlery barrel",
+    my: "မီးဖိုချောင်သုံးဗူးကို စစ်ဆေးပါ။"
+  },
+  "补满筷子汤匙": {
+    zh: "补满筷子汤匙",
+    en: "Refill chopsticks spoon",
+    my: "ဟင်းခတ်ဇွန်းကို ထပ်ဖြည့်ပါ။"
+  },
+  "准备茶水壶": {
+    zh: "准备茶水壶",
+    en: "Prepare tea kettle",
+    my: "လက်ဖက်ရည်အိုးပြင်ဆင်ပါ။"
+  },
+  "热水充足": {
+    zh: "热水充足",
+    en: "Plenty of hot water",
+    my: "ရေနွေးများများသောက်ပါ။"
+  },
+  "茶水": {
+    zh: "茶水",
+    en: "tea",
+    my: "လက်ဖက်ရည်"
+  },
+  "扫地与拖地": {
+    zh: "扫地与拖地",
+    en: "Sweeping and mopping",
+    my: "သုတ်သင်ရှင်းလင်းခြင်း။"
+  },
+  "无食物残渣": {
+    zh: "无食物残渣",
+    en: "No food residue",
+    my: "အစာအကြွင်းအကျန်မရှိပါ။"
+  },
+  "清洁": {
+    zh: "清洁",
+    en: "clean",
+    my: "သန့်ရှင်း"
+  },
+  "补充纸巾/牙签": {
+    zh: "补充纸巾/牙签",
+    en: "Replenish paper towels/toothpicks",
+    my: "စက္ကူသုတ်ပဝါ/ သွားကြားထိုးတံများ ဖြည့်ပါ။"
+  },
+  "补满": {
+    zh: "补满",
+    en: "fill up",
+    my: "ဖြည့်စွက်ပါ။"
+  },
+  "明日准备": {
+    zh: "明日准备",
+    en: "Prepare for tomorrow",
+    my: "မနက်ဖြန်အတွက် ပြင်ဆင်ပါ။"
+  },
+  "归位桌椅": {
+    zh: "归位桌椅",
+    en: "Home tables and chairs",
+    my: "အိမ်တွင် စားပွဲကုလားထိုင်များ"
+  },
+  "整齐划一": {
+    zh: "整齐划一",
+    en: "Uniform",
+    my: "ယူနီဖောင်း"
+  },
+  "美观": {
+    zh: "美观",
+    en: "beautiful",
+    my: "လှတယ်။"
+  },
+  "清理工作台垃圾": {
+    zh: "清理工作台垃圾",
+    en: "Clear workbench trash",
+    my: "အလုပ်ခုံမှာ အမှိုက်ရှင်းပါ။"
+  },
+  "清空": {
+    zh: "清空",
+    en: "Clear",
+    my: "ရှင်းပါတယ်။"
+  },
+  "防虫": {
+    zh: "防虫",
+    en: "pest control",
+    my: "ပိုးမွှားထိန်းချုပ်ရေး"
+  },
+  "彻底清洗厕所": {
+    zh: "彻底清洗厕所",
+    en: "Clean the toilet thoroughly",
+    my: "အိမ်သာကို သေချာဆေးကြောပါ။"
+  },
+  "无异味/干爽": {
+    zh: "无异味/干爽",
+    en: "No odor/dry",
+    my: "အနံ့/ ခြောက်သွေ့ခြင်း မရှိပါ။"
+  },
+  "补充洗手液/擦手纸": {
+    zh: "补充洗手液/擦手纸",
+    en: "Replenish hand sanitizer/hand wipes",
+    my: "လက်သန့်ဆေး/လက်ဆေးရည် ဖြည့်ပါ။"
+  },
+  "充足": {
+    zh: "充足",
+    en: "adequate",
+    my: "လုံလောက်ပါတယ်။"
+  },
+  "拖大厅地面": {
+    zh: "拖大厅地面",
+    en: "Mopping the hall floor",
+    my: "ခန်းမကြမ်းပြင်ကို သုတ်သင်သည်။"
+  },
+  "干净": {
+    zh: "干净",
+    en: "clean",
+    my: "သန့်ရှင်း"
+  },
+  "印象": {
+    zh: "印象",
+    en: "impression",
+    my: "အထင်ကြီးမှု၊"
+  },
+  "清理所有垃圾桶": {
+    zh: "清理所有垃圾桶",
+    en: "Clean all trash cans",
+    my: "အမှိုက်ပုံးအားလုံးကို သန့်ရှင်းရေးလုပ်ပါ။"
+  },
+  "换新袋": {
+    zh: "换新袋",
+    en: "Get a new bag",
+    my: "အိတ်အသစ်တစ်လုံးယူပါ။"
+  },
+  "清洗拖把并晾干": {
+    zh: "清洗拖把并晾干",
+    en: "Wash the mop and dry it",
+    my: "ကြမ်းတိုက်ဆေးကြောပြီး အခြောက်ခံပါ။"
+  },
+  "悬挂": {
+    zh: "悬挂",
+    en: "suspension",
+    my: "suspension"
+  },
+  "防臭": {
+    zh: "防臭",
+    en: "Anti-odor",
+    my: "အနံ့အသက်ကိုဆန့်ကျင်"
+  },
+  "再次清洗厕所": {
+    zh: "再次清洗厕所",
+    en: "Clean the toilet again",
+    my: "အိမ်သာကို ထပ်ပြီး သန့်ရှင်းရေးလုပ်ပါ။"
+  },
+  "消毒": {
+    zh: "消毒",
+    en: "disinfect",
+    my: "ဆေးခတ်ပါ။"
+  },
+  "试炭火 (Test Wok Heat)": {
+    zh: "试炭火 (Test Wok Heat)",
+    en: "Test Wok Heat",
+    my: "Wok Heat ကိုစမ်းသပ်ပါ။"
+  },
+  "火力猛": {
+    zh: "火力猛",
+    en: "Fierce firepower",
+    my: "ပြင်းထန်သော ပစ်ခတ်မှု"
+  },
+  "锅气": {
+    zh: "锅气",
+    en: "Pot gas",
+    my: "ဓာတ်ငွေ့အိုး"
+  },
+  "检查酱料味道 (Taste Test)": {
+    zh: "检查酱料味道 (Taste Test)",
+    en: "Check the taste of the sauce (Taste Test)",
+    my: "ငံပြာရည်၏ အရသာစစ်ဆေးခြင်း (Taste Test)၊"
+  },
+  "咸淡适中": {
+    zh: "咸淡适中",
+    en: "Moderately salty",
+    my: "အတန်အသင့်ငန်"
+  },
+  "品控": {
+    zh: "品控",
+    en: "Quality control",
+    my: "အရည်အသွေးထိန်းချုပ်မှု"
+  },
+  "确认今日特别推荐": {
+    zh: "确认今日特别推荐",
+    en: "Confirm today’s special recommendation",
+    my: "ယနေ့ အထူးအကြံပြုချက်ကို အတည်ပြုပါ။"
+  },
+  "通知楼面": {
+    zh: "通知楼面",
+    en: "Notify the floor",
+    my: "ထပ်အကြောင်းကြားပါ။"
+  },
+  "销售": {
+    zh: "销售",
+    en: "Sale",
+    my: "ရောင်းရန်"
+  },
+  "检查猪油渣库存": {
+    zh: "检查猪油渣库存",
+    en: "Check lard residue inventory",
+    my: "ဝက်ဆီကျန်စာရင်းကို စစ်ဆေးပါ။"
+  },
+  "足够": {
+    zh: "足够",
+    en: "enough",
+    my: "လုံလောက်ပါတယ်။"
+  },
+  "灵魂": {
+    zh: "灵魂",
+    en: "soul",
+    my: "ဝိညာဉ်"
+  },
+  "熄灭炭火 (Extinguish)": {
+    zh: "熄灭炭火 (Extinguish)",
+    en: "Extinguish charcoal fire (Extinguish)",
+    my: "မီးသွေးမီးကို ငြှိမ်းသတ်ခြင်း (Extinguish)၊"
+  },
+  "无明火": {
+    zh: "无明火",
+    en: "No open flame",
+    my: "မီးမပွင့်"
+  },
+  "关闭煤气总阀": {
+    zh: "关闭煤气总阀",
+    en: "Close the gas main valve",
+    my: "gas main valve ကိုပိတ်ပါ။"
+  },
+  "Locked": {
+    zh: "Locked",
+    en: "Locked",
+    my: "သော့ခတ်ထားသည်။"
+  },
+  "防爆": {
+    zh: "防爆",
+    en: "Explosion proof",
+    my: "ပေါက်ကွဲမှု အထောက်အထား"
+  },
+  "检查炉台卫生": {
+    zh: "检查炉台卫生",
+    en: "Check stove hygiene",
+    my: "မီးဖိုသန့်ရှင်းရေးကို စစ်ဆေးပါ။"
+  },
+  "无油垢": {
+    zh: "无油垢",
+    en: "No grease",
+    my: "အဆီမပါပါ။"
+  },
+  "盖好酱料桶": {
+    zh: "盖好酱料桶",
+    en: "Cover the sauce bucket",
+    my: "ငံပြာရည်ပုံးကို အဖုံးအုပ်ထားပါ။"
+  },
+  "密封": {
+    zh: "密封",
+    en: "seal",
+    my: "တံဆိပ်"
+  },
+  "滚热": {
+    zh: "滚热",
+    en: "boiling hot",
+    my: "ပူပူနွေးနွေး"
+  },
+  "汤面": {
+    zh: "汤面",
+    en: "noodle soup",
+    my: "ခေါက်ဆွဲပြုတ်"
+  },
+  "备货充足": {
+    zh: "备货充足",
+    en: "Well stocked",
+    my: "ကောင်းစွာသိုလှောင်ထားသည်။"
+  },
+  "速度": {
+    zh: "速度",
+    en: "speed",
+    my: "အရှိန်"
+  },
+  "节约": {
+    zh: "节约",
+    en: "save",
+    my: "ကယ်တင်ပါ။"
+  },
+  "锋利": {
+    zh: "锋利",
+    en: "sharp",
+    my: "ထက်ထက်"
+  },
+  "菜心/包菜": {
+    zh: "菜心/包菜",
+    en: "Choy sum/cabbage",
+    my: "Choy sum/ဂေါ်ဖီထုပ်"
+  },
+  "猪肉/鸡肉": {
+    zh: "猪肉/鸡肉",
+    en: "Pork/Chicken",
+    my: "ဝက်/ကြက်"
+  },
+  "入味": {
+    zh: "入味",
+    en: "Delicious",
+    my: "အရသာ"
+  },
+  "检查冰箱温度": {
+    zh: "检查冰箱温度",
+    en: "Check refrigerator temperature",
+    my: "ရေခဲသေတ္တာအပူချိန်ကို စစ်ဆေးပါ။"
+  },
+  "< 4°C": {
+    zh: "< 4°C",
+    en: "< 4°C",
+    my: "< 4°C"
+  },
+  "食安": {
+    zh: "食安",
+    en: "food safety",
+    my: "အစားအစာဘေးကင်းရေး"
+  },
+  "盖好所有生鲜食材": {
+    zh: "盖好所有生鲜食材",
+    en: "Cover all fresh ingredients",
+    my: "လတ်ဆတ်သောပါဝင်ပစ္စည်းများအားလုံးကိုဖုံးအုပ်ထားပါ။"
+  },
+  "保鲜膜": {
+    zh: "保鲜膜",
+    en: "plastic wrap",
+    my: "ပလပ်စတစ်ထုပ်ပိုး"
+  },
+  "防干": {
+    zh: "防干",
+    en: "Anti-drying",
+    my: "ခြောက်သွေ့မှုဆန့်ကျင်"
+  },
+  "清洗砧板 (Sanitize)": {
+    zh: "清洗砧板 (Sanitize)",
+    en: "Sanitize",
+    my: "သန့်ရှင်းရေးလုပ်ပါ။"
+  },
+  "消毒水": {
+    zh: "消毒水",
+    en: "Disinfectant water",
+    my: "ပိုးသတ်ဆေးရေ"
+  },
+  "防霉": {
+    zh: "防霉",
+    en: "Anti-mildew",
+    my: "အနာတိုက်ဖျက်ရေး"
+  },
+  "清理水槽滤网": {
+    zh: "清理水槽滤网",
+    en: "Clean sink strainer",
+    my: "ဇကာဇလုံကို သန့်ရှင်းပါ။"
+  },
+  "无残渣": {
+    zh: "无残渣",
+    en: "No residue",
+    my: "အကြွင်းမရှိပါ။"
+  },
+  "防堵": {
+    zh: "防堵",
+    en: "Anti-blocking",
+    my: "တားဆီးပိတ်ပင်ခြင်း။"
+  },
+  "倒垃圾": {
+    zh: "倒垃圾",
+    en: "Take out the trash",
+    my: "အမှိုက်ကို ထုတ်ယူပါ။"
+  },
+  "酱油/胡椒": {
+    zh: "酱油/胡椒",
+    en: "Soy sauce/pepper",
+    my: "ပဲငံပြာရည်/ငရုတ်ကောင်း"
+  },
+  "补给": {
+    zh: "补给",
+    en: "supply",
+    my: "ထောက်ပံ့ရေး"
+  },
+  "折叠好": {
+    zh: "折叠好",
+    en: "Fold well",
+    my: "ကောင်းကောင်းခေါက်"
+  },
+  "检查出菜盘": {
+    zh: "检查出菜盘",
+    en: "Check out the dish",
+    my: "ပန်းကန်ကိုစစ်ဆေးပါ။"
+  },
+  "数量足够": {
+    zh: "数量足够",
+    en: "sufficient quantity",
+    my: "လုံလောက်သောပမာဏ"
+  },
+  "流转": {
+    zh: "流转",
+    en: "circulation",
+    my: "လည်ပတ်မှု"
+  },
+  "补充猪油渣": {
+    zh: "补充猪油渣",
+    en: "Supplement lard residue",
+    my: "ဝက်ဆီအကြွင်းအကျန်ကို ဖြည့်စွက်ပါ။"
+  },
+  "从大桶取": {
+    zh: "从大桶取",
+    en: "Take from the vat",
+    my: "ပုလင်းထဲကယူပါ။"
+  },
+  "去油除滑": {
+    zh: "去油除滑",
+    en: "Remove oil and slip",
+    my: "ဆီဖယ်ပြီး ချော်ထွက်ပါ။"
+  },
+  "清洗抹布": {
+    zh: "清洗抹布",
+    en: "cleaning rag",
+    my: "သန့်ရှင်းရေးလုပ်ပါ။"
+  },
+  "漂白水": {
+    zh: "漂白水",
+    en: "Bleach",
+    my: "အရောင်ချွတ်ဆေး"
+  },
+  "倒厨房垃圾": {
+    zh: "倒厨房垃圾",
+    en: "Take out the kitchen garbage",
+    my: "မီးဖိုချောင်မှ အမှိုက်များကို ဖယ်ထုတ်ပါ။"
+  },
+  "不留过夜": {
+    zh: "不留过夜",
+    en: "Not staying overnight",
+    my: "တစ်ညလုံး မနေဘူး။"
+  },
+  "防鼠": {
+    zh: "防鼠",
+    en: "Rat-proof",
+    my: "ကြွက်ဒဏ်"
+  },
+  "按配方": {
+    zh: "按配方",
+    en: "According to recipe",
+    my: "ဟင်းချက်နည်းအရ"
+  },
+  "招牌": {
+    zh: "招牌",
+    en: "Shop sign",
+    my: "ဆိုင်ဆိုင်းဘုတ်"
+  },
+  "备满一盒": {
+    zh: "备满一盒",
+    en: "Keep a full box",
+    my: "သေတ္တာအပြည့်ထားပါ။"
+  },
+  "满桶": {
+    zh: "满桶",
+    en: "Full bucket",
+    my: "ပုံးအပြည့်"
+  },
+  "冷饮": {
+    zh: "冷饮",
+    en: "cold drink",
+    my: "အအေးသောက်"
+  },
+  "检查糖浆存量": {
+    zh: "检查糖浆存量",
+    en: "Check syrup inventory",
+    my: "ဆေးရည်စာရင်းကို စစ်ဆေးပါ။"
+  },
+  "清洗搅拌机/雪克杯": {
+    zh: "清洗搅拌机/雪克杯",
+    en: "Clean the mixer/shake cup",
+    my: "မွှေစက်/လှုပ်ခါထားသော ခွက်ကို သန့်ရှင်းပါ။"
+  },
+  "无残留": {
+    zh: "无残留",
+    en: "No residue",
+    my: "အကြွင်းမရှိပါ။"
+  },
+  "封好水果盒": {
+    zh: "封好水果盒",
+    en: "Seal the fruit box",
+    my: "သစ်သီးသေတ္တာကို တံဆိပ်ခတ်ပါ။"
+  },
+  "清理水吧水槽": {
+    zh: "清理水吧水槽",
+    en: "Clean the water bar sink",
+    my: "ရေဘား နစ်ကို သန့်ရှင်းပါ။"
+  },
+  "无茶叶渣": {
+    zh: "无茶叶渣",
+    en: "No tea leaves",
+    my: "လက်ဖက်ရွက်မရှိ။"
+  },
+  "关闭开水机": {
+    zh: "关闭开水机",
+    en: "Turn off the water boiler",
+    my: "ရေဘွိုင်လာကို ပိတ်ပါ။"
+  },
+  "差异 < RM10": {
+    zh: "差异 < RM10",
+    en: "Difference < RM10",
+    my: "ကွာခြားချက် < RM10"
+  },
+  "财务日清日结": {
+    zh: "财务日清日结",
+    en: "Financial daily clearing and closing",
+    my: "ငွေရေးကြေးရေးနေ့စဉ်ရှင်းလင်းခြင်းနှင့်ပိတ်"
+  },
+  "金额准确": {
+    zh: "金额准确",
+    en: "The amount is accurate",
+    my: "ပမာဏက တိကျတယ်။"
+  },
+  "防止遗失": {
+    zh: "防止遗失",
+    en: "Prevent loss",
+    my: "ဆုံးရှုံးမှုကိုကာကွယ်ပါ။"
+  },
+  "KF系列每日必盘": {
+    zh: "KF系列每日必盘",
+    en: "KF series must be listed every day",
+    my: "KF စီးရီးများကို နေ့စဉ် စာရင်းပြုစုရပါမည်။"
+  },
+  "成本控制": {
+    zh: "成本控制",
+    en: "cost control",
+    my: "ကုန်ကျစရိတ်ထိန်းချုပ်မှု"
+  },
+  "FIFO": {
+    zh: "FIFO",
+    en: "FIFO",
+    my: "FIFO"
+  },
+  "食品安全": {
+    zh: "食品安全",
+    en: "food safety",
+    my: "အစားအစာဘေးကင်းရေး"
+  },
+  "每日营业前": {
+    zh: "每日营业前",
+    en: "Before business every day",
+    my: "လုပ်ငန်းမစခင် နေ့တိုင်း"
+  },
+  "过期立即下架": {
+    zh: "过期立即下架",
+    en: "Expired and removed immediately",
+    my: "သက်တမ်းကုန်ပြီး ချက်ချင်း ဖယ်ရှားလိုက်ပါ။"
+  },
+  "< 2袋需申购": {
+    zh: "< 2袋需申购",
+    en: "< 2 bags need to subscribe",
+    my: "< 2 အိတ် စာရင်းသွင်းရန် လိုအပ်ပါသည်။"
+  },
+  "防断供": {
+    zh: "防断供",
+    en: "Prevent supply interruption",
+    my: "ထောက်ပံ့မှုပြတ်တောက်ခြင်းမှ ကာကွယ်ပါ။"
+  },
+  "每周日全盘": {
+    zh: "每周日全盘",
+    en: "All every Sunday",
+    my: "တနင်္ဂနွေနေ့တိုင်း"
+  },
+  "耗材管控": {
+    zh: "耗材管控",
+    en: "Consumables control",
+    my: "စားသုံးကုန်များ ထိန်းချုပ်ခြင်း။"
+  },
+  "足够5天用量": {
+    zh: "足够5天用量",
+    en: "Enough for 5 days",
+    my: "5 ရက်အတွက်လုံလောက်ပါတယ်။"
+  },
+  "外卖运营": {
+    zh: "外卖运营",
+    en: "Takeaway operations",
+    my: "ယူသွားခြင်းလုပ်ငန်းများ"
+  },
+  "每晚营业后": {
+    zh: "每晚营业后",
+    en: "after business every night",
+    my: "ညတိုင်း အလုပ်ပြီးရင်"
+  },
+  "监控每日炭火福建面出品质量 (锅气/色泽/味道)": {
+    zh: "监控每日炭火福建面出品质量 (锅气/色泽/味道)",
+    en: "Monitor the daily quality of charcoal-fired Hokkien noodles (pot gas/color/taste)",
+    my: "မီးသွေးသုံး Hokkien ခေါက်ဆွဲ (ဓာတ်ငွေ့/အရောင်/အရသာ) ၏ နေ့စဉ်အရည်အသွေးကို စောင့်ကြည့်ပါ"
+  },
+  "负责秘制酱料、猪油渣的熬制与品控": {
+    zh: "负责秘制酱料、猪油渣的熬制与品控",
+    en: "Responsible for the cooking and quality control of secret sauce and lard residue",
+    my: "လျှို့ဝှက်ဆော့စ်နှင့် ဝက်ဆီအကြွင်းအကျန်များကို ချက်ပြုတ်ခြင်းနှင့် အရည်အသွေးထိန်းချုပ်ခြင်းအတွက် တာဝန်ယူပါသည်။"
+  },
+  "控制厨房成本 (Costing) 在 35% 以内": {
+    zh: "控制厨房成本 (Costing) 在 35% 以内",
+    en: "Control kitchen costs (Costing) within 35%",
+    my: "မီးဖိုချောင်ကုန်ကျစရိတ် (Costing) ကို 35% အတွင်း ထိန်းချုပ်ပါ"
+  },
+  "培训头手与二锅，传承炒面技艺": {
+    zh: "培训头手与二锅，传承炒面技艺",
+    en: "Training the first hand and the second pot, inheriting the skill of fried noodles",
+    my: "ခေါက်ဆွဲကြော်ကျွမ်းကျင်မှုကို အမွေဆက်ခံပြီး ပထမလက်နှင့် ဒုတိယအိုးကို လေ့ကျင့်ပါ။"
+  },
+  "🗣️ 待客之道：见到顾客必须点头微笑说\"欢迎光临\"，离开说\"谢谢光临\"。": {
+    zh: "🗣️ 待客之道：见到顾客必须点头微笑说\"欢迎光临\"，离开说\"谢谢光临\"。",
+    en: "🗣️ Hospitality: When you see a customer, you must nod, smile and say \"Welcome\", and when leaving, say \"Thank you for coming\".",
+    my: "🗣️ ဧည့်ဝတ်ပြုခြင်း- ဖောက်သည်တစ်ဦးကိုတွေ့သောအခါ ခေါင်းညိတ်၊ ပြုံးပြပြီး \"ကြိုဆိုပါတယ်\" လို့ ပြောပြီး ထွက်သွားတဲ့အခါ \"လာလည်တဲ့အတွက် ကျေးဇူးတင်ပါတယ်\" လို့ ပြောရပါမယ်။"
+  },
+  "顾客投诉面没有锅气 (No Wok Hei)": {
+    zh: "顾客投诉面没有锅气 (No Wok Hei)",
+    en: "Customer complaints: No Wok Hei",
+    my: "ဖောက်သည်တိုင်ကြားချက်- Wok Hei မရှိပါ။"
+  },
+  "立即检查炭火炉温度及鼓风机运作，亲自试炒一份确认味道，必要时更换受潮的炭。": {
+    zh: "立即检查炭火炉温度及鼓风机运作，亲自试炒一份确认味道，必要时更换受潮的炭。",
+    en: "Immediately check the temperature of the charcoal stove and the operation of the blower, try frying one in person to confirm the taste, and replace the damp charcoal if necessary.",
+    my: "မီးသွေးမီးဖို၏ အပူချိန်နှင့် လေမှုတ်စက်၏ လည်ပတ်မှုကို ချက်ချင်းစစ်ဆေးပါ၊ အရသာအတည်ပြုရန် လူကိုယ်တိုင် ကြော်ပြီး လိုအပ်ပါက စိုစွတ်နေသော မီးသွေးကို အစားထိုးပါ။"
+  },
+  "酱料味道不稳定 (Taste inconsistent)": {
+    zh: "酱料味道不稳定 (Taste inconsistent)",
+    en: "The sauce tastes inconsistent (Taste inconsistent)",
+    my: "ငံပြာရည်သည် အရသာမတည့်ခြင်း (Taste inconsistent)၊"
+  },
+  "立即停止使用当前批次酱料，重新调配。检查是否有人未按比例投放调料。": {
+    zh: "立即停止使用当前批次酱料，重新调配。检查是否有人未按比例投放调料。",
+    en: "Immediately stop using the current batch of sauce and prepare a new batch. Check to see if anyone is dishing out the seasonings in proportion.",
+    my: "လက်ရှိ ဆော့စ်အသုတ်ကို ချက်ခြင်းရပ်လိုက်ပြီး အသုတ်အသစ်ပြင်ဆင်ပါ။ ဟင်းခတ်အမွှေးအကြိုင်များကို အချိုးကျ ရောစပ်ထားခြင်း ရှိ၊ မရှိ စစ်ဆေးပါ။"
+  },
+  "供应商送来的猪油不新鲜": {
+    zh: "供应商送来的猪油不新鲜",
+    en: "The lard delivered by the supplier is not fresh",
+    my: "ပေးသွင်းသူမှ ပေးပို့သော ဝက်ဆီသည် မလတ်ဆတ်ပါ။"
+  },
+  "直接拒收并拍照留证，立即联系备用供应商补货，确保猪油渣品质。": {
+    zh: "直接拒收并拍照留证，立即联系备用供应商补货，确保猪油渣品质。",
+    en: "Directly reject the product and take photos to keep the certificate, and immediately contact the backup supplier to replenish the goods to ensure the quality of the lard residue.",
+    my: "ထုတ်ကုန်ကိုတိုက်ရိုက်ငြင်းဆန်ပြီး လက်မှတ်ကိုသိမ်းဆည်းထားရန် ဓာတ်ပုံရိုက်ကာ ဝက်ဆီအကြွင်းအကျန်များ၏အရည်အသွေးကိုသေချာစေရန် ကုန်ပစ္စည်းများပြန်လည်ဖြည့်တင်းရန်အတွက် အရန်ရောင်းချသူထံ ချက်ချင်းဆက်သွယ်ပါ။"
+  },
+  "每日营业额目标跟进与汇报": {
+    zh: "每日营业额目标跟进与汇报",
+    en: "Daily turnover target follow-up and reporting",
+    my: "နေ့စဥ် လည်ပတ်မှု ရည်မှန်းချက် နောက်ဆက်တွဲနှင့် အစီရင်ခံခြင်း။"
+  },
+  "排班管理与人力成本控制": {
+    zh: "排班管理与人力成本控制",
+    en: "Shift management and labor cost control",
+    my: "အဆိုင်းလိုက်စီမံခန့်ခွဲမှုနှင့် အလုပ်သမားကုန်ကျစရိတ်ထိန်းချုပ်ခြင်း။"
+  },
+  "处理严重客诉 (Google Review / 现场发飙)": {
+    zh: "处理严重客诉 (Google Review / 现场发飙)",
+    en: "Handling serious customer complaints (Google Review / On-site outrage)",
+    my: "ပြင်းထန်သော သုံးစွဲသူများ၏ တိုင်ကြားချက်များကို ကိုင်တွယ်ခြင်း (Google ပြန်လည်သုံးသပ်ခြင်း/ ဆိုက်အတွင်း ဒေါသထွက်ခြင်း)"
+  },
+  "监督现金流与每日结算": {
+    zh: "监督现金流与每日结算",
+    en: "Monitor cash flow and daily settlement",
+    my: "ငွေသားစီးဆင်းမှုနှင့် နေ့စဥ်ဖြေရှင်းမှုများကို စောင့်ကြည့်ပါ။"
+  },
+  "业绩为王 · 客户至上 · 团队凝聚": {
+    zh: "业绩为王 · 客户至上 · 团队凝聚",
+    en: "Performance is king·Customer first·Team cohesion",
+    my: "စွမ်းဆောင်ရည်သည် ဘုရင် · ဖောက်သည် ပထမ · အဖွဲ့လိုက် စည်းလုံးညီညွတ်မှု"
+  },
+  "严禁伪造报表 / 严禁包庇员工违规行为": {
+    zh: "严禁伪造报表 / 严禁包庇员工违规行为",
+    en: "It is strictly prohibited to falsify reports / cover up employee violations",
+    my: "အစီရင်ခံစာများကို အတုအယောင်/ဝန်ထမ်းချိုးဖောက်မှုများကို ဖုံးကွယ်ရန် တင်းကြပ်စွာတားမြစ်ထားသည်။"
+  },
+  "突发停电/断网": {
+    zh: "突发停电/断网",
+    en: "Sudden power outage/internet disconnection",
+    my: "ရုတ်တရက် ဓာတ်အားပြတ်တောက်ခြင်း/အင်တာနက်ချိတ်ဆက်မှုပြတ်တောက်ခြင်း။"
+  },
+  "立即启动离线作业流程，指挥厨房使用应急照明继续出餐（炭火不受影响），安抚顾客情绪。": {
+    zh: "立即启动离线作业流程，指挥厨房使用应急照明继续出餐（炭火不受影响），安抚顾客情绪。",
+    en: "Immediately start the offline operation process, instruct the kitchen to use emergency lighting to continue serving meals (the charcoal fire will not be affected), and calm customers' emotions.",
+    my: "အော့ဖ်လိုင်း လည်ပတ်မှု လုပ်ငန်းစဉ်ကို ချက်ချင်းစတင်ပါ၊ အစားအစာများကို ဆက်လက်ထမ်းဆောင်ရန် အရေးပေါ်မီးအလင်းရောင်ကို အသုံးပြုရန် မီးဖိုချောင်အား ညွှန်ကြားပါ (မီးသွေးမီးအား ထိခိုက်မည်မဟုတ်ပါ) နှင့် သုံးစွဲသူများ၏ စိတ်ခံစားမှုများကို ငြိမ်သက်စေပါသည်။"
+  },
+  "甚至爆满排队混乱": {
+    zh: "甚至爆满排队混乱",
+    en: "It was even crowded and the queue was chaotic.",
+    my: "လူတန်းသည်ပင် စည်ကားနေပြီး တန်းစီမှုမှာလည်း ဖရိုဖရဲ ဖြစ်နေသည်။"
+  },
+  "亲自到门口控场，启用取号系统，预先派发菜单给排队顾客点餐以缩短等待时间。": {
+    zh: "亲自到门口控场，启用取号系统，预先派发菜单给排队顾客点餐以缩短等待时间。",
+    en: "Go to the door to control the venue in person, activate the order-taking system, and distribute menus in advance to customers in line to order food to shorten the waiting time.",
+    my: "ခန်းမကို လူကိုယ်တိုင်ထိန်းချုပ်ရန်၊ အော်ဒါမှာယူသည့်စနစ်ကို စတင်ရန်နှင့် စောင့်ဆိုင်းချိန်ကိုတိုစေရန်အတွက် အစားအစာမှာယူသူများအတွက် တန်းစီပြီး မီနူးများကြိုတင်ဖြန့်ဝေပါ။"
+  },
+  "员工之间发生争执": {
+    zh: "员工之间发生争执",
+    en: "Disputes between employees",
+    my: "ဝန်ထမ်းများကြားတွင် အငြင်းပွားမှုများ"
+  },
+  "立即将当事人带离现场至办公室冷静，避免在顾客面前吵架，事后进行调解或处分。": {
+    zh: "立即将当事人带离现场至办公室冷静，避免在顾客面前吵架，事后进行调解或处分。",
+    en: "Immediately take the person involved away from the scene to the office to calm down, avoid quarreling in front of customers, and conduct mediation or punishment afterwards.",
+    my: "အခင်းဖြစ်ပွားရာနေရာမှ ပါဝင်ပတ်သက်နေသူအား ငြိမ်သက်စေရန် ရုံးခန်းသို့ ချက်ခြင်းခေါ်ဆောင်ကာ ဖောက်သည်များရှေ့တွင် စကားများရန်ဖြစ်ခြင်းမှ ရှောင်ကြဉ်ကာ ဖျန်ဖြေခြင်း သို့မဟုတ် ပြစ်ဒဏ်ပေးခြင်းတို့ကို ပြုလုပ်ပါ။"
+  },
+  "排班管理": {
+    zh: "排班管理",
+    en: "Shift management",
+    my: "အပြောင်းအလဲစီမံခန့်ခွဲမှု"
+  },
+  "现场控场": {
+    zh: "现场控场",
+    en: "On-site control",
+    my: "ဆိုက်ထိန်းချုပ်မှု"
+  },
+  "新人培训": {
+    zh: "新人培训",
+    en: "Newcomer training",
+    my: "မျက်နှာသစ်သင်တန်း"
+  },
+  "客诉处理": {
+    zh: "客诉处理",
+    en: "Customer complaint handling",
+    my: "ဖောက်သည်တိုင်ကြားချက်ကို ကိုင်တွယ်ခြင်း။"
+  },
+  "现场效率与零客诉": {
+    zh: "现场效率与零客诉",
+    en: "On-site efficiency and zero customer complaints",
+    my: "ဆိုက်တွင် ထိရောက်မှုရှိပြီး သုံးစွဲသူ တိုင်ကြားချက် လုံးဝမရှိပါ။"
+  },
+  "严禁排班偏私 / 包庇下属违规": {
+    zh: "严禁排班偏私 / 包庇下属违规",
+    en: "It is strictly prohibited to favor shift arrangements/covering subordinates’ violations",
+    my: "လက်အောက်ငယ်သားများ၏ ချိုးဖောက်မှုများကို ကာမိစေရန် အပြောင်းအရွှေ့အစီအစဥ်များကို ထောက်ခံရန် တင်းကျပ်စွာတားမြစ်ထားသည်။"
+  },
+  "人手不足": {
+    zh: "人手不足",
+    en: "Short staff",
+    my: "ဝန်ထမ်းတို"
+  },
+  "合理重新划分服务区域，自己亲自顶上繁忙区域。": {
+    zh: "合理重新划分服务区域，自己亲自顶上繁忙区域。",
+    en: "Properly re-divide service areas and cover busy areas yourself.",
+    my: "ဝန်ဆောင်မှုဧရိယာများကို စနစ်တကျ ပြန်လည်ခွဲဝေပြီး အလုပ်များသောနေရာများကို သင်ကိုယ်တိုင် ဖုံးအုပ်ပါ။"
+  },
+  "顾客投诉菜品有异物": {
+    zh: "顾客投诉菜品有异物",
+    en: "Customer complained about foreign matter in dishes",
+    my: "ဖောက်သည်သည် ပန်းကန်ထဲတွင် နိုင်ငံခြားကိစ္စနှင့် ပတ်သက်၍ ညည်းညူသည်။"
+  },
+  "立即道歉并撤走菜品，承诺免单该菜品并赠送甜品，事后追查厨房责任人。": {
+    zh: "立即道歉并撤走菜品，承诺免单该菜品并赠送甜品，事后追查厨房责任人。",
+    en: "He immediately apologized and removed the dish, promised to waive the order of the dish and give away dessert, and later traced the person responsible for the kitchen.",
+    my: "သူချက်ချင်းတောင်းပန်ပြီး ပန်းကန်ကိုဖယ်လိုက်ပြီး ပန်းကန်အမှာစာတွေကို စွန့်လွှတ်ပြီး အချိုပွဲပေးမယ်လို့ ကတိပေးကာ နောက်ပိုင်းမှာ မီးဖိုချောင်တာဝန်ရှိသူကို ခြေရာခံခဲ့ပါတယ်။"
+  },
+  "维护员工档案 (入职/离职/调岗/薪资变动)": {
+    zh: "维护员工档案 (入职/离职/调岗/薪资变动)",
+    en: "Maintain employee files (entry/resignation/transfer/salary changes)",
+    my: "ဝန်ထမ်းဖိုင်များကို ထိန်းသိမ်းပါ (ဝင်ခွင့်/နုတ်ထွက်/အပြောင်းအရွှေ့/လစာအပြောင်းအလဲများ)"
+  },
+  "处理月度薪资计算与发放 (EPF/SOCSO/PCB)": {
+    zh: "处理月度薪资计算与发放 (EPF/SOCSO/PCB)",
+    en: "Process monthly payroll calculation and payment (EPF/SOCSO/PCB)",
+    my: "လစဉ်လုပ်ခလစာ တွက်ချက်မှုနှင့် ငွေပေးချေမှုကို လုပ်ဆောင်ပါ (EPF/SOCSO/PCB)"
+  },
+  "跟进员工警告记录与纪律流程": {
+    zh: "跟进员工警告记录与纪律流程",
+    en: "Follow up on employee warning records and disciplinary procedures",
+    my: "ဝန်ထမ်းသတိပေးချက်မှတ်တမ်းများနှင့် စည်းကမ်းလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။"
+  },
+  "协调招聘广告、面试与入职引导": {
+    zh: "协调招聘广告、面试与入职引导",
+    en: "Coordinate job advertisements, interviews and onboarding",
+    my: "အလုပ်ကြော်ငြာများ၊ အင်တာဗျူးများနှင့် စတင်ခေါ်ယူခြင်းကို ညှိနှိုင်းပါ။"
+  },
+  "管理员工排班与假期申请审批": {
+    zh: "管理员工排班与假期申请审批",
+    en: "Manage employee shift scheduling and leave application approval",
+    my: "ဝန်ထမ်းအပြောင်းအရွှေ့အချိန်ဇယားကို စီမံခန့်ခွဲပြီး လျှောက်လွှာတင်ခွင့်ပြုချက် ထွက်ခွာပါ။"
+  },
+  "确保公司遵守劳工法令 (Employment Act 1955)": {
+    zh: "确保公司遵守劳工法令 (Employment Act 1955)",
+    en: "Ensure the company complies with the Employment Act 1955",
+    my: "ကုမ္ပဏီသည် 1955 အလုပ်အကိုင်အက်ဥပဒေနှင့်အညီ လိုက်နာကြောင်း သေချာပါစေ။"
+  },
+  "公平 · 保密 · 合规": {
+    zh: "公平 · 保密 · 合规",
+    en: "Fairness·Confidentiality·Compliance",
+    my: "တရားမျှတမှု · လျှို့ဝှက်ရေး · လိုက်နာမှု"
+  },
+  "严禁泄露员工薪资与个人档案 / 严禁偏私处理纪律事件": {
+    zh: "严禁泄露员工薪资与个人档案 / 严禁偏私处理纪律事件",
+    en: "It is strictly prohibited to disclose employees’ salaries and personal files/it is strictly prohibited to handle disciplinary matters with partiality",
+    my: "ဝန်ထမ်းများ၏ လစာနှင့် ကိုယ်ရေးကိုယ်တာ ဖိုင်များကို ထုတ်ဖော်ရန် တင်းတင်းကျပ်ကျပ် တားမြစ်ထားပါသည်/ စည်းကမ်းပိုင်းဆိုင်ရာ ကိစ္စရပ်များကို ဘက်လိုက်မှုဖြင့် ကိုင်တွယ်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "员工投诉薪资计算错误": {
+    zh: "员工投诉薪资计算错误",
+    en: "Employees complain about salary calculation errors",
+    my: "ဝန်ထမ်းများသည် လစာတွက်ချက်မှု အမှားများကို တိုင်ကြားကြသည်။"
+  },
+  "立即调出当月考勤与薪资单核对，24小时内给出书面答复，确认有误则下次发薪补足差额。": {
+    zh: "立即调出当月考勤与薪资单核对，24小时内给出书面答复，确认有误则下次发薪补足差额。",
+    en: "Immediately check the attendance and salary slips for the current month, and give a written reply within 24 hours. If there are any errors, the difference will be made up in the next salary payment.",
+    my: "လက်ရှိလအတွက် တက်ရောက်သူနှင့် လစာဖြတ်ပိုင်းများကို ချက်ခြင်းစစ်ဆေးပြီး 24 နာရီအတွင်း စာဖြင့် အကြောင်းပြန်ပေးပါ။ အမှားအယွင်းများရှိပါက နောက်လစာပေးချေမှုတွင် ကွာခြားချက်ကို ထုတ်ပေးမည်ဖြစ်ပါသည်။"
+  },
+  "员工突然离职不辞而别 (Abscond)": {
+    zh: "员工突然离职不辞而别 (Abscond)",
+    en: "Employees suddenly leave without saying goodbye (Abscond)",
+    my: "ဝန်ထမ်းများသည် နှုတ်မဆက်ဘဲ ရုတ်တရက် ထွက်သွားကြသည် (Abscond)"
+  },
+  "按流程发送书面通知至其登记地址，记录档案为 '旷工离职' ，并更新系统状态。": {
+    zh: "按流程发送书面通知至其登记地址，记录档案为 '旷工离职' ，并更新系统状态。",
+    en: "Send a written notice to the registered address according to the procedure, record the file as 'absenteeism and resignation', and update the system status.",
+    my: "လုပ်ထုံးလုပ်နည်းအရ မှတ်ပုံတင်ထားသောလိပ်စာသို့ စာဖြင့်အကြောင်းကြားစာပေးပို့ပါ၊ ဖိုင်ကို 'ပျက်ကွက်ခြင်းနှင့် နုတ်ထွက်ခြင်း' အဖြစ် မှတ်တမ်းတင်ကာ စနစ်အခြေအနေကို အပ်ဒိတ်လုပ်ပါ။"
+  },
+  "收到前员工索取薪资单纪录": {
+    zh: "收到前员工索取薪资单纪录",
+    en: "Received request for payroll records from former employee",
+    my: "ဝန်ထမ်းဟောင်းထံမှ လုပ်ခလစာ မှတ်တမ်းများ တောင်းခံရယူခဲ့သည်။"
+  },
+  "核实身份后，依劳工法令在5个工作日内提供，只能提供本人档案。": {
+    zh: "核实身份后，依劳工法令在5个工作日内提供，只能提供本人档案。",
+    en: "After verifying the identity, it will be provided within 5 working days in accordance with labor laws. Only personal files can be provided.",
+    my: "မည်သူမည်ဝါဖြစ်ကြောင်း စိစစ်ပြီးပါက အလုပ်သမားဥပဒေနှင့်အညီ အလုပ် ၅ ရက်အတွင်း ဆောင်ရွက်ပေးမည်ဖြစ်သည်။ ကိုယ်ရေးကိုယ်တာဖိုင်များကိုသာ ပေးနိုင်ပါသည်။"
+  },
+  "监控每日营业额与达标率": {
+    zh: "监控每日营业额与达标率",
+    en: "Monitor daily turnover and compliance rate",
+    my: "နေ့စဉ် လည်ပတ်မှုနှင့် လိုက်လျောညီထွေမှုနှုန်းကို စောင့်ကြည့်ပါ။"
+  },
+  "跟进库存盘点，确保食材与物资充足": {
+    zh: "跟进库存盘点，确保食材与物资充足",
+    en: "Follow up on inventory counts to ensure sufficient ingredients and supplies",
+    my: "လုံလောက်သော ပါဝင်ပစ္စည်းများနှင့် ထောက်ပံ့မှုများကို သေချာစေရန်အတွက် စာရင်းအရေအတွက်များကို လိုက်နာပါ။"
+  },
+  "协调与供应商的采购、报价及交货": {
+    zh: "协调与供应商的采购、报价及交货",
+    en: "Coordinate procurement, quotation and delivery with suppliers",
+    my: "ပေးသွင်းသူများနှင့် ဝယ်ယူမှု၊ ကိုးကားမှုနှင့် ပေးပို့မှုကို ညှိနှိုင်းပါ။"
+  },
+  "负责设备日常检查与维修申报": {
+    zh: "负责设备日常检查与维修申报",
+    en: "Responsible for daily equipment inspection and maintenance declaration",
+    my: "နေ့စဉ် စက်ကိရိယာများ စစ်ဆေးခြင်းနှင့် ပြုပြင်ထိန်းသိမ်းခြင်းဆိုင်ရာ ကြေငြာခြင်းအတွက် တာဝန်ရှိသည်။"
+  },
+  "维护门店卫生与安全标准 (SOP Inspection)": {
+    zh: "维护门店卫生与安全标准 (SOP Inspection)",
+    en: "Maintain store hygiene and safety standards (SOP Inspection)",
+    my: "ဆိုင်၏ တစ်ကိုယ်ရေ သန့်ရှင်းမှုနှင့် ဘေးကင်းရေး စံနှုန်းများကို ထိန်းသိမ်းပါ (SOP စစ်ဆေးခြင်း)"
+  },
+  "协助经理完成月底盘点与成本报告": {
+    zh: "协助经理完成月底盘点与成本报告",
+    en: "Assist managers to complete end-of-month inventory and cost reports",
+    my: "လကုန်စာရင်းနှင့် ကုန်ကျစရိတ်အစီရင်ခံစာများ အပြီးသတ်ရန် မန်နေဂျာများအား ကူညီပေးပါ။"
+  },
+  "效率 · 节约 · 稳定运营": {
+    zh: "效率 · 节约 · 稳定运营",
+    en: "Efficiency · Saving · Stable Operation",
+    my: "ထိရောက်မှု · သိမ်းဆည်းခြင်း · တည်ငြိမ်သော လုပ်ဆောင်ချက်"
+  },
+  "严禁私自挪用库存物资 / 严禁授权不明的供应商进货": {
+    zh: "严禁私自挪用库存物资 / 严禁授权不明的供应商进货",
+    en: "It is strictly prohibited to misappropriate inventory materials without permission/It is strictly prohibited to purchase goods from suppliers with unknown authorization",
+    my: "ခွင့်ပြုချက်မရှိဘဲ လက်ကျန်ပစ္စည်းများကို အလွဲသုံးစားလုပ်ခြင်းအား တင်းကြပ်စွာတားမြစ်ထားပါသည်/ အမည်မသိခွင့်ပြုချက်ဖြင့် ပေးသွင်းသူများထံမှ ကုန်ပစ္စည်းဝယ်ယူခြင်းအား တင်းကြပ်စွာတားမြစ်ထားသည်။"
+  },
+  "供应商无法按时交货": {
+    zh: "供应商无法按时交货",
+    en: "Supplier cannot deliver goods on time",
+    my: "ပေးသွင်းသူသည် ကုန်ပစ္စည်းကို အချိန်မီ မပို့ဆောင်နိုင်ပါ။"
+  },
+  "立即联系备用供应商，同时通知厨房调整当日菜单以应对食材短缺。": {
+    zh: "立即联系备用供应商，同时通知厨房调整当日菜单以应对食材短缺。",
+    en: "Immediately contact the backup supplier and notify the kitchen to adjust the day's menu to cope with the shortage of ingredients.",
+    my: "ပါဝင်ပစ္စည်းများ ပြတ်လပ်မှုကို ရင်ဆိုင်ဖြေရှင်းရန် နေ့၏မီနူးကို ချိန်ညှိရန် အရန်ရောင်းချသူထံ ချက်ချင်းဆက်သွယ်ပြီး မီးဖိုချောင်ကို အကြောင်းကြားပါ။"
+  },
+  "设备故障 (如冰箱/炸炉/洗碗机)": {
+    zh: "设备故障 (如冰箱/炸炉/洗碗机)",
+    en: "Equipment failure (e.g. refrigerator/fryer/dishwasher)",
+    my: "စက်ပစ္စည်းချို့ယွင်းမှု (ဥပမာ ရေခဲသေတ္တာ/အကြော်ဆိုင်/ပန်းကန်ဆေးစက်)"
+  },
+  "立即拍照记录故障状况，联系指定维修师傅，同时安排替代方案确保运营不中断。": {
+    zh: "立即拍照记录故障状况，联系指定维修师傅，同时安排替代方案确保运营不中断。",
+    en: "Immediately take photos to record the fault condition, contact the designated maintenance technician, and arrange alternatives to ensure uninterrupted operations.",
+    my: "ချို့ယွင်းချက်အခြေအနေကို မှတ်တမ်းတင်ရန် ဓာတ်ပုံရိုက်ပါ၊ သတ်မှတ်ထားသော ပြုပြင်ထိန်းသိမ်းမှုဆိုင်ရာ ပညာရှင်ထံ ဆက်သွယ်ကာ အနှောင့်အယှက်ကင်းသော လုပ်ဆောင်ချက်များကို သေချာစေရန် အခြားနည်းလမ်းများကို စီစဉ်ပါ။"
+  },
+  "月底盘点与系统数据出现差异": {
+    zh: "月底盘点与系统数据出现差异",
+    en: "Differences between monthly base points and system data",
+    my: "လစဉ်အခြေခံအချက်များနှင့် စနစ်ဒေတာအကြား ကွာခြားချက်များ"
+  },
+  "重新清点实物，检查入库与出库记录，找出差异原因并形成书面报告。": {
+    zh: "重新清点实物，检查入库与出库记录，找出差异原因并形成书面报告。",
+    en: "Re-count the physical objects, check the incoming and outgoing records, find out the reasons for the discrepancies and formulate a written report.",
+    my: "ရုပ်ဝတ္ထုပစ္စည်းများကို ပြန်လည်ရေတွက်ခြင်း၊ အဝင်နှင့်အထွက် မှတ်တမ်းများကို စစ်ဆေးပါ၊ ကွဲလွဲမှုများအတွက် အကြောင်းရင်းများကို ရှာဖွေပြီး အစီရင်ခံစာကို ရေးဆွဲပါ။"
+  },
+  "StoreHub 收银操作与结账": {
+    zh: "StoreHub 收银操作与结账",
+    en: "StoreHub cashier operations and checkout",
+    my: "StoreHub ငွေကိုင်လုပ်ငန်းများနှင့် ငွေရှင်းခြင်း"
+  },
+  "接听电话订单与 GrabFood/FoodPanda 接单": {
+    zh: "接听电话订单与 GrabFood/FoodPanda 接单",
+    en: "Take phone orders with GrabFood/FoodPanda",
+    my: "GrabFood/FoodPanda ဖြင့် ဖုန်းအော်ဒါမှာယူပါ။"
+  },
+  "核对每日现金与单据 (Variance < RM10)": {
+    zh: "核对每日现金与单据 (Variance < RM10)",
+    en: "Reconcile daily cash and documents (Variance < RM10)",
+    my: "နေ့စဉ် ငွေသားနှင့် စာရွက်စာတမ်းများ ညှိနှိုင်းပါ (Variance < RM10)"
+  },
+  "管理排队叫号系统 (高峰期)": {
+    zh: "管理排队叫号系统 (高峰期)",
+    en: "Manage queuing system (peak hours)",
+    my: "တန်းစီခြင်းစနစ်ကို စီမံခန့်ခွဲပါ (အမြင့်ဆုံးနာရီများ)"
+  },
+  "StoreHub 系统卡顿/死机": {
+    zh: "StoreHub 系统卡顿/死机",
+    en: "StoreHub system freezes/crash",
+    my: "StoreHub စနစ်သည် ရပ်တန့်/ပျက်သွားပါသည်။"
+  },
+  "立即重启 iPad。若无法恢复，使用手写单记账，待网络恢复后补录。": {
+    zh: "立即重启 iPad。若无法恢复，使用手写单记账，待网络恢复后补录。",
+    en: "Restart iPad now. If it cannot be restored, use a handwritten note for accounting and make up for it after the network is restored.",
+    my: "iPad ကိုယခုပင်ပြန်လည်စတင်ပါ။ ပြန်လည်ရယူ၍မရပါက၊ စာရင်းကိုင်ခြင်းအတွက် လက်ရေးမှတ်စုကို အသုံးပြုပြီး ကွန်ရက်ကို ပြန်လည်ရယူပြီးနောက် ၎င်းအတွက် ဖန်တီးပါ။"
+  },
+  "外卖骑手催单且态度恶劣": {
+    zh: "外卖骑手催单且态度恶劣",
+    en: "The delivery rider presses for orders and has a bad attitude",
+    my: "ပို့ဆောင်ရေးသမားက အမှာစာတွေ တောင်းပြီး သဘောထား ဆိုးတယ်။"
+  },
+  "保持冷静，告知大概出餐时间。如骑手并在店内喧哗，请经理出面处理。": {
+    zh: "保持冷静，告知大概出餐时间。如骑手并在店内喧哗，请经理出面处理。",
+    en: "Remain calm and tell the approximate meal time. If a rider makes a noise in the store, please ask the manager to handle it.",
+    my: "စိတ်ငြိမ်ငြိမ်ထားပြီး ထမင်းစားချိန်ကို အနီးစပ်ဆုံးပြောပြပါ။ စတိုးဆိုင်တွင် စီးနင်းသူသည် ဆူညံပါက မန်နေဂျာကို ကိုင်တွယ်ဖြေရှင်းရန် တောင်းဆိုပါ။"
+  },
+  "结账时发现少钱 (Cash Shortage)": {
+    zh: "结账时发现少钱 (Cash Shortage)",
+    en: "Cash Shortage found during checkout",
+    my: "ငွေရှင်းစဉ်အတွင်း ငွေပြတ်လပ်မှုကို တွေ့ရှိခဲ့သည်။"
+  },
+  "如实记录在 Logbook，若差额超过 RM10 需自行补齐或接受调查。": {
+    zh: "如实记录在 Logbook，若差额超过 RM10 需自行补齐或接受调查。",
+    en: "Record it truthfully in the Logbook. If the difference exceeds RM10, you need to make up for it yourself or accept investigation.",
+    my: "မှတ်တမ်းစာအုပ်တွင် အမှန်အတိုင်း မှတ်တမ်းတင်ပါ။ ကွာခြားချက် RM10 ထက်ကျော်လွန်ပါက၊ သင်ကိုယ်တိုင်ပြုလုပ်ရန် သို့မဟုတ် စုံစမ်းစစ်ဆေးမှုလက်ခံရန် လိုအပ်ပါသည်။"
+  },
+  "为顾客点餐 (推荐: 招牌福建面, 月光河)": {
+    zh: "为顾客点餐 (推荐: 招牌福建面, 月光河)",
+    en: "Order food for customers (recommended: Signature Hokkien Noodles, Moonlight River)",
+    my: "ဖောက်သည်များအတွက် အစားအစာများ မှာယူပါ (အကြံပြုထားသည်- အမှတ်အသား ဟော့ကင်းခေါက်ဆွဲ၊ လရောင်မြစ်)"
+  },
+  "确认顾客特殊要求 (如: 少猪油, 加辣)": {
+    zh: "确认顾客特殊要求 (如: 少猪油, 加辣)",
+    en: "Confirm customer’s special requirements (e.g. less lard, more spicy)",
+    my: "ဖောက်သည်၏ အထူးလိုအပ်ချက်များကို အတည်ပြုပါ (ဥပမာ ဝက်ဆီနည်း၊ အစပ်ပိုသည်)"
+  },
+  "巡视餐桌，跟进出餐速度": {
+    zh: "巡视餐桌，跟进出餐速度",
+    en: "Patrol the dining table and follow up on meal delivery speed",
+    my: "ထမင်းစားပွဲအား လှည့်ပတ်ကြည့်ရှုပြီး အစားအသောက်ပေးပို့မှုအရှိန်ကို လိုက်နာပါ။"
+  },
+  "处理简单的退换菜要求": {
+    zh: "处理简单的退换菜要求",
+    en: "Handle simple dish return and exchange requests",
+    my: "ရိုးရှင်းသော ပန်းကန်များကို ကိုင်တွယ်ပြီး လဲလှယ်ရန် တောင်းဆိုမှုများ ပြုလုပ်ပါ။"
+  },
+  "精准下单 · 主动推销 · 掌控节奏": {
+    zh: "精准下单 · 主动推销 · 掌控节奏",
+    en: "Accurate order placement·Proactive promotion·Control the rhythm",
+    my: "တိကျသော အမှာစာနေရာချထားမှု · တက်ကြွသောမြှင့်တင်ရေး · ရစ်သမ်ကို ထိန်းချုပ်ပါ။"
+  },
+  "严禁漏单不报 / 严禁对顾客不耐烦": {
+    zh: "严禁漏单不报 / 严禁对顾客不耐烦",
+    en: "It is strictly forbidden to miss orders or not report them / it is strictly forbidden to be impatient with customers",
+    my: "မှာယူမှုများကို လက်လွှတ်ခံရန် သို့မဟုတ် ၎င်းတို့အား သတင်းမပို့ရန် တင်းကြပ်စွာ တားမြစ်ထားသည် / ဖောက်သည်များနှင့် စိတ်မရှည်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "顾客投诉等了 30 分钟还没上菜": {
+    zh: "顾客投诉等了 30 分钟还没上菜",
+    en: "Customer complained after waiting for 30 minutes and no food was served",
+    my: "မိနစ် 30 စောင့်ဆိုင်းပြီးနောက် ဖောက်သည် ညည်းညူပြီး အစားအသောက် မကျွေးပါ။"
+  },
+  "先道歉，立即去厨房查看单据位置。如果是漏单，优先补做并送上一杯免费凉茶致歉。": {
+    zh: "先道歉，立即去厨房查看单据位置。如果是漏单，优先补做并送上一杯免费凉茶致歉。",
+    en: "Apologize first and immediately go to the kitchen to check the location of the receipt. If the order is missed, we will make it up first and apologize with a free cup of herbal tea.",
+    my: "ဦးစွာတောင်းပန်ပြီး ပြေစာ၏တည်နေရာကို စစ်ဆေးရန် မီးဖိုချောင်သို့ ချက်ချင်းသွားပါ။ အော်ဒါလွဲသွားပါက ဦးစွာပြင်ဆင်ပြီး ဆေးဖက်ဝင်အပင်များ လက်ဖက်ရည်တစ်ခွက်အခမဲ့ဖြင့် တောင်းပန်အပ်ပါသည်။"
+  },
+  "顾客点菜犹豫不决": {
+    zh: "顾客点菜犹豫不决",
+    en: "Customer is hesitant to order food",
+    my: "ဖောက်သည်သည် အစားအသောက်ကို မှာရန် ချီတုံချတုံ ဖြစ်နေသည်။"
+  },
+  "主动引导：'不如试下我们的招牌福建面？两个人吃中份刚好，再加个炸鸡翅？": {
+    zh: "主动引导：'不如试下我们的招牌福建面？两个人吃中份刚好，再加个炸鸡翅？",
+    en: "Active guidance: 'Why don't you try our signature Hokkien noodles? The medium portion is just right for two people. How about some fried chicken wings?",
+    my: "တက်ကြွသော လမ်းညွှန်ချက်- 'ကျွန်ုပ်တို့၏ အမှတ်အသားဖြစ်သော ဟော့ကင်းခေါက်ဆွဲကို အဘယ်ကြောင့် မစမ်းကြည့်သနည်း။ အလယ်အလတ်အပိုင်းသည် လူနှစ်ယောက်အတွက် သင့်တော်သည်။ ကြက်တောင်ပံကြော်ကရော ဘယ်လိုလဲ။"
+  },
+  "福建面卖完了 (极少发生)": {
+    zh: "福建面卖完了 (极少发生)",
+    en: "The Hokkien Mee is sold out (rarely happens)",
+    my: "ဟော့ကင်းမီးရောင်းကုန်ပြီ (ရှားရှားပါးပါး)"
+  },
+  "立即通知所有服务员，并向顾客推荐广府鸳鸯或罗面作为替代。": {
+    zh: "立即通知所有服务员，并向顾客推荐广府鸳鸯或罗面作为替代。",
+    en: "Immediately notify all waiters and recommend Cantonese Yuanyang or Luo Noodles to customers as alternatives.",
+    my: "စားပွဲထိုးအားလုံးကို ချက်ခြင်းအကြောင်းကြားပြီး အခြားရွေးချယ်စရာအဖြစ် ဖောက်သည်များအတွက် Cantonese Yuanyang သို့မဟုတ် Luo ခေါက်ဆွဲများကို အကြံပြုပါ။"
+  },
+  "准确将菜品送至对应桌号": {
+    zh: "准确将菜品送至对应桌号",
+    en: "Accurately deliver dishes to corresponding table numbers",
+    my: "သက်ဆိုင်ရာ ဇယားနံပါတ်များသို့ ဟင်းလျာများကို တိကျစွာ ပေးပို့ပါ။"
+  },
+  "客人离座后 1 分钟内收桌并擦净": {
+    zh: "客人离座后 1 分钟内收桌并擦净",
+    en: "The table will be closed and wiped within 1 minute after the guest leaves the seat",
+    my: "ဧည့်သည် ထိုင်ခုံမှ ထွက်သွားပြီးနောက် ၁ မိနစ်အတွင်း စားပွဲကို ပိတ်သွားပါမည်။"
+  },
+  "补充餐具、辣椒酱、纸巾": {
+    zh: "补充餐具、辣椒酱、纸巾",
+    en: "Replenish cutlery, chili sauce, paper towels",
+    my: "မီးဖိုချောင်သုံးပစ္စည်းများ၊ ငရုတ်ဆီ၊ စက္ကူသုတ်ပုဝါတို့ကို ဖြည့်ပါ။"
+  },
+  "保持地面无垃圾": {
+    zh: "保持地面无垃圾",
+    en: "Keep the grounds litter-free",
+    my: "မြေကွက်များကို အမှိုက်ကင်းစင်အောင်ထားပါ။"
+  },
+  "眼观六路 · 手脚麻利 · 安全第一": {
+    zh: "眼观六路 · 手脚麻利 · 安全第一",
+    en: "See six directions, be quick with hands and feet, and put safety first",
+    my: "လမ်းညွှန်ချက်ခြောက်ချက်ကို ကြည့်ပါ၊ လက်ခြေကို အမြန်မောင်းပြီး ဘေးကင်းရေးကို ဦးစွာထားပါ။"
+  },
+  "严禁在店内奔跑 / 严禁跨过小孩头顶上菜": {
+    zh: "严禁在店内奔跑 / 严禁跨过小孩头顶上菜",
+    en: "It is strictly prohibited to run in the store / it is strictly prohibited to stand over children’s heads to serve food",
+    my: "စတိုးဆိုင်တွင် လည်ပတ်ခြင်းအား တင်းတင်းကျပ်ကျပ် တားမြစ်ထားသည် / အစားအသောက်ကျွေးရန်အတွက် ကလေးများ၏ ဦးခေါင်းကို မတ်တပ်ရပ်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "不小心把汤洒在客人身上": {
+    zh: "不小心把汤洒在客人身上",
+    en: "Accidentally spilled soup on a guest",
+    my: "ဧည့်သည်တစ်ယောက်က ဟင်းချိုကို မတော်တဆ ဖိတ်သွားတယ်။"
+  },
+  "立即道歉，提供纸巾擦拭。不管客人是否生气，必须马上报告经理处理赔偿事宜。": {
+    zh: "立即道歉，提供纸巾擦拭。不管客人是否生气，必须马上报告经理处理赔偿事宜。",
+    en: "Apologize immediately and offer tissues to wipe. Regardless of whether the guest is angry or not, the guest must immediately report the matter to the manager for compensation.",
+    my: "ချက်ချင်း တောင်းပန်ပြီး သုတ်ဖို့ တစ်ရှူးတွေ ပေးလိုက်ပါ။ ဧည့်သည်က စိတ်ဆိုးသည်ဖြစ်စေ မကျေနပ်သည်ဖြစ်စေ ဧည့်သည်သည် လျော်ကြေးပေးရန် မန်နေဂျာထံ ချက်ချင်းအကြောင်းကြားရမည်။"
+  },
+  "客人要求加汤/加猪油渣": {
+    zh: "客人要求加汤/加猪油渣",
+    en: "Guest requested to add soup/lard residue",
+    my: "ဧည့်သည်က ဟင်းချို/ဝက်ဆီ အကြွင်းအကျန် ထည့်ခိုင်းတယ်။"
+  },
+  "微笑着说'好的，稍等'，立即去厨房取，不要让客人等超过 3 分钟。": {
+    zh: "微笑着说'好的，稍等'，立即去厨房取，不要让客人等超过 3 分钟。",
+    en: "Smile and say 'ok, just a moment' and go to the kitchen to get it immediately and don't make the guest wait more than 3 minutes.",
+    my: "ပြုံးပြီး 'ကောင်းပြီ ခဏလေး' လို့ပြောပြီး ချက်ချင်းယူဖို့ မီးဖိုချောင်ကိုသွားပြီး ဧည့်သည်ကို ၃ မိနစ်ထက် ပိုမစောင့်ခိုင်းပါနဲ့။"
+  },
+  "发现桌子摇晃不稳": {
+    zh: "发现桌子摇晃不稳",
+    en: "Found the table to be unstable",
+    my: "မတည်မငြိမ်ဖြစ်နေသော စားပွဲကို တွေ့သည်။"
+  },
+  "立即找硬纸皮垫脚，确保客人用餐体验舒适。": {
+    zh: "立即找硬纸皮垫脚，确保客人用餐体验舒适。",
+    en: "Find cardboard feet now to ensure your guests’ dining experience is comfortable.",
+    my: "သင့်ဧည့်သည်များ၏ စားသောက်မှုအတွေ့အကြုံကို သက်တောင့်သက်သာရှိစေရန်အတွက် ကတ်ထူခြေထောက်များကို ယခုရှာဖွေပါ။"
+  },
+  "环境清洁": {
+    zh: "环境清洁",
+    en: "Clean environment",
+    my: "သန့်ရှင်းသောပတ်ဝန်းကျင်"
+  },
+  "厕所检查 (30min)": {
+    zh: "厕所检查 (30min)",
+    en: "Toilet inspection (30min)",
+    my: "အိမ်သာစစ်ဆေးခြင်း (30 မိနစ်)"
+  },
+  "垃圾处理": {
+    zh: "垃圾处理",
+    en: "garbage disposal",
+    my: "အမှိုက်စွန့်ပစ်ခြင်း။"
+  },
+  "翻台/抹桌": {
+    zh: "翻台/抹桌",
+    en: "Turn over/wipe table",
+    my: "စားပွဲကိုလှန်/သုတ်ပါ။"
+  },
+  "无死角清洁": {
+    zh: "无死角清洁",
+    en: "Cleaning without dead ends",
+    my: "အစွန်းမပါသော သန့်ရှင်းရေး"
+  },
+  "严禁地面积水不处理 (防滑倒)": {
+    zh: "严禁地面积水不处理 (防滑倒)",
+    en: "It is strictly prohibited to leave water on the ground without treatment (to prevent slipping)",
+    my: "(ချော်လဲခြင်းမှ ကာကွယ်ရန်) ကုသခြင်းမပြုဘဲ မြေပြင်ပေါ်တွင် ရေများထားခဲ့ခြင်းကို တင်းကြပ်စွာတားမြစ်ထားသည်။"
+  },
+  "厕所堵塞": {
+    zh: "厕所堵塞",
+    en: "Toilet is clogged",
+    my: "အိမ်သာက ပိတ်ဆို့နေတယ်။"
+  },
+  "立即暂停使用，尝试疏通，不行则通知经理报修。": {
+    zh: "立即暂停使用，尝试疏通，不行则通知经理报修。",
+    en: "Immediately suspend use and try to clear the problem. If that doesn't work, notify the manager to report it for repair.",
+    my: "အသုံးပြုမှုကို ချက်ချင်းရပ်လိုက်ပြီး ပြဿနာကို ရှင်းလင်းရန် ကြိုးစားပါ။ အဆင်မပြေပါက ပြုပြင်ရန်အတွက် မန်နေဂျာထံ အကြောင်းကြားပါ။"
+  },
+  "地面有呕吐物": {
+    zh: "地面有呕吐物",
+    en: "There is vomit on the ground",
+    my: "မြေပြင်မှာ အော့အန်တာတွေရှိတယ်။"
+  },
+  "戴上手套口罩，使用专用清洁剂和木屑覆盖清理，彻底消毒去味。": {
+    zh: "戴上手套口罩，使用专用清洁剂和木屑覆盖清理，彻底消毒去味。",
+    en: "Wear gloves and a mask, use special detergent and sawdust to cover and clean, and thoroughly disinfect and remove odors.",
+    my: "လက်အိတ်နှင့် မျက်နှာဖုံးကို ဝတ်ဆင်ပါ၊ အထူးဆပ်ပြာနှင့် လွှစာမှုန့်တို့ကို အသုံးပြုကာ ဖုံးအုပ်သန့်စင်ကာ အနံ့အသက်ဆိုးများကို သေချာစွာ ဆေးကြောသန့်စင်ပါ။"
+  },
+  "高峰期支援": {
+    zh: "高峰期支援",
+    en: "Peak period support",
+    my: "အထွတ်အထိပ်ကာလထောက်ခံမှု"
+  },
+  "基础服务/清洁": {
+    zh: "基础服务/清洁",
+    en: "Basic services/cleaning",
+    my: "အခြေခံဝန်ဆောင်မှု/သန့်ရှင်းရေး"
+  },
+  "听从调配": {
+    zh: "听从调配",
+    en: "Follow the instructions",
+    my: "ညွှန်ကြားချက်များကိုလိုက်နာပါ။"
+  },
+  "机动性与补位": {
+    zh: "机动性与补位",
+    en: "Mobility and replacement",
+    my: "ရွေ့လျားမှုနှင့် အစားထိုးမှု"
+  },
+  "严禁无故缺席 (No Show)": {
+    zh: "严禁无故缺席 (No Show)",
+    en: "No unexcused absence is strictly prohibited (No Show)",
+    my: "အကြောင်းပြချက်မရှိဘဲ ပျက်ကွက်ခြင်းကို တင်းတင်းကျပ်ကျပ် တားမြစ်သည် (မပြပါ)၊"
+  },
+  "不知道该做什么": {
+    zh: "不知道该做什么",
+    en: "don't know what to do",
+    my: "ဘာလုပ်ရမှန်းမသိ"
+  },
+  "主动询问 Supervisor 或 Captain：'有什么需要帮忙的吗？不要站在角落玩手机。": {
+    zh: "主动询问 Supervisor 或 Captain：'有什么需要帮忙的吗？不要站在角落玩手机。",
+    en: "Proactively ask the Supervisor or Captain: 'Can I help you?' Don't stand in the corner and play with your phone.",
+    my: "ကြီးကြပ်ရေးမှူး သို့မဟုတ် ကပ္ပတိန်အား 'ကူညီနိုင်မလား။' ထောင့်မှာရပ်ပြီး ဖုန်းနဲ့မကစားပါနဲ့။"
+  },
+  "负责核心炒锅 (福建面/月光河)": {
+    zh: "负责核心炒锅 (福建面/月光河)",
+    en: "Responsible for Core Wok (Hokkien Noodles/Moonlight River)",
+    my: "Core Wok (ဟော့ကင်းခေါက်ဆွဲ/လရောင်မြစ်) အတွက် တာဝန်ယူ၊"
+  },
+  "把控出餐节奏，指挥帮手": {
+    zh: "把控出餐节奏，指挥帮手",
+    en: "Control the rhythm of meal delivery and direct helpers",
+    my: "အစားအသောက်ပေးပို့ခြင်း၏ စည်းချက်နှင့် တိုက်ရိုက်အကူအညီပေးသူများကို ထိန်းချုပ်ပါ။"
+  },
+  "每日收档检查煤气与炭火安全": {
+    zh: "每日收档检查煤气与炭火安全",
+    en: "Check gas and charcoal fire safety after daily closing",
+    my: "နေ့စဥ်ပိတ်ပြီးနောက် ဓာတ်ငွေ့နှင့် မီးသွေးမီးဘေး လုံခြုံမှုကို စစ်ဆေးပါ။"
+  },
+  "试味 (确保咸淡适中)": {
+    zh: "试味 (确保咸淡适中)",
+    en: "Taste test (make sure it’s salty enough)",
+    my: "မြည်းစမ်းပါ (အငန်လုံအောင်သေချာစစ်ပါ)"
+  },
+  "锅气十足 · 速度激情 · 品质如一": {
+    zh: "锅气十足 · 速度激情 · 品质如一",
+    en: "Full of steam, fast and passionate, consistent quality",
+    my: "ရေနွေးငွေ့ အပြည့်၊ မြန်ဆန်ပြီး စိတ်အားထက်သန်မှု၊ တသမတ်တည်း အရည်အသွေး"
+  },
+  "严禁出品夹生或烧焦严重 / 严禁在炉台吸烟": {
+    zh: "严禁出品夹生或烧焦严重 / 严禁在炉台吸烟",
+    en: "It is strictly prohibited to produce raw or severely burnt products / Smoking on the stove is strictly prohibited",
+    my: "ကုန်ကြမ်း သို့မဟုတ် ပြင်းထန်စွာ လောင်ကျွမ်းသော ထုတ်ကုန်များ ထုတ်လုပ်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည် / မီးဖိုပေါ်တွင် ဆေးလိပ်သောက်ခြင်းကို တင်းတင်းကျပ်ကျပ် တားမြစ်ထားသည်။"
+  },
+  "炭火火力变弱": {
+    zh: "炭火火力变弱",
+    en: "Charcoal fire power weakens",
+    my: "မီးသွေးမီးအား အားနည်းစေသည်။"
+  },
+  "指挥马王(Commis)立即加炭并开大风机。若来不及，先用备用煤气炉顶替，确保不断供。": {
+    zh: "指挥马王(Commis)立即加炭并开大风机。若来不及，先用备用煤气炉顶替，确保不断供。",
+    en: "Command the horse King (Commis) to immediately add charcoal and turn on the big fan. If it is too late, replace it with a spare gas stove to ensure continuous supply.",
+    my: "မီးသွေးထည့်ကာ ပန်ကာကြီးဖွင့်ရန် မြင်းဘုရင် (Commis) ကို အမိန့်ပေးသည်။ အချိန်နောက်ကျပါက စဉ်ဆက်မပြတ်ထောက်ပံ့မှုသေချာစေရန် ၎င်းအား ဂက်စ်မီးဖိုဖြင့် အစားထိုးပါ။"
+  },
+  "单子突然爆满 (高峰期)": {
+    zh: "单子突然爆满 (高峰期)",
+    en: "The list is suddenly full (peak period)",
+    my: "စာရင်းသည် ရုတ်တရက် ပြည့်သွားသည် (အမြင့်ဆုံးကာလ)"
+  },
+  "保持冷静，按单顺序炒，可以一次炒 2-3 份同款面，但严禁一次炒太多导致味道变差。": {
+    zh: "保持冷静，按单顺序炒，可以一次炒 2-3 份同款面，但严禁一次炒太多导致味道变差。",
+    en: "Keep calm and fry in order. You can fry 2-3 portions of the same type of noodles at one time, but it is strictly forbidden to fry too many at once as the taste will deteriorate.",
+    my: "တည်တည်ငြိမ်ငြိမ်နဲ့ ကြော်ပါ။ ခေါက်ဆွဲတစ်မျိုးတည်း၏ ၂-၃ ပိုင်းကို တစ်ကြိမ်တည်းတွင် ကြော်နိုင်သော်လည်း အရသာ ဆိုးရွားသောကြောင့် တစ်ကြိမ်တည်းတွင် အလွန်အကျွံကြော်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "发现面条发酸": {
+    zh: "发现面条发酸",
+    en: "Found the noodles sour",
+    my: "ခေါက်ဆွဲချဉ်ကို တွေ့တယ်။"
+  },
+  "立即停止使用该批次面条，整锅倒掉，绝不侥幸出餐。": {
+    zh: "立即停止使用该批次面条，整锅倒掉，绝不侥幸出餐。",
+    en: "Immediately stop using this batch of noodles, throw away the entire pot, and never eat by chance.",
+    my: "ဒီခေါက်ဆွဲကို ချက်ခြင်းရပ်လိုက်ပြီး အိုးတစ်ခုလုံးကို စွန့်ပစ်လိုက်ပြီး မတော်တဆ ဘယ်တော့မှ မစားပါနဲ့။"
+  },
+  "负责汤面类 (罗面/滑蛋河) 制作": {
+    zh: "负责汤面类 (罗面/滑蛋河) 制作",
+    en: "Responsible for the production of soup noodles (Luo Noodles/Hua Danhe)",
+    my: "ဟင်းချိုခေါက်ဆွဲ (Luo Noodles/Hua Danhe) မှ တာဝန်ယူ၊"
+  },
+  "协助头手备料 (抓面/配菜)": {
+    zh: "协助头手备料 (抓面/配菜)",
+    en: "Assist in preparing ingredients (noodles/side dishes)",
+    my: "ပါဝင်ပစ္စည်းများ ပြင်ဆင်ရာတွင် ကူညီပါ (ခေါက်ဆွဲ/အရံဟင်း)"
+  },
+  "管理炸炉 (炸鸡翅/炸五香)": {
+    zh: "管理炸炉 (炸鸡翅/炸五香)",
+    en: "Manage fryer (fried chicken wings/fried five-spice)",
+    my: "အကြော်အိုးကို စီမံပါ (ကြက်တောင်ပံကြော်/ဟင်းခတ်ငါးမျိုးကြော်)"
+  },
+  "保持炉台卫生": {
+    zh: "保持炉台卫生",
+    en: "Keep your stovetop hygienic",
+    my: "သင့်မီးဖိုခုံကို တစ်ကိုယ်ရေသန့်ရှင်းအောင်ထားပါ။"
+  },
+  "配合默契 · 补位及时 · 学习进取": {
+    zh: "配合默契 · 补位及时 · 学习进取",
+    en: "Tacit cooperation, timely filling of positions, learning and progress",
+    my: "တိတ်တိတ်ဆိတ်ဆိတ် ပူးပေါင်းဆောင်ရွက်ခြင်း၊ ရာထူးများကို အချိန်နှင့်တစ်ပြေးညီ ဖြည့်ဆည်းပေးခြင်း၊ သင်ယူခြင်းနှင့် တိုးတက်မှု"
+  },
+  "严禁擅自离岗导致炉台无人": {
+    zh: "严禁擅自离岗导致炉台无人",
+    en: "It is strictly prohibited to leave the post without permission and leave the stove unoccupied",
+    my: "ခွင့်ပြုချက်မရှိဘဲ ရာထူးမှ ထွက်ခွာရန်နှင့် မီးဖိုကို စွန့်ပစ်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "头手忙不过来": {
+    zh: "头手忙不过来",
+    en: "My head and hands are too busy",
+    my: "ခေါင်းနဲ့ လက်တွေ အရမ်းရှုပ်နေတယ်။"
+  },
+  "主动接过简单的炒单 (如炒饭)，或帮头手提前烫面，减轻其负担。": {
+    zh: "主动接过简单的炒单 (如炒饭)，或帮头手提前烫面，减轻其负担。",
+    en: "Take the initiative to take simple fried orders (such as fried rice), or help the boss cook the noodles in advance to reduce his burden.",
+    my: "ရိုးရှင်းသော အကြော်အော်ဒါများ (ထမင်းကြော်ကဲ့သို့သော) မှာယူရန် အစပြုလုပ်ဆောင်ပါ သို့မဟုတ် ၎င်း၏ဝန်ထုပ်ဝန်ပိုးကို လျှော့ချရန်အတွက် သူဌေးက ခေါက်ဆွဲကို ကြိုတင်ချက်ပြုတ်ကူညီပေးပါ။"
+  },
+  "炸鸡翅没熟": {
+    zh: "炸鸡翅没熟",
+    en: "Fried chicken wings are undercooked",
+    my: "ကြက်တောင်ပံကြော်ကို မကျက်သေးပါ။"
+  },
+  "严格遵守定时器时间，出锅前用探针检查。没熟的必须重炸，不能出给客人。": {
+    zh: "严格遵守定时器时间，出锅前用探针检查。没熟的必须重炸，不能出给客人。",
+    en: "Strictly adhere to the timer and check with a probe before serving. Uncooked food must be re-fried and cannot be served to guests.",
+    my: "တိုင်မာကို တင်းတင်းကျပ်ကျပ် လိုက်နာပြီး အမှုမထမ်းဆောင်မီ ပစ္စတင်ဖြင့် စစ်ဆေးပါ။ မချက်ပြုတ်ရသေးသော အစားအစာများကို ပြန်လည်ကြော်ရမည်ဖြစ်ပြီး ဧည့်သည်များကို ကျွေးမွေးခြင်းမပြုရပါ။"
+  },
+  "负责普通炒锅 (炒饭/马来风光)": {
+    zh: "负责普通炒锅 (炒饭/马来风光)",
+    en: "Responsible for ordinary woks (fried rice/Malay scenery)",
+    my: "သာမာန် woks (ထမင်းကြော်/မလေး ရှုခင်း) အတွက် တာဝန်ယူ၊"
+  },
+  "协助备料": {
+    zh: "协助备料",
+    en: "Assist in preparing materials",
+    my: "ပစ္စည်းများပြင်ဆင်ရာတွင် ကူညီဆောင်ရွက်ပေးခြင်း။"
+  },
+  "炉台清洁": {
+    zh: "炉台清洁",
+    en: "Stove cleaning",
+    my: "မီးဖိုသန့်ရှင်းရေး"
+  },
+  "收档清洁": {
+    zh: "收档清洁",
+    en: "Closing Cleaning",
+    my: "ပိတ်ခြင်း သန့်ရှင်းရေး"
+  },
+  "标准统一 · 出品稳定": {
+    zh: "标准统一 · 出品稳定",
+    en: "Unified standards · Stable production",
+    my: "ပေါင်းစည်းထားသော စံချိန်စံညွှန်းများ · တည်ငြိမ်သော ထုတ်လုပ်မှု"
+  },
+  "严禁生熟不分 / 严禁出品夹生": {
+    zh: "严禁生熟不分 / 严禁出品夹生",
+    en: "It is strictly forbidden to mix raw and cooked food / it is strictly forbidden to serve raw food with mixed food",
+    my: "အစိမ်းနှင့် ချက်ပြုတ်ထားသော အစားအစာများကို ရောနှောခြင်း တင်းတင်းကျပ်ကျပ် တားမြစ်ထားသည် / အစားအစာ ရောစပ်ထားသော အစားအစာ စိမ်းများကို ကျွေးခြင်းအား တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "客人投诉咸淡": {
+    zh: "客人投诉咸淡",
+    en: "Customers complained about saltiness",
+    my: "ဖောက်သည်များက ဆားငန်မှုကို စောဒကတက်ကြသည်။"
+  },
+  "立即重做，并自我检查调料比例是否按SOP执行。": {
+    zh: "立即重做，并自我检查调料比例是否按SOP执行。",
+    en: "Redo it immediately and self-check whether the seasoning ratio is implemented according to the SOP.",
+    my: "၎င်းကိုချက်ချင်းပြန်လုပ်ကာ ဟင်းခတ်အမွှေးအကြိုင်အချိုးကို SOP အရ လုပ်ဆောင်ခြင်းရှိမရှိ ကိုယ်တိုင်စစ်ဆေးပါ။"
+  },
+  "饭太湿炒不散": {
+    zh: "饭太湿炒不散",
+    en: "The rice is too wet and won’t fall apart when fried",
+    my: "ထမင်းက အရမ်းစိုပြီး ကြော်တဲ့အခါ မကွဲပါဘူး။"
+  },
+  "通知占板注意煮饭水量，或者使用隔夜饭。尽力用大火将水分炒干。": {
+    zh: "通知占板注意煮饭水量，或者使用隔夜饭。尽力用大火将水分炒干。",
+    en: "Inform the board to pay attention to the amount of cooking water, or use overnight rice. Try your best to dry out the water over high heat.",
+    my: "ဟင်းချက်ရေပမာဏကို ဂရုပြုရန် သို့မဟုတ် တစ်ညလုံး ထမင်းသုံးဆောင်ရန် ဘုတ်အဖွဲ့အား အကြောင်းကြားပါ။ အပူလွန်ကဲပြီး ရေကို ခြောက်အောင် အစွမ်းကုန်ကြိုးစားပါ။"
+  },
+  "每日猪肉/鸡肉/海鲜切割与腌制": {
+    zh: "每日猪肉/鸡肉/海鲜切割与腌制",
+    en: "Daily pork/chicken/seafood cutting and marinating",
+    my: "နေ့စဉ် ဝက်/ကြက်/ပင်လယ်စာ ဖြတ်တောက်ပြီး နှပ်ထားပါ။"
+  },
+  "蔬菜清洗与切配": {
+    zh: "蔬菜清洗与切配",
+    en: "Vegetable cleaning and cutting",
+    my: "ဟင်းသီးဟင်းရွက်များ ခုတ်ထစ်ခြင်းနှင့် သန့်ရှင်းရေး"
+  },
+  "管理冰箱库存 (FIFO 先进先出)": {
+    zh: "管理冰箱库存 (FIFO 先进先出)",
+    en: "Manage refrigerator inventory (FIFO first in first out)",
+    my: "ရေခဲသေတ္တာစာရင်းကို စီမံခန့်ခွဲပါ (FIFO ပထမဦးစွာ ထွက်သည်)"
+  },
+  "根据预估销量备足料": {
+    zh: "根据预估销量备足料",
+    en: "Prepare sufficient materials based on estimated sales volume",
+    my: "ခန့်မှန်းရောင်းချမှုပမာဏပေါ်မူတည်၍ လုံလောက်သောပစ္စည်းများကို ပြင်ဆင်ပါ။"
+  },
+  "刀工精准 · 减少损耗 · 新鲜卫生": {
+    zh: "刀工精准 · 减少损耗 · 新鲜卫生",
+    en: "Precise knife work · Reduce loss · Fresh and hygienic",
+    my: "တိကျသောဓားလုပ်ငန်း · ဆုံးရှုံးမှုကို လျှော့ချ · လတ်ဆတ်ပြီး တစ်ကိုယ်ရေသန့်ရှင်းမှု"
+  },
+  "严禁生熟砧板混用 (食品安全红线)": {
+    zh: "严禁生熟砧板混用 (食品安全红线)",
+    en: "It is strictly prohibited to mix raw and cooked chopping boards (food safety red line)",
+    my: "အစိမ်းနှင့် ချက်ပြုတ်ထားသော စဉ်းတီဘုတ်များ ရောနှောခြင်း (အစားအသောက် ဘေးကင်းရေး အနီရောင်မျဉ်း) ကို တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "切肉时不小心切到手": {
+    zh: "切肉时不小心切到手",
+    en: "Accidentally cut my hand while cutting meat",
+    my: "အသားလှီးဖြတ်ရင်း လက်ကို မတော်တဆ ဖြတ်လိုက်တယ်။"
+  },
+  "立即停止工作，按压止血，对伤口进行包扎并戴上手套。严重者立即就医。": {
+    zh: "立即停止工作，按压止血，对伤口进行包扎并戴上手套。严重者立即就医。",
+    en: "Stop work immediately, apply pressure to stop bleeding, bandage the wound and wear gloves. In severe cases seek medical attention immediately.",
+    my: "အလုပ်ကိုချက်ချင်းရပ်ပါ၊ သွေးထွက်ခြင်းကိုရပ်ရန် ဖိအားကိုအသုံးပြုပါ၊ ဒဏ်ရာကိုပတ်တီးနှင့်လက်အိတ်များဝတ်ဆင်ပါ။ ပြင်းထန်သော အခြေအနေများတွင် ဆေးကုသမှု ချက်ချင်းခံယူပါ။"
+  },
+  "发现冰箱里的肉有异味": {
+    zh: "发现冰箱里的肉有异味",
+    en: "I noticed that the meat in the refrigerator had a strange smell",
+    my: "ရေခဲသေတ္တာထဲက အသားတွေက ထူးဆန်းတဲ့အနံ့ရှိနေတာကို သတိထားမိတယ်။"
+  },
+  "立即隔离该批次肉类并上报总厨，禁止使用。": {
+    zh: "立即隔离该批次肉类并上报总厨，禁止使用。",
+    en: "Immediately isolate the batch of meat and report it to the head chef to prohibit its use.",
+    my: "အသားအသုတ်ကို ချက်ချင်းခွဲထုတ်ပြီး ၎င်း၏စားသုံးမှုကို တားမြစ်ရန် ခေါင်းစားဖိုမှူးထံ သတင်းပို့ပါ။"
+  },
+  "备料不足": {
+    zh: "备料不足",
+    en: "Insufficient preparation of materials",
+    my: "ပစ္စည်းပြင်ဆင်မှု မလုံလောက်ခြင်း။"
+  },
+  "提前 1 小时预警，通知马王去补货或现场紧急切配。": {
+    zh: "提前 1 小时预警，通知马王去补货或现场紧急切配。",
+    en: "Warn 1 hour in advance to notify Mawang to restock or make an emergency match on site.",
+    my: "ပြန်လည်ရောင်းချရန် သို့မဟုတ် အရေးပေါ်ပွဲစဉ်ပြုလုပ်ရန် Mawang ကို 1 နာရီကြိုတင်သတိပေးပါ။"
+  },
+  "负责炸炉出品 (五香/鸡翅)": {
+    zh: "负责炸炉出品 (五香/鸡翅)",
+    en: "Responsible for fryer production (spiced/chicken wings)",
+    my: "အကြော်ထုတ်လုပ်ရေး (အမွှေးအကြိုင်/ကြက်တောင်ပံများ) တာဝန်ယူ၊"
+  },
+  "菜品装饰与摆盘": {
+    zh: "菜品装饰与摆盘",
+    en: "Dish decoration and presentation",
+    my: "ပန်းကန်အလှဆင်ခြင်းနှင့် တင်ဆက်ခြင်း။"
+  },
+  "配合头手出菜": {
+    zh: "配合头手出菜",
+    en: "Cooperate with first-hand dishes",
+    my: "ပထမလက်တွေ့ဟင်းလျာများနှင့် ပူးပေါင်းဆောင်ရွက်ပါ။"
+  },
+  "管理酱料碟与餐具": {
+    zh: "管理酱料碟与餐具",
+    en: "Manage sauce plates and cutlery",
+    my: "ငံပြာရည်ပန်းကန်များနှင့် မီးဖိုချောင်သုံးပစ္စည်းများကို စီမံပါ။"
+  },
+  "美观 · 速度 · 把关": {
+    zh: "美观 · 速度 · 把关",
+    en: "Beautiful · Speed ​​· Control",
+    my: "လှပသော · မြန်နှုန်း · ထိန်းချုပ်မှု"
+  },
+  "严禁出品盘边有油渍 / 严禁徒手接触熟食": {
+    zh: "严禁出品盘边有油渍 / 严禁徒手接触熟食",
+    en: "It is strictly forbidden to have oil stains on the edge of the plate / it is strictly forbidden to touch cooked food with bare hands",
+    my: "ပန်းကန်ပြားအစွန်းတွင် ဆီစွန်းထင်းခြင်းကို တင်းတင်းကျပ်ကျပ် တားမြစ်ထားပါသည် / ချက်ပြုတ်ထားသော အစားအစာများကို လက်ဗလာဖြင့် မထိရန် တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "炸炉油温过高冒烟": {
+    zh: "炸炉油温过高冒烟",
+    en: "Fryer oil temperature is too high and smoke occurs",
+    my: "Fryer ဆီ အပူချိန် အရမ်းမြင့်ပြီး မီးခိုးတွေ ထွက်ပါတယ်။"
+  },
+  "立即关火，放入少量冷油降温。严禁泼水！": {
+    zh: "立即关火，放入少量冷油降温。严禁泼水！",
+    en: "Turn off the heat immediately and add a small amount of cold oil to cool down. Splashing water is strictly prohibited!",
+    my: "အပူကိုချက်ချင်းပိတ်ပြီး အအေးခံရန်အတွက် ဆီအနည်းငယ်ထည့်ပါ။ ရေပက်ခြင်းကို တင်းတင်းကျပ်ကျပ် တားမြစ်ထားသည်။"
+  },
+  "出菜口积压": {
+    zh: "出菜口积压",
+    en: "Backlog at the food outlet",
+    my: "အစားအသောက်ဆိုင်ရှိ စာရွက်စာတမ်းများ"
+  },
+  "大声呼叫传菜员 (Runner) 取餐，优先处理容易变凉的菜品。": {
+    zh: "大声呼叫传菜员 (Runner) 取餐，优先处理容易变凉的菜品。",
+    en: "Call the runner loudly to pick up the food, giving priority to dishes that tend to get cold.",
+    my: "အအေးခံတတ်တဲ့ ဟင်းလျာတွေကို ဦးစားပေးပြီး အစားအသောက်ကို ကောက်ယူဖို့ အပြေးသမားကို အသံကျယ်ကျယ်နဲ့ ခေါ်ပါ။"
+  },
+  "连接切配台与炉台，传递食材": {
+    zh: "连接切配台与炉台，传递食材",
+    en: "Connect the cutting table and stove to transfer ingredients",
+    my: "ပါဝင်ပစ္စည်းများလွှဲပြောင်းရန် ဖြတ်တောက်ထားသော စားပွဲနှင့် မီးဖိုကို ချိတ်ဆက်ပါ။"
+  },
+  "负责出菜口的最后检查 (擦盘边)": {
+    zh: "负责出菜口的最后检查 (擦盘边)",
+    en: "Responsible for the final inspection of the food outlet (wiping the sides of the dishes)",
+    my: "အစားအသောက်ပလပ်ပေါက်ကို နောက်ဆုံးစစ်ဆေးခြင်း (ပန်းကန်နှစ်ဖက်ကို သုတ်ရန်) တာဝန်ယူ၊"
+  },
+  "紧急补货 (面条/猪油/酱料)": {
+    zh: "紧急补货 (面条/猪油/酱料)",
+    en: "Urgent replenishment (noodles/lard/sauce)",
+    my: "အရေးပေါ်ဖြည့်စွက်စာ (ခေါက်ဆွဲ/ဝက်ဆီ/ငံပြာရည်)"
+  },
+  "保持出菜通道畅通": {
+    zh: "保持出菜通道畅通",
+    en: "Keep food delivery channels clear",
+    my: "အစားအသောက်ပို့ဆောင်ရေးလမ်းကြောင်းများကို ရှင်းလင်းထားပါ။"
+  },
+  "响应迅速 · 眼观六路 · 随叫随到": {
+    zh: "响应迅速 · 眼观六路 · 随叫随到",
+    en: "Respond quickly · See all directions · Be on call at any time",
+    my: "လျင်မြန်စွာ တုံ့ပြန်ပါ · လမ်းညွှန်ချက်အားလုံးကို ကြည့်ပါ · အချိန်မရွေး ဖုန်းခေါ်ဆိုပါ။"
+  },
+  "严禁传递错误食材 / 严禁在厨房奔跑滑倒": {
+    zh: "严禁传递错误食材 / 严禁在厨房奔跑滑倒",
+    en: "It is strictly forbidden to pass the wrong ingredients / it is strictly forbidden to run and slip in the kitchen",
+    my: "မှားယွင်းသော ပါဝင်ပစ္စည်းများကို ကျော်ဖြတ်ရန် တင်းကြပ်စွာ တားမြစ်ထားသည် / မီးဖိုချောင်ထဲတွင် ပြေးလွှားချော်လဲခြင်းများကို တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "炉台突然说没面了": {
+    zh: "炉台突然说没面了",
+    en: "The stove suddenly said there was no food left.",
+    my: "မီးဖိုက အစာမကျန်တော့ဘူးလို့ ရုတ်တရက်ပြောတယ်။"
+  },
+  "立即跑步去冷房取面，如果冷房也没了，马上通报总厨并去最近的超市购买(经批准)。": {
+    zh: "立即跑步去冷房取面，如果冷房也没了，马上通报总厨并去最近的超市购买(经批准)。",
+    en: "Immediately run to the cold room to get noodles. If the cold room is gone, immediately notify the head chef and go to the nearest supermarket to buy (with approval).",
+    my: "ခေါက်ဆွဲသွားယူဖို့ အအေးခန်းကို ချက်ချင်းပြေးတယ်။ အအေးခန်း မရှိတော့ပါက၊ စားဖိုမှူးထံ ချက်ချင်းအကြောင်းကြားပြီး နီးစပ်ရာ စူပါမားကတ်ကို (ခွင့်ပြုချက်ဖြင့်) ဝယ်ယူပါ။"
+  },
+  "传菜员端错了菜": {
+    zh: "传菜员端错了菜",
+    en: "The waiter brought the wrong dish",
+    my: "စားပွဲထိုးက ပန်းကန်မှားယူလာခဲ့တယ်။"
+  },
+  "在出菜口就要核对单号，发现错误立即拦截，避免送错给客人。": {
+    zh: "在出菜口就要核对单号，发现错误立即拦截，避免送错给客人。",
+    en: "The order number must be checked at the dish outlet, and if any error is found, the order number will be intercepted immediately to avoid sending the wrong order to the customer.",
+    my: "အမှာစာနံပါတ်ကို ဟင်းပွဲပလပ်တွင် စစ်ဆေးရမည်ဖြစ်ပြီး အမှားအယွင်းတစ်စုံတစ်ရာတွေ့ရှိပါက မှာယူသူထံသို့ မှားယွင်းသောအမှာစာမပို့ခြင်းမှ ရှောင်ရှားနိုင်ရန် မှာယူမှုနံပါတ်ကို ချက်ချင်းကြားဖြတ်မည်ဖြစ်သည်။"
+  },
+  "地面有油渍": {
+    zh: "地面有油渍",
+    en: "There are oil stains on the floor",
+    my: "ကြမ်းပြင်မှာ ဆီစွန်းထင်းတာတွေရှိတယ်။"
+  },
+  "立即拿拖把清理，防止厨师端热锅时滑倒。": {
+    zh: "立即拿拖把清理，防止厨师端热锅时滑倒。",
+    en: "Clean up immediately with a mop to prevent chefs from slipping while carrying hot pans.",
+    my: "ဒယ်အိုးပူပူများ သယ်ဆောင်လာစဉ် စားဖိုမှူးများ ချော်လဲခြင်းမှ ကာကွယ်ရန် ကြမ်းတိုက်တံဖြင့် ချက်ချင်း သန့်ရှင်းရေးလုပ်ပါ။"
+  },
+  "打荷辅助": {
+    zh: "打荷辅助",
+    en: "Loading assistance",
+    my: "အကူအညီကို တင်နေသည်။"
+  },
+  "补货搬运": {
+    zh: "补货搬运",
+    en: "Replenishment handling",
+    my: "ဖြည့်ဆည်းမှု ကိုင်တွယ်ခြင်း။"
+  },
+  "洗碗支援": {
+    zh: "洗碗支援",
+    en: "Dishwashing support",
+    my: "ပန်းကန်ဆေးခြင်း အထောက်အပံ့"
+  },
+  "机动灵活": {
+    zh: "机动灵活",
+    en: "Maneuverable and flexible",
+    my: "Maneuverable နှင့် flexible"
+  },
+  "严禁垃圾过夜": {
+    zh: "严禁垃圾过夜",
+    en: "It is strictly prohibited to leave garbage overnight",
+    my: "အမှိုက်များကို ညတွင်းချင်း မစွန့်ပစ်ရန် တားမြစ်ထားသည်။"
+  },
+  "垃圾桶满了": {
+    zh: "垃圾桶满了",
+    en: "The trash can is full",
+    my: "အမှိုက်ပုံးက ပြည့်နေတယ်။"
+  },
+  "立即打包换袋，不要等溢出来才处理。": {
+    zh: "立即打包换袋，不要等溢出来才处理。",
+    en: "Pack and change bags immediately, don’t wait for spills to be disposed of.",
+    my: "အိတ်များကို ချက်ချင်းထုပ်ပိုးပြီး အမှိုက်များ စွန့်ပစ်ရန် စောင့်မနေပါနှင့်။"
+  },
+  "清洗所有碗盘筷子 (三槽洗涤法: 去渣-清洗-消毒)": {
+    zh: "清洗所有碗盘筷子 (三槽洗涤法: 去渣-清洗-消毒)",
+    en: "Wash all dishes and chopsticks (three-tank washing method: remove residue-cleaning-disinfection)",
+    my: "ပန်းကန်များနှင့် ပန်းကန်များအားလုံးကို ဆေးကြောပါ ( တိုင်ကီသုံးနည်း- အကြွင်းအကျန်များကို ဖယ်ရှားသန့်စင်ခြင်း - ပိုးသတ်ဆေး)"
+  },
+  "操作洗碗机 (如有)": {
+    zh: "操作洗碗机 (如有)",
+    en: "Operate dishwasher (if available)",
+    my: "ပန်းကန်ဆေးစက်သုံးပါ (ရနိုင်လျှင်)"
+  },
+  "清理厨余垃圾与隔油池 (Grease Trap)": {
+    zh: "清理厨余垃圾与隔油池 (Grease Trap)",
+    en: "Cleaning up kitchen waste and grease traps (Grease Trap)",
+    my: "မီးဖိုချောင်သုံး အမှိုက်များနှင့် အဆီထောင်ချောက် (Grease Trap)"
+  },
+  "保持洗碗间干燥卫生": {
+    zh: "保持洗碗间干燥卫生",
+    en: "Keep the dishwashing room dry and hygienic",
+    my: "ပန်းကန်ဆေးတဲ့အခန်းကို ခြောက်သွေ့သန့်ရှင်းအောင်ထားပါ။"
+  },
+  "卫生 · 速度 · 破损率低": {
+    zh: "卫生 · 速度 · 破损率低",
+    en: "Hygiene · Speed ​​· Low breakage rate",
+    my: "တစ်ကိုယ်ရေသန့်ရှင်းမှု · မြန်နှုန်း · ကျိုးနှုန်းနည်းပါးခြင်း။"
+  },
+  "严禁使用破损餐具 / 严禁地面积水 (防滑)": {
+    zh: "严禁使用破损餐具 / 严禁地面积水 (防滑)",
+    en: "It is strictly prohibited to use damaged tableware / it is strictly prohibited to accumulate water on the floor (anti-slip)",
+    my: "ပျက်စီးနေသော ပန်းကန်ခွက်ယောက်များကို အသုံးပြုရန် တင်းကြပ်စွာ တားမြစ်ထားသည် / ကြမ်းပြင်ပေါ်တွင် ရေများစုပုံခြင်း (ချော်လဲခြင်း) ကို တင်းကြပ်စွာ တားမြစ်ထားသည်။"
+  },
+  "碗盘堆积如山": {
+    zh: "碗盘堆积如山",
+    en: "Dishes piled up",
+    my: "ဟင်းပွဲတွေစုပုံတယ်။"
+  },
+  "优先清洗急需的餐具 (如: 筷子/汤匙/面盘)，请求厨房帮手支援。": {
+    zh: "优先清洗急需的餐具 (如: 筷子/汤匙/面盘)，请求厨房帮手支援。",
+    en: "Prioritize cleaning of urgently needed tableware (e.g. chopsticks/spoons/noodle plates) and ask for support from kitchen helpers.",
+    my: "အရေးပေါ်လိုအပ်သော ပန်းကန်ခွက်ယောက်များ (ဥပမာ- မီးဖိုချောင်သုံး ပန်းကန်ခွက်ယောက်များ/ ဇွန်း/ခေါက်ဆွဲပန်းကန်များ) ကို ဦးစားပေး၍ သန့်ရှင်းရေးကို ဦးစားပေးပြီး မီးဖိုချောင်အကူများထံမှ အကူအညီတောင်းပါ။"
+  },
+  "猪油太厚洗不干净": {
+    zh: "猪油太厚洗不干净",
+    en: "The lard is too thick and cannot be washed clean",
+    my: "ဝက်ဆီက အရမ်းထူပြီး ဆေးကြောလို့ မရပါဘူး။"
+  },
+  "使用热水浸泡去油，并适当增加洗洁精用量，确保无油腻感。": {
+    zh: "使用热水浸泡去油，并适当增加洗洁精用量，确保无油腻感。",
+    en: "Soak in hot water to remove oil and increase the amount of detergent to ensure there is no greasy feeling.",
+    my: "အဆီတွေကို ဖယ်ရှားဖို့ ရေနွေးထဲမှာ စိမ်ပြီး ဆပ်ပြာပမာဏကို တိုးစေပြီး အဆီပြန်ခြင်း မရှိစေရပါဘူး။"
+  },
+  "打破盘子": {
+    zh: "打破盘子",
+    en: "break the plate",
+    my: "ပန်းကန်ကွဲ"
+  },
+  "立即清理碎片，用报纸包好再丢入垃圾桶，防止割伤倒垃圾的人。": {
+    zh: "立即清理碎片，用报纸包好再丢入垃圾桶，防止割伤倒垃圾的人。",
+    en: "Clean up debris immediately and wrap it in newspaper before throwing it in the trash to prevent cuts and injuries to the person taking out the trash.",
+    my: "အမှိုက်များကို ချက်ခြင်းရှင်းလင်းပြီး အမှိုက်ပုံးထဲသို့ မစွန့်ပစ်မီ အမှိုက်ပုံးထဲသို့ စွန့်ပစ်သူများ ထိခိုက်ဒဏ်ရာရခြင်းမှ ကာကွယ်ရန်။"
+  },
+  "熬煮金莲记招牌凉茶 (Air Mata Kucing)": {
+    zh: "熬煮金莲记招牌凉茶 (Air Mata Kucing)",
+    en: "Brew Golden Lotus Signature Herbal Tea (Air Mata Kucing)",
+    my: "Golden Lotus Signature Herbal Tea (Air Mata Kucing) ချက်ချက်"
+  },
+  "制作各类冷热饮品": {
+    zh: "制作各类冷热饮品",
+    en: "Make various hot and cold drinks",
+    my: "အပူအအေးမျိုးစုံလုပ်ပါ။"
+  },
+  "管理吧台水果与罐装饮料库存": {
+    zh: "管理吧台水果与罐装饮料库存",
+    en: "Manage bar fruit and canned beverage inventory",
+    my: "ဘားအသီးများနှင့် စည်သွတ်အဖျော်ယမကာစာရင်းကို စီမံခန့်ခွဲပါ။"
+  },
+  "清洗杯具": {
+    zh: "清洗杯具",
+    en: "Cleaning cups",
+    my: "သန့်ရှင်းသော ခွက်များ"
+  },
+  "出品稳定 · 速度 · 控成本": {
+    zh: "出品稳定 · 速度 · 控成本",
+    en: "Stable production, speed, and cost control",
+    my: "တည်ငြိမ်သောထုတ်လုပ်မှု၊ မြန်နှုန်းနှင့် ကုန်ကျစရိတ်ထိန်းချုပ်မှု"
+  },
+  "严禁使用变质水果 / 严禁偷吃吧台零食": {
+    zh: "严禁使用变质水果 / 严禁偷吃吧台零食",
+    en: "It is strictly prohibited to use spoiled fruits / it is strictly prohibited to eat bar snacks",
+    my: "ပျက်စီးသောအသီးအနှံများကိုအသုံးပြုရန် တင်းကြပ်စွာတားမြစ်ထားပါသည်/ ဘားအဆာပြေစားရန် တင်းကြပ်စွာတားမြစ်ထားသည်။"
+  },
+  "凉茶卖完了": {
+    zh: "凉茶卖完了",
+    en: "Herbal tea is sold out",
+    my: "ဆေးဖက်ဝင်အပင်များ ရောင်းကုန်ပြီ။"
+  },
+  "高峰期前必须确保留有备用凉茶。若断货，礼貌推荐薏米水或中国茶。": {
+    zh: "高峰期前必须确保留有备用凉茶。若断货，礼貌推荐薏米水或中国茶。",
+    en: "Be sure to keep a spare supply of herbal tea before peak times. If it is out of stock, we politely recommend barley water or Chinese tea.",
+    my: "အမြင့်ဆုံးအချိန်များမတိုင်မီ ဆေးဖက်ဝင်အပင်များ လက်ဖက်ခြောက်ကို သေချာသိမ်းဆည်းထားပါ။ ပစ္စည်းကုန်သွားပါက မုယောရေ သို့မဟုတ် တရုတ်လက်ဖက်ရည်ကို ယဉ်ကျေးစွာ အကြံပြုအပ်ပါသည်။"
+  },
+  "冰块机故障或冰块不够": {
+    zh: "冰块机故障或冰块不够",
+    en: "Ice machine malfunction or not enough ice cubes",
+    my: "ရေခဲစက် ချွတ်ယွင်းခြင်း သို့မဟုတ် လုံလောက်သော ရေခဲတုံးများ မရှိခြင်း။"
+  },
+  "立即联系冰块供应商送货，或安排人去便利店买冰应急。": {
+    zh: "立即联系冰块供应商送货，或安排人去便利店买冰应急。",
+    en: "Contact the ice supplier immediately for delivery, or arrange for someone to go to a convenience store to buy ice for emergency use.",
+    my: "ပို့ဆောင်မှုအတွက် ရေခဲရောင်းချသူထံ ချက်ချင်းဆက်သွယ်ပါ၊ သို့မဟုတ် အရေးပေါ်အသုံးပြုရန်အတွက် ရေခဲဝယ်ရန် တစ်စုံတစ်ဦးကို ကုန်စုံဆိုင်သို့သွားရန် စီစဉ်ပါ။"
+  },
+  "客人投诉饮料太甜": {
+    zh: "客人投诉饮料太甜",
+    en: "Customer complained that the drink was too sweet",
+    my: "ဖောက်သည်က အရက်သည် အလွန်ချိုသည်ဟု စောဒကတက်သည်။"
+  },
+  "无条件重做一杯少糖的给客人，并检查糖浆泵的刻度。": {
+    zh: "无条件重做一杯少糖的给客人，并检查糖浆泵的刻度。",
+    en: "Unconditionally make a cup with less sugar for the guest and check the scale on the syrup pump.",
+    my: "ဧည့်သည်အတွက် သကြားနည်းသော ခွက်ကို ခြွင်းချက်မရှိ ချွင်းချက်မရှိ ပြုလုပ်ပြီး ဖျော်ရည်စုပ်စက်ပေါ်ရှိ အတိုင်းအတာကို စစ်ဆေးပါ။"
+  },
+  "基础备料 (剥蒜/洗菜)": {
+    zh: "基础备料 (剥蒜/洗菜)",
+    en: "Basic preparation (peel garlic/wash vegetables)",
+    my: "အခြေခံပြင်ဆင်မှု (ကြက်သွန်ဖြူကို အခွံခွာ/ရေဆေးပြီး ဟင်းသီးဟင်းရွက်များ)"
+  },
+  "传递食材": {
+    zh: "传递食材",
+    en: "Pass the ingredients",
+    my: "ပါဝင်ပစ္စည်းများကိုဖြတ်သန်းပါ။"
+  },
+  "学习烹饪技巧": {
+    zh: "学习烹饪技巧",
+    en: "Learn cooking skills",
+    my: "ချက်ပြုတ်ခြင်းအတတ်ပညာကိုလေ့လာပါ။"
+  },
+  "勤奋与好学": {
+    zh: "勤奋与好学",
+    en: "Diligence and studiousness",
+    my: "လုံ့လဝီရိယရှိခြင်း။"
+  },
+  "严禁操作不熟悉的设备 (安全第一)": {
+    zh: "严禁操作不熟悉的设备 (安全第一)",
+    en: "It is strictly prohibited to operate unfamiliar equipment (safety first)",
+    my: "မရင်းနှီးသော စက်ပစ္စည်းများကို အသုံးပြုရန် တင်းတင်းကျပ်ကျပ် တားမြစ်ထားသည် (ဘေးကင်းရန် ဦးစွာ)"
+  },
+  "主动问头手或占板：'有什么我可以先准备的？'不要发呆。": {
+    zh: "主动问头手或占板：'有什么我可以先准备的？'不要发呆。",
+    en: "Take the initiative to ask the leader or boarder: 'Is there anything I can prepare first? 'Don't be dazed.",
+    my: "ခေါင်းဆောင် သို့မဟုတ် ဘုတ်အဖွဲ့ဝင်ကို မေးရန် အစပြုပါ- 'ငါအရင်ပြင်ဆင်နိုင်တာ တစ်ခုခုရှိလား။ 'မမှိန်းပါနဲ့။"
+  },
+  "被师傅骂": {
+    zh: "被师傅骂",
+    en: "scolded by master",
+    my: "သခင်က ကြိမ်းမောင်းတယ်။"
+  },
+  "虚心接受，记住错误点，下次不再犯。不要顶嘴。": {
+    zh: "虚心接受，记住错误点，下次不再犯。不要顶嘴。",
+    en: "Accept it with an open mind, remember the mistakes, and don’t make them again next time. Don't talk back.",
+    my: "အဲဒါကို ပွင့်လင်းမြင်သာစွာ လက်ခံပါ၊ အမှားတွေကို သတိရပြီး နောက်တစ်ကြိမ် ထပ်မလုပ်ပါနဲ့။ ပြန်မပြောနဲ့။"
+  },
+  "Strategic Planning": {
+    zh: "Strategic Planning",
+    en: "Strategic Planning",
+    my: "မဟာဗျူဟာစီမံကိန်း"
+  },
+  "Financial Control": {
+    zh: "Financial Control",
+    en: "Financial Control",
+    my: "ဘဏ္ဍာရေးထိန်းချုပ်မှု"
+  },
+  "Business Development": {
+    zh: "Business Development",
+    en: "Business Development",
+    my: "စီးပွားရေးဖွံ့ဖြိုးတိုးတက်မှု"
+  },
+  "Ownership": {
+    zh: "Ownership",
+    en: "Ownership",
+    my: "ပိုင်ဆိုင်မှု"
+  },
+  "No Limits": {
+    zh: "No Limits",
+    en: "No Limits",
+    my: "ကန့်သတ်ချက်မရှိပါ။"
+  }
+
+// MODULE TRANSLATIONS
+  "PROCUREMENT": {
+    label: { zh: "procurement", en: "procurement", my: "ဝယ်ယူရေး" },
+    desc: { zh: "procurement功能模块", en: "Procurement function module", my: "ဝယ်ယူရေး လုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循procurement标准操作流程。", en: "Please follow procurement standard operating procedures.", my: "ကျေးဇူးပြု၍ ဝယ်ယူရေးစံ လည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "MENU_MANAGEMENT": {
+    label: { zh: "menu management", en: "menu management", my: "မီနူးစီမံခန့်ခွဲမှု" },
+    desc: { zh: "menu management功能模块", en: "menu management function module", my: "မီနူးစီမံခန့်ခွဲမှုလုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循menu management标准操作流程。", en: "Please follow menu management standard operating procedures.", my: "ကျေးဇူးပြု၍ မီနူးစီမံခန့်ခွဲမှုစံနှုန်း လည်ပတ်မှုလုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "SETTLEMENT": {
+    label: { zh: "settlement", en: "settlement", my: "အခြေချ" },
+    desc: { zh: "settlement功能模块", en: "settlement function module", my: "အခြေချမှုလုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循settlement标准操作流程。", en: "Please follow settlement standard operating procedures.", my: "ကျေးဇူးပြု၍ ဖြေရှင်းမှုစံနှုန်း လည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "ROSTER": {
+    label: { zh: "roster", en: "roster", my: "စာရင်းဇယား" },
+    desc: { zh: "roster功能模块", en: "roster function module", my: "စာရင်းဇယားလုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循roster标准操作流程。", en: "Please follow Roster's standard operating procedures.", my: "ကျေးဇူးပြု၍ စာရင်းဇယား၏ စံပြုလုပ်ဆောင်မှုလုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "ROSTER_KITCHEN": {
+    label: { zh: "roster kitchen", en: "roster kitchen", my: "မီးဖိုချောင်စာရင်း" },
+    desc: { zh: "roster kitchen功能模块", en: "roster kitchen function module", my: "စာရင်းဇယားမီးဖိုချောင်လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循roster kitchen标准操作流程。", en: "Please follow the roaster kitchen standard operating procedures.", my: "ကျေးဇူးပြု၍ မီးဖိုချောင်သုံး မီးဖိုချောင်စံနှုန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "ROSTER_FLOOR": {
+    label: { zh: "roster floor", en: "roster floor", my: "စာရင်းဇယား" },
+    desc: { zh: "roster floor功能模块", en: "roster floor function module", my: "စာရင်းဇယားကြမ်းပြင်လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循roster floor标准操作流程。", en: "Please follow the roser floor standard operating procedures.", my: "ကျေးဇူးပြု၍ နှင်းဆီကြမ်းခင်းစံ လည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "SOP_INSPECT": {
+    label: { zh: "sop inspect", en: "sop inspect", my: "sop စစ်ဆေးပါ။" },
+    desc: { zh: "sop inspect功能模块", en: "sop inspect function module", my: "sop function module ကိုစစ်ဆေးပါ။" },
+    guide: { zh: "请遵循sop inspect标准操作流程。", en: "Please follow sop inspect standard operating procedures.", my: "ကျေးဇူးပြု၍ sop စံချိန်စံညွှန်းလည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကိုစစ်ဆေးပါ။" }
+  },
+  "SOP": {
+    label: { zh: "sop", en: "sop", my: "ဆို့" },
+    desc: { zh: "sop功能模块", en: "sop function module", my: "sop function module" },
+    guide: { zh: "请遵循sop标准操作流程。", en: "Please follow sop standard operating procedures.", my: "ကျေးဇူးပြု၍ sop စံလုပ်ငန်းဆောင်တာများကို လိုက်နာပါ။" }
+  },
+  "INVENTORY_KITCHEN": {
+    label: { zh: "inventory kitchen", en: "inventory kitchen", my: "စာရင်းအင်းမီးဖိုချောင်" },
+    desc: { zh: "inventory kitchen功能模块", en: "inventory kitchen function module", my: "စာရင်းအင်းမီးဖိုချောင် function module" },
+    guide: { zh: "请遵循inventory kitchen标准操作流程。", en: "Please follow inventory kitchen standard operating procedures.", my: "ကျေးဇူးပြု၍ စာရင်းအင်း မီးဖိုချောင် စံချိန်စံညွှန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "INVENTORY_BAR": {
+    label: { zh: "inventory bar", en: "inventory bar", my: "စာရင်းဘား" },
+    desc: { zh: "inventory bar功能模块", en: "inventory bar function module", my: "inventory bar function module" },
+    guide: { zh: "请遵循inventory bar标准操作流程。", en: "Please follow inventory bar standard operating procedures.", my: "ကျေးဇူးပြု၍ စာရင်းဘား စံနှုန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "INVENTORY_GENERAL": {
+    label: { zh: "inventory general", en: "inventory general", my: "စာရင်းချုပ်" },
+    desc: { zh: "inventory general功能模块", en: "inventory general function module", my: "စာရင်းအင်း အထွေထွေ လုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循inventory general标准操作流程。", en: "Please follow inventory general standard operating procedures.", my: "ကျေးဇူးပြု၍ စာရင်းအင်း ယေဘူယျစံ လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "INVENTORY_FUEL": {
+    label: { zh: "inventory fuel", en: "inventory fuel", my: "စာရင်းလောင်စာ" },
+    desc: { zh: "inventory fuel功能模块", en: "inventory fuel function module", my: "inventory fuel function module" },
+    guide: { zh: "请遵循inventory fuel标准操作流程。", en: "Please follow inventory fuel standard operating procedures.", my: "စာရင်းလောင်စာဆီ စံချိန်စံညွှန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "QUEUE_MANAGER": {
+    label: { zh: "queue manager", en: "queue manager", my: "တန်းစီမန်နေဂျာ" },
+    desc: { zh: "queue manager功能模块", en: "queue manager function module", my: "တန်းစီမန်နေဂျာ လုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循queue manager标准操作流程。", en: "Please follow queue manager standard operating procedures.", my: "ကျေးဇူးပြု၍ တန်းစီမန်နေဂျာ၏ စံပြုလည်ပတ်မှုလုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "QUEUE": {
+    label: { zh: "queue", en: "queue", my: "တန်းစီသည်။" },
+    desc: { zh: "queue功能模块", en: "queue function module", my: "တန်းစီခြင်းလုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循queue标准操作流程。", en: "Please follow queue standard operating procedures.", my: "ကျေးဇူးပြု၍ တန်းစီခြင်းဆိုင်ရာ စံပြုလုပ်ဆောင်မှုလုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "KITCHEN_ALERT": {
+    label: { zh: "kitchen alert", en: "kitchen alert", my: "မီးဖိုချောင်သတိပေးချက်" },
+    desc: { zh: "kitchen alert功能模块", en: "kitchen alert function module", my: "မီးဖိုချောင်သတိပေးချက်လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循kitchen alert标准操作流程。", en: "Please follow kitchen alert standard operating procedures.", my: "မီးဖိုချောင်သတိပေးချက် စံချိန်စံညွှန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "ATTENDANCE_CONSOLE": {
+    label: { zh: "attendance console", en: "attendance console", my: "တက်ရောက်သူ console" },
+    desc: { zh: "attendance console功能模块", en: "attendance console function module", my: "တက်ရောက်သူ ကွန်ဆိုးလ် လုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循attendance console标准操作流程。", en: "Please follow attendance console standard operating procedures.", my: "ကျေးဇူးပြု၍ တက်ရောက်သူ ကွန်ဆိုးလ်စံ လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "ASSESSMENT": {
+    label: { zh: "assessment", en: "assessment", my: "အကဲဖြတ်ခြင်း။" },
+    desc: { zh: "assessment功能模块", en: "assessment function module", my: "အကဲဖြတ်ခြင်းလုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循assessment标准操作流程。", en: "Please follow assessment standard operating procedures.", my: "ကျေးဇူးပြု၍ အကဲဖြတ်ခြင်း စံလုပ်ငန်းဆောင်ရွက်မှု လုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "DAILY_ALERT": {
+    label: { zh: "daily alert", en: "daily alert", my: "နေ့စဉ်သတိပေးချက်" },
+    desc: { zh: "daily alert功能模块", en: "daily alert function module", my: "နေ့စဉ်သတိပေးချက်လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循daily alert标准操作流程。", en: "Please follow daily alert standard operating procedures.", my: "ကျေးဇူးပြု၍ နေ့စဉ်သတိပေးချက် စံပြုလုပ်ဆောင်မှု လုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "REPORTS": {
+    label: { zh: "reports", en: "reports", my: "အစီရင်ခံစာများ" },
+    desc: { zh: "reports功能模块", en: "reports function module", my: "လုပ်ဆောင်ချက် module အစီရင်ခံစာများ" },
+    guide: { zh: "请遵循reports标准操作流程。", en: "Please follow reports standard operating procedures.", my: "စံချိန်စံညွှန်း လည်ပတ်မှု လုပ်ငန်းစဉ်များ အစီရင်ခံစာများကို လိုက်နာပါ။" }
+  },
+  "HR_FILES": {
+    label: { zh: "hr files", en: "hr files", my: "hr ဖိုင်များ" },
+    desc: { zh: "hr files功能模块", en: "hr files function module", my: "hr ဖိုင်များ လုပ်ဆောင်ချက် မော်ဂျူး" },
+    guide: { zh: "请遵循hr files标准操作流程。", en: "Please follow hr files standard operating procedures.", my: "ကျေးဇူးပြု၍ hr ဖိုင်များ၏ စံပြုလည်ပတ်မှုလုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "AP": {
+    label: { zh: "ap", en: "ap", my: "ap" },
+    desc: { zh: "ap功能模块", en: "ap function module", my: "ap function module" },
+    guide: { zh: "请遵循ap标准操作流程。", en: "Please follow ap standard operating procedures.", my: "ကျေးဇူးပြု၍ AP စံနှုန်း လည်ပတ်မှု လုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "SELF_INVOICE": {
+    label: { zh: "self invoice", en: "self invoice", my: "ကိုယ်တိုင်ငွေတောင်းခံလွှာ" },
+    desc: { zh: "self invoice功能模块", en: "self invoice function module", my: "ကိုယ်ပိုင်ငွေတောင်းခံလွှာ လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循self invoice标准操作流程。", en: "Please follow the self invoice standard operating procedures.", my: "ကျေးဇူးပြု၍ ကိုယ်တိုင်ငွေတောင်းခံလွှာ စံလုပ်ငန်းဆောင်ရွက်မှု လုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "TREASURY": {
+    label: { zh: "treasury", en: "treasury", my: "ဘဏ္ဍာတိုက်" },
+    desc: { zh: "treasury功能模块", en: "treasury function module", my: "ဘဏ္ဍာတိုက်လုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循treasury标准操作流程。", en: "Please follow treasury standard operating procedures.", my: "ကျေးဇူးပြု၍ ဘဏ္ဍာတိုက်စံ လည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  },
+  "BILLS": {
+    label: { zh: "bills", en: "bills", my: "ငွေတောင်းခံလွှာများ" },
+    desc: { zh: "bills功能模块", en: "bills function module", my: "ငွေတောင်းခံလွှာများလုပ်ဆောင်မှု module" },
+    guide: { zh: "请遵循bills标准操作流程。", en: "Please follow bill's standard operating procedures.", my: "ကျေးဇူးပြု၍ ဘီလ်၏ စံပြုလုပ်ငန်းဆောင်ရွက်မှု လုပ်ငန်းစဉ်များကို လိုက်နာပါ။" }
+  },
+  "WARRANTY": {
+    label: { zh: "warranty", en: "warranty", my: "အာမခံ" },
+    desc: { zh: "warranty功能模块", en: "warranty function module", my: "အာမခံလုပ်ဆောင်ချက် module" },
+    guide: { zh: "请遵循warranty标准操作流程。", en: "Please follow the warranty standard operating procedures.", my: "ကျေးဇူးပြု၍ အာမခံစံနှုန်း လည်ပတ်မှုလုပ်ထုံးလုပ်နည်းများကို လိုက်နာပါ။" }
+  }

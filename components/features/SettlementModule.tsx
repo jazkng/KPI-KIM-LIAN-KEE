@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
     Trash2, Check, AlertTriangle, Calculator, Play, Power, History, 
     Wallet, Banknote, CreditCard, X, Calendar, Truck, CheckCircle2, 
-    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap
+    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft
 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
@@ -1028,7 +1028,18 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         <div className={isStandalone ? "fixed inset-0 bg-black/90 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200" : "w-full h-full flex flex-col relative animate-in fade-in"}>
             <div className={isStandalone ? "bg-[#F5F7FA] w-full h-[100dvh] md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl font-sans relative" : "flex-grow flex flex-col overflow-hidden font-sans relative"}>
                 <div className="bg-[#1A1A1A] px-4 py-3 md:py-4 pt-[max(env(safe-area-inset-top,12px),12px)] flex items-center justify-between text-white shrink-0 border-b-4 border-[#FFD700] relative z-50 shadow-md">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 md:gap-3">
+                        {onClose && (
+                            <button 
+                                onClick={onClose} 
+                                className="mr-0.5 p-1.5 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center text-white shrink-0"
+                                aria-label="Back"
+                                id="settlement-back-btn"
+                                style={{ minWidth: '40px', minHeight: '40px' }}
+                            >
+                                <ArrowLeft size={18} className="stroke-[2.5]" />
+                            </button>
+                        )}
                         <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg shrink-0"><Calculator size={20} className="md:w-6 md:h-6"/></div>
                         <div><h3 className="font-serif font-black text-sm md:text-xl tracking-wide">每日结算中心</h3><p className="text-[8px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">SETTLEMENT & CASH CONTROL</p></div>
                     </div>

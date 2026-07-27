@@ -1268,7 +1268,12 @@ const ViewModeContent: React.FC<ViewModeContentProps> = ({ record, metrics, isTr
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text,
-                    targetLang: 'zh'
+                    targetLang: 'zh',
+                    contentType: 'employee_feedback',
+                    audience: 'management',
+                    tone: 'neutral_professional',
+                    maxLength: 320,
+                    context: 'Boss or manager assessment comment. Preserve the original rating and incident severity.'
                 })
             });
             if (!res.ok) throw new Error('Translation failed');
@@ -1782,7 +1787,12 @@ const EditModeContent: React.FC<EditModeContentProps> = ({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text: commentToTranslate,
-                    targetLang: target
+                    targetLang: target,
+                    contentType: 'employee_feedback',
+                    audience: target === 'my' ? 'employee' : 'management',
+                    tone: 'neutral_professional',
+                    maxLength: 320,
+                    context: 'Restaurant employee assessment comment. Keep it factual, respectful, and consistent with the original score.'
                 })
             });
             if (!res.ok) throw new Error('Translation failed');

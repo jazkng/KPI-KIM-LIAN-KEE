@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, BookOpen, CalendarOff, ClipboardCheck, Package, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
-import { StoreConfig, AppModule, Employee } from '../types';
+import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
 import { mt } from '../constants/managementTranslations';
@@ -50,10 +50,10 @@ interface ManagerDashboardProps {
     onOpenTV?: () => void;
     currentEmployee?: Employee; 
     isManagementStaff?: boolean;
-    lang?: 'zh' | 'my';
+    lang?: AppLanguage | string;
 }
 
-export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allowedModules, initialTab, isSingleMode = false, onOpenTV, currentEmployee, isManagementStaff = false, lang = 'zh' }) => {
+export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allowedModules, initialTab, isSingleMode = false, onOpenTV, currentEmployee, isManagementStaff = false, lang = 'zh_en' }) => {
   const [activeTab, setActiveTab] = useState<'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'KITCHEN_ALERT'>('SETTLEMENT');
   const [storeConfig, setStoreConfig] = useState<StoreConfig>({ 
       businessDayCutoff: 4,
@@ -165,7 +165,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          tabs.push({ key: 'MENU_MANAGEMENT', label: lang === 'my' ? 'ဟင်းချက်နည်း' : '智能菜谱', icon: <Utensils size={18} /> });
      }
      if (showAll || allowedModules?.includes('LOGBOOK')) {
-         tabs.push({ key: 'LOGBOOK', label: lang === 'my' ? 'လည်ပတ်မှတ်တမ်း' : '运营日志', icon: <BookOpen size={18} /> });
+         tabs.push({ key: 'LOGBOOK', label: lang === 'en' ? 'Logbook' : lang === 'my' ? 'လည်ပတ်မှတ်တမ်း' : '运营日志', icon: <BookOpen size={18} /> });
      }
      if (showAll || allowedModules?.includes('SOP_INSPECT')) {
          tabs.push({ key: 'SOP_INSPECT', label: lang === 'my' ? 'SOP စစ်ဆေးခြင်း' : 'SOP 稽查', icon: <ClipboardCheck size={18} /> });
@@ -203,6 +203,26 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
 
   // Dynamic Title based on Active Tab (for Single Mode)
   const getPageTitle = () => {
+      if (lang === 'en') {
+          switch(activeTab) {
+              case 'SETTLEMENT': return 'Daily Settlement';
+              case 'ROSTER': return 'Roster Management';
+              case 'LOGBOOK': return 'Operations Logbook (Action Mode)';
+              case 'LOGBOOK_VIEW': return 'Operations Logbook (View Mode)';
+              case 'INVENTORY_CHECK': return 'Inventory Check';
+              case 'INVENTORY_VIEW': return 'Inventory Master';
+              case 'SOP_INSPECT': return 'SOP Inspection';
+              case 'SUPPLIER_CONTACTS': return 'Supplier Contacts';
+              case 'QUEUE': return 'Queue System';
+              case 'ATTENDANCE_CONSOLE': return 'Attendance Console';
+              case 'PROCUREMENT': return 'Smart Procurement';
+              case 'MENU_MANAGEMENT': return 'Menu Management';
+              case 'ASSESSMENT': return 'Skill Matrix Assessment';
+              case 'AP': return 'Accounts Payable';
+              case 'SELF_INVOICE': return 'Voucher Maker';
+              default: return 'Admin Console';
+          }
+      }
       if (lang === 'my') {
           switch(activeTab) {
               case 'SETTLEMENT': return 'နေ့စဉ် ငွေသားစာရင်း တိုက်ဆိုင်စစ်ဆေးခြင်း (Settlement)';
@@ -407,7 +427,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
              <SettlementModule 
                 storeConfig={storeConfig} 
                 isStandalone={isSingleMode} // Embed if not single mode
-                onClose={onBack} // Optional: Close button for Single Mode
+                onClose={onBack || handleModuleExit} // Optional: Close button
              />
          )}
          {activeTab === 'KITCHEN_ALERT' && (
@@ -415,8 +435,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          )}
          {activeTab === 'ROSTER' && <RosterModule onClose={handleModuleExit} allowedModules={allowedModules} />}
          {activeTab === 'ATTENDANCE_CONSOLE' && <AttendanceConsole onClose={handleModuleExit} />}
-         {activeTab === 'LOGBOOK' && <LogbookModule viewOnly={false} currentEmployee={currentEmployee} />}
-         {activeTab === 'LOGBOOK_VIEW' && <LogbookModule viewOnly={true} currentEmployee={currentEmployee} />}
+         {activeTab === 'LOGBOOK' && <LogbookModule viewOnly={false} currentEmployee={currentEmployee} lang={lang} />}
+         {activeTab === 'LOGBOOK_VIEW' && <LogbookModule viewOnly={true} currentEmployee={currentEmployee} lang={lang} />}
          {activeTab === 'PROCUREMENT' && (
              <ProcurementModule onClose={handleModuleExit} />
          )}

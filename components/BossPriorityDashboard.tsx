@@ -7,9 +7,9 @@ import {
     Activity, CalendarClock, CircleDollarSign, Gauge, ArrowUpRight, ListChecks, Store, Boxes, Receipt, UserRoundCheck
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { Employee, SettlementRecord, ExpenseItem, PurchaseOrder, LogEntry } from '../types';
+import { Employee, SettlementRecord, ExpenseItem } from '../types';
 import { db } from '../firebaseConfig';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { DataManager } from '../utils/dataManager';
 import { needsReplenishment } from '../utils/unitConversion';
 
@@ -89,7 +89,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
     // States for holding loaded database values
     const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+    const [pendingPOCount, setPendingPOCount] = useState<number>(0);
     const [lowStockCount, setLowStockCount] = useState<number | null>(null);
     const [criticalLowStockCount, setCriticalLowStockCount] = useState<number | null>(null);
     const [absentCount, setAbsentCount] = useState<number | null>(null);
@@ -124,7 +124,6 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             const now = new Date();
             const utc8 = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (3600000 * 8));
             const todayStr = utc8.toISOString().split('T')[0];
-            const currentMonthStr = todayStr.substring(0, 7); // "YYYY-MM"
             const yr = utc8.getFullYear();
             const mo = utc8.getMonth() + 1;
 
@@ -132,9 +131,11 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             const fetchedSettlements = await DataManager.getSettlements();
             setSettlements(fetchedSettlements);
 
-            // 2. Fetch purchase orders
-            const fetchedPOs = await DataManager.getPurchaseOrders(false);
-            setPurchaseOrders(fetchedPOs);
+            // 2. Count only purchase orders that are still waiting to be received.
+            // This uses a Firestore server-side aggregation instead of downloading
+            // up to 200 complete purchase-order documents.
+            const pendingPurchaseOrders = await DataManager.getPendingPurchaseOrderCount();
+            setPendingPOCount(pendingPurchaseOrders);
 
             // 3. Fetch Stock and compute low stock count
             const [kitchenStock, barStock, generalStock, fuelStock] = await Promise.all([
@@ -209,10 +210,14 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                 setTotalUnpaidBillsAmount(0);
             }
 
-            // 6. Fetch Logs and compute unacknowledged count
+            // 6. Check the boss's unread state in the latest 30 operational logs.
+            // The notification centre also keeps the latest 30 items, so the
+            // dashboard no longer downloads 200 complete log documents.
             try {
-                const logs = await DataManager.getLogs();
-                const unackCount = logs.filter((l: LogEntry) => !l.acknowledgedBy).length;
+                const logs = await DataManager.getRecentLogs(30);
+                const unackCount = logs.filter(log =>
+                    !(log.readReceipts || []).some(receipt => receipt.employeeId === currentEmployee.id)
+                ).length;
                 setUnacknowledgedLogsCount(unackCount);
             } catch (e) {
                 console.error('Failed to parse logs count', e);
@@ -221,10 +226,13 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 7. Fetch standalone expenses to get Accounts Payable (AP) statistics
             try {
-                const expensesSnap = await getDocs(collection(db, 'standalone_expenses'));
+                const unpaidExpensesQuery = query(
+                    collection(db, 'standalone_expenses'),
+                    where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])
+                );
+                const expensesSnap = await getDocs(unpaidExpensesQuery);
                 const apItems = expensesSnap.docs
-                    .map(doc => doc.data() as ExpenseItem)
-                    .filter(item => item.paymentStatus === 'UNPAID' || item.paymentStatus === 'PARTIAL');
+                    .map(doc => doc.data() as ExpenseItem);
                 
                 setUnpaidAPCount(apItems.length);
                 const unpaidTotal = apItems.reduce((acc, item) => acc + (item.outstandingAmount !== undefined ? item.outstandingAmount : item.amount), 0);
@@ -404,11 +412,6 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
         };
     }, [settlements, tzDates.todayStr]);
 
-    const pendingPOCount = useMemo(
-        () => purchaseOrders.filter(po => po.status === 'ORDERED').length,
-        [purchaseOrders],
-    );
-
     const paymentMetrics = useMemo(() => ({
         dueSoonCount: (dueSoonAPCount || 0) + (pendingBillsCount || 0),
         dueSoonAmount: (dueSoonAPAmount || 0) + (pendingBillsAmount || 0),
@@ -587,7 +590,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                 id: 'unacknowledged_logs',
                 title: '交接日志尚未阅读',
                 count: unacknowledgedLogsCount,
-                description: `${unacknowledgedLogsCount} 条店面交接日志尚未阅读，普通记录不会升级为老板紧急事项。`,
+                description: `最近30条店面交接日志中，有 ${unacknowledgedLogsCount} 条你尚未阅读；普通记录不会升级为老板紧急事项。`,
                 severity: 'NORMAL',
                 category: 'OPERATIONS',
                 decisionLevel: 'WATCH',

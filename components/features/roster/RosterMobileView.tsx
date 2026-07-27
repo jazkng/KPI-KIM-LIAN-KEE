@@ -4,7 +4,7 @@ import { getDayOfWeekText, getEmployeeDept, getDaysInMonth } from './rosterUtils
 import { 
     ChevronLeft, ChevronRight, MessageSquare, ShieldCheck, X, RefreshCw, 
     MoreHorizontal, Download, Save, Send, SlidersHorizontal, 
-    CheckSquare
+    CheckSquare, ArrowLeft
 } from 'lucide-react';
 import { Employee } from '../../../types';
 
@@ -169,7 +169,18 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
         <div className="flex flex-col h-[100dvh] bg-[#F6F7FB] relative overflow-hidden text-gray-900 w-full">
             {/* 1. Compact Header */}
             <div className="shrink-0 bg-gray-900 px-4 py-3 flex items-center justify-between z-20" style={{ minHeight: '64px' }}>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    {onClose && (
+                        <button 
+                            onClick={onClose} 
+                            className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-full transition-colors flex items-center justify-center shrink-0"
+                            aria-label="Back"
+                            id="roster-back-btn"
+                            style={{ minWidth: '40px', minHeight: '40px' }}
+                        >
+                            <ArrowLeft size={18} className="stroke-[2.5]" />
+                        </button>
+                    )}
                     <div className="bg-[#FFD200] text-[#111111] p-2 rounded-lg shadow-md flex-shrink-0">
                         <ShieldCheck size={18} />
                     </div>

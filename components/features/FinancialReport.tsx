@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Calendar, ArrowRight, PieChart, TrendingUp, TrendingDown, Download, Loader2, ListChecks, Info, Users, HelpCircle, Receipt, Briefcase, Wallet, Truck, BarChart3, ChevronRight, AlertCircle, Percent, LayoutList, ChevronLeft, Table2, ExternalLink, ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { X, Calendar, ArrowRight, PieChart, TrendingUp, TrendingDown, Download, Loader2, ListChecks, Info, Users, HelpCircle, Receipt, Briefcase, Wallet, Truck, BarChart3, ChevronRight, AlertCircle, Percent, LayoutList, ChevronLeft, Table2, ExternalLink, ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
 import { SettlementRecord, ExpenseItem, BillPaymentRecord, FundTransfer, TreasuryConfig, PayrollRecord, Employee, MARKETING_SUBCAT_LABELS, MARKETING_SUBCAT_EMOJIS, AD_CHANNEL_LABELS, AD_CHANNEL_EMOJIS, BeverageSubCategory, BEVERAGE_SUBCAT_LABELS, BEVERAGE_SUBCAT_EMOJIS, SeafoodSubCategory, SEAFOOD_SUBCAT_LABELS, SEAFOOD_SUBCAT_EMOJIS } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { jsPDF } from "jspdf";
@@ -2006,6 +2006,14 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 {/* --- HEADER --- */}
                 <div className="bg-[#FFFFFF] px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] md:px-5 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-[#111111] shrink-0 border-b-4 border-[#FFD200]">
                     <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0">
+                        <button
+                            onClick={onClose}
+                            style={{ touchAction: 'manipulation' }}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-[#F6F7FB] hover:bg-[#E5E7EB] text-[#111111] rounded-2xl transition-all active:scale-95 shrink-0 border border-[#E5E7EB]"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
                         <div className="w-11 h-11 bg-[#FFD200] text-[#111111] rounded-2xl shadow-[0_6px_18px_rgba(255,210,0,0.28)] shrink-0 flex items-center justify-center"><PieChart size={21}/></div>
                         <div className="min-w-0">
                             <h3 className="font-black text-[17px] md:text-xl tracking-tight truncate">财务报表</h3>

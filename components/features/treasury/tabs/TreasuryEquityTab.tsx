@@ -279,7 +279,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                   {/* Collapsible header row */}
                   <div
                     onClick={() => onToggleExpand(name)}
-                    className="cursor-pointer bg-gray-50/50 p-3 flex justify-between items-center border-b border-gray-200 hover:bg-gray-100/50 transition-colors select-none"
+                    className="cursor-pointer bg-gray-50/50 p-3 flex justify-between items-center border-b border-gray-200 hover:bg-gray-100/50 transition-colors touch-pan-y"
                   >
                     <div className="font-extrabold text-xs text-[#111111] flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">
@@ -418,7 +418,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                 >
                   <div
                     onClick={() => toggleDividendExpand(name)}
-                    className="cursor-pointer bg-red-50/50 p-3.5 flex justify-between items-center border-b border-red-50 hover:bg-red-50 transition-colors select-none"
+                    className="cursor-pointer bg-red-50/50 p-3.5 flex justify-between items-center border-b border-red-50 hover:bg-red-50 transition-colors touch-pan-y"
                   >
                     <div className="font-black text-xs text-gray-900 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">

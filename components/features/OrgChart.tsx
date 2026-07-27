@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { X, UserCircle2, Building2, Medal, ZoomIn, ZoomOut, Maximize2, Download } from 'lucide-react';
+import { X, UserCircle2, Building2, Medal, ZoomIn, ZoomOut, Maximize2, Download, ArrowLeft } from 'lucide-react';
 import { Employee, OrgLevel } from '../../types';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { DataManager } from '../../utils/dataManager';
@@ -176,8 +176,13 @@ export const OrgChart: React.FC<OrgChartProps> = ({ onClose }) => {
             {/* Header */}
             <div className="h-16 shrink-0 bg-stone-950 flex items-center justify-between px-6 shadow-xl z-20">
                 <div className="flex items-center gap-3">
-                    <button onClick={onClose} className="p-2 -ml-2 rounded-full text-stone-400 hover:text-white hover:bg-white/10 transition-colors">
-                        <X size={20} />
+                    <button 
+                        onClick={onClose}
+                        style={{ touchAction: 'manipulation' }}
+                        className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                        aria-label="Back"
+                    >
+                        <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
                     <div>
                         <h2 className="text-white font-black text-sm tracking-wide">组织架构图 (Org Chart)</h2>

@@ -2,36 +2,99 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
     Users, Crown, CheckSquare, BookOpen, ShieldCheck,
-    AlertTriangle, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Bell, Languages
+    AlertTriangle, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Languages
 } from 'lucide-react';
-import { Employee, AppModule } from '../../types';
+import { Employee, AppModule, OrgLevel, normalizeLanguage } from '../../types';
 import { DataManager } from '../../utils/dataManager';
-import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
+import { getOrgLevel } from '../../utils/orgAccess';
 import { getBusinessDateString } from '../../utils/dateHelper';
 import { MODULE_DEFINITIONS } from '../constants';
 import { mt, ManagementLang } from '../../constants/managementTranslations';
 import { needsReplenishment } from '../../utils/unitConversion';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 
-export const getDepartmentName = (dept?: string, lang: ManagementLang = 'zh'): string => {
+export const getDepartmentName = (dept?: string, lang: ManagementLang = 'zh_en'): string => {
     const d = (dept || '').toUpperCase().trim();
+    if (lang === 'my') {
+        switch (d) {
+            case 'KITCHEN':
+            case 'BOH':
+                return 'မီးဖိုချောင် ဌာန (BOH)';
+            case 'FLOOR':
+            case 'FOH':
+                return 'စားသောက်ဆိုင် ရှေ့တန်းဌာန (FOH)';
+            case 'BAR':
+                return 'ဘား ဌာန (BAR)';
+            case 'HR':
+                return 'လူ့စွမ်းအား အရင်းအမြစ် ဌာန (HR)';
+            default:
+                return 'စီမံခန့်ခွဲရေး (GENERAL)';
+        }
+    }
+    if (lang === 'en') {
+        switch (d) {
+            case 'KITCHEN':
+            case 'BOH':
+                return 'Kitchen Department (BOH)';
+            case 'FLOOR':
+            case 'FOH':
+                return 'Floor Department (FOH)';
+            case 'BAR':
+                return 'Bar Department (BAR)';
+            case 'HR':
+                return 'Human Resources (HR)';
+            default:
+                return 'General Management';
+        }
+    }
     switch (d) {
         case 'KITCHEN':
         case 'BOH':
-            return lang === 'my' ? 'မီးဖိုချောင် ဌာန (BOH)' : '厨房部 (BOH)';
+            return '厨房部 (BOH)';
         case 'FLOOR':
         case 'FOH':
-            return lang === 'my' ? 'စားသောက်ဆိုင် ရှေ့တန်းဌာန (FOH)' : '楼面部 (FOH)';
+            return '楼面部 (FOH)';
         case 'BAR':
-            return lang === 'my' ? 'ဘား ဌာန (BAR)' : '水吧部 (BAR)';
+            return '水吧部 (BAR)';
         case 'HR':
-            return lang === 'my' ? 'လူ့စွမ်းအား အရင်းအမြစ် ဌာန (HR)' : '人事部 (HR)';
-        case 'GENERAL':
-        case 'MANAGEMENT':
+            return '人事部 (HR)';
         default:
-            return lang === 'my' ? 'စီမံခန့်ခွဲရေးနှင့် ဘဏ္ဍာရေး (GENERAL)' : '综合后勤 (GENERAL)';
+            return '综合后勤 (GENERAL)';
     }
 };
+
+const ORG_LEVEL_LABELS: Record<OrgLevel, Record<'zh_en' | 'en' | 'my', string>> = {
+    OWNER: {
+        zh_en: 'L1 老板',
+        en: 'L1 Owner',
+        my: 'L1 လုပ်ငန်းရှင်'
+    },
+    BRANCH_MANAGER: {
+        zh_en: 'L2 店面管理',
+        en: 'L2 Branch Manager',
+        my: 'L2 ဆိုင်ခွဲမန်နေဂျာ'
+    },
+    DEPARTMENT_HEAD: {
+        zh_en: 'L3 部门负责人',
+        en: 'L3 Department Head',
+        my: 'L3 ဌာနအကြီးအကဲ'
+    },
+    TEAM_LEAD: {
+        zh_en: 'L4 组长／PIC',
+        en: 'L4 Team Lead / PIC',
+        my: 'L4 အဖွဲ့ခေါင်းဆောင် / PIC'
+    },
+    CREW: {
+        zh_en: 'L5 员工',
+        en: 'L5 Crew',
+        my: 'L5 ဝန်ထမ်း'
+    }
+};
+
+export const getOrgLevelDisplayName = (
+    level: OrgLevel,
+    lang: ManagementLang = 'zh_en'
+): string => ORG_LEVEL_LABELS[level][normalizeLanguage(lang)];
 
 interface ManagementHomeProps {
     employee: Employee;
@@ -58,84 +121,109 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             setLoading(true);
             try {
                 const dateStr = getBusinessDateString();
-
-                const [kStock, bStock, gStock, fStock, logs, rosterData, tasks, employees] = await Promise.all([
-                    DataManager.getStock('KITCHEN').catch(() => []),
-                    DataManager.getStock('BAR').catch(() => []),
-                    DataManager.getStock('GENERAL').catch(() => []),
-                    DataManager.getStock('FUEL').catch(() => []),
-                    DataManager.getLogs().catch(() => []),
-                    DataManager.getRosterData().catch(() => ({ roster: {}, notes: {} })),
-                    DataManager.getInventoryTasks().catch(() => []),
-                    DataManager.getEmployees().catch(() => [])
-                ]);
-
-                if (!isMounted) return;
-
-                // ─────────────────────────────────────────────────────────────────────
-                // Issue 4: Strict L2 / L3 department level data isolation
-                // ─────────────────────────────────────────────────────────────────────
                 const orgLevel = getOrgLevel(employee);
                 const isL3 = orgLevel === 'DEPARTMENT_HEAD';
                 const managerDept = (employee.department || 'GENERAL').toUpperCase().trim();
 
-                // 1. Calculate Low Stock Items based on L2 / L3 isolation
-                let allStock = [...kStock, ...bStock, ...gStock, ...fStock];
+                // L2 can see all stock. L3 only loads stock collections relevant
+                // to their department instead of downloading all four collections.
+                let stockTypes: Array<'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL'> = [
+                    'KITCHEN',
+                    'BAR',
+                    'GENERAL',
+                    'FUEL'
+                ];
                 if (isL3) {
                     if (managerDept === 'KITCHEN' || managerDept === 'BOH') {
-                        allStock = kStock;
+                        stockTypes = ['KITCHEN'];
                     } else if (managerDept === 'BAR') {
-                        allStock = bStock;
+                        stockTypes = ['BAR'];
                     } else if (managerDept === 'FLOOR' || managerDept === 'FOH') {
-                        allStock = []; // Floor has no specific material stock
+                        stockTypes = [];
                     } else {
-                        allStock = [...gStock, ...fStock];
+                        stockTypes = ['GENERAL', 'FUEL'];
                     }
                 }
 
+                const [
+                    stockGroups,
+                    rosterData,
+                    todayLogsCount,
+                    pendingTaskResult
+                ] = await Promise.all([
+                    Promise.all(
+                        stockTypes.map(type => DataManager.getStock(type).catch(() => []))
+                    ),
+                    DataManager.getRosterData().catch(() => ({ roster: {}, notes: {} })),
+                    DataManager.getOperationalLogCountByDate(dateStr).catch(() => 0),
+                    isL3
+                        ? DataManager.getPendingInventoryTasks().catch(() => [])
+                        : DataManager.getPendingInventoryTaskCount().catch(() => 0)
+                ]);
+
+                if (!isMounted) return;
+
+                // 1. Calculate Low Stock Items with the existing replenishment algorithm.
+                const allStock = stockGroups.flat();
+
                 const lowItemsCount = allStock.filter(needsReplenishment).length;
 
-                // 2. Process Today's Roster & Absences with L2 / L3 isolation
+                // 2. Identify only today's exception employees and task assignees.
+                // Employee profiles are fetched by document id instead of loading
+                // the complete employee collection.
                 const todayRoster = rosterData.roster?.[dateStr] || {};
+                const absenceEntries = Object.entries(todayRoster).filter(([, status]) =>
+                    status === 'MC' || status === 'ABSENT' || status === 'LEAVE'
+                );
+                const pendingTasks = Array.isArray(pendingTaskResult)
+                    ? pendingTaskResult
+                    : [];
+                const requiredEmployeeIds = [
+                    ...absenceEntries.map(([empId]) => empId),
+                    ...(isL3 ? pendingTasks.map(task => task.assigneeId) : [])
+                ];
+                const relevantEmployees: Employee[] = await DataManager.getEmployeesByIds(requiredEmployeeIds)
+                    .catch(() => []);
+
+                if (!isMounted) return;
+
+                const employeesById = new Map<string, Employee>(
+                    relevantEmployees.map(emp => [emp.id, emp] as const)
+                );
                 const absentList: Array<{ name: string; role: string; type: string }> = [];
                 let absenceCount = 0;
 
-                Object.entries(todayRoster).forEach(([empId, status]) => {
-                    if (status === 'MC' || status === 'ABSENT' || status === 'LEAVE') {
-                        const emp = employees.find(e => e.id === empId);
-                        if (emp) {
-                            // Filter absences for L3 (DEPARTMENT_HEAD) - only show members in their department
-                            if (isL3) {
-                                const empDept = (emp.department || '').toUpperCase().trim();
-                                if (empDept !== managerDept) {
-                                    return; // Skip if different department
-                                }
+                absenceEntries.forEach(([empId, status]) => {
+                    const emp = employeesById.get(empId);
+                    if (emp) {
+                        // Filter absences for L3 (DEPARTMENT_HEAD) - only show members in their department
+                        if (isL3) {
+                            const empDept = (emp.department || '').toUpperCase().trim();
+                            if (empDept !== managerDept) {
+                                return; // Skip if different department
                             }
-
-                            absenceCount++;
-                            absentList.push({
-                                name: emp.name,
-                                role: emp.role?.split('(')[0] || '员工',
-                                type: status === 'MC' ? '病假 (MC)' : status === 'LEAVE' ? '事假 (UL)' : '旷工 (ABS)'
-                            });
                         }
+
+                        absenceCount++;
+                        absentList.push({
+                            name: emp.name,
+                            role: emp.role?.split('(')[0] || '员工',
+                            type: status === 'MC' ? '病假 (MC)' : status === 'LEAVE' ? '事假 (UL)' : '旷工 (ABS)'
+                        });
                     }
                 });
 
                 // 3. Pending Inventory Tasks with L2 / L3 isolation
-                let filteredTasks = tasks;
-                if (isL3) {
-                    filteredTasks = tasks.filter(t => {
-                        const assignee = employees.find(e => e.id === t.assigneeId);
+                const pendingTasksCount = isL3
+                    ? pendingTasks.filter(task => {
+                        const assignee = employeesById.get(task.assigneeId);
                         if (!assignee) return false;
                         const assigneeDept = (assignee.department || '').toUpperCase().trim();
                         return assigneeDept === managerDept;
-                    });
-                }
-                const pendingTasksCount = filteredTasks.filter(t => t.status === 'PENDING').length;
-
-                // 4. Today's Logs (Operational logs are shared or filtered)
-                const todayLogsCount = logs.filter(l => l.date === dateStr).length;
+                    }).length
+                    : typeof pendingTaskResult === 'number'
+                        ? pendingTaskResult
+                        : pendingTasks.length;
 
                 setStats({
                     lowStock: lowItemsCount,
@@ -244,19 +332,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                                     </div>
                                 ) : (
                                     <span className="bg-amber-500/10 text-amber-700 text-[9px] px-2 py-0.5 rounded-full font-black border border-amber-500/20 uppercase tracking-wider shrink-0 leading-none">
-                                        {(() => {
-                                            const level = getOrgLevel(employee);
-                                            const translationMap = {
-                                                'BOSS': 'org_owner',
-                                                'GENERAL_MANAGER': 'org_general_manager',
-                                                'BRANCH_MANAGER': 'org_branch_manager',
-                                                'DEPARTMENT_HEAD': 'org_department_head',
-                                                'STAFF': 'org_staff'
-                                            };
-                                            const transKey = translationMap[level];
-                                            if (transKey) return mt(transKey as any, lang);
-                                            return getOrgLevelLabel(employee);
-                                        })()}
+                                        {getOrgLevelDisplayName(getOrgLevel(employee), lang)}
                                     </span>
                                 )}
                             </div>
@@ -272,7 +348,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                     </div>
                     
                     {/* Notifications & Language Wrapper */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 mr-12">
                         {/* Languages switch button */}
                         <button 
                             onClick={() => onLanguageChange(lang === 'zh' ? 'my' : 'zh')}
@@ -283,15 +359,6 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                             <span>{lang === 'zh' ? '中文' : 'မြန်မာ'}</span>
                         </button>
 
-                        {/* Active Notifications Indicator */}
-                        <div className="relative">
-                            <button className="w-10 h-10 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-600 active:scale-95 transition-transform outline-none" style={{ minWidth: '44px', minHeight: '44px' }}>
-                                <Bell size={18} />
-                            </button>
-                            {(stats.lowStock > 0 || stats.absences > 0 || stats.pendingTasks > 0) && (
-                                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
-                            )}
-                        </div>
                     </div>
                 </div>
             </header>

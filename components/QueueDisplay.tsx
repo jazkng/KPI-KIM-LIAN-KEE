@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QueueTicket } from '../types';
 import { Utensils, Clock, Bell, Volume2, Play } from 'lucide-react';
-import { DataManager } from '../utils/dataManager';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 
 // This component is designed for a 1080p/4K TV Screen
 export const QueueDisplay: React.FC = () => {
@@ -35,38 +36,52 @@ export const QueueDisplay: React.FC = () => {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 3. Data Polling & Audio Trigger from CLOUD
+    // 3. Real-time queue listener & audio trigger from CLOUD
     useEffect(() => {
-        const fetchQueue = async () => {
-            const parsed = await DataManager.getQueueTickets();
-            
-            // Find tickets that are actively CALLING
-            // Sort by calledAt DESCENDING (Newest first)
-            const calling = parsed
-                .filter(t => t.status === 'CALLING')
-                .sort((a, b) => {
-                    const timeA = a.calledAt ? new Date(a.calledAt).getTime() : 0;
-                    const timeB = b.calledAt ? new Date(b.calledAt).getTime() : 0;
-                    return timeB - timeA;
-                });
+        // The display only needs active tickets. Completed/cancelled history is
+        // intentionally excluded to keep the initial Firestore read small.
+        const activeQueueQuery = query(
+            collection(db, 'queue_tickets'),
+            where('status', 'in', ['WAITING', 'CALLING'])
+        );
 
-            setTickets(parsed);
+        const unsubscribe = onSnapshot(
+            activeQueueQuery,
+            (snapshot) => {
+                const parsed = snapshot.docs.map(queueDoc => ({
+                    ...(queueDoc.data() as QueueTicket),
+                    id: queueDoc.id
+                }));
 
-            if (isAudioEnabled && calling.length > 0) {
-                const latestTicket = calling[0];
-                // Check if ID is different OR timestamp is different (Re-called)
-                if (latestTicket.id !== lastAnnouncedId.current || latestTicket.calledAt !== lastAnnouncedTime.current) {
-                    console.log("Announcing:", latestTicket.number);
-                    speakTicket(latestTicket.number);
-                    lastAnnouncedId.current = latestTicket.id;
-                    lastAnnouncedTime.current = latestTicket.calledAt || null;
+                // Find tickets that are actively CALLING
+                // Sort by calledAt DESCENDING (Newest first)
+                const calling = parsed
+                    .filter(t => t.status === 'CALLING')
+                    .sort((a, b) => {
+                        const timeA = a.calledAt ? new Date(a.calledAt).getTime() : 0;
+                        const timeB = b.calledAt ? new Date(b.calledAt).getTime() : 0;
+                        return timeB - timeA;
+                    });
+
+                setTickets(parsed);
+
+                if (isAudioEnabled && calling.length > 0) {
+                    const latestTicket = calling[0];
+                    // Check if ID is different OR timestamp is different (Re-called)
+                    if (latestTicket.id !== lastAnnouncedId.current || latestTicket.calledAt !== lastAnnouncedTime.current) {
+                        console.log("Announcing:", latestTicket.number);
+                        speakTicket(latestTicket.number);
+                        lastAnnouncedId.current = latestTicket.id;
+                        lastAnnouncedTime.current = latestTicket.calledAt || null;
+                    }
                 }
+            },
+            (error) => {
+                console.error('Queue display listener failed:', error);
             }
-        };
+        );
 
-        fetchQueue(); 
-        const poller = setInterval(fetchQueue, 2000); 
-        return () => clearInterval(poller);
+        return unsubscribe;
     }, [isAudioEnabled]);
 
     const handleEnableAudio = () => {

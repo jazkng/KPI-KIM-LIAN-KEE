@@ -20,11 +20,43 @@ import {
 import { MENU_CATEGORIES, INITIAL_MENU_ITEMS } from '../../constants/menu';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { uploadToCloudinary } from '../utils';
+import { db } from '../../firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface MenuManagementProps {
     onClose?: () => void;
     isModal?: boolean;
 }
+
+const MENU_CATEGORY_STORAGE_KEY = 'menu_categories_v1';
+const MENU_CATEGORY_CONFIG_DOC = 'menu_categories';
+
+const normalizeMenuCategories = (value: unknown): MenuCategory[] => {
+    const source = Array.isArray(value) ? value : [];
+    const normalized = source.reduce<MenuCategory[]>((result, rawCategory) => {
+        if (!rawCategory || typeof rawCategory !== 'object') return result;
+
+        const raw = rawCategory as Partial<MenuCategory>;
+        const id = String(raw.id || '').trim().toUpperCase();
+        const label = String(raw.label || '').trim();
+
+        if (!id || !label || result.some(category => category.id === id)) return result;
+        result.push({ ...raw, id, label } as MenuCategory);
+        return result;
+    }, []);
+
+    const fallbackCategories = normalized.length > 0
+        ? normalized
+        : MENU_CATEGORIES.map(category => ({ ...category }));
+
+    const allCategory = fallbackCategories.find(category => category.id === 'ALL');
+    const businessCategories = fallbackCategories.filter(category => category.id !== 'ALL');
+
+    return [
+        { ...(allCategory || {}), id: 'ALL', label: allCategory?.label || '全部 (All)' } as MenuCategory,
+        ...businessCategories
+    ];
+};
 
 const STOCK_CATEGORIES: Record<string, string> = {
     'FRESH': '生鲜 (Fresh)', 'MEAT': '肉类 (Meat)', 'SEAFOOD': '海鲜 (Seafood)',
@@ -274,6 +306,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const [copySearch, setCopySearch] = useState('');
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
+    // ---- 分类管理 State ----
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [newCategoryLabel, setNewCategoryLabel] = useState('');
+    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+    const [editingCategoryLabel, setEditingCategoryLabel] = useState('');
+    const [isSavingCategories, setIsSavingCategories] = useState(false);
+
     // 👑 新增: 食材展开 / 拖拽 / 统一弹窗 (替换所有 native confirm/alert)
     const [expandedIngIdx, setExpandedIngIdx] = useState<number | null>(null);
     const [draggedIngIdx, setDraggedIngIdx] = useState<number | null>(null);
@@ -306,12 +345,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
     // 👑 编辑模式以及物料审计模式下锁定 body 滚动 (iOS Safari 防止 modal 背景滚穿)
     useEffect(() => {
-        if (viewMode === 'EDIT' || viewMode === 'YIELD_AUDIT' || deleteId || showStockSelector || showCopyModal || confirmModal || infoModal) {
+        if (viewMode === 'EDIT' || viewMode === 'YIELD_AUDIT' || deleteId || showStockSelector || showCopyModal || showCategoryManager || confirmModal || infoModal) {
             const originalOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
             return () => { document.body.style.overflow = originalOverflow; };
         }
-    }, [viewMode, deleteId, showStockSelector, showCopyModal, confirmModal, infoModal]);
+    }, [viewMode, deleteId, showStockSelector, showCopyModal, showCategoryManager, confirmModal, infoModal]);
 
     // 👑 智能计算当前配方实时联动数值 (穿透最新菜谱改动)
     const getLiveQuantities = (p: any) => {
@@ -435,9 +474,206 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     }, [linkedMenuItemId, menuItems]);
 
+    const loadMenuCategories = async () => {
+        let localCategories: MenuCategory[] | null = null;
+
+        try {
+            const savedLocal = localStorage.getItem(MENU_CATEGORY_STORAGE_KEY);
+            if (savedLocal) localCategories = normalizeMenuCategories(JSON.parse(savedLocal));
+        } catch (error) {
+            console.warn('[Menu Categories] Invalid local cache ignored:', error);
+        }
+
+        try {
+            const snapshot = await getDoc(doc(db, 'config', MENU_CATEGORY_CONFIG_DOC));
+            const cloudCategories = snapshot.exists()
+                ? normalizeMenuCategories(snapshot.data()?.items)
+                : null;
+            const resolved = cloudCategories && cloudCategories.length > 1
+                ? cloudCategories
+                : localCategories && localCategories.length > 1
+                    ? localCategories
+                    : normalizeMenuCategories(MENU_CATEGORIES);
+
+            setCategories(resolved);
+            localStorage.setItem(MENU_CATEGORY_STORAGE_KEY, JSON.stringify(resolved));
+        } catch (error) {
+            console.warn('[Menu Categories] Cloud load failed; using local/default categories:', error);
+            const fallback = localCategories && localCategories.length > 1
+                ? localCategories
+                : normalizeMenuCategories(MENU_CATEGORIES);
+            setCategories(fallback);
+        }
+    };
+
+    const persistMenuCategories = async (nextCategories: MenuCategory[]): Promise<boolean> => {
+        const normalized = normalizeMenuCategories(nextCategories);
+        setCategories(normalized);
+        localStorage.setItem(MENU_CATEGORY_STORAGE_KEY, JSON.stringify(normalized));
+
+        try {
+            await setDoc(
+                doc(db, 'config', MENU_CATEGORY_CONFIG_DOC),
+                {
+                    items: normalized,
+                    updatedAt: new Date().toISOString()
+                },
+                { merge: true }
+            );
+            return true;
+        } catch (error) {
+            console.error('[Menu Categories] Cloud save failed:', error);
+            return false;
+        }
+    };
+
+    const createCategoryId = (label: string) => {
+        const slug = label
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 28);
+
+        const baseId = slug || `CATEGORY_${Date.now().toString(36).toUpperCase()}`;
+        let candidate = baseId;
+        let suffix = 2;
+
+        while (categories.some(category => category.id === candidate)) {
+            candidate = `${baseId}_${suffix}`;
+            suffix += 1;
+        }
+
+        return candidate;
+    };
+
+    const handleAddCategory = async () => {
+        const label = newCategoryLabel.trim();
+        if (!label) {
+            return showInfo('缺少分类名称', '请先输入新分类名称。', 'error');
+        }
+
+        const duplicate = categories.some(
+            category => category.label.trim().toLowerCase() === label.toLowerCase()
+        );
+        if (duplicate) {
+            return showInfo('分类已存在', `「${label}」已经在分类列表中。`, 'error');
+        }
+
+        const id = createCategoryId(label);
+        const nextCategories = [
+            ...categories,
+            { id, label } as MenuCategory
+        ];
+
+        setIsSavingCategories(true);
+        const cloudSaved = await persistMenuCategories(nextCategories);
+        setIsSavingCategories(false);
+        setNewCategoryLabel('');
+        setNewCategory(id);
+        setActiveCategory(id);
+
+        showInfo(
+            cloudSaved ? '✅ 分类已新增' : '分类已保存在本机',
+            cloudSaved
+                ? `「${label}」已新增，并已同步到云端。`
+                : `「${label}」已经可以使用，但云端同步失败。请检查网络后再编辑一次。`,
+            cloudSaved ? 'success' : 'info'
+        );
+    };
+
+    const startEditingCategory = (category: MenuCategory) => {
+        if (category.id === 'ALL') return;
+        setEditingCategoryId(category.id);
+        setEditingCategoryLabel(category.label);
+    };
+
+    const cancelEditingCategory = () => {
+        setEditingCategoryId(null);
+        setEditingCategoryLabel('');
+    };
+
+    const handleSaveCategoryEdit = async () => {
+        if (!editingCategoryId) return;
+
+        const label = editingCategoryLabel.trim();
+        if (!label) {
+            return showInfo('缺少分类名称', '分类名称不可以留空。', 'error');
+        }
+
+        const duplicate = categories.some(
+            category =>
+                category.id !== editingCategoryId &&
+                category.label.trim().toLowerCase() === label.toLowerCase()
+        );
+        if (duplicate) {
+            return showInfo('分类名称重复', `「${label}」已经被其他分类使用。`, 'error');
+        }
+
+        const nextCategories = categories.map(category =>
+            category.id === editingCategoryId
+                ? { ...category, label }
+                : category
+        );
+
+        setIsSavingCategories(true);
+        const cloudSaved = await persistMenuCategories(nextCategories);
+        setIsSavingCategories(false);
+        cancelEditingCategory();
+
+        showInfo(
+            cloudSaved ? '✅ 分类已更新' : '分类名称已保存在本机',
+            cloudSaved
+                ? `分类已改名为「${label}」，原有菜品会继续保留在这个分类中。`
+                : '分类名称已更新，但云端同步失败。请检查网络连接。',
+            cloudSaved ? 'success' : 'info'
+        );
+    };
+
+    const handleDeleteCategory = (category: MenuCategory) => {
+        if (category.id === 'ALL') return;
+
+        const usageCount = menuItems.filter(item => item.category === category.id).length;
+        if (usageCount > 0) {
+            return showInfo(
+                '无法删除正在使用的分类',
+                `「${category.label}」仍有 ${usageCount} 个菜品使用。请先把这些菜品移到其他分类，再删除这个分类。`,
+                'error'
+            );
+        }
+
+        askConfirm(
+            '删除分类?',
+            `确定删除「${category.label}」吗？这个分类目前没有菜品使用。`,
+            async () => {
+                const nextCategories = categories.filter(item => item.id !== category.id);
+                setIsSavingCategories(true);
+                const cloudSaved = await persistMenuCategories(nextCategories);
+                setIsSavingCategories(false);
+
+                if (activeCategory === category.id) setActiveCategory('ALL');
+                if (newCategory === category.id) {
+                    setNewCategory(nextCategories.find(item => item.id !== 'ALL')?.id || 'A_SERIES');
+                }
+                if (editingCategoryId === category.id) cancelEditingCategory();
+
+                showInfo(
+                    cloudSaved ? '分类已删除' : '分类已从本机删除',
+                    cloudSaved
+                        ? `「${category.label}」已删除。`
+                        : '分类已经从当前设备删除，但云端同步失败。',
+                    cloudSaved ? 'success' : 'info'
+                );
+            },
+            { danger: true, confirmText: '删除分类' }
+        );
+    };
+
     const loadData = async () => {
         setLoading(true);
         try {
+            await loadMenuCategories();
+
             // 加载物料出成模型配置与损耗对账记录
             const savedProfiles = localStorage.getItem('menu_yield_profiles');
             if (savedProfiles) {
@@ -650,9 +886,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     };
 
     const handleDeleteAuditLog = (id: string) => {
-        const updated = auditLogs.filter(l => l.id !== id);
-        setAuditLogs(updated);
-        localStorage.setItem('menu_yield_audit_logs', JSON.stringify(updated));
+        askConfirm(
+            "⚠️ 确认删除审计记录?",
+            "删除后该条稽账历史记录将无法恢复。",
+            () => {
+                const updated = auditLogs.filter(l => l.id !== id);
+                setAuditLogs(updated);
+                localStorage.setItem('menu_yield_audit_logs', JSON.stringify(updated));
+                showInfo("🗑️ 已删除", "审计记录已删除", "success");
+            },
+            { danger: true, confirmText: "是的，删除" }
+        );
     };
 
     // ============================================================
@@ -780,10 +1024,18 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             cost: recalcVariantCost(v.recipe, v.overheadMarginPercent, stockItems)
         }));
 
+        const selectedCategoryId = categories.some(category => category.id === newCategory && category.id !== 'ALL')
+            ? newCategory
+            : categories.find(category => category.id !== 'ALL')?.id;
+
+        if (!selectedCategoryId) {
+            return showInfo('缺少分类', '请先建立至少一个菜品分类。', 'error');
+        }
+
         const newItem: MenuItem = {
             id: cleanId,
             name: newName,
-            category: newCategory,
+            category: selectedCategoryId,
             variants: finalVariants,
             options: newOptions ? newOptions.split(',').map(s => s.trim()).filter(s => s) : [],
             image: newImage
@@ -845,7 +1097,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const resetForm = () => {
         setNewId('');
         setNewName('');
-        setNewCategory('A_SERIES');
+        setNewCategory(categories.find(category => category.id !== 'ALL')?.id || 'A_SERIES');
         setNewOptions('');
         setNewImage('');
         setNewVariants([
@@ -1752,17 +2004,25 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {/* 顶栏 Header (含 iOS safe-area) */}
             {/* ====================================================== */}
             <div className="bg-[#1A1A1A] px-3 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] md:px-4 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] z-30 relative shadow-md">
-                <div className="flex items-center gap-3 md:gap-4">
-                    <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg"><Utensils size={20} className="md:w-6 md:h-6" /></div>
-                    <div>
-                        <h3 className="font-serif font-black text-lg md:text-xl tracking-wide">智能菜谱系统</h3>
-                        <p className="text-[9px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">SMART MENU</p>
+                <div className="flex items-center gap-2 md:gap-4 min-w-0">
+                    <button 
+                        onClick={onClose || (() => window.history.back())}
+                        style={{ touchAction: 'manipulation' }}
+                        className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                        aria-label="Back"
+                    >
+                        <ArrowLeft size={20} strokeWidth={2.5} />
+                    </button>
+                    <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg shrink-0"><Utensils size={20} className="md:w-6 md:h-6" /></div>
+                    <div className="min-w-0">
+                        <h3 className="font-serif font-black text-base md:text-xl tracking-wide truncate">智能菜谱系统</h3>
+                        <p className="text-[9px] md:text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5 truncate">SMART MENU</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center shrink-0">
                     <ModuleGuideButton module="MENU" />
                     {onClose && (
-                        <button onClick={onClose} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/10 rounded-full active:scale-95 transition-all">
+                        <button onClick={onClose} aria-label="关闭" className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/10 rounded-full active:scale-95 transition-all text-gray-300 hover:text-white">
                             <X size={20} />
                         </button>
                     )}
@@ -1825,6 +2085,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         >
                                             <Scale size={13} />
                                             <span>损耗对账与换算</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setShowCategoryManager(true)}
+                                            className="px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 active:scale-95 shrink-0"
+                                        >
+                                            <Layers size={13} />
+                                            <span>分类管理</span>
                                         </button>
                                         <button onClick={handleAddNew} className="bg-[#FFD700] hover:bg-[#E5C100] text-black px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0 border border-yellow-400/20">
                                             <Plus size={14} /> <span className="hidden sm:inline">新增</span>
@@ -2840,7 +3107,16 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             </div>
 
                             <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Category (分类)</label>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Category (分类)</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCategoryManager(true)}
+                                        className="text-[10px] font-black text-yellow-700 hover:text-black flex items-center gap-1 min-h-[32px] px-2 rounded-lg hover:bg-yellow-50 transition-all"
+                                    >
+                                        <Layers size={11} /> 管理分类
+                                    </button>
+                                </div>
                                 <select className="w-full p-3 bg-gray-50 rounded-xl text-base font-bold outline-none" value={newCategory} onChange={e => setNewCategory(e.target.value)}>
                                     {categories.filter(c => c.id !== 'ALL').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                                 </select>
@@ -3125,6 +3401,184 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         <button onClick={handleSaveItem} className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
                             <Save size={20} /> 保存菜品 (Save)
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ====================================================== */}
+            {/* 分类管理 Modal */}
+            {/* ====================================================== */}
+            {showCategoryManager && (
+                <div
+                    className="fixed inset-0 bg-black/60 z-[240] flex items-center justify-center p-3 md:p-4 backdrop-blur-sm animate-in fade-in pb-[max(env(safe-area-inset-bottom),1rem)]"
+                    onClick={() => {
+                        if (!isSavingCategories) {
+                            setShowCategoryManager(false);
+                            cancelEditingCategory();
+                        }
+                    }}
+                >
+                    <div
+                        className="bg-[#F6F7FB] rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden border border-white/20"
+                        onClick={event => event.stopPropagation()}
+                    >
+                        <div className="bg-[#111111] text-white px-5 py-4 flex items-center justify-between border-b-4 border-[#FFD200]">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-11 h-11 rounded-2xl bg-[#FFD200] text-black flex items-center justify-center shadow-lg shrink-0">
+                                    <Layers size={21} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-lg leading-tight">菜品分类管理</h3>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                        Menu Categories
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={isSavingCategories}
+                                onClick={() => {
+                                    setShowCategoryManager(false);
+                                    cancelEditingCategory();
+                                }}
+                                className="w-11 h-11 rounded-full hover:bg-white/10 disabled:opacity-40 flex items-center justify-center active:scale-95 transition-all shrink-0"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-4 md:p-5 border-b border-gray-200 bg-white">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-2">
+                                新增分类
+                            </label>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    type="text"
+                                    value={newCategoryLabel}
+                                    onChange={event => setNewCategoryLabel(event.target.value)}
+                                    onKeyDown={event => {
+                                        if (event.key === 'Enter' && !isSavingCategories) handleAddCategory();
+                                    }}
+                                    placeholder="例如：季节限定、员工餐、甜品"
+                                    className="flex-grow min-h-[48px] px-4 bg-[#F6F7FB] border-2 border-transparent focus:border-[#FFD200] rounded-xl text-base font-bold outline-none transition-all"
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    disabled={isSavingCategories || !newCategoryLabel.trim()}
+                                    onClick={handleAddCategory}
+                                    className="min-h-[48px] px-5 rounded-xl bg-[#FFD200] hover:bg-[#E5BE00] text-black font-black text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+                                >
+                                    {isSavingCategories ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                    新增分类
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
+                                分类会同步到云端；修改名称不会改变分类编号，也不会影响原有菜品。
+                            </p>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-4 md:p-5 space-y-3">
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 flex gap-2">
+                                <Info size={16} className="text-yellow-700 shrink-0 mt-0.5" />
+                                <p className="text-[11px] text-yellow-900 leading-relaxed font-medium">
+                                    为保护菜谱资料，仍有菜品使用的分类不能删除。请先编辑相关菜品并转移分类。
+                                </p>
+                            </div>
+
+                            {categories.filter(category => category.id !== 'ALL').map(category => {
+                                const usageCount = menuItems.filter(item => item.category === category.id).length;
+                                const isEditing = editingCategoryId === category.id;
+
+                                return (
+                                    <div
+                                        key={category.id}
+                                        className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 md:p-4"
+                                    >
+                                        {isEditing ? (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block mb-1">
+                                                        修改分类名称
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingCategoryLabel}
+                                                        onChange={event => setEditingCategoryLabel(event.target.value)}
+                                                        onKeyDown={event => {
+                                                            if (event.key === 'Enter' && !isSavingCategories) handleSaveCategoryEdit();
+                                                            if (event.key === 'Escape') cancelEditingCategory();
+                                                        }}
+                                                        className="w-full min-h-[46px] px-3 bg-[#F6F7FB] border-2 border-[#FFD200] rounded-xl text-base font-bold outline-none"
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSavingCategories}
+                                                        onClick={cancelEditingCategory}
+                                                        className="flex-1 min-h-[44px] rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs active:scale-95 transition-all"
+                                                    >
+                                                        取消
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSavingCategories || !editingCategoryLabel.trim()}
+                                                        onClick={handleSaveCategoryEdit}
+                                                        className="flex-1 min-h-[44px] rounded-xl bg-[#111111] text-[#FFD200] font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-40 active:scale-95 transition-all"
+                                                    >
+                                                        {isSavingCategories ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                                        保存名称
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-11 h-11 rounded-xl bg-[#FFD200]/20 text-yellow-800 flex items-center justify-center shrink-0">
+                                                    <Layers size={18} />
+                                                </div>
+                                                <div className="min-w-0 flex-grow">
+                                                    <div className="font-black text-sm text-[#111111] truncate">{category.label}</div>
+                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                        <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md">
+                                                            {category.id}
+                                                        </span>
+                                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${usageCount > 0 ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                            {usageCount} 个菜品
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1.5 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSavingCategories}
+                                                        onClick={() => startEditingCategory(category)}
+                                                        className="w-11 h-11 rounded-xl border border-gray-200 bg-white hover:bg-[#FFD200] hover:border-[#FFD200] text-gray-700 flex items-center justify-center disabled:opacity-40 active:scale-95 transition-all"
+                                                        title="修改分类名称"
+                                                    >
+                                                        <Edit3 size={15} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSavingCategories}
+                                                        onClick={() => handleDeleteCategory(category)}
+                                                        className={`w-11 h-11 rounded-xl border flex items-center justify-center disabled:opacity-40 active:scale-95 transition-all ${
+                                                            usageCount > 0
+                                                                ? 'border-gray-200 bg-gray-100 text-gray-300'
+                                                                : 'border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white'
+                                                        }`}
+                                                        title={usageCount > 0 ? `仍有 ${usageCount} 个菜品使用，不能删除` : '删除分类'}
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             )}

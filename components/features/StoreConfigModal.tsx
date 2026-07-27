@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Settings, Crown, Layout, Cloud, Lock, Save, X, Download, AlertTriangle, 
     Info, History, Database, RotateCcw, Loader2, Calendar, Upload, 
-    User, Phone, MapPin, Clock, Languages, Coins, Printer, Plus, Trash2, Check, Sparkles
+    User, Phone, MapPin, Clock, Languages, Coins, Printer, Plus, Trash2, Check, Sparkles,
+    Image as ImageIcon, UploadCloud, Link as LinkIcon, CheckCircle, RefreshCw
 } from 'lucide-react';
 import { StoreConfig, Employee, SystemBackup } from '../../types';
 import { DataManager } from '../../utils/dataManager';
@@ -147,6 +148,231 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
         `[${new Date().toLocaleTimeString()}] INFO: Cloud snapshot list synced successfully (3 records)`,
         `[${new Date().toLocaleTimeString()}] INFO: Active user role: OWNER (${currentEmployee?.name || 'JAKE'})`
     ]);
+
+    // Image & Logo Upload Logic
+    const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
+
+    const compressImageFile = (file: File, maxDim = 800): Promise<string> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        } else {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const dataUrl = canvas.toDataURL('image/png', 0.88);
+                        resolve(dataUrl);
+                    } else {
+                        resolve(e.target?.result as string || '');
+                    }
+                };
+                img.onerror = () => resolve(e.target?.result as string || '');
+                img.src = e.target?.result as string || '';
+            };
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleImageUpload = async (
+        field: 'logoUrl' | 'headerLogoUrl' | 'appIconUrl' | 'receiptLogoUrl', 
+        file: File
+    ) => {
+        if (!file) return;
+        setUploadingTarget(field);
+        
+        const cloudName = storeConfig.cloudinaryCloudName?.trim();
+        const uploadPreset = storeConfig.cloudinaryUploadPreset?.trim();
+
+        if (cloudName && uploadPreset) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('upload_preset', uploadPreset);
+
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    throw new Error(errJson?.error?.message || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const secureUrl = data.secure_url;
+                setStoreConfig(prev => ({ ...prev, [field]: secureUrl }));
+                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] SUCCESS: Uploaded ${field} to Cloudinary -> ${secureUrl}`]);
+                alert(`✅ 成功将图片上传至 Cloudinary 云端！\n图片链接：${secureUrl}`);
+            } catch (err: any) {
+                console.warn('Cloudinary upload failed, falling back to local compressed data URL:', err);
+                const localDataUrl = await compressImageFile(file);
+                setStoreConfig(prev => ({ ...prev, [field]: localDataUrl }));
+                alert(`⚠️ Cloudinary 云端上传未成功 (${err.message || '网络问题'})。\n已自动优化并转存为本地图片源！\n如需重新连通 Cloudinary，请检查“开发者选项”中的 Cloud Name 和 Preset 配置。`);
+            } finally {
+                setUploadingTarget(null);
+            }
+        } else {
+            const localDataUrl = await compressImageFile(file);
+            setStoreConfig(prev => ({ ...prev, [field]: localDataUrl }));
+            alert(`✅ 已读取并应用本地图片！\n💡 提示：若要在所有设备间跨网托管图源，可在下方“云端存储及脚本配置”中输入您的 Cloudinary Cloud Name 与 Upload Preset。`);
+            setUploadingTarget(null);
+        }
+    };
+
+    const handleTestCloudinary = async () => {
+        const cloudName = storeConfig.cloudinaryCloudName?.trim();
+        const uploadPreset = storeConfig.cloudinaryUploadPreset?.trim();
+
+        if (!cloudName || !uploadPreset) {
+            alert('⚠️ 请先输入 Cloudinary Cloud Name 与 Upload Preset (Unsigned)！');
+            return;
+        }
+
+        setUploadingTarget('test_cloudinary');
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 20;
+            canvas.height = 20;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = '#FFD200';
+                ctx.fillRect(0, 0, 20, 20);
+                ctx.fillStyle = '#8B0000';
+                ctx.fillText('KLK', 2, 14);
+            }
+            const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (!blob) throw new Error('Blob creation failed');
+
+            const formData = new FormData();
+            formData.append('file', blob, 'klk_cloudinary_test.png');
+            formData.append('upload_preset', uploadPreset);
+
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+            }
+
+            const data = await res.json();
+            alert(`🎉 Cloudinary 通道联通成功！\nCloud Name: ${cloudName}\nPreset: ${uploadPreset}\n测试图片 URL: ${data.secure_url}`);
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] SUCCESS: Cloudinary connectivity verified -> ${data.secure_url}`]);
+        } catch (e: any) {
+            alert(`❌ Cloudinary 连通失败！\n原因: ${e.message || e}\n请确认：\n1. Cloud Name 拼写无误\n2. Upload Preset 属于 Unsigned 类型 (无加密设置)\n3. 您的网络可以正常访问 Cloudinary API。`);
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: Cloudinary connectivity failed -> ${e.message}`]);
+        } finally {
+            setUploadingTarget(null);
+        }
+    };
+
+    const renderImageUploadBox = (
+        label: string, 
+        subtext: string, 
+        field: 'logoUrl' | 'headerLogoUrl' | 'appIconUrl' | 'receiptLogoUrl', 
+        currentVal?: string
+    ) => {
+        const isCloudinary = currentVal?.includes('cloudinary.com');
+        const isBase64 = currentVal?.startsWith('data:');
+
+        return (
+            <div className="bg-stone-50 p-3.5 rounded-xl border border-stone-200 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white border-2 border-dashed border-stone-300 rounded-xl flex items-center justify-center p-1 relative overflow-hidden shrink-0 shadow-inner group">
+                    {currentVal ? (
+                        <img src={currentVal} alt={label} className="w-full h-full object-contain rounded-lg" />
+                    ) : (
+                        <div className="text-center p-1 text-stone-300">
+                            <Upload size={20} className="mx-auto mb-0.5" />
+                            <span className="text-[9px] font-bold block">无图片</span>
+                        </div>
+                    )}
+                    {uploadingTarget === field && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white rounded-xl">
+                            <Loader2 size={18} className="animate-spin text-[#FFD700]" />
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex-grow min-w-0 space-y-2 w-full">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                        <div>
+                            <span className="text-xs font-black text-stone-800 block">{label}</span>
+                            <span className="text-[10px] font-bold text-stone-400 block">{subtext}</span>
+                        </div>
+                        {currentVal && (
+                            <span className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-full border ${
+                                isCloudinary 
+                                    ? 'bg-sky-50 text-sky-700 border-sky-200' 
+                                    : isBase64 
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                        : 'bg-stone-100 text-stone-600 border-stone-200'
+                            }`}>
+                                {isCloudinary ? '☁️ Cloudinary 托管' : isBase64 ? '📁 本地图源 (Base64)' : '🌐 网络外链'}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <label className="bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0 active:scale-95">
+                            <Upload size={13} className="text-[#8B0000]" />
+                            <span>选择图片文件</span>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleImageUpload(field, file);
+                                    e.target.value = '';
+                                }}
+                            />
+                        </label>
+
+                        <div className="relative flex-grow min-w-0">
+                            <input 
+                                type="text" 
+                                value={currentVal || ''} 
+                                onChange={e => setStoreConfig({ ...storeConfig, [field]: e.target.value })}
+                                placeholder="或直接输入/粘贴图片 URL 链接..." 
+                                className="w-full p-1.5 pl-7 border border-stone-200 rounded-lg text-[11px] font-mono text-stone-800 bg-white"
+                            />
+                            <Sparkles size={11} className="absolute left-2.5 top-2.5 text-stone-400" />
+                        </div>
+
+                        {currentVal && (
+                            <button 
+                                type="button" 
+                                onClick={() => setStoreConfig({ ...storeConfig, [field]: '' })}
+                                className="text-stone-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0 flex items-center gap-1 text-[11px] font-bold"
+                                title="清除此图片"
+                            >
+                                <X size={14} /> 清除
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     useEffect(() => {
         const updateTime = () => {
@@ -566,6 +792,10 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                             placeholder="店铺物理地址" 
                                         />
                                     </div>
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    {renderImageUploadBox('店铺/应用主 Logo (Main App Logo)', '用于登录界面、顶栏显示及系统启动动画', 'logoUrl', storeConfig.logoUrl)}
                                 </div>
 
                                 <div className="sm:col-span-2 bg-stone-50/50 p-4 rounded-xl border border-stone-200/80">
@@ -1164,7 +1394,39 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                         placeholder="https://script.google.com/macros/s/..." 
                                     />
                                 </div>
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-stone-100">
+                                    <p className="text-[10px] text-stone-500 font-medium">
+                                        💡 填入 Cloudinary 凭证后，应用将自动将所有上传的 Logo 与图片同步存储至 Cloudinary 云端。
+                                    </p>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleTestCloudinary}
+                                        disabled={uploadingTarget === 'test_cloudinary'}
+                                        className="px-3 py-1.5 bg-[#8B0000]/10 hover:bg-[#8B0000] text-[#8B0000] hover:text-white border border-[#8B0000]/20 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shrink-0 active:scale-95"
+                                    >
+                                        {uploadingTarget === 'test_cloudinary' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                        <span>测试 Cloudinary 上传通道</span>
+                                    </button>
+                                </div>
                             </div>
+                        </div>
+
+                        {/* A2. BRANDING & IMAGE MANAGEMENT */}
+                        <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-stone-100">
+                                <h4 className="text-xs font-black text-stone-800 uppercase tracking-widest flex items-center gap-2">
+                                    <ImageIcon size={14} className="text-[#8B0000]"/>
+                                    <span>应用视觉与品牌 Logo 图像管理 (App Branding & Logos)</span>
+                                </h4>
+                                <span className="text-[10px] font-bold text-stone-400">
+                                    {storeConfig.cloudinaryCloudName ? `☁️ Cloudinary 已就绪 (${storeConfig.cloudinaryCloudName})` : '💡 未设置 Cloudinary (自动压缩本地为 Base64 图源)'}
+                                </span>
+                            </div>
+
+                            {renderImageUploadBox('1. 系统主 Logo (Main App Logo)', '用于登录界面、应用引导启动动画及主菜单顶部', 'logoUrl', storeConfig.logoUrl)}
+                            {renderImageUploadBox('2. 顶栏 Header 品牌 Logo (Header Logo)', '用于全屏大屏模式下顶部 Navigation Header 展示', 'headerLogoUrl', storeConfig.headerLogoUrl)}
+                            {renderImageUploadBox('3. PWA / 手机桌面应用图标 (App Icon)', '用于手机 Safari/Chrome 快捷图标与 PWA 安装提示框', 'appIconUrl', storeConfig.appIconUrl)}
+                            {renderImageUploadBox('4. 打印机热敏小票 / 报表 Logo (Receipt Logo)', '用于结账小票打印顶部与 PDF 账单生成', 'receiptLogoUrl', storeConfig.receiptLogoUrl)}
                         </div>
 
                         {/* B. DATABASE SETTINGS (Supabase / Firestore) */}

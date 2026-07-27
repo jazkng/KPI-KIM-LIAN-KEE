@@ -14,7 +14,7 @@ import {
     XCircle,
     Zap,
 } from 'lucide-react';
-import { Employee, KitchenAlert, KitchenAlertStatus, KitchenAlertType, MenuItem } from '../../../types';
+import { Employee, KitchenAlert, KitchenAlertStatus, KitchenAlertType, MenuItem, AppLanguage } from '../../../types';
 import { INITIAL_MENU_ITEMS } from '../../../constants/menu';
 import { DataManager } from '../../../utils/dataManager';
 import {
@@ -24,7 +24,7 @@ import {
 
 interface KitchenAlertModuleProps {
     employee: Employee;
-    lang: 'zh' | 'my';
+    lang: AppLanguage | string;
 }
 
 type ViewMode = 'CREATE' | 'MY_ALERTS';
@@ -45,7 +45,7 @@ const ALERT_TYPE_OPTIONS: Array<{
     { value: 'NOTICE', zh: '特别注意 / Notice', my: 'အထူးသတိ / Notice', icon: BellRing },
 ];
 
-const formatElapsed = (createdAt: string, nowMs: number, lang: 'zh' | 'my'): string => {
+const formatElapsed = (createdAt: string, nowMs: number, lang: string): string => {
     const createdMs = new Date(createdAt).getTime();
     if (!Number.isFinite(createdMs)) return '--';
     const minutes = Math.max(0, Math.floor((nowMs - createdMs) / 60000));
@@ -53,7 +53,7 @@ const formatElapsed = (createdAt: string, nowMs: number, lang: 'zh' | 'my'): str
     return lang === 'my' ? `${minutes} မိနစ်` : `${minutes} 分钟`;
 };
 
-const getStatusMeta = (status: KitchenAlertStatus, lang: 'zh' | 'my') => {
+const getStatusMeta = (status: KitchenAlertStatus, lang: string) => {
     switch (status) {
         case 'NEW':
             return {

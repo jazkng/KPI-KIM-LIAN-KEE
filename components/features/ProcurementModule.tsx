@@ -1779,7 +1779,18 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 {/* === HEADER === */}
                 <div className="bg-[#1A1A1A] px-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700] shadow-md z-20"
                      style={{ paddingTop: 'max(env(safe-area-inset-top, 12px), 12px)', paddingBottom: '12px' }}>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        {onClose && (
+                            <button 
+                                onClick={onClose} 
+                                className="mr-0.5 p-1.5 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center text-white"
+                                aria-label="Back"
+                                id="procurement-back-btn"
+                                style={{ minWidth: '40px', minHeight: '40px' }}
+                            >
+                                <ArrowLeft size={18} className="stroke-[2.5]" />
+                            </button>
+                        )}
                         <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg"><ShoppingCart size={20}/></div>
                         <div>
                             <h3 className="font-serif font-black text-lg tracking-wide">智能采购</h3>

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
     FileText, Plus, Search, X, Save, Trash2, Calendar, Download, 
     Sparkles, RefreshCw, Printer, AlertCircle, CheckCircle2, User, Phone, 
-    FileSignature, Coins, Receipt, HelpCircle, ArrowLeftRight, HardDrive,
+    FileSignature, Coins, Receipt, HelpCircle, ArrowLeft, ArrowLeftRight, HardDrive,
     ExternalLink, FileCheck, Loader2, ChevronDown, SlidersHorizontal
 } from 'lucide-react';
 import { SelfIssuedVoucher, SelfVoucherItem } from '../../types';
@@ -1117,16 +1117,24 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
                 
                 {/* Compact mobile-first header */}
                 <header className="shrink-0 bg-[#FFFFFF] border-b border-[#E5E7EB] safe-area-top">
-                    <div className="px-4 pb-3 flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-[#FFD200] text-[#111111] flex items-center justify-center shadow-[0_6px_18px_rgba(255,210,0,0.28)] shrink-0">
-                            <Receipt size={22} strokeWidth={2.2} />
+                    <div className="px-3 md:px-4 pt-2 pb-3 flex items-center gap-2.5">
+                        <button
+                            onClick={onClose || (() => window.history.back())}
+                            style={{ touchAction: 'manipulation' }}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-[#F6F7FB] hover:bg-[#E5E7EB] text-[#111111] rounded-2xl transition-all active:scale-95 shrink-0 border border-[#E5E7EB]"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
+                        <div className="w-10 h-10 md:w-11 md:h-11 rounded-2xl bg-[#FFD200] text-[#111111] flex items-center justify-center shadow-[0_6px_18px_rgba(255,210,0,0.28)] shrink-0">
+                            <Receipt size={20} strokeWidth={2.2} />
                         </div>
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                                <h1 className="text-[17px] md:text-xl font-black tracking-tight text-[#111111] truncate">自制账单</h1>
-                                <span className="px-2 py-1 rounded-full bg-[#FFF8D6] text-[#7A6100] text-[9px] font-extrabold whitespace-nowrap">A5 凭单</span>
+                                <h1 className="text-[16px] md:text-xl font-black tracking-tight text-[#111111] truncate">自制账单</h1>
+                                <span className="px-2 py-0.5 rounded-full bg-[#FFF8D6] text-[#7A6100] text-[9px] font-extrabold whitespace-nowrap hidden sm:inline-block">A5 凭单</span>
                             </div>
-                            <p className="text-[11px] text-[#6B7280] mt-0.5 truncate">补录无原始单据的支出与对账记录</p>
+                            <p className="text-[10px] md:text-[11px] text-[#6B7280] truncate">补录无原始单据的支出与对账记录</p>
                         </div>
                         <button aria-label="关闭" onClick={onClose} className="w-11 h-11 flex items-center justify-center text-[#4B5563] bg-[#F6F7FB] hover:bg-[#E5E7EB] rounded-2xl select-none transition-all active:scale-95 shrink-0">
                             <X size={20}/>

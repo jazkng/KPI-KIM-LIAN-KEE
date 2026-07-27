@@ -16,6 +16,7 @@ import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { SystemDialogProvider } from './components/ui/SystemDialog';
+import { NotificationCenter } from './components/ui/NotificationCenter';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
 // 与 ManagerDashboard 的 initialTab prop 类型保持一致
@@ -78,6 +79,20 @@ export default function App() {
         return params.get('portal') === 'boss' ? 'BOSS' : 'STAFF';
     });
 
+    const [isBossModalOpen, setIsBossModalOpen] = useState(false);
+
+    useEffect(() => {
+        const checkBossModal = () => {
+            if (typeof window !== 'undefined') {
+                const modal = (window as any).bossActiveModal;
+                setIsBossModalOpen(!!modal && modal !== 'NONE');
+            }
+        };
+        checkBossModal();
+        window.addEventListener('boss-modal-change', checkBossModal);
+        return () => window.removeEventListener('boss-modal-change', checkBossModal);
+    }, []);
+
     const [isTVMode,        setIsTVMode]        = useState(() => {
         const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
         return params.get('mode') === 'tv';
@@ -119,6 +134,16 @@ export default function App() {
     // App 启动时只有两个稳定状态: BOOTING 和 READY
     const [bootStatus,      setBootStatus]      = useState<'BOOTING' | 'READY'>('BOOTING');
     const [bossActiveModal, setBossActiveModal] = useState<string>('NONE');
+    const [customLogo,      setCustomLogo]      = useState<string>('');
+    const [headerLogo,      setHeaderLogo]      = useState<string>('');
+
+    // Load store config branding logos
+    useEffect(() => {
+        DataManager.getConfig().then(cfg => {
+            if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
+            if (cfg?.headerLogoUrl) setHeaderLogo(cfg.headerLogoUrl);
+        }).catch(err => console.error('Failed to load branding logos:', err));
+    }, [isConfigOpen]);
 
     // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
     const checkVersion = useCallback(() => {
@@ -141,9 +166,8 @@ export default function App() {
     // Cloud session synchronization and status checking callback
     const syncEmployeePermissions = useCallback((employeeId: string, currentEmpLocal: Employee) => {
         if (!employeeId) return;
-        DataManager.getEmployees()
-            .then(employees => {
-                const fresh = employees.find(e => e.id === employeeId);
+        DataManager.getEmployeeById(employeeId)
+            .then(fresh => {
                 if (!fresh) {
                     console.log('⚠️ Employee account not found. Logging out...');
                     handleLogout();
@@ -187,7 +211,7 @@ export default function App() {
         }
         checkVersion();
         setBootStatus('READY');
-    }, [checkVersion, syncEmployeePermissions, currentUser, currentEmployee]);
+    }, [checkVersion, syncEmployeePermissions, currentUser, currentEmployee?.id]);
 
     // Active Window/Tab Focus sync trigger
     useEffect(() => {
@@ -265,7 +289,7 @@ export default function App() {
                     {/* 黄色品牌 Logo 容器 */}
                     <div className="w-20 h-20 bg-[#FFD200] rounded-full p-1 shadow-[0_4px_14px_0_rgba(255,210,0,0.3)] flex items-center justify-center overflow-hidden shrink-0 animate-pulse">
                         <img
-                            src="https://i.imgur.com/ex06Jva.png"
+                            src={customLogo || "https://i.imgur.com/ex06Jva.png"}
                             alt="Logo"
                             className="w-full h-full object-contain"
                         />
@@ -286,8 +310,6 @@ export default function App() {
         if (employee) {
             setCurrentEmployee(employee);
             safeStorage.set('kepong_erp_session_employee', JSON.stringify(employee));
-            // Trigger background permission and status sync immediately
-            syncEmployeePermissions(employee.id, employee);
         } else {
             setCurrentEmployee(null);
             safeStorage.remove('kepong_erp_session_employee');
@@ -312,6 +334,13 @@ export default function App() {
     const handleCloseWhatsNew = () => {
         setShowWhatsNew(false);
         safeStorage.set('klk_last_seen_version', APP_VERSION);
+    };
+
+    const openOperationalLogFromNotification = (logId: string) => {
+        try {
+            localStorage.setItem('klk_notification_log_target', logId);
+        } catch {}
+        setBossTab('LOGBOOK_VIEW');
     };
 
     // Fix #9: 完整处理所有角色，default 给出明确的 fallback 而非空字符串
@@ -356,7 +385,7 @@ export default function App() {
                             <div className="w-10 h-10 md:w-16 md:h-16 bg-[#8B0000] rounded-full p-1 shadow-lg
                                             border border-[#FFD700] flex items-center justify-center overflow-hidden shrink-0">
                                 <img
-                                    src="https://i.imgur.com/ex06Jva.png"
+                                    src={headerLogo || customLogo || "https://i.imgur.com/ex06Jva.png"}
                                     alt="Logo"
                                     className="w-full h-full object-contain hover:scale-110 transition-transform"
                                 />
@@ -364,7 +393,13 @@ export default function App() {
                             <div className="flex flex-col justify-center">
                                 <h1 className="font-black text-sm md:text-2xl tracking-widest text-[#FFD700] font-serif drop-shadow-md leading-tight">
                                     御膳智控{' '}
-                                    <span className="text-[9px] md:text-sm opacity-80 font-sans tracking-normal font-normal text-white">ERP</span>
+                                    <span 
+                                        onClick={() => setShowWhatsNew(true)}
+                                        className="text-[9px] md:text-sm opacity-80 font-sans tracking-normal font-normal text-white cursor-pointer hover:text-[#FFD700] hover:underline transition-all"
+                                        title="查看更新日志 (Changelog)"
+                                    >
+                                        ERP v{APP_VERSION}
+                                    </span>
                                 </h1>
                                 <span className="text-[9px] md:text-xs text-white/80 font-bold tracking-widest uppercase block truncate max-w-[120px] md:max-w-none">
                                     {getRoleName(currentUser)}
@@ -451,6 +486,14 @@ export default function App() {
                 {/* Boss */}
                 {currentUser === PortalRole.BOSS && (
                     <>
+                        {currentEmployee && !bossTab && !isBossModalOpen && !isConfigOpen && !isAiOpen && (
+                            <NotificationCenter
+                                employee={currentEmployee}
+                                onOpenLog={openOperationalLogFromNotification}
+                                variant="floating"
+                                className="md:top-[6.2rem]"
+                            />
+                        )}
                         {!bossTab ? (
                             bossHomeView === 'PRIORITY' ? (
                                 <BossPriorityDashboard
@@ -574,8 +617,12 @@ export default function App() {
                             ) : (
                                 <>
                                     {/* 员工及管理层简化底栏：既保证系统一致性，又避开误操作 */}
-                                    <div className="text-[10px] font-bold tracking-widest text-stone-600 uppercase font-serif py-1 px-1 truncate flex-grow text-center">
-                                        👑 御膳智慧餐饮治理系统
+                                    <div 
+                                        onClick={() => setShowWhatsNew(true)}
+                                        className="text-[10px] font-bold tracking-widest text-stone-600 uppercase font-serif py-1 px-1 truncate flex-grow text-center cursor-pointer hover:text-amber-600 transition-colors"
+                                        title="查看更新日志 (Changelog)"
+                                    >
+                                        👑 御膳智慧餐饮治理系统 v{APP_VERSION}
                                     </div>
                                     <button
                                         onClick={handleLogout}

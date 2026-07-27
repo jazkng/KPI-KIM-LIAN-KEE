@@ -17,39 +17,48 @@ export const TreasuryQuickActions: React.FC<TreasuryQuickActionsProps> = ({
       <button
         onClick={onTransferClick}
         type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5E7EB] bg-white text-gray-800 hover:bg-gray-50 active:scale-[0.98] transition-all touch-manipulation select-none shadow-sm"
+        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-[#FFD200] active:scale-[0.96] transition-all touch-pan-y shadow-xs"
       >
-        <div className="p-1.5 bg-[#FFD200]/10 rounded-xl text-[#111111]">
+        <div className="p-2 bg-[#FFD200]/20 rounded-xl text-[#111111]">
           <ArrowRightLeft size={18} strokeWidth={2.5} />
         </div>
-        <span className="text-xs font-bold text-[#111111]">
-          内部转账
+        <span className="text-xs font-black text-[#111111]">
+          内部划转
+        </span>
+        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
+          Transfer
         </span>
       </button>
 
       <button
         onClick={onIncomeClick}
         type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5E7EB] bg-white text-gray-800 hover:bg-gray-50 active:scale-[0.98] transition-all touch-manipulation select-none shadow-sm"
+        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-emerald-400 active:scale-[0.96] transition-all touch-pan-y shadow-xs"
       >
-        <div className="p-1.5 bg-green-50 rounded-xl text-green-600">
+        <div className="p-2 bg-emerald-100/70 rounded-xl text-emerald-700">
           <PlusCircle size={18} strokeWidth={2.5} />
         </div>
-        <span className="text-xs font-bold text-[#111111]">
-          记录收入
+        <span className="text-xs font-black text-[#111111]">
+          额外收入
+        </span>
+        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
+          Income
         </span>
       </button>
 
       <button
         onClick={onHistoryClick}
         type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5E7EB] bg-white text-gray-800 hover:bg-gray-50 active:scale-[0.98] transition-all touch-manipulation select-none shadow-sm"
+        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-indigo-400 active:scale-[0.96] transition-all touch-pan-y shadow-xs"
       >
-        <div className="p-1.5 bg-purple-50 rounded-xl text-purple-600">
+        <div className="p-2 bg-indigo-100/70 rounded-xl text-indigo-700">
           <History size={18} strokeWidth={2.5} />
         </div>
-        <span className="text-xs font-bold text-[#111111]">
-          历史账本
+        <span className="text-xs font-black text-[#111111]">
+          调拨历史
+        </span>
+        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
+          History
         </span>
       </button>
     </div>

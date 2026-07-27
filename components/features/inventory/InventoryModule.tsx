@@ -5,7 +5,7 @@ import {
     Filter, Calendar, CalendarDays, Box, ArrowRightLeft, Minus, DollarSign, History, Clock, User, Scale, Loader2, Check, Flame, Send, ClipboardList, CheckSquare, PlayCircle, RefreshCw,
     FileDown, Printer, Square, UserCheck, PenLine, ChevronRight, Users, XCircle, AlertOctagon, RotateCcw, CalendarClock, ArrowLeft, HelpCircle, Lock
 } from 'lucide-react';
-import { StockItem, Employee, AppModule, Supplier, UomOption, InventoryLog, InventoryLogItem, InventoryTask, InventoryPermission, InventoryScope, PortalRole } from '../../../types';
+import { StockItem, Employee, AppModule, Supplier, UomOption, InventoryLog, InventoryLogItem, InventoryTask, InventoryPermission, InventoryScope, PortalRole, AppLanguage } from '../../../types';
 import { 
     CATEGORY_SECTIONS, getCategoryLabel, getCategoryColor, 
     getToday, getYesterday, daysBetween, 
@@ -57,7 +57,7 @@ interface InventoryModuleProps {
     initialMode?: 'CHECK' | 'MASTER';
     initialSearchTerm?: string;
     isManagementStaff?: boolean;
-    lang?: 'zh' | 'my';
+    lang?: AppLanguage | string;
     onClose?: () => void;
 }
 
@@ -518,8 +518,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
     const activeTasks = useMemo(() => taskList.filter(task =>
         task.status === 'PENDING' &&
-        task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category)))
-    ), [taskList, allowedScopeKey]);
+        (task.assigneeId === employee?.id || task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))))
+    ), [taskList, allowedScopeKey, employee?.id]);
 
     const assignedItemMap = useMemo(() => {
         const map: Record<string, { assigneeName: string, taskId: string }[]> = {};
@@ -596,23 +596,21 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         const today = getToday();
         return activeTasks.filter(task => {
             if (task.assigneeId !== employee.id) return false;
-            if (!task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category)))) return false;
             if (todayCompletions[task.id]) return false;
             const freq = (task as any).checkFrequency || 1;
             const last = completionsByTask[task.id];
             if (!last) return true;
             return daysBetween(last.date, today) >= freq;
         });
-    }, [activeTasks, employee, todayCompletions, completionsByTask, allowedScopeKey]);
+    }, [activeTasks, employee, todayCompletions, completionsByTask]);
 
     const myDoneToday = useMemo(() => {
         if (!employee) return [];
         return activeTasks.filter(t =>
             t.assigneeId === employee.id &&
-            t.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))) &&
             !!todayCompletions[t.id]
         );
-    }, [activeTasks, employee, todayCompletions, allowedScopeKey]);
+    }, [activeTasks, employee, todayCompletions]);
 
     useEffect(() => {
         if (allowedScopes.length === 0) {
@@ -749,7 +747,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             else if (taskDateFilter === 'ALL') { sd = '2020-01-01'; }
             const data = await DataManager.getTaskCompletionsByRange(sd, ed) as any as TaskCompletion[];
             const allowedTaskIds = new Set(taskList
-                .filter(task => task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))))
+                .filter(task => task.assigneeId === employee?.id || task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))))
                 .map(task => task.id));
             setCompletionLog(data.filter(completion => allowedTaskIds.has(completion.taskId)));
         } catch (e) { console.error(e); }
@@ -798,7 +796,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             alert('你没有这个库存区域的权限。');
             return;
         }
-        if (taskRef && !taskRef.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category)))) {
+        if (taskRef && !(taskRef.assigneeId === employee?.id || taskRef.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))))) {
             alert('这个任务包含你无权处理的库存区域，请联系管理层调整任务。');
             return;
         }
@@ -1244,7 +1242,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     // 🌟 修复：执行任务时加载该任务跨越的所有分类，并动态剔除已被删除的幽灵物品 🌟
     const startTaskExecution = async (task: InventoryTask) => {
         if (!canExecuteStocktake) return alert('你没有执行盘点的权限。');
-        if (!task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category)))) {
+        if (!(task.assigneeId === employee?.id || task.items.every(item => allowedScopes.includes(getInventoryScopeForCategory(item.category))))) {
             alert('这个任务包含你无权处理的库存区域，请联系管理层调整任务。');
             return;
         }
@@ -2117,7 +2115,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 </div>
             )}
 
-            {!myTask && (hasNoInventoryAccess || allowedScopes.length === 0) && (
+            {!myTask && (hasNoInventoryAccess || (!isRestrictedView && allowedScopes.length === 0)) && (
                 <div className="mx-auto mt-8 w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 text-center shadow-sm">
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
                         <Lock size={26}/>
@@ -2129,7 +2127,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 </div>
             )}
 
-            {!myTask && !hasNoInventoryAccess && allowedScopes.length > 0 && (
+            {!myTask && !hasNoInventoryAccess && (isRestrictedView || allowedScopes.length > 0) && (
             <div className="space-y-4">
                 
                 {mode === 'CHECK' && (

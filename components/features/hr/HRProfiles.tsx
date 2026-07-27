@@ -1415,7 +1415,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <div className="grid grid-cols-2 gap-2"><InputField label="身高 (cm)" type="number" value={form.height} onChange={(e: any) => setForm({...form, height: parseInt(e.target.value)})} placeholder="cm" isEditing={isEditing} /><InputField label="体重 (kg)" type="number" value={form.weight} onChange={(e: any) => setForm({...form, weight: parseInt(e.target.value)})} placeholder="kg" isEditing={isEditing} /></div>
                                             <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
                                             <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
-                                            <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英文 (ZH / EN)', value:'zh_en'}, {label:'缅甸文 (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
+                                            <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-gray-50"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
                                     </div>
@@ -1649,11 +1649,35 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             
             {/* Image Viewer */}
             {viewImage && (
-                <div className="fixed inset-0 bg-black/95 z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setViewImage(null)}>
-                    <button className="absolute top-4 right-4 text-white/50 hover:text-white p-2" onClick={() => setViewImage(null)}>
-                        <X size={32}/>
-                    </button>
-                    <img src={viewImage} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()}/>
+                <div 
+                    className="fixed inset-0 bg-black/95 z-[300] flex flex-col items-center justify-between p-4 sm:p-6 animate-in fade-in duration-200 select-none cursor-pointer" 
+                    style={{
+                        paddingTop: 'max(env(safe-area-inset-top, 16px), 16px)',
+                        paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
+                    }}
+                    onClick={() => setViewImage(null)}
+                >
+                    <div className="w-full max-w-4xl flex items-center justify-between z-10 shrink-0 py-1">
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setViewImage(null); }}
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 text-sm font-bold cursor-pointer"
+                        >
+                            <ArrowLeft size={20} className="stroke-[2.5]" />
+                            <span>返回 (Back)</span>
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setViewImage(null); }}
+                            className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 flex items-center justify-center cursor-pointer"
+                        >
+                            <X size={22} className="stroke-[2.5]"/>
+                        </button>
+                    </div>
+                    <div className="flex-1 w-full max-w-4xl flex items-center justify-center my-2 overflow-hidden">
+                        <img src={viewImage} className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10" onClick={() => setViewImage(null)}/>
+                    </div>
+                    <p className="text-xs text-gray-400 font-semibold tracking-wide shrink-0">点击屏幕任意位置或按钮即可返回 (Tap anywhere to close)</p>
                 </div>
             )}
 
@@ -1906,7 +1930,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Nationality</span><span className="font-bold text-xs">{form.nationality || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Gender</span><span className="font-bold text-xs">{form.gender || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Shirt Size</span><span className="font-bold text-xs">{form.shirtSize || '-'}</span></div>
-                                <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Preferred Lang</span><span className="font-bold text-xs">{form.preferredLanguage === 'my' ? '缅甸文优先 (Burmese)' : '中英文混合 (Chinese/English)'}</span></div>
+                                <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Preferred Lang</span><span className="font-bold text-xs">{form.preferredLanguage === 'my' ? 'မြန်မာ (Burmese)' : form.preferredLanguage === 'en' ? 'English Only' : '中英双语 (ZH / EN)'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Tenure</span><span className="font-bold text-xs">{getTenure(form.joinDate || '')}</span></div>
                                 <div className="col-span-3"><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Address</span><span className="font-bold text-xs">{form.address || '-'}</span></div>
                             </div>

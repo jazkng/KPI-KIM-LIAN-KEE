@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShieldCheck, Plus, Search, X, Save, Trash2, Calendar, Link as LinkIcon, ExternalLink, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Plus, Search, X, Save, Trash2, Calendar, Link as LinkIcon, ExternalLink, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { WarrantyRecord } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -77,8 +77,16 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                 
                 {/* Header */}
                 <div className="bg-[#1A1A1A] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-[#FFD700] text-black p-2.5 rounded-xl shadow-lg"><ShieldCheck size={24}/></div>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={onClose}
+                            style={{ touchAction: 'manipulation' }}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
+                        <div className="bg-[#FFD700] text-black p-2.5 rounded-xl shadow-lg shrink-0"><ShieldCheck size={24}/></div>
                         <div>
                             <h3 className="font-serif font-black text-xl tracking-wide">保修记录管理</h3>
                             <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">WARRANTY TRACKER</p>

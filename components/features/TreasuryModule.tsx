@@ -129,7 +129,7 @@ const GroupedLedgerItem = ({ group }: { group: any }) => {
       {/* --- MOBILE COMPACT VIEW (md:hidden) --- */}
       <div
         onClick={() => !isSingle && setIsExpanded(!isExpanded)}
-        className="p-2.5 flex md:hidden items-center justify-between gap-3 active:bg-gray-100 transition-colors cursor-pointer select-none"
+        className="p-2.5 flex md:hidden items-center justify-between gap-3 active:bg-gray-100 transition-colors cursor-pointer touch-pan-y"
       >
         <div className="min-w-0 flex-1 flex items-start gap-2">
           {/* Status Dot / Flag */}

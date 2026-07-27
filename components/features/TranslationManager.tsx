@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Save, Search, Languages, CheckCircle2, Loader2, Package, Flame, Coffee, Box, ChevronDown, ChevronRight, Sparkles, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { X, Save, Search, Languages, CheckCircle2, Loader2, Package, Flame, Coffee, Box, ChevronDown, ChevronRight, Sparkles, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { StockItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { UI_TRANSLATION_KEYS } from '../../constants/translationKeys';
@@ -192,6 +192,13 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
         // Limit to 20 items to prevent high usage/costs
         const itemsToProcess = missingList.slice(0, 20);
         const chineseTexts = itemsToProcess.map(x => x.chinese);
+        const contentType = activeSection === 'ITEMS'
+            ? 'inventory_item'
+            : activeSection === 'CATEGORIES'
+                ? 'inventory_category'
+                : activeSection === 'UNITS'
+                    ? 'inventory_unit'
+                    : 'ui_label';
 
         setTranslating(true);
         try {
@@ -200,6 +207,11 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     texts: chineseTexts,
+                    targetLang: 'my',
+                    contentType,
+                    audience: activeSection === 'UI' ? 'general_staff' : 'kitchen_staff',
+                    tone: 'plain',
+                    maxLength: activeSection === 'UI' ? 36 : 64,
                     context: `${activeSection} names for a Chinese-English Restaurant ERP Inventory system.`
                 })
             });
@@ -329,38 +341,53 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
             <div className="bg-[#F5F7FA] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* HEADER */}
-                <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] safe-area-top">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-[#FFD200] text-black p-2.5 rounded-xl shadow-lg"><Languages size={22}/></div>
-                        <div>
-                            <h3 className="font-sans font-black text-lg tracking-wide flex items-center gap-2">
-                                缅甸语翻译中心 <span className="bg-[#FFD200] text-black text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">Myanmar Translation Center</span>
+                <div className="bg-[#111111] px-3 py-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] safe-area-top">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <button 
+                            onClick={onClose}
+                            style={{ touchAction: 'manipulation' }}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
+                        <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg shrink-0">
+                            <Languages size={20} className="md:w-5 md:h-5"/>
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="font-sans font-black text-sm md:text-lg tracking-wide flex items-center gap-1.5 truncate">
+                                <span>缅甸语翻译中心</span>
+                                <span className="hidden lg:inline-block bg-[#FFD200] text-black text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                    Myanmar Translation Center
+                                </span>
                             </h3>
-                            <p className="text-[10px] text-gray-400 font-mono tracking-widest mt-0.5">ADMIN SECURITY LEVEL • AI-ASSISTED MULTI-LAYER INTEGRATION</p>
+                            <p className="text-[9px] md:text-[10px] text-gray-400 font-mono tracking-widest truncate">
+                                AI-ASSISTED MULTI-LAYER INTEGRATION
+                            </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="text-right mr-3 hidden sm:block">
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right mr-2 hidden md:block">
                             <div className="text-[10px] text-gray-400">已翻译覆盖率</div>
-                            <div className="text-sm font-mono font-black text-[#FFD200]">
+                            <div className="text-xs md:text-sm font-mono font-black text-[#FFD200]">
                                 {translatedCount} / {totalItems} ({Math.round((translatedCount / (totalItems || 1)) * 100)}%)
                             </div>
                         </div>
                         <button 
                             onClick={handleSave} 
                             disabled={saving}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${saved ? 'bg-green-600 text-white' : 'bg-[#FFD200] text-black hover:bg-yellow-400'}`}
+                            style={{ touchAction: 'manipulation' }}
+                            className={`flex items-center gap-1.5 px-3 py-2 md:px-4 md:py-2.5 min-h-[44px] rounded-xl font-bold text-xs transition-all active:scale-95 shrink-0 ${saved ? 'bg-green-600 text-white' : 'bg-[#FFD200] text-black hover:bg-yellow-400'}`}
                         >
-                            {saving ? <Loader2 size={14} className="animate-spin"/> : saved ? <CheckCircle2 size={14}/> : <Save size={14}/>}
-                            {saving ? '保存中' : saved ? '保存成功' : '部署保存'}
+                            {saving ? <Loader2 size={15} className="animate-spin"/> : saved ? <CheckCircle2 size={15}/> : <Save size={15}/>}
+                            <span className="whitespace-nowrap">{saving ? '保存中' : saved ? '已保存' : '部署保存'}</span>
                         </button>
-                        <button onClick={onClose} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/10 rounded-full select-none transition-colors"><X size={20}/></button>
                     </div>
                 </div>
 
                 {/* MODULE TABS & GENERAL ACTIONS */}
-                <div className="bg-white border-b border-gray-200 p-2 flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center shrink-0">
-                    <div className="flex gap-1 overflow-x-auto scrollbar-hide flex-grow">
+                <div className="bg-white border-b border-gray-200 p-2 md:p-2.5 flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center shrink-0">
+                    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide shrink-0 pb-1 sm:pb-0">
                         {[
                             { key: 'ITEMS', label: '品项翻译', sub: `${translatedCount}/${totalItems}` },
                             { key: 'CATEGORIES', label: '分类翻译', sub: `${Object.keys(categoryTranslations).filter(k => categoryTranslations[k]).length}` },
@@ -370,7 +397,8 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                             <button 
                                 key={tab.key}
                                 onClick={() => setActiveSection(tab.key as any)} 
-                                className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-black transition-all whitespace-nowrap ${activeSection === tab.key ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                                style={{ touchAction: 'manipulation' }}
+                                className={`flex-1 min-h-[40px] py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap shrink-0 ${activeSection === tab.key ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                             >
                                 {tab.label} <span className="text-[10px] opacity-60 font-mono ml-0.5">({tab.sub})</span>
                             </button>
@@ -378,20 +406,21 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                     </div>
 
                     {/* AI ASSISTANT PANEL */}
-                    <div className="flex items-center gap-1.5 shrink-0 pl-1">
+                    <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0 pt-1 sm:pt-0">
                         <button
                             onClick={handleAiTranslate}
                             disabled={translating}
-                            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95"
+                            style={{ touchAction: 'manipulation' }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
                         >
                             {translating ? (
                                 <>
-                                    <Loader2 size={13} className="animate-spin" />
+                                    <Loader2 size={14} className="animate-spin" />
                                     <span>AI 翻译中...</span>
                                 </>
                             ) : (
                                 <>
-                                    <Sparkles size={13} className="text-yellow-300 animate-pulse" />
+                                    <Sparkles size={14} className="text-yellow-300 animate-pulse" />
                                     <span>AI 翻译 20 项</span>
                                 </>
                             )}
@@ -399,9 +428,10 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
 
                         <button
                             onClick={() => setShowMissingOnly(!showMissingOnly)}
-                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${showMissingOnly ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                            style={{ touchAction: 'manipulation' }}
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold border transition-all ${showMissingOnly ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
                         >
-                            {showMissingOnly ? <EyeOff size={13} /> : <Eye size={13} />}
+                            {showMissingOnly ? <EyeOff size={14} /> : <Eye size={14} />}
                             <span>{showMissingOnly ? '只看未翻译' : '查看全部'}</span>
                         </button>
                     </div>
@@ -431,7 +461,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                     <input 
                                         type="text" placeholder="搜索品项名称、ID..." value={searchTerm} 
                                         onChange={e => setSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] transition-all shadow-sm"
+                                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm md:text-xs font-bold outline-none focus:border-[#FFD200] transition-all shadow-sm"
                                     />
                                 </div>
                             </div>
@@ -482,7 +512,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                                                         placeholder="ဘာသာပြန် ရိုက်ထည့်ပါ (输入缅甸文翻译)..."
                                                                         value={currentVal}
                                                                         onChange={e => setItemTranslations(prev => ({...prev, [item.id]: e.target.value}))}
-                                                                        className={`w-full p-2.5 pr-14 rounded-lg text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 text-gray-800 focus:border-[#FFD200]'}`}
+                                                                        className={`w-full p-2.5 pr-14 rounded-lg text-sm md:text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 text-gray-800 focus:border-[#FFD200]'}`}
                                                                     />
                                                                     {isDraft && (
                                                                         <span className="absolute right-2 top-2 bg-green-200 text-green-800 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">草稿</span>
@@ -536,7 +566,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                                                 placeholder="ဘာသာပြန်..."
                                                                 value={currentVal}
                                                                 onChange={e => setCategoryTranslations(prev => ({...prev, [cat.id]: e.target.value}))}
-                                                                className={`w-full p-2.5 pr-14 rounded-lg text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
+                                                                className={`w-full p-2.5 pr-14 rounded-lg text-sm md:text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
                                                             />
                                                             {isDraft && (
                                                                 <span className="absolute right-2 top-2 bg-green-200 text-green-800 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">草稿</span>
@@ -572,7 +602,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                                     placeholder="ဘာသာပြန်..."
                                                     value={currentVal}
                                                     onChange={e => setUnitTranslations(prev => ({...prev, [unit]: e.target.value}))}
-                                                    className={`w-full p-2.5 pr-14 rounded-lg text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
+                                                    className={`w-full p-2.5 pr-14 rounded-lg text-sm md:text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
                                                 />
                                                 {isDraft && (
                                                     <span className="absolute right-2 top-2 bg-green-200 text-green-800 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">草稿</span>
@@ -605,7 +635,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                                     placeholder="ဘာသာပြန်..."
                                                     value={currentVal}
                                                     onChange={e => setUiTranslations(prev => ({...prev, [label]: e.target.value}))}
-                                                    className={`w-full p-2.5 pr-14 rounded-lg text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
+                                                    className={`w-full p-2.5 pr-14 rounded-lg text-sm md:text-xs font-bold outline-none border transition-all ${isMissing ? 'bg-gray-50 border-gray-200 focus:border-[#FFD200]' : isDraft ? 'bg-green-50 border-green-300 text-green-900 focus:border-green-500' : 'bg-white border-gray-200 focus:border-[#FFD200]'}`}
                                                 />
                                                 {isDraft && (
                                                     <span className="absolute right-2 top-2 bg-green-200 text-green-800 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">草稿</span>
@@ -620,31 +650,33 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                 </div>
 
                 {/* BOTTOM FLOATING CONTROL BAR */}
-                <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-4 px-6 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
-                    <div className="text-xs text-gray-500 text-center sm:text-left">
-                        <span className="inline-block mr-2 text-gray-400">系统盘点:</span>
+                <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl z-30 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                    <div className="text-[11px] md:text-xs text-gray-500 text-center sm:text-left leading-tight">
+                        <span className="inline-block mr-1 text-gray-400 font-medium">系统盘点:</span>
                         品项 <strong className="text-[#111111] font-mono">{translatedCount} / {totalItems}</strong> 已译 •
                         分类 <strong className="text-[#111111] font-mono">{Object.values(categoryTranslations).filter(v => v?.trim()).length}</strong> •
                         单位 <strong className="text-[#111111] font-mono">{Object.values(unitTranslations).filter(v => v?.trim()).length}</strong> •
                         UI <strong className="text-[#111111] font-mono">{Object.values(uiTranslations).filter(v => v?.trim()).length}</strong>
                         {unsavedCount > 0 && (
-                            <div className="text-orange-600 font-bold mt-1 animate-pulse">
-                                ⚠️ 当前有 {unsavedCount} 个翻译发生了修改（待保存部署）
-                            </div>
+                            <span className="text-orange-600 font-bold ml-1.5 inline-block animate-pulse">
+                                (待保存修改 {unsavedCount})
+                            </span>
                         )}
                     </div>
                     
-                    <div className="flex gap-2 w-full sm:w-auto">
+                    <div className="flex gap-2 w-full sm:w-auto shrink-0">
                         <button
                             onClick={onClose}
-                            className="flex-1 sm:flex-initial px-5 py-2.5 border border-gray-300 hover:bg-gray-50 rounded-xl font-bold text-xs text-gray-700 active:scale-95 transition-all"
+                            style={{ touchAction: 'manipulation' }}
+                            className="flex-1 sm:flex-initial px-5 py-2.5 min-h-[44px] border border-gray-300 hover:bg-gray-50 rounded-xl font-bold text-xs text-gray-700 active:scale-95 transition-all"
                         >
                             关闭
                         </button>
                         <button 
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 bg-[#111111] text-[#FFD200] rounded-xl font-black text-xs shadow-lg hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+                            style={{ touchAction: 'manipulation' }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 min-h-[44px] bg-[#111111] text-[#FFD200] rounded-xl font-black text-xs shadow-lg hover:bg-black transition-all active:scale-95 disabled:opacity-50"
                         >
                             {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
                             <span>{saving ? '正在部署保存...' : `确认并保存当前更改 (${unsavedCount})`}</span>

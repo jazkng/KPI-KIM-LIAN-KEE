@@ -7,7 +7,7 @@ const STORE_ID = 'KEPONG';
 
 interface KitchenAlertNotifierProps {
     employee: Employee;
-    lang: 'zh' | 'my';
+    lang: string;
     disabled?: boolean;
     onOpen: () => void;
 }

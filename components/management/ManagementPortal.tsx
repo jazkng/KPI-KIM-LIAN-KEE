@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
     CheckCircle2, LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
 } from 'lucide-react';
-import { Employee, AppModule } from '../../types';
+import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
 import { ManagerDashboard } from '../AdminDashboard';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
 import { MODULE_DEFINITIONS } from '../constants';
@@ -11,6 +11,7 @@ import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
 import { mt, ManagementLang, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../constants/managementTranslations';
 import { DataManager } from '../../utils/dataManager';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
+import { NotificationCenter } from '../ui/NotificationCenter';
 
 interface ManagementPortalProps {
     employee: Employee;
@@ -18,27 +19,42 @@ interface ManagementPortalProps {
 }
 
 export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, onLogout }) => {
-    const [lang, setLang] = useState<ManagementLang>(employee.preferredLanguage === 'my' ? 'my' : 'zh');
+    const [lang, setLang] = useState<AppLanguage>(() => {
+        if (employee?.preferredLanguage) {
+            return normalizeLanguage(employee.preferredLanguage);
+        }
+        try {
+            const saved = localStorage.getItem('kepong_erp_session_employee');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.preferredLanguage) return normalizeLanguage(parsed.preferredLanguage);
+            }
+        } catch (e) {}
+        return 'zh_en';
+    });
     const [activeTabIdx, setActiveTabIdx] = useState<number>(0);
     const [activeModule, setActiveModule] = useState<AppModule | null>(null);
 
     // Keep state in sync when cloud session triggers a background update
     useEffect(() => {
-        if (employee) {
-            setLang(employee.preferredLanguage === 'my' ? 'my' : 'zh');
+        if (employee?.preferredLanguage) {
+            setLang(normalizeLanguage(employee.preferredLanguage));
         }
     }, [employee.preferredLanguage]);
 
-    const handleLanguageChange = async (newLang: ManagementLang) => {
+    const handleLanguageChange = async (newLang: AppLanguage) => {
         setLang(newLang);
         try {
-            const dbLangValue = newLang === 'zh' ? 'zh_en' : 'my';
-            await DataManager.updateEmployeePreferredLanguage(employee.id, dbLangValue);
-            console.log(`Preferred language updated in Cloud: ${dbLangValue}`);
+            await DataManager.updateEmployeePreferredLanguage(employee.id, newLang);
+            const savedEmp = localStorage.getItem('kepong_erp_session_employee');
+            if (savedEmp) {
+                const empObj = JSON.parse(savedEmp);
+                empObj.preferredLanguage = newLang;
+                localStorage.setItem('kepong_erp_session_employee', JSON.stringify(empObj));
+            }
+            console.log(`Preferred language updated in Cloud: ${newLang}`);
         } catch (err) {
             console.error('Failed to update language in Cloud:', err);
-            // Non-blocking fallback alert
-            alert(newLang === 'zh' ? '语言更新失败，请重试。' : 'ဘာသာစကားပြောင်းလဲမှု မအောင်မြင်ပါ။ ထပ်မံကြိုးစားပါ။');
         }
     };
 
@@ -96,6 +112,13 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                 ? `⚠️ ကန့်သတ်ချက်- လုပ်ဆောင်ချက် “${def?.label || modKey}” ကို စီမံခန့်ခွဲသူများအတွက် မဖွင့်ရသေးပါ။` 
                 : `⚠️ 功能受限：模块“${def?.label || modKey}”暂未对管理人员开放或未接入管理层控制台。`);
         }
+    };
+
+    const openOperationalLogFromNotification = (logId: string) => {
+        try {
+            localStorage.setItem('klk_notification_log_target', logId);
+        } catch {}
+        handleNavigateToModule('LOGBOOK');
     };
 
     // Filter and compile active/permitted tasks list based on allowedModules and department isolation
@@ -268,6 +291,13 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
 
     return (
         <div className="min-h-screen bg-[#F6F7FB] flex flex-col relative overflow-x-hidden select-none text-stone-850">
+            {!activeModule && activeTabIdx === 0 && (
+                <NotificationCenter
+                    employee={employee}
+                    onOpenLog={openOperationalLogFromNotification}
+                    variant="floating"
+                />
+            )}
             
             {/* If an operational sub-module is active, render the workspace full-screen, hiding tabs */}
             <AnimatePresence mode="wait">
@@ -525,19 +555,32 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                     <div className="p-5 rounded-2xl bg-white border border-stone-200 shadow-sm space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Languages size={16} className="text-[#650707]" />
-                                            <h4 className="font-extrabold text-stone-900 text-sm">首选语言 (Language)</h4>
+                                            <h4 className="font-extrabold text-stone-900 text-sm">
+                                                {lang === 'en' ? 'Preferred Language' : lang === 'my' ? 'ဘာသာစကား' : '首选语言 (Language)'}
+                                            </h4>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-3 gap-2">
                                             <button
-                                                onClick={() => handleLanguageChange('zh')}
+                                                onClick={() => handleLanguageChange('zh_en')}
                                                 className={`h-11 rounded-xl text-xs font-black border transition-all ${
-                                                    lang === 'zh'
+                                                    lang === 'zh_en'
                                                         ? 'bg-[#650707] text-white border-[#650707] shadow-sm'
                                                         : 'bg-[#FAF9F6] text-stone-500 border-stone-200 hover:bg-stone-50'
                                                 }`}
                                                 style={{ minHeight: '44px' }}
                                             >
-                                                中文 / English
+                                                中英双语
+                                            </button>
+                                            <button
+                                                onClick={() => handleLanguageChange('en')}
+                                                className={`h-11 rounded-xl text-xs font-black border transition-all ${
+                                                    lang === 'en'
+                                                        ? 'bg-[#650707] text-white border-[#650707] shadow-sm'
+                                                        : 'bg-[#FAF9F6] text-stone-500 border-stone-200 hover:bg-stone-50'
+                                                }`}
+                                                style={{ minHeight: '44px' }}
+                                            >
+                                                English
                                             </button>
                                             <button
                                                 onClick={() => handleLanguageChange('my')}
@@ -548,7 +591,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                                 }`}
                                                 style={{ minHeight: '44px' }}
                                             >
-                                                မြန်မာစာ (Myanmar)
+                                                မြန်မာ
                                             </button>
                                         </div>
                                     </div>

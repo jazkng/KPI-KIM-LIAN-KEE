@@ -37,6 +37,7 @@ interface DeviceAccountRecord extends DeviceAccount {
 }
 
 export type DeviceAccountListener = (devices: DeviceAccount[]) => void;
+export type DeviceSessionListener = (device: DeviceAccount) => void;
 export type DeviceAccountErrorListener = (error: Error) => void;
 
 export class DeviceAccountValidationError extends Error {
@@ -576,33 +577,52 @@ export class DeviceAccountService {
         return toPublicAccount(record);
     }
 
-    static async heartbeat(session: DeviceSession, currentScreen: DeviceScreen): Promise<void> {
-        if (!VALID_SCREENS.includes(currentScreen) || !session.allowedScreens.includes(currentScreen)) {
-            throw new DeviceAccountAuthError('这个设备没有使用该画面的权限');
-        }
-        const deviceRef = doc(db, COLLECTION_NAME, session.deviceId);
-        await runTransaction(db, async transaction => {
-            const snapshot = await transaction.get(deviceRef);
-            if (!snapshot.exists()) throw new DeviceAccountAuthError('设备会话已经失效');
-            const record = mapSnapshot(snapshot);
-            const credentialValid = await verifySessionCredential(session.sessionToken, record.sessionHash);
-            if (
-                record.status !== 'ACTIVE' ||
-                record.sessionVersion !== session.sessionVersion ||
-                !credentialValid
-            ) {
-                throw new DeviceAccountAuthError('设备会话已经失效，请重新登录');
-            }
-            if (!record.allowedScreens.includes(currentScreen)) {
-                throw new DeviceAccountAuthError('这个设备没有使用该画面的权限');
-            }
-            const now = new Date().toISOString();
-            transaction.update(deviceRef, {
-                lastSeenAt: now,
-                currentScreen,
-                serverLastSeenAt: serverTimestamp(),
-            });
-        });
+    static subscribeSession(
+        session: DeviceSession,
+        listener: DeviceSessionListener,
+        onError?: DeviceAccountErrorListener,
+    ): Unsubscribe {
+        let disposed = false;
+        const unsubscribe = onSnapshot(
+            doc(db, COLLECTION_NAME, session.deviceId),
+            snapshot => {
+                void (async () => {
+                    if (!snapshot.exists()) {
+                        throw new DeviceAccountAuthError('设备会话已经失效');
+                    }
+                    const record = mapSnapshot(snapshot);
+                    const credentialValid = await verifySessionCredential(
+                        session.sessionToken,
+                        record.sessionHash,
+                    );
+                    if (
+                        record.status !== 'ACTIVE' ||
+                        record.sessionVersion !== session.sessionVersion ||
+                        !credentialValid
+                    ) {
+                        throw new DeviceAccountAuthError('设备会话已经失效，请重新登录');
+                    }
+                    return toPublicAccount(record);
+                })()
+                    .then(account => {
+                        if (!disposed) listener(account);
+                    })
+                    .catch(error => {
+                        if (disposed) return;
+                        onError?.(error instanceof Error ? error : new Error(String(error)));
+                    });
+            },
+            error => {
+                if (!disposed) {
+                    onError?.(error instanceof Error ? error : new Error(String(error)));
+                }
+            },
+        );
+
+        return () => {
+            disposed = true;
+            unsubscribe();
+        };
     }
 
     static getScreenMode(screen: DeviceScreen): 'kitchen' | 'tv' {

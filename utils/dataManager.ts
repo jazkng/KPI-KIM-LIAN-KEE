@@ -1,21 +1,69 @@
 import { db } from '../firebaseConfig';
-import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
 import { 
     Employee, SettlementRecord, ExpenseItem, RecurringBill, 
     BillPaymentRecord, StockItem, Supplier, PurchaseOrder, 
-    MenuItem, QueueTicket, LogEntry, RoleGuide, PayrollRecord, 
+    MenuItem, QueueTicket, QueueSize, LogEntry, RoleGuide, PayrollRecord, 
     StoreConfig, AttendanceRecord, SystemBackup, TreasuryConfig, FundTransfer,
     WarrantyRecord, InventoryLog, InventoryTask,
     Proposal, OKR, MarketingCampaign, StoreEvent,
     MisconductRecord, WarningRecord,
     TaskCompletion,
     StockPriceEntry, StockPriceHistory,
-    SelfIssuedVoucher
+    SelfIssuedVoucher, AppLanguage, LogStatus, OperationalLogReply,
+    OperationalLogReadReceipt, SystemNotification
 } from "../types";
 import { APP_VERSION } from "../constants/versionHistory";
 import { PaymentVoucher } from "./paymentVoucherUtils";
 import { normalizeInventoryItem } from "./unitConversion";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
+import { buildOperationalLogNotifications } from "./notificationUtils";
+import { getBusinessDateString } from "./dateHelper";
+
+const withoutUndefined = <T>(value: T): T =>
+    JSON.parse(JSON.stringify(value)) as T;
+
+const getLegacyLogTimestamp = (log: LogEntry): string => {
+    if (log.updatedAt) return log.updatedAt;
+    if (log.acknowledgedAt) return log.acknowledgedAt;
+    return `${log.date} ${log.time || '00:00'}`;
+};
+
+const normalizeOperationalLog = (rawLog: LogEntry): LogEntry => {
+    const replies = [...(rawLog.replies || [])];
+    const readReceipts = [...(rawLog.readReceipts || [])];
+
+    if (rawLog.action?.trim() && replies.length === 0) {
+        replies.push({
+            id: `legacy-${rawLog.id}`,
+            authorId: 'LEGACY',
+            authorName: '旧系统记录',
+            content: rawLog.action.trim(),
+            createdAt: getLegacyLogTimestamp(rawLog),
+            legacy: true,
+        });
+    }
+
+    if (rawLog.acknowledgedBy && readReceipts.length === 0) {
+        readReceipts.push({
+            employeeId: `legacy-${rawLog.acknowledgedBy}`,
+            employeeName: rawLog.acknowledgedBy,
+            readAt: rawLog.acknowledgedAt || getLegacyLogTimestamp(rawLog),
+            legacy: true,
+        });
+    }
+
+    return {
+        ...rawLog,
+        status: rawLog.status === 'RESOLVED'
+            ? 'RESOLVED'
+            : rawLog.status === 'IN_PROGRESS'
+                ? 'IN_PROGRESS'
+                : 'PENDING',
+        replies,
+        readReceipts,
+    };
+};
 
 export class DataManager {
 
@@ -113,6 +161,26 @@ export class DataManager {
             return snap.docs.map(d => normalizeEmployeeOrgFields(d.data() as Employee));
         });
     }
+    static async getEmployeeById(id: string): Promise<Employee | null> {
+        if (!id) return null;
+        const snap = await getDoc(doc(db, 'employees', id));
+        if (!snap.exists()) return null;
+
+        const employee = snap.data() as Employee;
+        return normalizeEmployeeOrgFields({
+            ...employee,
+            id: employee.id || snap.id,
+        });
+    }
+    static async getEmployeesByIds(ids: string[]): Promise<Employee[]> {
+        const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+        if (uniqueIds.length === 0) return [];
+
+        const employees = await Promise.all(
+            uniqueIds.map(id => DataManager.getEmployeeById(id).catch(() => null))
+        );
+        return employees.filter((employee): employee is Employee => employee !== null);
+    }
     static async saveEmployee(employee: Employee): Promise<void> {
         await setDoc(doc(db, 'employees', employee.id), normalizeEmployeeOrgFields(employee));
         DataManager.clearCacheKeys(['employees']);
@@ -124,7 +192,7 @@ export class DataManager {
 
     static async updateEmployeePreferredLanguage(
         employeeId: string,
-        preferredLanguage: 'zh_en' | 'my'
+        preferredLanguage: AppLanguage
     ): Promise<void> {
         await updateDoc(doc(db, 'employees', employeeId), {
             preferredLanguage
@@ -466,6 +534,27 @@ export class DataManager {
             const snap = await getDocs(q);
             return snap.docs.map(d => d.data() as InventoryTask).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
         });
+    }
+    static async getPendingInventoryTasks(): Promise<InventoryTask[]> {
+        return DataManager.runWithCache('inventory_tasks_pending', async () => {
+            const q = query(
+                collection(db, 'inventory_tasks'),
+                where('status', '==', 'PENDING'),
+                limit(100)
+            );
+            const snap = await getDocs(q);
+            return snap.docs
+                .map(d => d.data() as InventoryTask)
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        }, 60 * 1000);
+    }
+    static async getPendingInventoryTaskCount(): Promise<number> {
+        const q = query(
+            collection(db, 'inventory_tasks'),
+            where('status', '==', 'PENDING')
+        );
+        const snapshot = await getCountFromServer(q);
+        return snapshot.data().count;
     }
     static async saveInventoryTask(task: InventoryTask): Promise<void> {
         await setDoc(doc(db, 'inventory_tasks', task.id), task);
@@ -992,8 +1081,24 @@ export class DataManager {
         const snap = await getDocs(q);
         return snap.docs.map(d => d.data() as PurchaseOrder);
     }
-    static async savePurchaseOrder(po: PurchaseOrder): Promise<void> { await setDoc(doc(db, 'purchase_orders', po.id), DataManager.removeUndefined(po)); }
-    static async deletePurchaseOrder(id: string): Promise<void> { await deleteDoc(doc(db, 'purchase_orders', id)); }
+    static async getPendingPurchaseOrderCount(): Promise<number> {
+        return DataManager.runWithCache('purchase_orders_pending_count', async () => {
+            const pendingQuery = query(
+                collection(db, 'purchase_orders'),
+                where('status', '==', 'ORDERED')
+            );
+            const snapshot = await getCountFromServer(pendingQuery);
+            return snapshot.data().count;
+        });
+    }
+    static async savePurchaseOrder(po: PurchaseOrder): Promise<void> {
+        await setDoc(doc(db, 'purchase_orders', po.id), DataManager.removeUndefined(po));
+        DataManager.clearCacheKeys(['purchase_orders_pending_count']);
+    }
+    static async deletePurchaseOrder(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'purchase_orders', id));
+        DataManager.clearCacheKeys(['purchase_orders_pending_count']);
+    }
 
     // ==========================================
     // 🟢 菜单与排队
@@ -1013,12 +1118,70 @@ export class DataManager {
         const snap = await getDocs(collection(db, 'queue_tickets'));
         return snap.docs.map(d => d.data() as QueueTicket);
     }
+    static async issueQueueTicket(input: {
+        sizeCategory: QueueSize;
+        pax: number;
+        phone?: string;
+        minimumSequence?: number;
+    }): Promise<QueueTicket> {
+        const prefix = input.sizeCategory === 'LARGE'
+            ? 'C'
+            : input.sizeCategory === 'MEDIUM'
+                ? 'B'
+                : 'A';
+        const businessDate = getBusinessDateString();
+        const counterRef = doc(db, 'queue_counters', businessDate);
+        const ticketRef = doc(collection(db, 'queue_tickets'));
+
+        return runTransaction(db, async transaction => {
+            const counterSnapshot = await transaction.get(counterRef);
+            const savedSequence = Number(counterSnapshot.data()?.[prefix] || 0);
+            const minimumSequence = Math.max(0, Number(input.minimumSequence || 0));
+            const nextSequence = Math.max(savedSequence, minimumSequence) + 1;
+            const now = new Date().toISOString();
+
+            const ticket: QueueTicket = {
+                id: ticketRef.id,
+                number: `${prefix}${String(nextSequence).padStart(3, '0')}`,
+                sizeCategory: input.sizeCategory,
+                pax: input.pax,
+                status: 'WAITING',
+                createdAt: now,
+            };
+
+            const normalizedPhone = input.phone?.trim();
+            if (normalizedPhone) {
+                ticket.phone = normalizedPhone;
+            }
+
+            transaction.set(counterRef, {
+                businessDate,
+                [prefix]: nextSequence,
+                updatedAt: now,
+            }, { merge: true });
+            transaction.set(ticketRef, {
+                ...ticket,
+                businessDate,
+                sequence: nextSequence,
+            });
+
+            return ticket;
+        });
+    }
     static async saveQueueTicket(ticket: QueueTicket): Promise<void> { await setDoc(doc(db, 'queue_tickets', ticket.id), ticket); }
     static async clearQueue(): Promise<void> {
         const snap = await getDocs(collection(db, 'queue_tickets'));
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+        const batchSize = 450;
+
+        for (let index = 0; index < snap.docs.length; index += batchSize) {
+            const batch = writeBatch(db);
+            snap.docs.slice(index, index + batchSize).forEach(queueDoc => {
+                batch.delete(queueDoc.ref);
+            });
+            await batch.commit();
+        }
+
+        await deleteDoc(doc(db, 'queue_counters', getBusinessDateString()));
     }
 
     // ==========================================
@@ -1028,18 +1191,318 @@ export class DataManager {
         const colRef = collection(db, 'logs');
         const q = forBackup ? colRef : query(colRef, orderBy('id', 'desc'), limit(200));
         const snap = await getDocs(q);
-        return snap.docs.map(d => d.data() as LogEntry).sort((a,b) => b.id.localeCompare(a.id));
+        return snap.docs
+            .map(d => normalizeOperationalLog(d.data() as LogEntry))
+            .sort((a,b) => b.id.localeCompare(a.id));
     }
-    static async addLog(log: LogEntry): Promise<void> {
+    static async getRecentLogs(limitCount: number = 30, beforeId?: string): Promise<LogEntry[]> {
+        const safeLimit = Math.max(1, Math.min(100, Math.floor(limitCount)));
+        const logsRef = collection(db, 'logs');
+        const recentQuery = beforeId
+            ? query(
+                logsRef,
+                orderBy('id', 'desc'),
+                startAfter(beforeId),
+                limit(safeLimit)
+            )
+            : query(
+                logsRef,
+                orderBy('id', 'desc'),
+                limit(safeLimit)
+            );
+        const snapshot = await getDocs(recentQuery);
+        return snapshot.docs
+            .map(item => normalizeOperationalLog(item.data() as LogEntry))
+            .sort((a, b) => b.id.localeCompare(a.id));
+    }
+    static async getLogsByDateRange(
+        startDate: string,
+        endDate: string,
+        limitCount: number = 100,
+    ): Promise<LogEntry[]> {
+        if (!startDate || !endDate) return [];
+        const safeLimit = Math.max(1, Math.min(100, Math.floor(limitCount)));
+        const rangeQuery = query(
+            collection(db, 'logs'),
+            where('date', '>=', startDate),
+            where('date', '<=', endDate),
+            orderBy('date', 'desc'),
+            limit(safeLimit),
+        );
+        const snapshot = await getDocs(rangeQuery);
+        return snapshot.docs
+            .map(item => normalizeOperationalLog(item.data() as LogEntry))
+            .sort((a, b) => {
+                const dateCompare = b.date.localeCompare(a.date);
+                if (dateCompare !== 0) return dateCompare;
+                return (b.time || '').localeCompare(a.time || '');
+            });
+    }
+    static async getLogById(id: string): Promise<LogEntry | null> {
+        if (!id) return null;
+        const snapshot = await getDoc(doc(db, 'logs', id));
+        if (!snapshot.exists()) return null;
+        const rawLog = snapshot.data() as LogEntry;
+        return normalizeOperationalLog({
+            ...rawLog,
+            id: rawLog.id || snapshot.id,
+        });
+    }
+    static async getOperationalLogCountByDate(date: string): Promise<number> {
+        if (!date) return 0;
+        const q = query(
+            collection(db, 'logs'),
+            where('date', '==', date)
+        );
+        const snapshot = await getCountFromServer(q);
+        return snapshot.data().count;
+    }
+    static async addLog(
+        log: LogEntry,
+        notificationContext?: { actor: Employee; employees: Employee[] },
+    ): Promise<LogEntry> {
         if (log.misconduct) {
              const resultMsg = await this.updateEmployeeMisconduct(log.misconduct.employeeId, log.misconduct.type, log.issue, log.misconduct.fineAmount);
              log.misconduct.actionResult = resultMsg;
         }
-        await setDoc(doc(db, 'logs', log.id), log);
+
+        const normalized = normalizeOperationalLog(log);
+        const notifications = notificationContext
+            ? buildOperationalLogNotifications(
+                { type: 'LOGBOOK_NEW', eventId: `log-new-${normalized.id}` },
+                normalized,
+                notificationContext.actor,
+                notificationContext.employees,
+                normalized.updatedAt || new Date().toISOString(),
+            )
+            : [];
+
+        await runTransaction(db, async transaction => {
+            transaction.set(doc(db, 'logs', normalized.id), withoutUndefined(normalized));
+            notifications.forEach(notification => {
+                transaction.set(
+                    doc(db, 'notifications', notification.id),
+                    withoutUndefined(notification),
+                );
+            });
+        });
+
+        return normalized;
     }
     static async deleteLog(id: string): Promise<void> { await deleteDoc(doc(db, 'logs', id)); }
+
+    static async appendLogReply(
+        logId: string,
+        reply: OperationalLogReply,
+        actor: Employee,
+        employees: Employee[],
+    ): Promise<LogEntry> {
+        const logRef = doc(db, 'logs', logId);
+        return runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(logRef);
+            if (!snapshot.exists()) throw new Error('Operational log not found');
+
+            const current = normalizeOperationalLog(snapshot.data() as LogEntry);
+            if ((current.replies || []).some(item => item.id === reply.id)) {
+                return current;
+            }
+
+            const updated: LogEntry = {
+                ...current,
+                replies: [...(current.replies || []), withoutUndefined(reply)],
+                updatedAt: reply.createdAt,
+            };
+            const notifications = buildOperationalLogNotifications(
+                { type: 'LOGBOOK_REPLY', eventId: `log-reply-${reply.id}`, reply },
+                updated,
+                actor,
+                employees,
+                reply.createdAt,
+            );
+
+            transaction.set(logRef, withoutUndefined(updated));
+            notifications.forEach(notification => {
+                transaction.set(
+                    doc(db, 'notifications', notification.id),
+                    withoutUndefined(notification),
+                );
+            });
+            return updated;
+        });
+    }
+
+    static async markLogRead(
+        logId: string,
+        employee: Employee,
+    ): Promise<LogEntry> {
+        const logRef = doc(db, 'logs', logId);
+        return runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(logRef);
+            if (!snapshot.exists()) throw new Error('Operational log not found');
+
+            const current = normalizeOperationalLog(snapshot.data() as LogEntry);
+            const existing = (current.readReceipts || []).find(
+                receipt => receipt.employeeId === employee.id,
+            );
+            if (existing) return current;
+
+            const receipt: OperationalLogReadReceipt = {
+                employeeId: employee.id,
+                employeeName: employee.name,
+                readAt: new Date().toISOString(),
+            };
+            const updated: LogEntry = {
+                ...current,
+                readReceipts: [...(current.readReceipts || []), receipt],
+                updatedAt: receipt.readAt,
+            };
+            transaction.set(logRef, withoutUndefined(updated));
+            return updated;
+        });
+    }
+
+    static async assignLog(
+        logId: string,
+        assignee: Employee | null,
+        actor: Employee,
+        employees: Employee[],
+    ): Promise<LogEntry> {
+        const logRef = doc(db, 'logs', logId);
+        return runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(logRef);
+            if (!snapshot.exists()) throw new Error('Operational log not found');
+
+            const current = normalizeOperationalLog(snapshot.data() as LogEntry);
+            const nextAssigneeId = assignee?.id || '';
+            if ((current.assignedEmployeeId || '') === nextAssigneeId) return current;
+
+            const now = new Date().toISOString();
+            const updated: LogEntry = {
+                ...current,
+                assignedEmployeeId: assignee?.id,
+                assignedEmployeeName: assignee?.name,
+                assignedDepartment: assignee?.department,
+                updatedAt: now,
+            };
+
+            transaction.set(logRef, withoutUndefined(updated));
+            if (assignee) {
+                const notifications = buildOperationalLogNotifications(
+                    {
+                        type: 'LOGBOOK_ASSIGNED',
+                        eventId: `log-assigned-${logId}-${now}`,
+                        assignedEmployeeId: assignee.id,
+                    },
+                    updated,
+                    actor,
+                    employees,
+                    now,
+                );
+                notifications.forEach(notification => {
+                    transaction.set(
+                        doc(db, 'notifications', notification.id),
+                        withoutUndefined(notification),
+                    );
+                });
+            }
+            return updated;
+        });
+    }
+
+    static async updateLogStatus(
+        logId: string,
+        status: LogStatus,
+        actor: Employee,
+        employees: Employee[],
+    ): Promise<LogEntry> {
+        const logRef = doc(db, 'logs', logId);
+        return runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(logRef);
+            if (!snapshot.exists()) throw new Error('Operational log not found');
+
+            const current = normalizeOperationalLog(snapshot.data() as LogEntry);
+            if (current.status === status) return current;
+
+            const now = new Date().toISOString();
+            const updated: LogEntry = {
+                ...current,
+                status,
+                updatedAt: now,
+                resolvedAt: status === 'RESOLVED' ? now : undefined,
+                resolvedById: status === 'RESOLVED' ? actor.id : undefined,
+                resolvedByName: status === 'RESOLVED' ? actor.name : undefined,
+            };
+            const notifications = buildOperationalLogNotifications(
+                {
+                    type: 'LOGBOOK_STATUS',
+                    eventId: `log-status-${logId}-${now}`,
+                    status,
+                },
+                updated,
+                actor,
+                employees,
+                now,
+            );
+
+            transaction.set(logRef, withoutUndefined(updated));
+            notifications.forEach(notification => {
+                transaction.set(
+                    doc(db, 'notifications', notification.id),
+                    withoutUndefined(notification),
+                );
+            });
+            return updated;
+        });
+    }
+
+    /** Legacy compatibility for older callers. */
     static async acknowledgeLog(id: string, name: string): Promise<void> {
-        await updateDoc(doc(db, 'logs', id), { acknowledgedBy: name, acknowledgedAt: new Date().toISOString() });
+        await updateDoc(doc(db, 'logs', id), {
+            acknowledgedBy: name,
+            acknowledgedAt: new Date().toISOString(),
+        });
+    }
+
+    static subscribeNotifications(
+        employeeId: string,
+        onChange: (notifications: SystemNotification[]) => void,
+        onError?: (error: Error) => void,
+    ): () => void {
+        const notificationQuery = query(
+            collection(db, 'notifications'),
+            where('recipientEmployeeId', '==', employeeId),
+            orderBy('createdAt', 'desc'),
+            limit(30),
+        );
+
+        return onSnapshot(
+            notificationQuery,
+            snapshot => {
+                const notifications = snapshot.docs
+                    .map(item => item.data() as SystemNotification);
+                onChange(notifications);
+            },
+            error => {
+                console.error('[Notifications] subscription failed:', error);
+                onError?.(error);
+            },
+        );
+    }
+
+    static async markNotificationRead(notificationId: string): Promise<void> {
+        await updateDoc(doc(db, 'notifications', notificationId), {
+            readAt: new Date().toISOString(),
+        });
+    }
+
+    static async markAllNotificationsRead(notificationIds: string[]): Promise<void> {
+        if (notificationIds.length === 0) return;
+        const now = new Date().toISOString();
+        const batch = writeBatch(db);
+        notificationIds.forEach(notificationId => {
+            batch.update(doc(db, 'notifications', notificationId), { readAt: now });
+        });
+        await batch.commit();
     }
 
     // ==========================================
@@ -1222,6 +1685,23 @@ export class DataManager {
         const q = query(collection(db, 'attendance'), where('date', '==', date));
         const snap = await getDocs(q);
         return snap.docs.map(d => d.data() as AttendanceRecord);
+    }
+    static async getAttendanceByEmployeeAndDate(employeeId: string, date: string): Promise<AttendanceRecord | null> {
+        if (!employeeId || !date) return null;
+        const q = query(
+            collection(db, 'attendance'),
+            where('employeeId', '==', employeeId),
+            where('date', '==', date),
+            limit(1)
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) return null;
+
+        const attendance = snap.docs[0].data() as AttendanceRecord;
+        return {
+            ...attendance,
+            id: attendance.id || snap.docs[0].id,
+        };
     }
     static async getAttendanceByMonth(month: string): Promise<AttendanceRecord[]> {
         const q = query(collection(db, 'attendance'), where('date', '>=', `${month}-01`), where('date', '<=', `${month}-31`));

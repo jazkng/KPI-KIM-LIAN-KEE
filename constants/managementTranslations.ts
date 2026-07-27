@@ -1,4 +1,7 @@
-export type ManagementLang = 'zh' | 'my';
+import { AppLanguage, normalizeLanguage } from '../types';
+import { cleanEnglishOnly } from './staffTranslations';
+
+export type ManagementLang = AppLanguage | 'zh' | 'zh_en';
 
 export const MANAGEMENT_TRANSLATIONS = {
     // Shared / Core
@@ -406,42 +409,50 @@ export const MANAGEMENT_TRANSLATIONS = {
         zh: '该模块已关闭或未启用。',
         my: 'ဤလုပ်ဆောင်ချက်ကို ပိတ်ထားသည် သို့မဟုတ် အသုံးမပြုနိုင်ပါ။'
     }
-} satisfies Record<string, Record<ManagementLang, string>>;
+} satisfies Record<string, Partial<Record<ManagementLang | string, string>>>;
 
 export type ManagementTranslationKey = keyof typeof MANAGEMENT_TRANSLATIONS;
 
-export function mt(key: ManagementTranslationKey, lang: ManagementLang): string {
-    const entry = (MANAGEMENT_TRANSLATIONS as Record<string, Record<ManagementLang, string>>)[key];
+export function mt(key: ManagementTranslationKey | string, lang: ManagementLang): string {
+    const norm = normalizeLanguage(lang);
+    const entry = (MANAGEMENT_TRANSLATIONS as any)[key];
     if (!entry) {
-        console.warn(`[Translation Warning] Missing key: "${key}"`);
-        return "";
+        if (norm === 'en') return cleanEnglishOnly(key) || key.replace(/_/g, ' ');
+        return key;
     }
-    const val = entry[lang];
-    if (val !== undefined && val !== null && val !== '') {
-        return val;
+    if (norm === 'en') {
+        if (entry.en) return entry.en;
+        if (entry.zh) return cleanEnglishOnly(entry.zh) || entry.zh;
     }
-    console.warn(`[Translation Warning] Missing language "${lang}" for key: "${key}"`);
-    return entry['zh'] || "";
+    if (norm === 'my' && entry.my) {
+        return entry.my;
+    }
+    if (entry[norm]) {
+        return entry[norm];
+    }
+    return entry.zh || "";
 }
 
 export function getModuleTranslatedLabel(modKey: string, lang: ManagementLang, defaultLabel: string): string {
-    if (lang === 'zh') return defaultLabel;
+    const norm = normalizeLanguage(lang);
+    if (norm === 'zh_en') return defaultLabel;
+    if (norm === 'en') return cleanEnglishOnly(defaultLabel) || modKey.replace(/_/g, ' ').toUpperCase();
     const key = `mod_name_${modKey}`;
     const entry = (MANAGEMENT_TRANSLATIONS as any)[key];
-    if (entry && entry[lang]) {
-        return entry[lang];
+    if (entry && entry[norm]) {
+        return entry[norm];
     }
-    console.warn(`[Translation Warning] Missing label translation for module: "${modKey}"`);
     return modKey.replace(/_/g, ' ').toUpperCase();
 }
 
 export function getModuleTranslatedDesc(modKey: string, lang: ManagementLang, defaultDesc: string): string {
-    if (lang === 'zh') return defaultDesc;
+    const norm = normalizeLanguage(lang);
+    if (norm === 'zh_en') return defaultDesc;
+    if (norm === 'en') return cleanEnglishOnly(defaultDesc) || defaultDesc;
     const key = `mod_desc_${modKey}`;
     const entry = (MANAGEMENT_TRANSLATIONS as any)[key];
-    if (entry && entry[lang]) {
-        return entry[lang];
+    if (entry && entry[norm]) {
+        return entry[norm];
     }
-    console.warn(`[Translation Warning] Missing desc translation for module: "${modKey}"`);
     return mt('not_open_tip', lang);
 }

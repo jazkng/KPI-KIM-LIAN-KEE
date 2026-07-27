@@ -116,7 +116,7 @@ export const TreasuryExtraIncomeTab: React.FC<TreasuryExtraIncomeTabProps> = ({
         <button
           type="button"
           onClick={onAddIncome}
-          className="relative z-10 bg-[#FFD200] text-[#111111] px-6 md:px-8 py-3.5 rounded-xl shadow-md flex items-center gap-2 font-extrabold text-xs md:text-sm hover:bg-[#FFD200]/90 transition-all cursor-pointer w-full md:w-auto justify-center active:scale-[0.98] touch-manipulation"
+          className="relative z-10 bg-[#FFD200] text-[#111111] px-6 md:px-8 py-3.5 rounded-xl shadow-md flex items-center gap-2 font-extrabold text-xs md:text-sm hover:bg-[#FFD200]/90 transition-all cursor-pointer w-full md:w-auto justify-center active:scale-[0.98] touch-pan-y"
         >
           <Plus size={16} strokeWidth={3} />
           <span>记录新收入</span>

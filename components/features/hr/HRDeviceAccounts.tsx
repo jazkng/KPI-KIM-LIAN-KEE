@@ -19,8 +19,6 @@ import {
     Search,
     ShieldCheck,
     ShieldOff,
-    Wifi,
-    WifiOff,
     X,
 } from 'lucide-react';
 import { DeviceAccount, DeviceAccountActor, DeviceScreen, Employee } from '../../../types';
@@ -32,7 +30,6 @@ const noTap: React.CSSProperties = {
 };
 
 const STORE_ID = 'KEPONG';
-const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 
 const SCREEN_OPTIONS: Array<{
     id: DeviceScreen;
@@ -90,7 +87,7 @@ const createEmptyForm = (): DeviceFormState => ({
 });
 
 const formatDateTime = (value?: string): string => {
-    if (!value) return '从未上线';
+    if (!value) return '从未登录';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '时间不明';
     return new Intl.DateTimeFormat('zh-MY', {
@@ -102,12 +99,6 @@ const formatDateTime = (value?: string): string => {
         minute: '2-digit',
         hour12: false,
     }).format(date);
-};
-
-const isDeviceOnline = (device: DeviceAccount, now: number): boolean => {
-    if (device.status !== 'ACTIVE' || !device.lastSeenAt) return false;
-    const lastSeen = new Date(device.lastSeenAt).getTime();
-    return Number.isFinite(lastSeen) && now - lastSeen <= ONLINE_WINDOW_MS;
 };
 
 const getScreenLabel = (screen?: DeviceScreen): string => {
@@ -132,7 +123,6 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
     const [saving, setSaving] = useState(false);
     const [busyDeviceId, setBusyDeviceId] = useState<string | null>(null);
     const [notice, setNotice] = useState<NoticeState | null>(null);
-    const [now, setNow] = useState(Date.now());
 
     const actor = useMemo<DeviceAccountActor>(() => ({
         id: currentEmployee?.id || 'SYSTEM_ADMIN',
@@ -160,11 +150,6 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
     }, []);
 
     useEffect(() => {
-        const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-        return () => window.clearInterval(timer);
-    }, []);
-
-    useEffect(() => {
         if (!notice) return;
         const timer = window.setTimeout(() => setNotice(null), 4000);
         return () => window.clearTimeout(timer);
@@ -173,9 +158,9 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
     const stats = useMemo(() => ({
         total: devices.length,
         active: devices.filter(device => device.status === 'ACTIVE').length,
-        online: devices.filter(device => isDeviceOnline(device, now)).length,
+        kitchen: devices.filter(device => device.status === 'ACTIVE' && device.allowedScreens.includes('KITCHEN_ALERT')).length,
         disabled: devices.filter(device => device.status === 'DISABLED').length,
-    }), [devices, now]);
+    }), [devices]);
 
     const filteredDevices = useMemo(() => {
         const keyword = search.trim().toLowerCase();
@@ -408,7 +393,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     {[
                         { label: '全部设备', value: stats.total, Icon: MonitorSmartphone, color: 'text-gray-900', bg: 'bg-white' },
                         { label: '已启用', value: stats.active, Icon: ShieldCheck, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-                        { label: '目前在线', value: stats.online, Icon: Wifi, color: 'text-blue-700', bg: 'bg-blue-50' },
+                        { label: '厨房荧幕', value: stats.kitchen, Icon: ChefHat, color: 'text-amber-700', bg: 'bg-amber-50' },
                         { label: '已停用', value: stats.disabled, Icon: ShieldOff, color: 'text-gray-500', bg: 'bg-gray-100' },
                     ].map(item => (
                         <div key={item.label} className={`${item.bg} rounded-2xl border p-4 shadow-sm`}>
@@ -466,27 +451,26 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                 ) : (
                     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 pb-8">
                         {filteredDevices.map(device => {
-                            const online = isDeviceOnline(device, now);
                             const busy = busyDeviceId === device.id;
                             return (
                                 <article key={device.id} className={`bg-white rounded-3xl border shadow-sm overflow-hidden ${device.status === 'DISABLED' ? 'opacity-75' : ''}`}>
-                                    <div className={`h-2 ${device.status === 'DISABLED' ? 'bg-gray-400' : online ? 'bg-emerald-500' : 'bg-[#FFD700]'}`} />
+                                    <div className={`h-2 ${device.status === 'DISABLED' ? 'bg-gray-400' : 'bg-emerald-500'}`} />
                                     <div className="p-5">
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                                 <h5 className="font-black text-lg truncate">{device.deviceName}</h5>
                                                 <p className="font-mono text-xs font-black text-gray-500 mt-1 tracking-wide">登入 ID：{device.deviceCode}</p>
                                             </div>
-                                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black flex items-center gap-1 ${device.status === 'DISABLED' ? 'bg-gray-200 text-gray-600' : online ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                {device.status === 'DISABLED' ? <ShieldOff size={12} /> : online ? <Wifi size={12} /> : <WifiOff size={12} />}
-                                                {device.status === 'DISABLED' ? '已停用' : online ? '在线' : '离线'}
+                                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black flex items-center gap-1 ${device.status === 'DISABLED' ? 'bg-gray-200 text-gray-600' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                {device.status === 'DISABLED' ? <ShieldOff size={12} /> : <ShieldCheck size={12} />}
+                                                {device.status === 'DISABLED' ? '已停用' : '已启用'}
                                             </span>
                                         </div>
 
                                         <div className="mt-4 space-y-2 text-xs font-bold text-gray-600">
                                             <p className="flex items-start gap-2"><MapPin size={15} className="shrink-0 text-gray-400" /> {device.location || '未填写设备位置'}</p>
-                                            <p className="flex items-start gap-2"><Clock3 size={15} className="shrink-0 text-gray-400" /> 最后在线：{formatDateTime(device.lastSeenAt)}</p>
-                                            <p className="flex items-start gap-2"><MonitorSmartphone size={15} className="shrink-0 text-gray-400" /> 当前：{getScreenLabel(device.currentScreen)}</p>
+                                            <p className="flex items-start gap-2"><Clock3 size={15} className="shrink-0 text-gray-400" /> 最后登录：{formatDateTime(device.lastLoginAt)}</p>
+                                            <p className="flex items-start gap-2"><MonitorSmartphone size={15} className="shrink-0 text-gray-400" /> 默认：{getScreenLabel(device.defaultScreen)}</p>
                                         </div>
 
                                         <div className="mt-4 flex flex-wrap gap-2">

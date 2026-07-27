@@ -31,7 +31,7 @@ import {
 import { DataManager } from '../../../utils/dataManager';
 
 // Firebase APIs
-import { collection, getDocs, getDoc, query, where, orderBy, doc, deleteDoc, runTransaction, limit, writeBatch, documentId } from "firebase/firestore";
+import { collection, getDocs, getDoc, query, where, orderBy, doc, deleteDoc, runTransaction, limit } from "firebase/firestore";
 import { db } from '../../../firebaseConfig';
 
 // AP Constants & Sub-components
@@ -82,6 +82,15 @@ const getDefaultDueDate = (dateValue: unknown, days = 15): string => {
 
 const getEffectiveDueDate = (bill: Partial<ExpenseItem>): string =>
     bill.dueDate || (bill.paymentStatus !== 'PAID' ? getDefaultDueDate(bill.time) : '');
+
+const matchesActiveStatus = (
+    bill: ExpenseItem,
+    activeTab: 'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'
+): boolean => {
+    if (activeTab === 'ALL') return true;
+    if (activeTab === 'UNPAID') return bill.paymentStatus !== 'PAID';
+    return bill.paymentStatus === activeTab;
+};
 
 const getApiErrorMessage = (payload: any, fallback: string): string => {
     let msg = payload?.error || payload?.message || fallback;
@@ -155,7 +164,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'LIST' | 'SUPPLIER_DETAIL'>('LIST');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'>('ALL');
+    const [activeTab, setActiveTab] = useState<'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'>('UNPAID');
     const [searchId, setSearchId] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [dateRange, setDateRange] = useState<{start: string, end: string}>({ start: '', end: '' });
@@ -205,9 +214,13 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [debouncedSearchId, setDebouncedSearchId] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-    const [totalLoaded, setTotalLoaded] = useState(0);
     const [isBillingCapped, setIsBillingCapped] = useState(false);
+    const [hasLoadedPaidHistory, setHasLoadedPaidHistory] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [debouncedDateRange, setDebouncedDateRange] = useState<{start: string, end: string}>({ start: '', end: '' });
+    const employeesLoadedRef = useRef(false);
+    const employeesLoadPromiseRef = useRef<Promise<Employee[]> | null>(null);
+    const paidHistoryLoadPromiseRef = useRef<Promise<void> | null>(null);
 
     const [showMigrationTool, setShowMigrationTool] = useState(false);
     const [migrationData, setMigrationData] = useState<Record<string, {
@@ -222,6 +235,49 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [reconShowAll, setReconShowAll] = useState(false);
     const [isDeletingFile, setIsDeletingFile] = useState(false);
     const [isHoldingFile, setIsHoldingFile] = useState(false);
+
+    const totalLoaded = allBills.length;
+
+    const mergeBillsIntoState = (incoming: ExpenseItem[]) => {
+        if (incoming.length === 0) return;
+        setAllBills(prev => {
+            const merged = new Map(prev.map(bill => [bill.id, bill]));
+            incoming.forEach(bill => merged.set(bill.id, bill));
+            return Array.from(merged.values()).sort(
+                (a, b) => new Date(b.time || '').getTime() - new Date(a.time || '').getTime()
+            );
+        });
+    };
+
+    const removeBillsFromState = (billIds: Iterable<string>) => {
+        const ids = new Set(billIds);
+        if (ids.size === 0) return;
+        setAllBills(prev => prev.filter(bill => !ids.has(bill.id)));
+        setExpensesWithPV(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => next.delete(id));
+            return next;
+        });
+    };
+
+    const ensureEmployeesLoaded = async (): Promise<Employee[]> => {
+        if (employeesLoadedRef.current) return employees;
+        if (!employeesLoadPromiseRef.current) {
+            employeesLoadPromiseRef.current = getCached(
+                'klk_ap_employees_v1',
+                () => DataManager.getEmployees()
+            );
+        }
+
+        try {
+            const loadedEmployees = await employeesLoadPromiseRef.current;
+            setEmployees(loadedEmployees);
+            employeesLoadedRef.current = true;
+            return loadedEmployees;
+        } finally {
+            employeesLoadPromiseRef.current = null;
+        }
+    };
 
     const monthsList = useMemo(() => {
         const list = [];
@@ -310,7 +366,6 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             alert(payload.message || '账单已移入废单隔离区。');
             setIsMatchModalOpen(false);
             setAiScannedData(null);
-            await loadData();
         } catch (error: any) {
             console.error('[AP AI] Delete pending failed:', error);
             alert(`废弃账单失败：${error?.message || '未知错误'}`);
@@ -353,6 +408,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
         setIsSaving(true);
         try {
+            const updatedBills: ExpenseItem[] = [];
             for (const [billId, data] of entries) {
                 const bill = allBills.find(b => b.id === billId);
                 if (!bill || !data.subCat) continue;
@@ -366,11 +422,12 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 const clean = JSON.parse(JSON.stringify(merged)) as ExpenseItem;
                 await DataManager.saveStandaloneExpense(clean);
                 if (clean.settlementId) await DataManager.updateExpenseInSettlement(clean.settlementId, clean);
+                updatedBills.push(clean);
             }
+            mergeBillsIntoState(updatedBills);
             alert(`✅ 已成功补类目 ${entries.length} 条`);
             setMigrationData({});
             setShowMigrationTool(false);
-            await loadData();
         } catch (e) {
             console.error('Migration save failed', e);
             alert('补类目出错，请查看控制台');
@@ -378,10 +435,10 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     useEffect(() => { 
-        loadData(); 
-        
         const targetCompany = localStorage.getItem('klk_ap_highlight_company');
         const targetDate = localStorage.getItem('klk_ap_highlight_date');
+        const targetBillId = localStorage.getItem('klk_ap_highlight_bill');
+        void loadData(targetBillId);
         
         if (targetCompany && targetDate) {
             setSearchQuery(targetCompany);
@@ -395,7 +452,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             localStorage.removeItem('klk_ap_highlight_date');
             localStorage.removeItem('klk_ap_highlight_bill'); // Clear fallback as well
         } else {
-            const targetId = localStorage.getItem('klk_ap_highlight_bill');
+            const targetId = targetBillId;
             if (targetId) {
                 setSearchQuery(targetId);
                 setDebouncedSearchQuery(targetId);
@@ -433,11 +490,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     useEffect(() => {
         if (!debouncedDateRange.start || !debouncedDateRange.end) return;
-        const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - 3);
-        const cutoffStr = cutoff.toISOString().split('T')[0];
-        if (!isBillingCapped && debouncedDateRange.start >= cutoffStr) return;
-            
+
         const fetchDateRange = async () => {
             try {
                 const qRange = query(
@@ -448,181 +501,39 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     limit(500)
                 );
 
-                const qStlRange = query(
-                    collection(db, 'settlements'),
-                    where('date', '>=', debouncedDateRange.start),
-                    where('date', '<=', debouncedDateRange.end),
-                    orderBy('date', 'desc'),
-                    limit(300)
-                );
-
-                const qPvRange = query(
-                    collection(db, 'payment_vouchers'),
-                    where('date', '>=', debouncedDateRange.start),
-                    where('date', '<=', debouncedDateRange.end),
-                    limit(500)
-                );
-
-                const [snap, stlSnap, pvSnap] = await Promise.all([
-                    getDocs(qRange),
-                    getDocs(qStlRange),
-                    getDocs(qPvRange)
-                ]);
-
-                if (snap.size >= 500 || stlSnap.size >= 300) setIsBillingCapped(true);
-
-                const rangeItems: ExpenseItem[] = [];
-
-                snap.forEach(doc => rangeItems.push(doc.data() as ExpenseItem));
-
-                stlSnap.forEach(d => {
-                    const s = d.data() as SettlementRecord;
-                    if (s.expenses) {
-                        s.expenses.forEach(e => rangeItems.push({ ...e, settlementId: s.id }));
-                    }
-                });
-
-                setAllBills(prev => {
-                    const merged = new Map(prev.map(b => [b.id, b]));
-                    rangeItems.forEach(b => merged.set(b.id, b));
-                    const arr = Array.from(merged.values());
-                    arr.sort((a, b) => new Date(b.time || '').getTime() - new Date(a.time || '').getTime());
-                    return arr;
-                });
-
-                // Update expensesWithPV for the loaded date range
-                const rangePvExpenseIds = new Set<string>();
-                pvSnap.forEach(d => {
-                    const pv = d.data() as PaymentVoucher;
-                    if (pv.status !== 'VOID' && pv.relatedExpenseIds) {
-                        pv.relatedExpenseIds.forEach(id => rangePvExpenseIds.add(id));
-                    }
-                });
-
-                if (rangePvExpenseIds.size > 0) {
-                    setExpensesWithPV(prev => {
-                        const next = new Set(prev);
-                        rangePvExpenseIds.forEach(id => next.add(id));
-                        return next;
-                    });
-                }
+                const snap = await getDocs(qRange);
+                if (snap.size >= 500) setIsBillingCapped(true);
+                mergeBillsIntoState(snap.docs.map(item => item.data() as ExpenseItem));
             } catch (err) { console.error('Date range fetch error:', err); }
         };
-        fetchDateRange();
-    }, [debouncedDateRange.start, debouncedDateRange.end, isBillingCapped]);
+        void fetchDateRange();
+    }, [debouncedDateRange.start, debouncedDateRange.end]);
 
-    const loadData = async () => {
+    const loadData = async (focusBillId?: string | null) => {
         setLoading(true);
         setIsBillingCapped(false);
+        setHasLoadedPaidHistory(false);
+        paidHistoryLoadPromiseRef.current = null;
         try {
-            const [sups, emps, pvs] = await Promise.all([
-                getCached('klk_ap_suppliers_v1', () => DataManager.getSuppliers()),
-                getCached('klk_ap_employees_v1', () => DataManager.getEmployees()),
-                DataManager.getPaymentVouchers({ max: 300 })
-            ]);
-            setSuppliers(sups);
-            setEmployees(emps);
-            
-            const pvExpenseIds = new Set<string>();
-            pvs.forEach(pv => {
-                if (pv.status !== 'VOID' && pv.relatedExpenseIds) {
-                    pv.relatedExpenseIds.forEach(id => pvExpenseIds.add(id));
-                }
-            });
-            setExpensesWithPV(pvExpenseIds);
-            
-            let expenses: ExpenseItem[] = [];
-            const cutoffDate = new Date();
-            cutoffDate.setMonth(cutoffDate.getMonth() - 3);
-            const cutoffStr = cutoffDate.toISOString().split('T')[0];
-
-            const qSettlements = query(
-                collection(db, 'settlements'),
-                where('date', '>=', cutoffStr),
-                orderBy('date', 'desc'),
-                limit(30)
-            );
-            
-            const recentDate = new Date();
-            recentDate.setMonth(recentDate.getMonth() - 6); 
-            const recentStr = recentDate.toISOString().split('T')[0];
-            const qRecent = query(
-                collection(db, 'standalone_expenses'), 
-                where('time', '>=', recentStr),
-                orderBy('time', 'desc'),
-                limit(150)
-            );
-
-            const qUnpaid = query(
-                collection(db, 'standalone_expenses'), 
+            const qOpenBills = query(
+                collection(db, 'standalone_expenses'),
                 where('paymentStatus', 'in', ['UNPAID', 'PARTIAL']),
                 orderBy('time', 'desc'),
                 limit(100)
             );
 
-            const [stlSnap, unpaidSnap, recentSnap] = await Promise.all([
-                getDocs(qSettlements),
-                getDocs(qUnpaid), 
-                getDocs(qRecent)
+            const [sups, openBillsSnap] = await Promise.all([
+                getCached('klk_ap_suppliers_v1', () => DataManager.getSuppliers()),
+                getDocs(qOpenBills)
             ]);
+            setSuppliers(sups);
+            setExpensesWithPV(new Set());
 
-            if (recentSnap.size >= 50 || stlSnap.size >= 30 || unpaidSnap.size >= 100) {
-                setIsBillingCapped(true);
-            }
-
-            const activeSettlements = new Map<string, SettlementRecord>();
-            stlSnap.docs.forEach(d => { 
-                const s = d.data() as SettlementRecord;
-                activeSettlements.set(s.id, s);
-                if (s.expenses) expenses.push(...s.expenses.map(e => ({...e, settlementId: s.id}))); 
-            });
-
-            const missingSettlementIds = new Set<string>();
-            unpaidSnap.forEach(d => {
-                const data = d.data() as ExpenseItem;
-                if (data.settlementId && !activeSettlements.has(data.settlementId)) {
-                    missingSettlementIds.add(data.settlementId);
-                }
-            });
-            if (missingSettlementIds.size > 0) {
-                const ids = Array.from(missingSettlementIds);
-                const chunks: string[][] = [];
-                for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
-                await Promise.all(chunks.map(async (chunk) => {
-                    try {
-                        const qFill = query(
-                            collection(db, 'settlements'),
-                            where(documentId(), 'in', chunk)
-                        );
-                        const snap = await getDocs(qFill);
-                        snap.forEach(d => {
-                            const s = d.data() as SettlementRecord;
-                            activeSettlements.set(s.id, s);
-                            if (s.expenses) expenses.push(...s.expenses.map(e => ({...e, settlementId: s.id})));
-                        });
-                    } catch (err) {
-                        console.warn('Backfill settlements failed for chunk:', err);
-                    }
-                }));
-            }
-
-            const filterAndPushStandalone = (doc: any) => {
-                const data = doc.data() as ExpenseItem;
-                if (data.settlementId) {
-                    const parent = activeSettlements.get(data.settlementId);
-                    if (parent) {
-                        const exists = parent.expenses?.some(e => e.id === data.id);
-                        if (!exists) return; 
-                    }
-                }
-                expenses.push(data);
-            };
-
-            unpaidSnap.forEach(filterAndPushStandalone);
-            recentSnap.forEach(filterAndPushStandalone);
+            const expenses = openBillsSnap.docs.map(item => item.data() as ExpenseItem);
+            if (openBillsSnap.size >= 100) setIsBillingCapped(true);
             
             // 🎯 Check if there is a cross-navigation focus bill target and fetch directly if missing from last 3-month default query
-            const targetId = localStorage.getItem('klk_ap_highlight_bill');
+            const targetId = focusBillId;
             if (targetId) {
                 const targetKey = targetId.toLowerCase().replace('exp_', '');
                 const alreadyLoaded = expenses.some(e => e.id.toLowerCase().replace('exp_', '') === targetKey);
@@ -648,11 +559,51 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             unique.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
             
             setAllBills(unique);
-            setTotalLoaded(unique.length);
             setDisplayLimit(30); 
             
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
+
+    const loadPaidHistory = async (): Promise<void> => {
+        if (hasLoadedPaidHistory) return;
+        if (paidHistoryLoadPromiseRef.current) return paidHistoryLoadPromiseRef.current;
+
+        paidHistoryLoadPromiseRef.current = (async () => {
+            setIsLoadingHistory(true);
+            try {
+                const recentDate = new Date();
+                recentDate.setMonth(recentDate.getMonth() - 6);
+                const recentStr = recentDate.toISOString().split('T')[0];
+                const recentQuery = query(
+                    collection(db, 'standalone_expenses'),
+                    where('time', '>=', recentStr),
+                    orderBy('time', 'desc'),
+                    limit(150)
+                );
+                const recentSnap = await getDocs(recentQuery);
+                const paidBills = recentSnap.docs
+                    .map(item => item.data() as ExpenseItem)
+                    .filter(bill => bill.paymentStatus === 'PAID');
+                mergeBillsIntoState(paidBills);
+                if (recentSnap.size >= 150) setIsBillingCapped(true);
+                setHasLoadedPaidHistory(true);
+            } catch (error) {
+                console.error('Paid AP history load failed:', error);
+            } finally {
+                setIsLoadingHistory(false);
+                paidHistoryLoadPromiseRef.current = null;
+            }
+        })();
+
+        return paidHistoryLoadPromiseRef.current;
+    };
+
+    useEffect(() => {
+        const hasExplicitDateRange = Boolean(dateRange.start && dateRange.end);
+        if (!hasExplicitDateRange && (activeTab === 'PAID' || activeTab === 'ALL')) {
+            void loadPaidHistory();
+        }
+    }, [activeTab, hasLoadedPaidHistory, dateRange.start, dateRange.end]);
 
     const supplierByName = useMemo(() => {
         const map = new Map<string, Supplier>();
@@ -729,7 +680,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         let fixed = 0;
         
         let baseList = allBills;
-        if (activeTab !== 'ALL') baseList = baseList.filter(b => b.paymentStatus === activeTab);
+        baseList = baseList.filter(b => matchesActiveStatus(b, activeTab));
         if (dateRange.start) baseList = baseList.filter(b => b.time >= dateRange.start);
         if (dateRange.end) baseList = baseList.filter(b => b.time <= dateRange.end + 'T23:59:59');
         if (selectedTag !== 'ALL') baseList = baseList.filter(b => (b.tags || []).includes(selectedTag));
@@ -802,7 +753,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             // 'ALL' -> Show everything
         }
 
-        if (activeTab !== 'ALL') list = list.filter(b => b.paymentStatus === activeTab);
+        list = list.filter(b => matchesActiveStatus(b, activeTab));
         
         if (debouncedSearchId) {
             const idToSearch = debouncedSearchId.trim();
@@ -832,7 +783,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             const sup = supplierById.get(selectedSupplierId);
             if (sup) list = list.filter(b => b.company === sup.name);
         }
-        const hasActiveFilter = dateRange.start || dateRange.end || debouncedSearchId || debouncedSearchQuery || selectedTag !== 'ALL' || activeTab !== 'ALL' || viewMode === 'SUPPLIER_DETAIL';
+        const hasActiveFilter = dateRange.start || dateRange.end || debouncedSearchId || debouncedSearchQuery || selectedTag !== 'ALL' || viewMode === 'SUPPLIER_DETAIL';
         if (!hasActiveFilter) return list.slice(0, displayLimit);
         return list;
     }, [allBills, activeTab, debouncedSearchId, debouncedSearchQuery, dateRange, selectedTag, viewMode, selectedSupplierId, supplierByName, supplierById, displayLimit, billTypeFilter]);
@@ -851,6 +802,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     }, [allBills]);
 
     const handleOpenForm = (bill?: ExpenseItem, defaultCompany?: string) => {
+        void ensureEmployeesLoaded();
         setFormGeneratePV(false);
         if (bill) {
             setEditingBill({
@@ -1060,7 +1012,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 }
             }
 
-            await loadData();
+            mergeBillsIntoState([finalBill]);
             setIsFormOpen(false);
         } catch (e) { console.error(e); alert("Error saving: " + e); } finally { setIsSaving(false); }
     };
@@ -1082,7 +1034,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 });
             }
 
-            await loadData();
+            removeBillsFromState([billId]);
             setIsFormOpen(false);
         } catch (e) { 
             console.error("Delete failed", e); 
@@ -1108,6 +1060,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
         setIsSaving(true);
         try {
+            let updatedPrimaryBill: ExpenseItem;
+            let supplementalPaymentRecord: ExpenseItem | null = null;
             if (bill.paymentStatus === 'UNPAID' || !bill.paymentStatus) {
                 const updatedBill = {
                     ...bill,
@@ -1120,6 +1074,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 };
                 await DataManager.saveStandaloneExpense(updatedBill);
                 if (updatedBill.settlementId) await DataManager.updateExpenseInSettlement(updatedBill.settlementId, updatedBill);
+                updatedPrimaryBill = updatedBill;
             } else {
                 const paymentRecord: ExpenseItem = {
                     id: `pay_${bill.id}_${Date.now()}`,
@@ -1136,6 +1091,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     paidBy: 'COMPANY'
                 };
                 await DataManager.saveStandaloneExpense(paymentRecord);
+                supplementalPaymentRecord = paymentRecord;
 
                 const updatedTracker = {
                     ...bill,
@@ -1145,6 +1101,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 };
                 await DataManager.saveStandaloneExpense(updatedTracker);
                 if (updatedTracker.settlementId) await DataManager.updateExpenseInSettlement(updatedTracker.settlementId, updatedTracker);
+                updatedPrimaryBill = updatedTracker;
             }
 
             if (options?.generatePV) {
@@ -1187,7 +1144,10 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 console.error("Treasury ledger adjustment failed", trErr);
             }
 
-            await loadData();
+            mergeBillsIntoState([
+                updatedPrimaryBill!,
+                ...(supplementalPaymentRecord ? [supplementalPaymentRecord] : [])
+            ]);
             setPayModalData(null);
             setPayMethod('');
         } catch (err) { alert(err); } finally { setIsSaving(false); }
@@ -1209,7 +1169,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             };
             await DataManager.saveStandaloneExpense(updatedBill);
             if (updatedBill.settlementId) await DataManager.updateExpenseInSettlement(updatedBill.settlementId, updatedBill);
-            await loadData();
+            mergeBillsIntoState([updatedBill]);
         } catch (err) { alert(err); } finally { setIsSaving(false); }
     };
 
@@ -1264,6 +1224,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         setIsSaving(true);
         try {
             const selectedBills = allBills.filter(b => selectedBillIds.has(b.id));
+            const updatedBills: ExpenseItem[] = [];
+            const generatedPVBillIds: string[] = [];
             const paymentDateIso = options?.paymentDate ? `${options.paymentDate}T12:00:00.000Z` : new Date().toISOString();
             
             for (const bill of selectedBills) {
@@ -1283,6 +1245,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 
                 await DataManager.saveStandaloneExpense(updatedBill);
                 if (updatedBill.settlementId) await DataManager.updateExpenseInSettlement(updatedBill.settlementId, updatedBill);
+                updatedBills.push(updatedBill);
 
                 if (options?.generatePV) {
                     try {
@@ -1305,6 +1268,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             }]
                         });
                         await DataManager.savePaymentVoucher(pv);
+                        generatedPVBillIds.push(bill.id);
                     } catch (pvErr) {
                         console.error("Batch single PV gen error (bill saved)", pvErr);
                     }
@@ -1319,9 +1283,16 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             }
 
             alert(`✅ Batch paid ${selectedBills.length} bills successfully!`);
+            mergeBillsIntoState(updatedBills);
+            if (generatedPVBillIds.length > 0) {
+                setExpensesWithPV(prev => {
+                    const next = new Set(prev);
+                    generatedPVBillIds.forEach(id => next.add(id));
+                    return next;
+                });
+            }
             setSelectedBillIds(new Set());
             setIsBatchPayModalOpen(false);
-            await loadData();
         } catch (err) { alert(err); } finally { setIsSaving(false); }
     };
 
@@ -1353,9 +1324,9 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             }
 
             alert(`✅ 已彻底删除 ${ids.length} 笔账单！`);
+            removeBillsFromState(ids);
             setSelectedBillIds(new Set());
             setIsBatchDeleteModalOpen(false);
-            await loadData();
         } catch (err) { 
             console.error(err); 
             alert('删除出错，部分账单可能未完整彻底删除：' + err);
@@ -1965,6 +1936,11 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             const matches = await DataManager.getPaymentVouchersForExpenses([bill.id]);
             const match = matches[0] || null;
             if (match) {
+                setExpensesWithPV(prev => {
+                    const next = new Set(prev);
+                    next.add(bill.id);
+                    return next;
+                });
                 exportVoucherPDF(match);
             } else {
                 setGeneratePVForBill(bill);
@@ -2144,7 +2120,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     {[
                         { id: 'UNPAID', label: '未付' },
                         { id: 'PAID', label: '已付' },
-                        { id: 'ALL', label: `全部 (${filteredBills.length})` }
+                        { id: 'ALL', label: `全部状态 (${filteredBills.length})` }
                     ].map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
@@ -2547,16 +2523,71 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     </div>
                 )}
                 
-                {/* Row 3: Tabs + Select All */}
+                {/* Row 3: Desktop bill type selector */}
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-[118px] shrink-0">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.16em]">账单类型</p>
+                        <p className="text-[10px] font-bold text-gray-500 mt-0.5">Bill Type</p>
+                    </div>
+
+                    <div className="flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-2xl bg-[#F6F7FB] border border-gray-200 p-1.5 min-w-0">
+                        {[
+                            { value: 'ALL', label: '全部类型', english: 'All Types', count: billTypeCounts.total, icon: ListChecks },
+                            { value: 'REGULAR', label: '常规账单', english: 'Regular', count: billTypeCounts.regular, icon: Archive },
+                            { value: 'FIXED', label: '固定支出', english: 'Fixed', count: billTypeCounts.fixed, icon: RotateCcw },
+                            { value: 'SALARY', label: '薪资相关', english: 'Salary', count: billTypeCounts.salary, icon: User },
+                            { value: 'PLATFORM', label: '银行／平台', english: 'Bank / Platform', count: billTypeCounts.platform, icon: CreditCard },
+                        ].map(option => {
+                            const Icon = option.icon;
+                            const isActive = billTypeFilter === option.value;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setBillTypeFilter(option.value as typeof billTypeFilter)}
+                                    aria-pressed={isActive}
+                                    className={`group min-w-[132px] flex-1 h-[54px] px-3 rounded-xl border transition-all duration-200 flex items-center gap-2.5 text-left shrink-0 ${
+                                        isActive
+                                            ? 'bg-[#FFD200] text-[#111111] border-[#FFD200] shadow-[0_5px_14px_rgba(255,210,0,0.24)]'
+                                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-[#111111] text-[#FFD200]' : 'bg-[#F6F7FB] text-gray-500 group-hover:text-[#111111]'}`}>
+                                        <Icon size={15} strokeWidth={2.2}/>
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block text-[11px] font-black whitespace-nowrap">{option.label}</span>
+                                        <span className={`block text-[9px] font-bold mt-0.5 whitespace-nowrap ${isActive ? 'text-[#111111]/65' : 'text-gray-400'}`}>{option.english}</span>
+                                    </span>
+                                    <span className={`min-w-6 h-6 px-1.5 rounded-full flex items-center justify-center text-[10px] font-black tabular-nums shrink-0 ${isActive ? 'bg-[#111111] text-[#FFD200]' : 'bg-gray-100 text-gray-500'}`}>
+                                        {option.count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Row 4: Payment status tabs + Select All */}
                 <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap">
-                        {TABS.map(tab => (
-                            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black border-b-2 md:border-b-4 transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id ? tab.color : 'bg-white text-gray-400 border-transparent hover:bg-gray-50'}`}>{tab.label.split(' ')[0]}<span className="hidden md:inline"> {tab.label.split(' ').slice(1).join(' ')}</span>{activeTab === tab.id && <span className="bg-white/20 px-1 rounded text-[9px] ml-1">{filteredBills.length}</span>}</button>
-                        ))}
-                        <div className="h-4 w-px bg-gray-200 shrink-0 mx-0.5"></div>
-                        {filteredBills.length > 0 && <button onClick={handleSelectAll} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 ${selectedBillIds.size > 0 && selectedBillIds.size === filteredBills.length ? 'bg-[#1A1A1A] text-[#FFD700]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}><ListChecks size={12}/> {selectedBillIds.size > 0 ? '取消' : '全选'}</button>}
-                        
-                        <div className="relative shrink-0 ml-auto"><select value={selectedTag} onChange={e => setSelectedTag(e.target.value)} className="bg-gray-50 border-none rounded-lg pl-2 pr-6 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD700] appearance-none"><option value="ALL">🔖 All Tags</option>{availableTags.map(t => <option key={t} value={t}>{t}</option>)}</select><div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDown size={10}/></div></div>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-[118px] shrink-0">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.16em]">付款状态</p>
+                            <p className="text-[10px] font-bold text-gray-500 mt-0.5">Payment Status</p>
+                        </div>
+
+                        <div className="flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
+                            {TABS.map(tab => {
+                                const displayLabel = tab.id === 'ALL' ? '全部状态 (All Statuses)' : tab.label;
+                                return (
+                                    <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black border-b-2 md:border-b-4 transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id ? tab.color : 'bg-white text-gray-400 border-transparent hover:bg-gray-50'}`}>{displayLabel.split(' ')[0]}<span className="hidden md:inline"> {displayLabel.split(' ').slice(1).join(' ')}</span>{activeTab === tab.id && <span className="bg-white/20 px-1 rounded text-[9px] ml-1">{filteredBills.length}</span>}</button>
+                                );
+                            })}
+                            <div className="h-4 w-px bg-gray-200 shrink-0 mx-0.5"></div>
+                            {filteredBills.length > 0 && <button onClick={handleSelectAll} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 ${selectedBillIds.size > 0 && selectedBillIds.size === filteredBills.length ? 'bg-[#1A1A1A] text-[#FFD700]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}><ListChecks size={12}/> {selectedBillIds.size > 0 ? '取消' : '全选'}</button>}
+                            
+                            <div className="relative shrink-0 ml-auto"><select value={selectedTag} onChange={e => setSelectedTag(e.target.value)} className="bg-gray-50 border-none rounded-lg pl-2 pr-6 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD700] appearance-none"><option value="ALL">🔖 All Tags</option>{availableTags.map(t => <option key={t} value={t}>{t}</option>)}</select><div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDown size={10}/></div></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2658,7 +2689,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     </>
                 )}
 
-                {loading ? (
+                {loading || isLoadingHistory ? (
                     <div className="flex items-center justify-center h-40"><Loader2 size={32} className="animate-spin text-gray-400"/></div>
                 ) : filteredBills.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-gray-300"><Filter size={64} className="mb-4 opacity-20"/><p className="font-black text-sm">没有找到相关账单</p></div>
@@ -2796,7 +2827,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         })}
                     </div>
                     {/* Load More */}
-                    {!dateRange.start && !dateRange.end && !searchId && !searchQuery && selectedTag === 'ALL' && activeTab === 'ALL' && viewMode !== 'SUPPLIER_DETAIL' && displayLimit < totalLoaded && (
+                    {!dateRange.start && !dateRange.end && !searchId && !searchQuery && selectedTag === 'ALL' && viewMode !== 'SUPPLIER_DETAIL' && displayLimit < totalLoaded && (
                         <div className="flex flex-col items-center mt-6 gap-2">
                             <p className="text-[10px] text-gray-400 font-bold">显示 {Math.min(displayLimit, totalLoaded)} / {totalLoaded} 笔账单</p>
                             <button onClick={() => setDisplayLimit(prev => prev + 30)} className="px-6 py-3 bg-white border-2 border-gray-200 hover:border-[#FFD700] text-[#1A1A1A] rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center gap-2">
@@ -3278,7 +3309,10 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setPvMergeMode('merge')}
+                                onClick={() => {
+                                    setPvMergeMode('merge');
+                                    void ensureEmployeesLoaded();
+                                }}
                                 className={`py-2 text-[10px] md:text-xs font-black rounded-lg transition-all flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1 ${pvMergeMode === 'merge' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-md' : 'text-gray-500 hover:text-gray-800'}`}
                             >
                                 <span>🪙</span>

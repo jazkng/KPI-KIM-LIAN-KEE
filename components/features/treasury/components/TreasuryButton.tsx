@@ -13,7 +13,7 @@ export const TreasuryButton: React.FC<TreasuryButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseStyle = "h-12 px-5 rounded-xl text-sm font-bold transition duration-200 active:scale-[0.98] select-none touch-manipulation flex items-center justify-center gap-2 cursor-pointer";
+  const baseStyle = "h-12 px-5 rounded-xl text-sm font-bold transition duration-200 active:scale-[0.98] touch-pan-y flex items-center justify-center gap-2 cursor-pointer";
   
   const variants = {
     primary: "bg-[#FFD200] hover:bg-[#FFD200]/90 text-[#111111] border-none shadow-sm",

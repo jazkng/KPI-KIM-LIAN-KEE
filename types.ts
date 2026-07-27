@@ -5,6 +5,22 @@ export enum PortalRole {
   STAFF = 'STAFF'
 }
 
+export type AppLanguage = 'zh_en' | 'en' | 'my';
+
+export const normalizeLanguage = (
+  language?: string | null
+): AppLanguage => {
+  if (language === 'en') return 'en';
+  if (language === 'my') return 'my';
+
+  // 兼容旧版的 zh 和 zh_en
+  if (language === 'zh' || language === 'zh_en') {
+    return 'zh_en';
+  }
+
+  return 'zh_en';
+};
+
 // Compatibility alias while App.tsx and Login.tsx are migrated one file at a time.
 export { PortalRole as UserRole };
 
@@ -513,7 +529,7 @@ export interface Employee {
     assessmentHistory?: AssessmentRecord[]; 
     assessmentYearlyLimit?: number; 
     assessmentTargets?: string[]; 
-    preferredLanguage?: 'zh_en' | 'my'; // 🟢 Myanmar language support
+    preferredLanguage?: AppLanguage; // 🟢 Myanmar & English language support
     
     // ✨ V2 新增 (季度评分系统)
     assessmentRecordsV2?: AssessmentRecordV2[];
@@ -545,6 +561,10 @@ export interface StoreConfig {
     googleScriptUrl?: string;
     cloudinaryCloudName?: string;
     cloudinaryUploadPreset?: string;
+    logoUrl?: string;
+    headerLogoUrl?: string;
+    appIconUrl?: string;
+    receiptLogoUrl?: string;
     googleDriveUrl?: string;
     storeName?: string;
     storeAddress?: string;
@@ -1216,6 +1236,27 @@ export interface MisconductRecord {
     actionResult?: string; // e.g., "Triggered Yellow Warning"
 }
 
+export type LogStatus = 'PENDING' | 'IN_PROGRESS' | 'RESOLVED';
+
+export interface OperationalLogReply {
+    id: string;
+    authorId: string;
+    authorName: string;
+    authorOrgLevel?: OrgLevel;
+    authorDepartment?: Employee['department'];
+    content: string;
+    createdAt: string;
+    editedAt?: string;
+    legacy?: boolean;
+}
+
+export interface OperationalLogReadReceipt {
+    employeeId: string;
+    employeeName: string;
+    readAt: string;
+    legacy?: boolean;
+}
+
 export interface LogEntry {
     id: string;
     date: string;
@@ -1224,12 +1265,52 @@ export interface LogEntry {
     action: string;
     category: LogCategory;
     priority: LogPriority;
-    status: 'PENDING' | 'RESOLVED';
+    status: LogStatus;
+    creatorId?: string;
     creatorName: string;
+    creatorDepartment?: Employee['department'];
     image?: string;
+    replies?: OperationalLogReply[];
+    readReceipts?: OperationalLogReadReceipt[];
+    assignedEmployeeId?: string;
+    assignedEmployeeName?: string;
+    assignedDepartment?: Employee['department'];
+    updatedAt?: string;
+    resolvedById?: string;
+    resolvedByName?: string;
+    resolvedAt?: string;
+    /** Legacy single-reader fields kept for old Firestore records. */
     acknowledgedBy?: string;
     acknowledgedAt?: string;
     misconduct?: MisconductRecord; // NEW FIELD
+}
+
+export type NotificationEventType =
+    | 'LOGBOOK_NEW'
+    | 'LOGBOOK_REPLY'
+    | 'LOGBOOK_ASSIGNED'
+    | 'LOGBOOK_STATUS';
+
+export interface LocalizedNotificationText {
+    zh_en: string;
+    en: string;
+    my: string;
+}
+
+export interface SystemNotification {
+    id: string;
+    recipientEmployeeId: string;
+    recipientName: string;
+    eventType: NotificationEventType;
+    module: 'LOGBOOK';
+    entityId: string;
+    title: LocalizedNotificationText;
+    message: LocalizedNotificationText;
+    actorId: string;
+    actorName: string;
+    priority: LogPriority;
+    createdAt: string;
+    readAt?: string;
 }
 
 export interface WarrantyRecord {

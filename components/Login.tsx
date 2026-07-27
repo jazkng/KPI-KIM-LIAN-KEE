@@ -3,6 +3,7 @@ import { PortalRole, Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { DEFAULT_STAFF } from '../constants/staff';
 import { getPortalRole } from '../utils/orgAccess';
+import { APP_VERSION } from '../constants/versionHistory';
 import { Lock, User, ShieldCheck, Zap, Delete, Server, Unlock, ArrowLeft, CloudUpload, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
 
 interface LoginProps {
@@ -362,11 +363,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSystemEmpty, setIsSystemEmpty] = useState(false);
+  const [customLogo, setCustomLogo] = useState<string>('');
 
   useEffect(() => {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            const cfg = await DataManager.getConfig();
+            if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
+
             const list = await DataManager.getEmployees();
             const activeList = list.filter(e => e.status !== 'TERMINATED' && e.isArchived !== true);
             const hasOwner = list.some(e => e.role.includes('Owner') || ['001', '002', '003', '004'].includes(e.id));
@@ -499,7 +504,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             <div className={`glass-panel p-6 md:p-12 rounded-3xl w-full max-w-md md:max-w-lg relative z-20 animate-fade-in ${gateState !== 'HIDDEN' ? 'opacity-0' : ''} border border-[#FFD700]/30`}>
                 <div className="text-center mb-8 md:mb-12">
                     <div className="w-20 h-20 md:w-32 md:h-32 border-4 border-[#FFD700] rounded-full flex items-center justify-center mx-auto mb-6 bg-primary shadow-[0_0_30px_#FFD700]">
-                        <img src="https://i.imgur.com/ex06Jva.png" className="w-12 h-12 md:w-20 md:h-20 object-contain" />
+                        <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} className="w-12 h-12 md:w-20 md:h-20 object-contain" />
                     </div>
                     <h1 className="text-xl md:text-3xl font-serif font-black text-[#FFD700] tracking-widest uppercase">御膳智控 <span className="text-[#FFD700]/80 text-[10px] md:text-sm block mt-2 font-sans">OWNER ACCESS</span></h1>
                 </div>
@@ -510,7 +515,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                     </div>
                     {error && <p className="text-red-400 text-sm text-center font-bold flex items-center justify-center gap-2"><ShieldAlert size={16}/> {error}</p>}
                     <button type="submit" className="w-full bg-gradient-to-r from-[#FFD700] to-[#FDB931] text-[#500000] font-black py-5 md:py-6 rounded-2xl shadow-lg flex items-center justify-center gap-3 tracking-widest uppercase active:scale-95 transition-all text-lg"><Zap size={24} fill="currentColor"/> Unlock</button>
-                    <p className="text-center text-[10px] md:text-xs text-white/30 uppercase tracking-widest italic">Staff should use regular portal</p>
+                    <p className="text-center text-[10px] md:text-xs text-white/30 uppercase tracking-widest italic">Staff should use regular portal · v{APP_VERSION}</p>
                 </form>
                 <div className="mt-8 md:mt-12 text-center"><button onClick={() => onSwitchPortal?.('STAFF')} className="text-white/40 text-xs font-bold hover:text-[#FFD700] transition-colors flex items-center justify-center gap-2 w-full p-4"><ArrowLeft size={16}/> 返回前台 (Staff Portal)</button></div>
             </div>
@@ -533,7 +538,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
           <div className="relative z-10 w-full max-w-xl mx-auto lg:mx-0">
             <div className="flex items-center lg:block gap-4 sm:gap-5">
               <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-44 lg:h-44 rounded-[1.4rem] lg:rounded-[2rem] bg-[#FFD200] p-2.5 lg:p-5 shadow-[0_22px_60px_rgba(33,0,0,0.28)] shrink-0">
-                <img src="https://i.imgur.com/ex06Jva.png" alt="金莲记 Kim Lian Kee" className="w-full h-full object-contain drop-shadow-xl" />
+                <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} alt="金莲记 Kim Lian Kee" className="w-full h-full object-contain drop-shadow-xl" />
               </div>
 
               <div className="lg:mt-8 min-w-0">
@@ -571,7 +576,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             </div>
           </div>
 
-          <p className="hidden lg:block absolute bottom-7 left-12 xl:left-16 text-[10px] font-bold tracking-[0.16em] text-white/25">KIM LIAN KEE GROUP · KUALA LUMPUR</p>
+          <p className="hidden lg:block absolute bottom-7 left-12 xl:left-16 text-[10px] font-bold tracking-[0.16em] text-white/25">KIM LIAN KEE GROUP · KUALA LUMPUR · v{APP_VERSION}</p>
         </section>
 
         <main className="relative min-h-[calc(100dvh-128px)] lg:min-h-[100dvh] px-4 sm:px-8 lg:px-12 py-5 sm:py-8 lg:py-10 flex flex-col">
@@ -691,7 +696,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             <p className="mt-4 text-center text-[10px] sm:text-xs font-semibold text-stone-400">登入后将自动套用员工档案中的页面权限与默认语言。</p>
           </div>
 
-          <p className="w-full max-w-[600px] mx-auto text-center text-[9px] font-bold tracking-[0.12em] text-stone-300">KIM LIAN KEE ERP · SECURE EMPLOYEE ACCESS</p>
+          <p className="w-full max-w-[600px] mx-auto text-center text-[9px] font-bold tracking-[0.12em] text-stone-300">KIM LIAN KEE ERP v{APP_VERSION} · SECURE EMPLOYEE ACCESS</p>
         </main>
       </div>
     </div>

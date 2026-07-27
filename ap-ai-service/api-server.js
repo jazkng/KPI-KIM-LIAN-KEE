@@ -78,7 +78,6 @@ const whitelist1_MainSuppliers = {
     "8072": { folderName: "8072_EVO_PRINT_LABEL_SDN_BHD", keywords: ["EVO PRINT"] },
     "8084": { folderName: "8084_EK_FRESH", keywords: ["EK FRESH", "EKFRESH"] },
     "8085": { folderName: "8085_CHOI_SENG_TRADING", keywords: ["CHOI SENG TRADING", "CHOI SENG"] },
-    "8097": { folderName: "8097_RESTORAN_NOBLE", keywords: ["NOBLE HOUSE", "RESTORAN NOBLE", "NOBLE HOUSE SEAFOOD"] },
     "8099": { folderName: "8099_RIPON_MIAH", keywords: ["RIPON MIAH"] },
     "8102": { folderName: "8102_KLCC_BIHUN_WEE_HAI", keywords: ["KLCC BIHUN"] },
     "8103": { folderName: "8103_KY_MARKETING_RENOVATION_ENTERPRISE", keywords: ["KY MARKETING", "KY RENOVATION"] },

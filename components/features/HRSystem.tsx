@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, User, DollarSign, Briefcase, MonitorSmartphone, X } from 'lucide-react';
+import { Users, User, DollarSign, Briefcase, MonitorSmartphone, X, ArrowLeft } from 'lucide-react';
 import { Employee, RoleDefinition, RoleGuide } from '../../types';
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES, ROLE_SOP_DETAILS } from '../constants';
 import { DataManager } from '../../utils/dataManager';
@@ -82,15 +82,25 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
 
                 {/* 顶栏 — iOS safe-area */}
                 <div className="bg-[#1A1A1A] px-4 pb-4 text-white flex justify-between items-center shrink-0 border-b-4 border-[#FFD700] safe-area-top">
-                    <h3 className="font-black text-lg flex items-center gap-2">
-                        <Users className="text-[#FFD700]" />
-                        <span className="hidden md:inline">御膳智控 · </span>人事中心
-                        {isSuperAdminMode && (
-                            <span className="text-[9px] md:text-[10px] bg-[#FFD700] text-black px-2 py-1 rounded-full tracking-wider">
-                                SYSTEM ADMIN
-                            </span>
-                        )}
-                    </h3>
+                    <div className="flex items-center gap-3">
+                        <button
+                            style={noTap}
+                            onClick={onClose}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
+                        <h3 className="font-black text-lg flex items-center gap-2">
+                            <Users className="text-[#FFD700]" />
+                            <span className="hidden md:inline">御膳智控 · </span>人事中心
+                            {isSuperAdminMode && (
+                                <span className="text-[9px] md:text-[10px] bg-[#FFD700] text-black px-2 py-1 rounded-full tracking-wider">
+                                    SYSTEM ADMIN
+                                </span>
+                            )}
+                        </h3>
+                    </div>
                     <div className="flex items-center gap-2">
                         <ModuleGuideButton module="HR" />
                         <button

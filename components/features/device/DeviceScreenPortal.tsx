@@ -26,7 +26,6 @@ import { QueueDisplay } from '../../QueueDisplay';
 import { KitchenAlertDisplay } from '../kitchen/KitchenAlertDisplay';
 
 const SESSION_STORAGE_KEY = 'klk_device_session_v2';
-const HEARTBEAT_INTERVAL_MS = 30_000;
 
 type PortalStatus = 'CHECKING' | 'LOGIN' | 'READY' | 'VERIFY_ERROR';
 
@@ -172,44 +171,74 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
 
     useEffect(() => {
         if (status !== 'READY' || !session) return;
-        let disposed = false;
 
-        const heartbeat = async () => {
-            try {
-                await DeviceAccountService.heartbeat(session, activeScreen);
-                if (!disposed) setConnectionOnline(true);
-            } catch (error) {
-                if (disposed) return;
+        return DeviceAccountService.subscribeSession(
+            session,
+            account => {
+                setConnectionOnline(navigator.onLine);
+                setSession(current => {
+                    if (!current || current.deviceId !== session.deviceId) return current;
+                    const screensUnchanged = current.allowedScreens.length === account.allowedScreens.length
+                        && current.allowedScreens.every((screen, index) => screen === account.allowedScreens[index]);
+                    if (
+                        current.deviceCode === account.deviceCode
+                        && current.deviceName === account.deviceName
+                        && current.storeId === account.storeId
+                        && current.defaultScreen === account.defaultScreen
+                        && current.sessionVersion === account.sessionVersion
+                        && screensUnchanged
+                    ) {
+                        return current;
+                    }
+                    const refreshedSession: DeviceSession = {
+                        ...current,
+                        deviceCode: account.deviceCode,
+                        deviceName: account.deviceName,
+                        storeId: account.storeId,
+                        allowedScreens: account.allowedScreens,
+                        defaultScreen: account.defaultScreen,
+                        sessionVersion: account.sessionVersion,
+                    };
+                    safeStorage.set(refreshedSession);
+                    return refreshedSession;
+                });
+            },
+            error => {
                 if (error instanceof DeviceAccountAuthError) {
                     clearSession(error.message);
                 } else {
+                    console.error('Device session subscription failed:', error);
                     setConnectionOnline(false);
                 }
-            }
-        };
+            },
+        );
+    }, [clearSession, session, status]);
 
-        void heartbeat();
-        const timer = window.setInterval(() => void heartbeat(), HEARTBEAT_INTERVAL_MS);
-        const handleOnline = () => void heartbeat();
+    useEffect(() => {
+        if (status !== 'READY' || !session || session.allowedScreens.includes(activeScreen)) return;
+        const fallbackScreen = session.allowedScreens.includes(session.defaultScreen)
+            ? session.defaultScreen
+            : session.allowedScreens[0];
+        if (!fallbackScreen) {
+            clearSession('这个设备没有可使用的画面，请联系管理员。');
+            return;
+        }
+        setActiveScreen(fallbackScreen);
+        updateModeUrl(fallbackScreen);
+    }, [activeScreen, clearSession, session, status]);
+
+    useEffect(() => {
+        const handleOnline = () => setConnectionOnline(true);
         const handleOffline = () => setConnectionOnline(false);
-        const handleFocus = () => void heartbeat();
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') void heartbeat();
-        };
 
+        setConnectionOnline(navigator.onLine);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
         return () => {
-            disposed = true;
-            window.clearInterval(timer);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [activeScreen, clearSession, session, status]);
+    }, []);
 
     const handleLogin = async () => {
         if (!deviceCode.trim()) {
@@ -400,7 +429,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
 
             {!connectionOnline && (
                 <div className="fixed top-[max(env(safe-area-inset-top),0.5rem)] left-1/2 -translate-x-1/2 z-[600] rounded-full bg-red-700 text-white px-4 py-2 text-xs font-black shadow-xl flex items-center gap-2">
-                    <WifiOff size={15} /> 设备验证离线，正在重试
+                    <WifiOff size={15} /> 网络已中断，恢复后自动连接
                 </div>
             )}
 
@@ -428,7 +457,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                         <div className="p-4">
                             <div className={`rounded-xl px-3 py-2.5 text-xs font-black flex items-center gap-2 ${connectionOnline ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
                                 {connectionOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
-                                {connectionOnline ? '设备在线 · 会话正常' : '网络中断 · 自动重试中'}
+                                {connectionOnline ? '网络正常 · 会话已验证' : '网络中断 · 恢复后自动连接'}
                             </div>
 
                             {session.allowedScreens.length > 1 && (

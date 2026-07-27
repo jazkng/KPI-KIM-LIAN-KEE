@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Building, Zap, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Home, Banknote, Droplets, Wifi, Gauge, CalendarDays, TrendingUp, ArrowRight, Clock, Edit3, Calculator, BadgeAlert, Layers, ShieldCheck, Copy, AlertOctagon, Link as LinkIcon, PiggyBank, Archive, ArchiveRestore, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Filter, Search } from 'lucide-react';
+import { Calendar, Building, Zap, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Home, Banknote, Droplets, Wifi, Gauge, CalendarDays, TrendingUp, ArrowRight, Clock, Edit3, Calculator, BadgeAlert, Layers, ShieldCheck, Copy, AlertOctagon, Link as LinkIcon, PiggyBank, Archive, ArchiveRestore, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Filter, Search, ArrowLeft } from 'lucide-react';
 import { RecurringBill, BillPaymentRecord, RecurringBillCategory, RecurringBillType, ExpenseItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -765,9 +765,14 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 
                 {/* HEADER */}
                 <div className="sticky top-0 z-50 bg-[#1A1A1A] px-4 py-2.5 flex justify-between items-center text-white shrink-0 border-b border-white/10 safe-area-top">
-                    <div className="flex items-center gap-2">
-                        <button onClick={onClose} className="p-1 -ml-1 hover:bg-white/10 rounded-full select-none transition-colors" title="Back">
-                            <ChevronLeft size={20} className="text-[#FFD700]"/>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={onClose}
+                            style={{ touchAction: 'manipulation' }}
+                            className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all border border-white/10 shrink-0"
+                            aria-label="Back"
+                        >
+                            <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
                         <div>
                             <h3 className="font-sans font-extrabold text-sm tracking-tight leading-none">固定支出管理</h3>

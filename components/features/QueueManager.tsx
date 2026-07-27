@@ -4,6 +4,8 @@ import { Armchair, Users, Bell, Trash2, CheckCircle, RotateCcw, Tv, Plus, User, 
 import { QueueTicket, QueueSize, QueueStatus } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 
 interface QueueManagerProps {
     onOpenTV: () => void;
@@ -13,28 +15,42 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
     const [tickets, setTickets] = useState<QueueTicket[]>([]);
     const [paxInput, setPaxInput] = useState<string>('');
     const [phoneInput, setPhoneInput] = useState<string>('');
+    const [isIssuing, setIsIssuing] = useState(false);
     
     useEffect(() => {
-        // Initial load
-        loadQueue();
-        // Poll for updates
-        const interval = setInterval(loadQueue, 3000); 
-        return () => clearInterval(interval);
-    }, []);
+        // Only subscribe to active tickets. Firestore sends the initial result
+        // once, then only changed documents instead of re-reading every 3 seconds.
+        const activeQueueQuery = query(
+            collection(db, 'queue_tickets'),
+            where('status', 'in', ['WAITING', 'CALLING'])
+        );
 
-    const loadQueue = async () => {
-        const data = await DataManager.getQueueTickets();
-        // Sort by created time
-        setTickets(data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-    };
+        const unsubscribe = onSnapshot(
+            activeQueueQuery,
+            (snapshot) => {
+                const data = snapshot.docs.map(queueDoc => ({
+                    ...(queueDoc.data() as QueueTicket),
+                    id: queueDoc.id
+                }));
+
+                setTickets(data.sort(
+                    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                ));
+            },
+            (error) => {
+                console.error('Queue manager listener failed:', error);
+            }
+        );
+
+        return unsubscribe;
+    }, []);
 
     // --- LOGIC: TICKET GENERATION ---
     const issueTicket = async (paxOverride?: number) => {
+        if (isIssuing) return;
+
         const pax = paxOverride || parseInt(paxInput);
         if (isNaN(pax) || pax <= 0) return alert("请输入有效人数");
-
-        // 1. Fetch LATEST data to minimize race conditions
-        const latestTickets = await DataManager.getQueueTickets();
 
         let sizeCategory: QueueSize = 'SMALL';
         let prefix = 'A';
@@ -46,38 +62,34 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
             prefix = 'B';
         }
 
-        const sameTypeTickets = latestTickets.filter(t => t.number.startsWith(prefix));
-        const lastTicket = sameTypeTickets.length > 0 
-            ? [...sameTypeTickets].sort((a,b) => b.createdAt.localeCompare(a.createdAt))[0]
-            : null;
-        
-        let nextNum = 1;
-        if (lastTicket) {
-            // Robust parsing: Extract digits from "A001" -> 1
-            const numPart = lastTicket.number.replace(/\D/g, '');
-            nextNum = parseInt(numPart) + 1;
+        // Existing active tickets are already present in memory from the real-time
+        // listener. They safely seed the new counter on the first deployment day
+        // without downloading the complete queue history again.
+        const minimumSequence = tickets
+            .filter(ticket => ticket.number.startsWith(prefix))
+            .reduce((highest, ticket) => {
+                const sequence = Number(ticket.number.replace(/\D/g, ''));
+                return Number.isFinite(sequence) ? Math.max(highest, sequence) : highest;
+            }, 0);
+
+        setIsIssuing(true);
+        try {
+            const newTicket = await DataManager.issueQueueTicket({
+                sizeCategory,
+                pax,
+                phone: phoneInput,
+                minimumSequence,
+            });
+
+            alert(`✅ 取号成功 (Issued)!\n\n号码: ${newTicket.number}\n人数: ${pax} 位`);
+            setPaxInput('');
+            setPhoneInput('');
+        } catch (error) {
+            console.error('Queue ticket issue failed:', error);
+            alert('发号失败，请检查网络后再试。');
+        } finally {
+            setIsIssuing(false);
         }
-        
-        const formattedNum = `${prefix}${String(nextNum).padStart(3, '0')}`;
-
-        const newTicket: QueueTicket = {
-            id: Date.now().toString(),
-            number: formattedNum,
-            sizeCategory,
-            pax,
-            status: 'WAITING',
-            createdAt: new Date().toISOString(),
-            phone: phoneInput || undefined
-        };
-
-        await DataManager.saveQueueTicket(newTicket);
-        await loadQueue();
-        
-        // Success Feedback
-        alert(`✅ 取号成功 (Issued)!\n\n号码: ${formattedNum}\n人数: ${pax} 位`);
-
-        setPaxInput('');
-        setPhoneInput('');
     };
 
     // --- LOGIC: ACTIONS ---
@@ -99,7 +111,6 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
     const clearQueue = async () => {
         if (confirm("确定要清空所有排队记录吗？(Reset all)\n此操作将重置号码从 001 开始。")) {
             await DataManager.clearQueue();
-            loadQueue();
         }
     };
 
@@ -141,7 +152,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
                                     { label: '3-4人', pax: 4, icon: Users, color: 'border-blue-200 text-blue-700 bg-blue-50' },
                                     { label: '5人+', pax: 6, icon: UserPlus, color: 'border-orange-200 text-orange-700 bg-orange-50' },
                                 ].map((btn, idx) => (
-                                    <button key={idx} onClick={() => issueTicket(btn.pax)} className={`flex flex-col items-center justify-center py-4 rounded-2xl border-2 transition-all active:scale-95 ${btn.color} hover:shadow-md`}>
+                                    <button key={idx} onClick={() => issueTicket(btn.pax)} disabled={isIssuing} className={`flex flex-col items-center justify-center py-4 rounded-2xl border-2 transition-all active:scale-95 disabled:opacity-40 ${btn.color} hover:shadow-md`}>
                                         <btn.icon size={24} className="mb-1" /><span className="text-[10px] font-black uppercase">{btn.label}</span>
                                     </button>
                                 ))}
@@ -150,7 +161,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
                             <div className="space-y-4">
                                 <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">人数 (Pax Count)</label><input type="number" value={paxInput} onChange={e => setPaxInput(e.target.value)} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-2xl font-black text-center focus:border-[#FFD700] outline-none transition-all" placeholder="0"/></div>
                                 <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">手机号 (Phone - Optional)</label><input type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-[#FFD700]" placeholder="012..."/></div>
-                                <button onClick={() => issueTicket()} disabled={!paxInput} className="w-full py-4 bg-black text-[#FFD700] rounded-2xl font-black text-lg shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2">确认发号 (Confirm)</button>
+                                <button onClick={() => issueTicket()} disabled={!paxInput || isIssuing} className="w-full py-4 bg-black text-[#FFD700] rounded-2xl font-black text-lg shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2">{isIssuing ? '正在发号…' : '确认发号 (Confirm)'}</button>
                             </div>
                         </div>
                     </div>

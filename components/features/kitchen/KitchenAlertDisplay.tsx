@@ -175,23 +175,79 @@ export const KitchenAlertDisplay: React.FC = () => {
     }, []);
 
     const playAlertTone = useCallback(async () => {
-        const context = await getAudioContext();
-        if (!context) return;
+        try {
+            const context = await getAudioContext();
+            if (!context) return;
 
-        [0, 0.24, 0.48].forEach((delay, index) => {
-            const oscillator = context.createOscillator();
-            const gain = context.createGain();
-            oscillator.type = index === 2 ? 'square' : 'sine';
-            oscillator.frequency.setValueAtTime(index === 2 ? 1046 : 880, context.currentTime + delay);
-            gain.gain.setValueAtTime(0.0001, context.currentTime + delay);
-            gain.gain.exponentialRampToValueAtTime(0.28, context.currentTime + delay + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + delay + 0.18);
-            oscillator.connect(gain);
-            gain.connect(context.destination);
-            oscillator.start(context.currentTime + delay);
-            oscillator.stop(context.currentTime + delay + 0.2);
-        });
+            if (context.state === 'suspended') {
+                await context.resume();
+            }
+
+            const startTime = context.currentTime;
+            
+            // iPad/iOS webkit 对 linearRamp 兼容最好
+            // 播放两声高亮的“叮咚”警报 (D6 1174Hz, G6 1568Hz)
+            const playNote = (freq: number, startDelay: number, duration: number) => {
+                const osc = context.createOscillator();
+                const gain = context.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, startTime + startDelay);
+                
+                gain.gain.setValueAtTime(0.001, startTime + startDelay);
+                gain.gain.linearRampToValueAtTime(0.38, startTime + startDelay + 0.04);
+                gain.gain.linearRampToValueAtTime(0.001, startTime + startDelay + duration);
+                
+                osc.connect(gain);
+                gain.connect(context.destination);
+                
+                osc.start(startTime + startDelay);
+                osc.stop(startTime + startDelay + duration + 0.05);
+            };
+
+            // 叮
+            playNote(1174.66, 0, 0.22);
+            // 咚 (更清脆的音高)
+            playNote(1567.98, 0.18, 0.32);
+
+        } catch (error) {
+            console.error('播放提示音出错 / Play tone error:', error);
+        }
     }, [getAudioContext]);
+
+    const unlockAudioAndTest = async () => {
+        setErrorMessage('');
+        setSuccessMessage('');
+        try {
+            const context = await getAudioContext();
+            if (!context) {
+                setErrorMessage('浏览器不支持 Web Audio API，无法解锁声音。');
+                return;
+            }
+            
+            if (context.state === 'suspended') {
+                await context.resume();
+            }
+            
+            // 强制发送一次叮咚提示音进行测试
+            await playAlertTone();
+            
+            // 同时，如果是 iPad，进行一次空白或测试合成语音播报，以此完全打通 Speech 锁
+            if ('speechSynthesis' in window) {
+                const speech = window.speechSynthesis;
+                speech.cancel();
+                const utterance = new SpeechSynthesisUtterance('Sound Channel Unlocked.');
+                utterance.volume = 0.6;
+                utterance.rate = 1.05;
+                speech.speak(utterance);
+            }
+            
+            setSuccessMessage('🔊 声音测试成功！iPad 音频通道与合成语音已完全激活与解锁。');
+        } catch (error) {
+            console.error('Failed to unlock and test audio:', error);
+            setErrorMessage('声音解锁失败，请确保 iPad 没有开启物理静音开关，并允许浏览器声音播放权限。');
+        }
+    };
 
     const speakEnglish = useCallback((text: string) => {
         if (!('speechSynthesis' in window)) return;
@@ -395,10 +451,8 @@ export const KitchenAlertDisplay: React.FC = () => {
         setErrorMessage('');
         setIsStarted(true);
         isStartedRef.current = true;
-        await getAudioContext();
         await requestWakeLock();
-        void playAlertTone();
-        speakEnglish('Kitchen alert sound enabled.');
+        void unlockAudioAndTest();
     };
 
     const toggleSound = async () => {
@@ -406,9 +460,7 @@ export const KitchenAlertDisplay: React.FC = () => {
         setSoundEnabled(nextValue);
         soundEnabledRef.current = nextValue;
         if (nextValue) {
-            await getAudioContext();
-            void playAlertTone();
-            speakEnglish('Kitchen alert sound enabled.');
+            void unlockAudioAndTest();
         } else if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
         }
@@ -485,99 +537,99 @@ export const KitchenAlertDisplay: React.FC = () => {
         return (
             <article
                 key={alert.id}
-                className={`relative overflow-hidden rounded-[1.5rem] border bg-[#1B1B1E] shadow-[0_18px_45px_rgba(0,0,0,0.24)] ${borderTone}`}
+                className={`relative overflow-hidden rounded-[1.25rem] border bg-[#1B1B1E] shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${borderTone}`}
             >
                 {(isUrgent || isOverdue) && isPending && (
                     <div className="absolute inset-x-0 top-0 h-1 bg-red-500 animate-pulse" />
                 )}
 
-                <div className="p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-2xl flex flex-col items-center justify-center shrink-0 ${isPending ? 'bg-[#FFD200] text-[#111111]' : 'bg-sky-500 text-white'}`}>
-                                <span className="text-[9px] font-black uppercase tracking-[0.16em] opacity-60">桌号 / Table</span>
-                                <span className="max-w-[64px] truncate text-3xl sm:text-4xl font-black leading-none mt-1">{alert.tableNo}</span>
+                <div className="p-2.5 sm:p-3">
+                    <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                            <div className={`w-[52px] h-[52px] sm:w-[58px] sm:h-[58px] rounded-xl flex flex-col items-center justify-center shrink-0 ${isPending ? 'bg-[#FFD200] text-[#111111]' : 'bg-sky-500 text-white'}`}>
+                                <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-[0.12em] opacity-60">桌号/Table</span>
+                                <span className="max-w-[48px] truncate text-lg sm:text-xl font-black leading-none mt-0.5">{alert.tableNo}</span>
                             </div>
 
                             <div className="min-w-0 pt-0.5">
-                                <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1">
                                     {isUrgent && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-black text-white">
-                                            <Flame size={12} fill="currentColor" /> 紧急 / URGENT
+                                        <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-black text-white">
+                                            <Flame size={10} fill="currentColor" /> 紧急
                                         </span>
                                     )}
-                                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${typeMeta.tone}`}>
-                                        {typeMeta.label} · {typeMeta.english}
+                                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black ${typeMeta.tone}`}>
+                                        {typeMeta.label}
                                     </span>
-                                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-black ${isPending ? 'border-[#FFD200]/30 bg-[#FFD200]/10 text-[#FFD200]' : 'border-sky-400/25 bg-sky-400/10 text-sky-200'}`}>
-                                        {isPending ? <BellRing size={12} /> : <Eye size={12} />}
-                                        {isPending ? '待接收 / Pending' : '处理中 / Active'}
+                                    <span className={`inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-[9px] font-black ${isPending ? 'border-[#FFD200]/30 bg-[#FFD200]/10 text-[#FFD200]' : 'border-sky-400/25 bg-sky-400/10 text-sky-200'}`}>
+                                        {isPending ? <BellRing size={10} /> : <Eye size={10} />}
+                                        {isPending ? '待接收' : '处理中'}
                                     </span>
                                 </div>
-                                <h2 className="mt-2 text-xl sm:text-2xl font-black leading-tight text-white break-words">
+                                <h2 className="mt-1 text-sm sm:text-base font-black leading-tight text-white break-words">
                                     {alert.dishName}
                                 </h2>
-                                <p className="mt-1 text-xs font-bold text-stone-500 truncate">单号 / Order No. {alert.orderNo}</p>
+                                <p className="mt-0.5 text-[9px] font-bold text-stone-500 truncate">单号 No.{alert.orderNo}</p>
                             </div>
                         </div>
 
-                        <div className={`shrink-0 min-w-[88px] rounded-xl border px-2.5 py-2 text-right ${timerTone}`}>
-                            <div className="text-[9px] font-black tracking-wider opacity-65">{timerLabel}</div>
-                            <div className="mt-0.5 font-mono text-lg sm:text-xl font-black tabular-nums leading-none">
+                        <div className={`shrink-0 min-w-[64px] rounded-lg border px-1.5 py-1 text-right ${timerTone}`}>
+                            <div className="text-[7px] font-black tracking-wider opacity-65">{timerLabel}</div>
+                            <div className="mt-0.5 font-mono text-xs sm:text-sm font-black tabular-nums leading-none">
                                 {formatElapsedClock(timerStart, now)}
                             </div>
                         </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-3 gap-2">
-                        <div className="rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
-                            <div className="text-[9px] font-black tracking-wider text-stone-500">数量 / QTY</div>
-                            <div className="mt-0.5 text-xl font-black text-white">× {alert.quantity}</div>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        <div className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-1.5 flex flex-col items-center justify-center">
+                            <div className="text-[7px] font-black tracking-wider text-stone-500">数量 QTY</div>
+                            <div className="mt-0.5 text-sm font-black text-white">× {alert.quantity}</div>
                         </div>
-                        <div className="rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
-                            <div className="text-[9px] font-black tracking-wider text-stone-500">大小 / SIZE</div>
-                            <div className="mt-1 truncate text-sm font-black text-stone-200">{alert.size || '—'}</div>
+                        <div className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-1.5 flex flex-col items-center justify-center">
+                            <div className="text-[7px] font-black tracking-wider text-stone-500">大小 SIZE</div>
+                            <div className="mt-0.5 truncate text-[11px] font-black text-stone-200">{alert.size || '—'}</div>
                         </div>
-                        <div className="rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
-                            <div className="text-[9px] font-black tracking-wider text-stone-500">提交 / CREATED AT</div>
-                            <div className="mt-1 text-sm font-black text-stone-200">{formatCreatedTime(alert.createdAt)}</div>
+                        <div className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-1.5 flex flex-col items-center justify-center">
+                            <div className="text-[7px] font-black tracking-wider text-stone-500">提交 TIME</div>
+                            <div className="mt-0.5 text-[11px] font-black text-stone-200">{formatCreatedTime(alert.createdAt)}</div>
                         </div>
                     </div>
 
                     {alert.note && (
-                        <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3.5 py-3">
-                            <div className="text-[9px] font-black tracking-wider text-amber-300">楼面备注 / NOTE</div>
-                            <p className="mt-1 text-sm sm:text-base leading-relaxed font-black text-amber-50 whitespace-pre-wrap break-words">
+                        <div className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5">
+                            <div className="text-[7px] font-black tracking-wider text-amber-300/80">楼面备注 NOTE</div>
+                            <p className="mt-0.5 text-[11px] sm:text-xs leading-relaxed font-black text-amber-50 whitespace-pre-wrap break-words">
                                 {alert.note}
                             </p>
                         </div>
                     )}
 
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-stone-500">
-                        <span>楼面 / Staff：<span className="text-stone-300">{alert.createdByName}</span></span>
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 text-[9px] font-bold text-stone-500">
+                        <span>楼面：<span className="text-stone-300">{alert.createdByName}</span></span>
                         {!isPending && (
-                            <span>处理人 / Chef：<span className="text-sky-300">{alert.acknowledgedByName || operatorName}</span></span>
+                            <span>处理人：<span className="text-sky-300">{alert.acknowledgedByName || operatorName}</span></span>
                         )}
                     </div>
                 </div>
 
-                <div className="border-t border-white/8 p-3 sm:p-4">
+                <div className="border-t border-white/8 p-2">
                     {isPending ? (
                         <button
                             onClick={() => void handleAcknowledge(alert)}
                             disabled={isWorking}
-                            className="min-h-16 w-full rounded-2xl bg-[#FFD200] px-4 py-3 text-base sm:text-lg font-black text-[#111111] shadow-[0_10px_28px_rgba(255,210,0,0.2)] transition-all hover:bg-[#E8BF00] active:scale-[0.99] disabled:opacity-50"
+                            className="min-h-[40px] w-full rounded-lg bg-[#FFD200] px-3 py-1.5 text-sm font-black text-[#111111] shadow-[0_4px_12px_rgba(255,210,0,0.15)] transition-all hover:bg-[#E8BF00] active:scale-[0.99] disabled:opacity-50"
                         >
-                            {isWorking ? '正在接收 / Accepting…' : '开始处理 / Accept Alert'}
+                            {isWorking ? '正在接收…' : '开始处理 / Accept'}
                         </button>
                     ) : (
                         <button
                             onClick={() => void handleResolve(alert)}
                             disabled={isWorking}
-                            className="min-h-16 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-base sm:text-lg font-black text-white shadow-[0_10px_28px_rgba(5,150,105,0.2)] transition-all hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="min-h-[40px] w-full rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-black text-white shadow-[0_4px_12px_rgba(5,150,105,0.15)] transition-all hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-1.5"
                         >
-                            <CheckCircle2 size={23} />
-                            {isWorking ? '正在保存 / Saving…' : '处理完成 / Mark Resolved'}
+                            <CheckCircle2 size={16} />
+                            {isWorking ? '正在保存…' : '处理完成 / Done'}
                         </button>
                     )}
                 </div>
@@ -676,6 +728,14 @@ export const KitchenAlertDisplay: React.FC = () => {
                             >
                                 {soundEnabled ? <Volume2 size={19} /> : <VolumeX size={19} />}
                                 <span className="hidden xl:inline text-xs font-black">{soundEnabled ? '声音开启 / Sound On' : '已静音 / Muted'}</span>
+                            </button>
+                            <button
+                                onClick={() => void unlockAudioAndTest()}
+                                className="h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 px-2.5 sm:px-3 text-xs font-black flex items-center gap-1.5 active:scale-95 transition-all"
+                                title="测试警报声并强制解锁 iPad 声音 / Play Test & Unlock Audio"
+                            >
+                                <Volume2 size={16} className="animate-bounce" />
+                                <span>测试声音 / Test Sound</span>
                             </button>
                             <button
                                 onClick={() => void toggleFullscreen()}
@@ -935,60 +995,8 @@ export const KitchenAlertDisplay: React.FC = () => {
                         </div>
                     </section>
                 ) : (
-                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] gap-4 lg:gap-5 items-start">
-                        <section className="rounded-[1.75rem] border border-[#FFD200]/15 bg-[#141416] p-3 sm:p-4 shadow-[0_24px_70px_rgba(0,0,0,0.18)]">
-                            <div className="mb-3 flex items-center justify-between gap-3 px-1 sm:px-2">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-10 h-10 rounded-xl bg-[#FFD200] text-[#111111] flex items-center justify-center">
-                                        <BellRing size={20} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-base sm:text-lg font-black text-white">待接收 / Pending Alerts</h2>
-                                        <p className="text-[11px] font-bold text-stone-500">按等待时间处理，紧急优先 / Ordered by time, urgent first</p>
-                                    </div>
-                                </div>
-                                <span className="min-w-9 h-9 rounded-full bg-[#FFD200]/12 border border-[#FFD200]/20 px-2 text-[#FFD200] flex items-center justify-center text-lg font-black">{newCount}</span>
-                            </div>
-
-                            {pendingAlerts.length === 0 ? (
-                                <div className="min-h-44 rounded-2xl border border-dashed border-white/10 bg-white/[0.025] flex flex-col items-center justify-center px-5 py-8 text-center">
-                                    <CheckCircle2 size={30} className="text-emerald-400" />
-                                    <p className="mt-3 text-sm font-black text-stone-300">没有等待接收的通知 / No Pending Alerts</p>
-                                    <p className="mt-1 text-xs font-semibold text-stone-600">新的楼面通知会出现在这里 / New alerts will appear here instantly</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3 sm:space-y-4">
-                                    {pendingAlerts.map(renderAlertCard)}
-                                </div>
-                            )}
-                        </section>
-
-                        <section className="rounded-[1.75rem] border border-sky-400/15 bg-[#141416] p-3 sm:p-4 shadow-[0_24px_70px_rgba(0,0,0,0.18)]">
-                            <div className="mb-3 flex items-center justify-between gap-3 px-1 sm:px-2">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center">
-                                        <Eye size={20} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-base sm:text-lg font-black text-white">处理中 / In Progress</h2>
-                                        <p className="text-[11px] font-bold text-stone-500">处理完成后通知楼面 / Mark done to notify staff</p>
-                                    </div>
-                                </div>
-                                <span className="min-w-9 h-9 rounded-full bg-sky-400/10 border border-sky-400/20 px-2 text-sky-300 flex items-center justify-center text-lg font-black">{acknowledgedCount}</span>
-                            </div>
-
-                            {inProgressAlerts.length === 0 ? (
-                                <div className="min-h-44 rounded-2xl border border-dashed border-white/10 bg-white/[0.025] flex flex-col items-center justify-center px-5 py-8 text-center">
-                                    <Eye size={30} className="text-sky-400/70" />
-                                    <p className="mt-3 text-sm font-black text-stone-300">目前没有正在处理 / None Active</p>
-                                    <p className="mt-1 text-xs font-semibold text-stone-600">按“开始处理”后会移到这里 / Click Accept on left cards to start</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3 sm:space-y-4">
-                                    {inProgressAlerts.map(renderAlertCard)}
-                                </div>
-                            )}
-                        </section>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4 items-start">
+                        {alerts.map(renderAlertCard)}
                     </div>
                 )}
             </main>

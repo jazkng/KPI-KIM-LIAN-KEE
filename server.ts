@@ -2,10 +2,55 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import {
+  inferContentType,
+  localizeRecord,
+  localizeTexts,
+  type TranslationAudience,
+  type TranslationContentType,
+  type TranslationTargetLanguage,
+  type TranslationTone,
+} from "./server/translationService";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
-const TRANSLATION_MODEL = process.env.GEMINI_TRANSLATION_MODEL || "gemini-3.1-flash-lite";
+const TRANSLATION_MODELS = {
+  // Keep GEMINI_TRANSLATION_MODEL as a backwards-compatible alias.
+  lite:
+    process.env.GEMINI_TRANSLATION_LITE_MODEL ||
+    process.env.GEMINI_TRANSLATION_MODEL ||
+    "gemini-3.1-flash-lite",
+  smart: process.env.GEMINI_TRANSLATION_SMART_MODEL || "gemini-3.5-flash",
+};
+
+let aiClient: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY is not configured on the server. Please check Settings > Secrets.",
+    );
+  }
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+  }
+  return aiClient;
+}
+
+function normalizeTranslationTarget(value: unknown): TranslationTargetLanguage | null {
+  const normalized = value === "zh_en" ? "zh" : value;
+  return normalized === "zh" || normalized === "en" || normalized === "my"
+    ? normalized
+    : null;
+}
 
 // In-memory rate limiting structures
 interface RateLimitInfo {
@@ -54,16 +99,6 @@ async function startServer() {
 
   app.use(express.json({ limit: "10mb" }));
 
-  // Initialize Gemini Client secure on the server side
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
-
   // Secure API endpoint for querying app data context with Gemini
   app.post("/api/gemini/chat", async (req, res) => {
     try {
@@ -97,21 +132,21 @@ async function startServer() {
 2. 【禁止财务胡乱推测】：
    - 严禁脑补/推测/编造任何未在数据上下文中体现的数字（如具体的“利润额”、“差异额”或“差异原因”）。
    - 若系统没有明确传入的数据科目、对账明细、或明确金额，必须诚实回答：“后台对账明细不足，无法精准评估/归因，请由财务人员核实。”
-   - 如果 \`dailySettlements\` 数组为空，或用户追问无差异的日结算差额原因，必须返回：“当前后台对账数据完整无差异或明细不足，无法精准定位，请查阅当天店面实记。”
+   - 如果 dailySettlements 数组为空，或用户追问无差异的日结算差额原因，必须返回：“当前后台对账数据完整无差异或明细不足，无法精准定位，请查阅当天店面实记。”
 3. 【财务机密隔离】：对于“分红 (Dividend)”和“押金 (Deposit)”等非主营流动资金，你必须遵循隔离逻辑，在计算餐厅日常纯利润 (OpEx/P&L) 时，坚决不计入，绝不污染通用营运费用。
 
 # Core Capabilities & Thumb Actions Mapping
 1. 📊 今日营收与对账摘要
-   - 对比 POS 系统营业额（\`salesTotal\` 或 \`storeHubTotal\`）与实际流入分类对账状况。
-   - 当用户问及"收入" / "营业额" / "进账" / "营业收入"时，必须查询并统计 \`dailySettlements\` 数组。
+   - 对比 POS 系统营业额（salesTotal 或 storeHubTotal）与实际流入分类对账状况。
+   - 当用户问及"收入" / "营业额" / "进账" / "营业收入"时，必须查询并统计 dailySettlements 数组。
    - 绝不能把“分红/押金”等非主营收入计入。
 2. 📉 低库存精准检查
-   - 扫描库存并列出 \`lowStockItems\`（低于安全阈值 \`minLevelBase\` 的项）。
-   - 计算和列出低库存项时，必须严格以基础单位（Base Unit，如 \`baseUnit\`）和基础数量（\`currentQtyBase\`、\`minLevelBase\`、\`deficitBase\`）进行分析与陈述，避免混淆二/三级单位。
+   - 扫描库存并列出 lowStockItems（低于安全阈值 minLevelBase 的项）。
+   - 计算和列出低库存项时，必须严格以基础单位（Base Unit，如 baseUnit）和基础数量（currentQtyBase、minLevelBase、deficitBase）进行分析与陈述，避免混淆二/三级单位。
 3. 🔍 当日日志异常检查
-   - 检查当天运营日志 \`logs\`，稽查是否发生任何打碎砂锅、投诉、免单等异常，并可与 \`dailySettlements\` 中的 \`refundTotal\` 或 \`varianceReason\` 进行交叉稽查。
+   - 检查当天运营日志 logs，稽查是否发生任何打碎砂锅、投诉、免单等异常，并可与 dailySettlements 中的 refundTotal 或 varianceReason 进行交叉稽查。
 4. 💰 资金与转账摘要
-   - 汇总最近资金转账 \`recentFundTransfers\` 与账户余额状况。
+   - 汇总最近资金转账 recentFundTransfers 与账户余额状况。
 
 # Interaction Tone & Style
 - 语气专业、严谨、客观。
@@ -135,7 +170,7 @@ ${JSON.stringify(contextData, null, 2)}
         }
       ];
 
-      const response = await ai.models.generateContent({
+      const response = await getAiClient().models.generateContent({
         model: CHAT_MODEL,
         contents,
         config: {
@@ -151,162 +186,140 @@ ${JSON.stringify(contextData, null, 2)}
     }
   });
 
-  // Secure translation endpoint for multi-language translation (e.g. Burmese/Chinese)
+  // Smart Localization V2: translate values while all JSON keys remain program-owned.
   app.post("/api/gemini/translate-card", async (req, res) => {
     try {
       const ip = getClientIp(req);
       const limit = checkRateLimit(ip, translationLimitStore, 10);
       if (!limit.allowed) {
-        return res.status(429).json({
-          error: "⚠️ 翻译服务请求过快，请稍候再试。"
-        });
+        return res.status(429).json({ error: "⚠️ 翻译服务请求过快，请稍候再试。" });
       }
 
-      const { bundle } = req.body;
-      
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ 
-          error: "GEMINI_API_KEY is not configured on the server. Please check Settings > Secrets." 
-        });
+      const targetLang = normalizeTranslationTarget(req.body?.targetLang ?? "my");
+      if (!targetLang) {
+        return res.status(400).json({ error: "Unsupported target language." });
       }
 
-      const systemInstruction = `You are a professional restaurant-industry translator specializing in translating text from Chinese to Burmese (Myanmar).
-Translate all user-facing description, questions, and option descriptions in the provided JSON into Burmese (Myanmar language).
-Keep all IDs, grade labels (like 'S档', 'A档', 'B档', 'C档', 'D档'), and JSON structures EXACTLY the same.
-Your response must be valid JSON only, matching the exact same keys as the input.`;
-
-      const response = await ai.models.generateContent({
-        model: TRANSLATION_MODEL,
-        contents: [
-          { role: 'user', parts: [{ text: JSON.stringify(bundle) }] }
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.1,
-          responseMimeType: "application/json"
+      const translated = await localizeRecord(
+        getAiClient(),
+        req.body?.bundle,
+        {
+          targetLang,
+          contentType: "assessment_content",
+          audience: "employee",
+          tone: "clear_respectful",
+          context: "Restaurant employee performance assessment descriptions and rating options.",
+          maxLength: 240,
+          preserve: ["S档", "A档", "B档", "C档", "D档"],
         },
-      });
+        TRANSLATION_MODELS,
+      );
 
-      const responseText = response.text?.trim() || "{}";
-      const parsed = JSON.parse(responseText);
-      res.json(parsed);
+      res.json(translated);
     } catch (error: any) {
-      console.error("Card Translation API server error:", error);
-      res.status(500).json({ error: error.message || "An error occurred with Card Translation." });
+      console.error("Card Translation V2 API error:", error);
+      res.status(500).json({
+        error: error.message || "An error occurred with Smart Localization V2.",
+      });
     }
   });
 
-  // Secure translation endpoint for multi-language translation (e.g. Burmese/Chinese)
+  // Backwards-compatible single-text endpoint with semantic localization options.
   app.post("/api/gemini/translate", async (req, res) => {
     try {
       const ip = getClientIp(req);
       const limit = checkRateLimit(ip, translationLimitStore, 10);
       if (!limit.allowed) {
-        return res.status(429).json({
-          error: "⚠️ 翻译服务请求过快，请稍候再试。"
-        });
+        return res.status(429).json({ error: "⚠️ 翻译服务请求过快，请稍候再试。" });
       }
 
-      const { text, targetLang } = req.body;
-      
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ 
-          error: "GEMINI_API_KEY is not configured on the server. Please check Settings > Secrets." 
-        });
+      const targetLang = normalizeTranslationTarget(req.body?.targetLang);
+      if (!targetLang || typeof req.body?.text !== "string" || !req.body.text.trim()) {
+        return res.status(400).json({ error: "A valid text and targetLang are required." });
       }
 
-      const targetLangName = targetLang === 'my' ? 'Burmese (Myanmar)' : targetLang === 'zh' ? 'Simplified Chinese' : 'English';
-      
-      const systemInstruction = `You are a professional restaurant-industry translator. Translate the given text into ${targetLangName} accurately. Keep the tone professional, natural, and friendly. Do not output anything except the translated text itself. Do not add quotes.`;
+      const result = await localizeTexts(
+        getAiClient(),
+        [req.body.text],
+        {
+          targetLang,
+          contentType: (req.body.contentType || inferContentType(req.body.context)) as TranslationContentType,
+          audience: req.body.audience as TranslationAudience,
+          tone: req.body.tone as TranslationTone,
+          context: req.body.context,
+          maxLength: req.body.maxLength,
+          preserve: req.body.preserve,
+        },
+        TRANSLATION_MODELS,
+      );
 
-      const response = await ai.models.generateContent({
-        model: TRANSLATION_MODEL,
-        contents: [
-          { role: 'user', parts: [{ text }] }
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.3,
+      res.json({
+        text: result.translations[0],
+        original: req.body.text,
+        localization: {
+          model: result.model,
+          fallbackUsed: result.fallbackUsed,
+          contentType: result.contentType,
         },
       });
-
-      res.json({ text: response.text?.trim() });
     } catch (error: any) {
-      console.error("Translation API server error:", error);
-      res.status(500).json({ error: error.message || "An error occurred with Translation." });
+      console.error("Translation V2 API error:", error);
+      res.status(500).json({
+        error: error.message || "An error occurred with Smart Localization V2.",
+      });
     }
   });
 
-  // Secure translation endpoint with prompt builder and batch support for Myanmar Translation Layer
+  // Backwards-compatible batch/single endpoint used by logs and translation management.
   app.post("/api/gemini/translate-my", async (req, res) => {
     try {
       const ip = getClientIp(req);
       const limit = checkRateLimit(ip, translationLimitStore, 10);
       if (!limit.allowed) {
-        return res.status(429).json({
-          error: "⚠️ 翻译服务请求过快，请稍候再试。"
-        });
+        return res.status(429).json({ error: "⚠️ 翻译服务请求过快，请稍候再试。" });
       }
 
-      const { text, texts, context } = req.body;
-      
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ 
-          error: "GEMINI_API_KEY is not configured on the server. Please check Settings > Secrets." 
-        });
+      const targetLang = normalizeTranslationTarget(req.body?.targetLang ?? "my");
+      if (!targetLang) {
+        return res.status(400).json({ error: "Unsupported target language." });
       }
 
-      if (texts && Array.isArray(texts)) {
-        // Batch translation
-        const prompt = `你是餐饮 ERP 系统的缅甸文翻译助手。
-请把以下的中文词汇列表翻译成自然、简洁、适合缅甸员工操作的缅甸文。
-如果内容包含英文单位、品牌名、SKU、代码、缩写，请保留英文。
-如果是库存品项，请使用餐饮、厨房、仓库常用说法。
-如果是按钮或系统状态，请用简单易懂的操作用语。
-不要解释，只返回一个 JSON 对象，结构为: { "translations": [ "翻译1", "翻译2", ... ] }。列表顺序必须与输入列表完全一致。
+      const hasBatch = Array.isArray(req.body?.texts);
+      const inputs = hasBatch ? req.body.texts : [req.body?.text];
+      if ((!hasBatch && typeof req.body?.text !== "string") || inputs.length === 0) {
+        return res.status(400).json({ error: "Missing text or texts in request body." });
+      }
 
-上下文背景: ${context || '餐饮、库存管理'}
-待翻译列表: ${JSON.stringify(texts)}`;
+      const result = await localizeTexts(
+        getAiClient(),
+        inputs,
+        {
+          targetLang,
+          contentType: (req.body.contentType || inferContentType(req.body.context)) as TranslationContentType,
+          audience: req.body.audience as TranslationAudience,
+          tone: req.body.tone as TranslationTone,
+          context: req.body.context,
+          maxLength: req.body.maxLength,
+          preserve: req.body.preserve,
+        },
+        TRANSLATION_MODELS,
+      );
 
-        const response = await ai.models.generateContent({
-          model: TRANSLATION_MODEL,
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        });
-
-        const textResult = response.text?.trim() || "{}";
-        const parsed = JSON.parse(textResult);
-        res.json(parsed);
-      } else if (text) {
-        // Single translation
-        const prompt = `你是餐饮 ERP 系统的缅甸文翻译助手。
-请把中文翻译成自然、简洁、适合缅甸员工操作的缅甸文。
-如果内容包含英文单位、品牌名、SKU、代码、缩写，请保留英文。
-如果是库存品项，请使用餐饮、厨房、仓库常用说法。
-如果是按钮或系统状态，请用简单易懂的操作用语。
-不要解释，只返回翻译结果。
-
-待翻译文本: "${text}"
-${context ? `上下文背景: ${context}` : ''}`;
-
-        const response = await ai.models.generateContent({
-          model: TRANSLATION_MODEL,
-          contents: prompt,
-          config: {
-            temperature: 0.1,
-          },
-        });
-
-        res.json({ translation: response.text?.trim() || "" });
+      const localization = {
+        model: result.model,
+        fallbackUsed: result.fallbackUsed,
+        contentType: result.contentType,
+      };
+      if (hasBatch) {
+        res.json({ translations: result.translations, originals: inputs, localization });
       } else {
-        res.status(400).json({ error: "Missing text or texts in request body." });
+        res.json({ translation: result.translations[0], original: inputs[0], localization });
       }
     } catch (error: any) {
-      console.error("Myanmar Translation API error:", error);
-      res.status(500).json({ error: error.message || "An error occurred during translation." });
+      console.error("Translation V2 batch API error:", error);
+      res.status(500).json({
+        error: error.message || "An error occurred with Smart Localization V2.",
+      });
     }
   });
 
@@ -362,6 +375,28 @@ ${context ? `上下文背景: ${context}` : ''}`;
     } finally {
       clearTimeout(timeoutId);
     }
+  });
+
+  // Digital Asset Links verification for Android TWA
+  app.get("/.well-known/assetlinks.json", (_req, res) => {
+    res
+      .status(200)
+      .type("application/json")
+      .set("Cache-Control", "no-store")
+      .send([
+        {
+          relation: [
+            "delegate_permission/common.handle_all_urls",
+          ],
+          target: {
+            namespace: "android_app",
+            package_name: "studio.ai.service_5174.twa",
+            sha256_cert_fingerprints: [
+              "5D:4C:BC:CE:EA:19:2A:C7:58:CF:4C:AA:E6:CD:13:AE:C8:A1:B5:27:91:D4:C8:BC:8C:9F:30:C3:1D:45:26:2D",
+            ],
+          },
+        },
+      ]);
   });
 
   // Vite middleware for development
