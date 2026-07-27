@@ -13,8 +13,7 @@ import {
     GRADE_TIERS, 
     GradeTier,
     classifyJob,
-    JOB_CATEGORY_SORT,
-    DEPARTMENT_SORT
+    JOB_CATEGORY_SORT
 } from './assessmentConfig';
 
 // 💡 提取统一的等级标签类型

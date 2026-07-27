@@ -4,7 +4,7 @@ import { DataManager } from '../utils/dataManager';
 import { DEFAULT_STAFF } from '../constants/staff';
 import { getPortalRole } from '../utils/orgAccess';
 import { APP_VERSION } from '../constants/versionHistory';
-import { Lock, User, ShieldCheck, Zap, Delete, Server, Unlock, ArrowLeft, CloudUpload, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
+import { Lock, User, ShieldCheck, Zap, Delete, Unlock, ArrowLeft, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
 
 interface LoginProps {
     onLogin: (role: PortalRole, employee?: Employee) => void;
@@ -36,7 +36,7 @@ const LOGIN_STYLES = `
     position: absolute;
     width: 108%;
     height: 108%;
-    border: 1.5px dashed rgba(255, 215, 0, 0.4);
+    border: 1.5px dashed rgba(255, 210, 0, 0.4);
     border-radius: inherit;
     animation: slowRotate 30s linear infinite;
     pointer-events: none;
@@ -50,7 +50,7 @@ const LOGIN_STYLES = `
   .gold-glow-background {
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 50% 25%, rgba(255, 215, 0, 0.08) 0%, transparent 60%);
+    background: radial-gradient(circle at 50% 25%, rgba(255, 210, 0, 0.08) 0%, transparent 60%);
     pointer-events: none;
     z-index: 1;
     animation: goldGlow 8s ease-in-out infinite;
@@ -110,7 +110,7 @@ const LOGIN_STYLES = `
     background: rgba(22, 1, 1, 0.65); /* Darker glass for better contrast */
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 215, 0, 0.25);
+    border: 1px solid rgba(255, 210, 0, 0.25);
     box-shadow: 0 25px 60px rgba(0,0,0,0.7);
   }
 
@@ -118,14 +118,14 @@ const LOGIN_STYLES = `
     position: relative;
     overflow: hidden;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 210, 0, 0.15);
     transition: all 0.2s;
   }
   
   .ripple-btn:active {
     transform: scale(0.95);
-    background: rgba(255, 215, 0, 0.18);
-    border-color: #FFD700;
+    background: rgba(255, 210, 0, 0.18);
+    border-color: #FFD200;
   }
 
   .shake-container {
@@ -154,25 +154,25 @@ const LOGIN_STYLES = `
     height: 120px;
     border-radius: 50%;
     background: #500000;
-    border: 4px solid #FFD700;
+    border: 4px solid #FFD200;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     position: relative;
     z-index: 20;
-    box-shadow: 0 0 30px rgba(255,215,0,0.2);
+    box-shadow: 0 0 30px rgba(255,210,0,0.2);
     transition: all 0.3s;
   }
   
   .gate-lock-btn:hover {
-    box-shadow: 0 0 60px rgba(255,215,0,0.6);
+    box-shadow: 0 0 60px rgba(255,210,0,0.6);
     transform: scale(1.05);
   }
   
   .gate-lock-btn.charging {
     animation: shakeHard 0.5s ease-in-out infinite;
-    background: #FFD700;
+    background: #FFD200;
     border-color: white;
   }
 `;
@@ -214,15 +214,15 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
 
     return (
         <div className={`w-full ${error ? 'shake-container' : ''}`}>
-            <div className="mb-5 sm:mb-6">
+            <div className="mb-5 md:mb-6">
                 <div className="flex items-start gap-3">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${isIdStep ? 'bg-[#FFD200] text-[#171717]' : 'bg-[#650707] text-white'}`}>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${isIdStep ? 'bg-[#FFD200] text-[#111111]' : 'bg-[#650707] text-white'}`}>
                         {isIdStep ? <User size={21} /> : <KeyRound size={21} />}
                     </div>
                     <div>
                         <p className="text-[10px] font-black tracking-[0.18em] text-stone-400 uppercase">{label}</p>
-                        <h2 className="mt-0.5 text-xl sm:text-2xl font-black text-[#171717]">{title}</h2>
-                        <p className="mt-1 text-xs sm:text-sm font-semibold text-stone-500">{subtitle}</p>
+                        <h2 className="mt-0.5 text-xl md:text-2xl font-black text-[#111111]">{title}</h2>
+                        <p className="mt-1 text-xs md:text-sm font-semibold text-stone-500">{subtitle}</p>
                     </div>
                 </div>
 
@@ -238,18 +238,18 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                             autoFocus
                             autoComplete="username"
                             maxLength={20}
-                            className="w-full h-16 rounded-2xl border-2 border-stone-200 bg-[#FAF9F6] pl-12 pr-4 text-center text-xl font-black font-mono tracking-[0.16em] text-[#171717] outline-none transition-all placeholder:tracking-normal placeholder:text-sm placeholder:font-semibold focus:border-[#650707] focus:bg-white focus:ring-4 focus:ring-[#650707]/8 uppercase"
+                            className="w-full h-16 rounded-2xl border-2 border-stone-200 bg-[#FAF9F6] pl-12 pr-4 text-center text-xl font-black font-mono tracking-[0.16em] text-[#111111] outline-none transition-all placeholder:tracking-normal placeholder:text-sm placeholder:font-semibold focus:border-[#650707] focus:bg-white focus:ring-4 focus:ring-[#650707]/8 uppercase"
                         />
                     </div>
                 ) : (
-                    <div className="mt-5 flex items-center justify-center gap-2 sm:gap-3">
+                    <div className="mt-5 flex items-center justify-center gap-2 md:gap-3">
                         {Array.from({ length: slotCount }).map((_, idx) => {
                             const isFilled = idx < value.length;
                             const isActive = idx === value.length;
                             return (
                                 <div
                                     key={idx}
-                                    className={`w-10 h-12 sm:w-12 sm:h-14 rounded-xl border-2 flex items-center justify-center transition-all ${
+                                    className={`w-10 h-12 md:w-12 md:h-14 rounded-xl border-2 flex items-center justify-center transition-all ${
                                         isFilled
                                             ? 'border-[#650707] bg-[#650707] shadow-[0_8px_20px_rgba(101,7,7,0.13)]'
                                             : isActive
@@ -258,7 +258,7 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                                     }`}
                                 >
                                     {isFilled ? (
-                                        <span className={`text-lg sm:text-xl font-black select-none ${error ? 'text-red-200' : 'text-white'}`}>
+                                        <span className={`text-lg md:text-xl font-black select-none ${error ? 'text-red-200' : 'text-white'}`}>
                                             {isMasked ? '●' : value[idx]}
                                         </span>
                                     ) : isActive ? (
@@ -279,13 +279,13 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                 )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+            <div className="grid grid-cols-3 gap-2.5 md:gap-3 mb-4 md:mb-5">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
                     <button
                         type="button"
                         key={n}
                         onClick={() => onInput(n.toString())}
-                        className="h-16 sm:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl sm:text-3xl font-black text-[#171717] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
+                        className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl md:text-3xl font-black text-[#111111] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
                     >
                         {n}
                     </button>
@@ -294,14 +294,14 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                     type="button"
                     onClick={() => onInput('CLEAR')}
                     disabled={value.length === 0}
-                    className="h-16 sm:h-[72px] rounded-2xl border border-stone-200 bg-white text-xs font-black text-stone-500 flex items-center justify-center gap-1.5 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
+                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-white text-xs font-black text-stone-500 flex items-center justify-center gap-1.5 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
                 >
                     <RotateCcw size={16} /> 清除
                 </button>
                 <button
                     type="button"
                     onClick={() => onInput('0')}
-                    className="h-16 sm:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl sm:text-3xl font-black text-[#171717] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
+                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl md:text-3xl font-black text-[#111111] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
                 >
                     0
                 </button>
@@ -309,7 +309,7 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                     type="button"
                     onClick={onDelete}
                     disabled={value.length === 0}
-                    className="h-16 sm:h-[72px] rounded-2xl border border-stone-200 bg-white text-stone-500 flex items-center justify-center transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
+                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-white text-stone-500 flex items-center justify-center transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
                 >
                     <Delete size={23} />
                 </button>
@@ -319,7 +319,7 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
                 type="button"
                 onClick={onSubmit}
                 disabled={value.length === 0}
-                className="w-full min-h-14 sm:min-h-16 rounded-2xl bg-[#FFD200] px-5 py-3 text-sm sm:text-base font-black text-[#171717] shadow-[0_12px_30px_rgba(255,210,0,0.22)] transition-all flex items-center justify-center gap-2 hover:bg-[#EBC200] active:scale-[0.98] disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none disabled:pointer-events-none"
+                className="w-full min-h-14 md:min-h-16 rounded-2xl bg-[#FFD200] px-5 py-3 text-sm md:text-base font-black text-[#111111] shadow-[0_12px_30px_rgba(255,210,0,0.22)] transition-all flex items-center justify-center gap-2 hover:bg-[#E5C100] active:scale-[0.98] disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none disabled:pointer-events-none"
             >
                 {isIdStep ? <ChevronRight size={21} /> : <Unlock size={20} />}
                 {submitText}
@@ -334,11 +334,11 @@ const TransitionGate = ({ gateState, onLockClick }: any) => {
         <div className={`energy-gate ${gateState === 'ENTERING' ? 'dissolved' : ''}`}>
             {(gateState === 'CLOSED' || gateState === 'OPENING') && (
                 <div className={`gate-lock-btn ${gateState === 'OPENING' ? 'charging' : ''}`} onClick={onLockClick}>
-                    <Lock size={48} className="text-[#FFD700]" strokeWidth={2}/>
+                    <Lock size={48} className="text-[#FFD200]" strokeWidth={2}/>
                 </div>
             )}
             {gateState === 'CLOSED' && (
-                <div className="mt-8 text-[#FFD700] font-serif tracking-[0.5em] text-xs uppercase opacity-70 animate-pulse font-bold">
+                <div className="mt-8 text-[#FFD200] font-serif tracking-[0.5em] text-xs uppercase opacity-70 animate-pulse font-bold">
                     点击进入系统 (Tap to Enter)
                 </div>
             )}
@@ -501,56 +501,56 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             <style>{LOGIN_STYLES}</style>
             <div className="smoke-layer"></div>
             <TransitionGate gateState={gateState} onLockClick={() => setGateState('OPENING')} />
-            <div className={`glass-panel p-6 md:p-12 rounded-3xl w-full max-w-md md:max-w-lg relative z-20 animate-fade-in ${gateState !== 'HIDDEN' ? 'opacity-0' : ''} border border-[#FFD700]/30`}>
+            <div className={`glass-panel p-6 md:p-12 rounded-3xl w-full max-w-md md:max-w-lg relative z-20 animate-fade-in ${gateState !== 'HIDDEN' ? 'opacity-0' : ''} border border-[#FFD200]/30`}>
                 <div className="text-center mb-8 md:mb-12">
-                    <div className="w-20 h-20 md:w-32 md:h-32 border-4 border-[#FFD700] rounded-full flex items-center justify-center mx-auto mb-6 bg-primary shadow-[0_0_30px_#FFD700]">
+                    <div className="w-20 h-20 md:w-32 md:h-32 border-4 border-[#FFD200] rounded-full flex items-center justify-center mx-auto mb-6 bg-primary shadow-[0_0_30px_#FFD200]">
                         <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} className="w-12 h-12 md:w-20 md:h-20 object-contain" />
                     </div>
-                    <h1 className="text-xl md:text-3xl font-serif font-black text-[#FFD700] tracking-widest uppercase">御膳智控 <span className="text-[#FFD700]/80 text-[10px] md:text-sm block mt-2 font-sans">OWNER ACCESS</span></h1>
+                    <h1 className="text-xl md:text-3xl font-serif font-black text-[#FFD200] tracking-widest uppercase">御膳智控 <span className="text-[#FFD200]/80 text-[10px] md:text-sm block mt-2 font-sans">OWNER ACCESS</span></h1>
                 </div>
                 <form onSubmit={e => { e.preventDefault(); handleBossDirectLogin(); }} className={`space-y-6 md:space-y-8 ${error ? 'shake-container' : ''}`}>
                     <div className="relative">
-                        <Lock className="absolute left-6 top-5 text-[#FFD700]/50" size={24} />
-                        <input type="password" value={bossPassword} onChange={e => { setBossPassword(e.target.value); setError(''); }} className="w-full bg-black/40 border-2 border-[#FFD700]/30 rounded-2xl py-5 pl-16 text-[#FFD700] outline-none text-center font-mono text-2xl tracking-[0.5em] placeholder:tracking-normal focus:border-[#FFD700] transition-colors" placeholder="OWNER PIN" />
+                        <Lock className="absolute left-6 top-5 text-[#FFD200]/50" size={24} />
+                        <input type="password" value={bossPassword} onChange={e => { setBossPassword(e.target.value); setError(''); }} className="w-full bg-black/40 border-2 border-[#FFD200]/30 rounded-2xl py-5 pl-16 text-[#FFD200] outline-none text-center font-mono text-2xl tracking-[0.5em] placeholder:tracking-normal focus:border-[#FFD200] transition-colors" placeholder="OWNER PIN" />
                     </div>
                     {error && <p className="text-red-400 text-sm text-center font-bold flex items-center justify-center gap-2"><ShieldAlert size={16}/> {error}</p>}
-                    <button type="submit" className="w-full bg-gradient-to-r from-[#FFD700] to-[#FDB931] text-[#500000] font-black py-5 md:py-6 rounded-2xl shadow-lg flex items-center justify-center gap-3 tracking-widest uppercase active:scale-95 transition-all text-lg"><Zap size={24} fill="currentColor"/> Unlock</button>
+                    <button type="submit" className="w-full bg-gradient-to-r from-[#FFD200] to-[#FDB931] text-[#500000] font-black py-5 md:py-6 rounded-2xl shadow-lg flex items-center justify-center gap-3 tracking-widest uppercase active:scale-95 transition-all text-lg"><Zap size={24} fill="currentColor"/> Unlock</button>
                     <p className="text-center text-[10px] md:text-xs text-white/30 uppercase tracking-widest italic">Staff should use regular portal · v{APP_VERSION}</p>
                 </form>
-                <div className="mt-8 md:mt-12 text-center"><button onClick={() => onSwitchPortal?.('STAFF')} className="text-white/40 text-xs font-bold hover:text-[#FFD700] transition-colors flex items-center justify-center gap-2 w-full p-4"><ArrowLeft size={16}/> 返回前台 (Staff Portal)</button></div>
+                <div className="mt-8 md:mt-12 text-center"><button onClick={() => onSwitchPortal?.('STAFF')} className="text-white/40 text-xs font-bold hover:text-[#FFD200] transition-colors flex items-center justify-center gap-2 w-full p-4"><ArrowLeft size={16}/> 返回前台 (Staff Portal)</button></div>
             </div>
         </div>
       );
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#F7F3EA] font-sans text-[#171717] overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-[#F7F3EA] font-sans text-[#111111] overflow-x-hidden">
       <style>{LOGIN_STYLES}</style>
       <TransitionGate gateState={gateState} onLockClick={() => setGateState('OPENING')} />
 
       <div className={`min-h-[100dvh] grid grid-cols-1 lg:grid-cols-[minmax(360px,42%)_minmax(0,58%)] transition-all duration-500 ${gateState !== 'HIDDEN' ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}>
-        <section className="relative overflow-hidden bg-[#650707] text-white px-5 sm:px-8 lg:px-12 xl:px-16 py-6 sm:py-8 lg:py-12 flex lg:min-h-[100dvh] items-center">
+        <section className="relative overflow-hidden bg-[#650707] text-white px-5 md:px-8 lg:px-12 xl:px-16 py-6 md:py-8 lg:py-12 flex lg:min-h-[100dvh] items-center">
           <div className="absolute -top-32 -left-28 w-80 h-80 rounded-full border border-[#FFD200]/15" />
           <div className="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-[#FFD200]/8 blur-2xl" />
           <div className="absolute -bottom-40 -right-32 w-96 h-96 rounded-full border border-[#FFD200]/10" />
           <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#390303]/45 to-transparent" />
 
           <div className="relative z-10 w-full max-w-xl mx-auto lg:mx-0">
-            <div className="flex items-center lg:block gap-4 sm:gap-5">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-44 lg:h-44 rounded-[1.4rem] lg:rounded-[2rem] bg-[#FFD200] p-2.5 lg:p-5 shadow-[0_22px_60px_rgba(33,0,0,0.28)] shrink-0">
+            <div className="flex items-center lg:block gap-4 md:gap-5">
+              <div className="w-20 h-20 md:w-24 md:h-24 lg:w-44 lg:h-44 rounded-[1.4rem] lg:rounded-[2rem] bg-[#FFD200] p-2.5 lg:p-5 shadow-[0_22px_60px_rgba(33,0,0,0.28)] shrink-0">
                 <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} alt="金莲记 Kim Lian Kee" className="w-full h-full object-contain drop-shadow-xl" />
               </div>
 
               <div className="lg:mt-8 min-w-0">
-                <div className="inline-flex items-center rounded-full border border-[#FFD200]/25 bg-[#FFD200]/10 px-3 py-1.5 text-[10px] sm:text-xs font-black tracking-[0.14em] text-[#FFD200]">
+                <div className="inline-flex items-center rounded-full border border-[#FFD200]/25 bg-[#FFD200]/10 px-3 py-1.5 text-[10px] md:text-xs font-black tracking-[0.14em] text-[#FFD200]">
                   员工入口 · STAFF PORTAL
                 </div>
-                <h1 className="mt-3 lg:mt-5 text-3xl sm:text-4xl lg:text-6xl font-serif font-black tracking-[0.08em] text-[#FFD200] leading-none">金莲记</h1>
-                <p className="mt-2 text-xs sm:text-sm lg:text-lg font-bold uppercase tracking-[0.28em] text-white/70">Kim Lian Kee</p>
+                <h1 className="mt-3 lg:mt-5 text-3xl md:text-4xl lg:text-6xl font-serif font-black tracking-[0.08em] text-[#FFD200] leading-none">金莲记</h1>
+                <p className="mt-2 text-xs md:text-sm lg:text-lg font-bold uppercase tracking-[0.28em] text-white/70">Kim Lian Kee</p>
               </div>
             </div>
 
-            <div className="hidden sm:block mt-7 lg:mt-10 max-w-md">
+            <div className="hidden md:block mt-7 lg:mt-10 max-w-md">
               <div className="flex items-center gap-3 text-xs font-bold text-white/55">
                 <span className="h-px flex-1 bg-[#FFD200]/35" />
                 <span className="tracking-[0.22em]">SINCE 1927</span>
@@ -579,7 +579,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
           <p className="hidden lg:block absolute bottom-7 left-12 xl:left-16 text-[10px] font-bold tracking-[0.16em] text-white/25">KIM LIAN KEE GROUP · KUALA LUMPUR · v{APP_VERSION}</p>
         </section>
 
-        <main className="relative min-h-[calc(100dvh-128px)] lg:min-h-[100dvh] px-4 sm:px-8 lg:px-12 py-5 sm:py-8 lg:py-10 flex flex-col">
+        <main className="relative min-h-[calc(100dvh-128px)] lg:min-h-[100dvh] px-4 md:px-8 lg:px-12 py-5 md:py-8 lg:py-10 flex flex-col">
           <div className="w-full max-w-[600px] mx-auto flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 text-xs font-black text-stone-500">
               <MapPin size={15} className="text-[#650707]" /> 甲洞分行 · Kepong Branch
@@ -587,13 +587,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             <button
               type="button"
               onClick={() => onSwitchPortal?.('BOSS')}
-              className="rounded-full border border-stone-200 bg-white px-3 py-2 text-[10px] sm:text-xs font-black text-stone-500 shadow-sm transition-colors hover:border-[#650707]/25 hover:text-[#650707]"
+              className="rounded-full border border-stone-200 bg-white px-3 py-2 text-[10px] md:text-xs font-black text-stone-500 shadow-sm transition-colors hover:border-[#650707]/25 hover:text-[#650707]"
             >
               老板登入 · Owner
             </button>
           </div>
 
-          <div className="w-full max-w-[520px] mx-auto flex-1 flex flex-col justify-center py-5 sm:py-7">
+          <div className="w-full max-w-[520px] mx-auto flex-1 flex flex-col justify-center py-5 md:py-7">
             <div className="mb-4 flex items-center justify-center gap-2">
               <div className={`h-8 rounded-full px-3 flex items-center gap-1.5 text-[10px] font-black ${step === 'SELECT' ? 'bg-[#650707] text-white' : 'bg-emerald-100 text-emerald-700'}`}>
                 <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center">1</span> 员工编号
@@ -611,14 +611,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                 <p className="mt-1 text-xs font-semibold text-stone-400">Connecting employee records</p>
               </div>
             ) : isSystemEmpty ? (
-              <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 sm:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
+              <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
                 <ShieldCheck size={42} className="mx-auto text-[#650707]" />
                 <h2 className="mt-4 text-xl font-black">系统尚未初始化</h2>
                 <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人建立初始员工资料。</p>
-                <button onClick={handleFirstRunInit} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#171717] font-black">初始化系统</button>
+                <button onClick={handleFirstRunInit} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">初始化系统</button>
               </div>
             ) : step === 'SELECT' ? (
-              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 sm:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
+              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 md:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
                 <Keypad
                   value={enteredId}
                   label="STAFF ID"
@@ -630,7 +630,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                 />
               </div>
             ) : (
-              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 sm:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
+              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 md:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
                 {step === 'CHANGE_PIN' && (
                   <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3.5 text-center">
                     <p className="text-xs font-black text-sky-800">安全升级 · 请设置你的 6 位新 PIN</p>
@@ -687,13 +687,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                 url.searchParams.set('mode', 'device');
                 window.location.assign(url.toString());
               }}
-              className="mt-4 w-full min-h-[52px] rounded-2xl border border-stone-300 bg-white px-4 py-3 text-xs sm:text-sm font-black text-stone-600 flex items-center justify-center gap-2 shadow-sm transition-all hover:border-[#650707]/30 hover:text-[#650707] active:scale-[0.99]"
+              className="mt-4 w-full min-h-[52px] rounded-2xl border border-stone-300 bg-white px-4 py-3 text-xs md:text-sm font-black text-stone-600 flex items-center justify-center gap-2 shadow-sm transition-all hover:border-[#650707]/30 hover:text-[#650707] active:scale-[0.99]"
             >
               <MonitorSmartphone size={17} />
               专用设备登入 · Device Login
             </button>
 
-            <p className="mt-4 text-center text-[10px] sm:text-xs font-semibold text-stone-400">登入后将自动套用员工档案中的页面权限与默认语言。</p>
+            <p className="mt-4 text-center text-[10px] md:text-xs font-semibold text-stone-400">登入后将自动套用员工档案中的页面权限与默认语言。</p>
           </div>
 
           <p className="w-full max-w-[600px] mx-auto text-center text-[9px] font-bold tracking-[0.12em] text-stone-300">KIM LIAN KEE ERP v{APP_VERSION} · SECURE EMPLOYEE ACCESS</p>

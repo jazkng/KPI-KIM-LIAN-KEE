@@ -19,7 +19,7 @@ export const TreasuryHeader: React.FC<TreasuryHeaderProps> = ({ onClose }) => {
         >
           <ArrowLeft size={20} strokeWidth={2.5} />
         </button>
-        <div className="bg-gradient-to-br from-[#FFD200] to-[#E5BD00] text-[#111111] p-2 rounded-xl shrink-0 shadow-sm">
+        <div className="bg-gradient-to-br from-[#FFD200] to-[#E5C100] text-[#111111] p-2 rounded-xl shrink-0 shadow-sm">
           <Wallet className="w-5 h-5 stroke-[2.5]" />
         </div>
         <div className="min-w-0">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Save, Search, Languages, CheckCircle2, Loader2, Package, Flame, Coffee, Box, ChevronDown, ChevronRight, Sparkles, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Save, Search, Languages, CheckCircle2, Loader2, Package, Flame, Coffee, Box, ChevronDown, ChevronRight, Sparkles, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { StockItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { UI_TRANSLATION_KEYS } from '../../constants/translationKeys';
@@ -323,13 +323,12 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
     // Stats for active dashboard
     const totalItems = allItems.length;
     const translatedCount = Object.values(itemTranslations).filter(v => v && v.trim()).length;
-    const missingTotalItems = totalItems - translatedCount;
 
     if (loading) {
         return (
             <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center">
                 <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-3 shadow-2xl">
-                    <Loader2 size={32} className="animate-spin text-[#FFD700]"/>
+                    <Loader2 size={32} className="animate-spin text-[#FFD200]"/>
                     <p className="text-sm font-bold text-gray-700">加载翻译数据库 & 盘点中...</p>
                 </div>
             </div>
@@ -338,7 +337,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* HEADER */}
                 <div className="bg-[#111111] px-3 py-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] safe-area-top">
@@ -386,8 +385,8 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                 </div>
 
                 {/* MODULE TABS & GENERAL ACTIONS */}
-                <div className="bg-white border-b border-gray-200 p-2 md:p-2.5 flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center shrink-0">
-                    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide shrink-0 pb-1 sm:pb-0">
+                <div className="bg-white border-b border-gray-200 p-2 md:p-2.5 flex flex-col md:flex-row gap-2 justify-between items-stretch md:items-center shrink-0">
+                    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide shrink-0 pb-1 md:pb-0">
                         {[
                             { key: 'ITEMS', label: '品项翻译', sub: `${translatedCount}/${totalItems}` },
                             { key: 'CATEGORIES', label: '分类翻译', sub: `${Object.keys(categoryTranslations).filter(k => categoryTranslations[k]).length}` },
@@ -406,12 +405,12 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                     </div>
 
                     {/* AI ASSISTANT PANEL */}
-                    <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0 pt-1 sm:pt-0">
+                    <div className="flex items-center gap-2 justify-between md:justify-end shrink-0 pt-1 md:pt-0">
                         <button
                             onClick={handleAiTranslate}
                             disabled={translating}
                             style={{ touchAction: 'manipulation' }}
-                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
                         >
                             {translating ? (
                                 <>
@@ -429,7 +428,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                         <button
                             onClick={() => setShowMissingOnly(!showMissingOnly)}
                             style={{ touchAction: 'manipulation' }}
-                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold border transition-all ${showMissingOnly ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold border transition-all ${showMissingOnly ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
                         >
                             {showMissingOnly ? <EyeOff size={14} /> : <Eye size={14} />}
                             <span>{showMissingOnly ? '只看未翻译' : '查看全部'}</span>
@@ -496,15 +495,15 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                                                     const isMissing = !currentVal.trim();
                                                     
                                                     return (
-                                                        <div key={item.id} className={`p-3 px-4 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors ${isDraft ? 'bg-green-50/60' : 'hover:bg-gray-50/50'}`}>
-                                                            <div className="flex items-center gap-2.5 sm:w-2/5 min-w-0">
+                                                        <div key={item.id} className={`p-3 px-4 flex flex-col md:flex-row md:items-center gap-3 transition-colors ${isDraft ? 'bg-green-50/60' : 'hover:bg-gray-50/50'}`}>
+                                                            <div className="flex items-center gap-2.5 md:w-2/5 min-w-0">
                                                                 <span className="text-[9px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">{item.id}</span>
                                                                 <div className="truncate">
                                                                     <div className="text-xs font-black text-[#111111]">{item.name}</div>
                                                                     {item.image && <div className="text-[9px] text-gray-400 font-mono mt-0.5">有图片关联</div>}
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2 sm:w-3/5">
+                                                            <div className="flex items-center gap-2 md:w-3/5">
                                                                 <span className="text-xs text-gray-300 font-mono">→</span>
                                                                 <div className="relative flex-grow">
                                                                     <input 
@@ -586,7 +585,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                     {activeSection === 'UNITS' && (
                         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                             <h4 className="text-xs font-black text-[#111111] uppercase tracking-wider mb-4 border-b pb-2">单位翻译对照表 (Unit Translations)</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {UNIT_LIST.filter(u => !showMissingOnly || !(unitTranslations[u] || '').trim()).map(unit => {
                                     const currentVal = unitTranslations[unit] || '';
                                     const isDraft = currentVal !== savedUnitTranslations[unit];
@@ -650,8 +649,8 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                 </div>
 
                 {/* BOTTOM FLOATING CONTROL BAR */}
-                <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl z-30 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-                    <div className="text-[11px] md:text-xs text-gray-500 text-center sm:text-left leading-tight">
+                <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 px-4 md:px-6 flex flex-col md:flex-row items-center justify-between gap-2.5 shadow-2xl z-30 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                    <div className="text-[11px] md:text-xs text-gray-500 text-center md:text-left leading-tight">
                         <span className="inline-block mr-1 text-gray-400 font-medium">系统盘点:</span>
                         品项 <strong className="text-[#111111] font-mono">{translatedCount} / {totalItems}</strong> 已译 •
                         分类 <strong className="text-[#111111] font-mono">{Object.values(categoryTranslations).filter(v => v?.trim()).length}</strong> •
@@ -664,11 +663,11 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                         )}
                     </div>
                     
-                    <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                    <div className="flex gap-2 w-full md:w-auto shrink-0">
                         <button
                             onClick={onClose}
                             style={{ touchAction: 'manipulation' }}
-                            className="flex-1 sm:flex-initial px-5 py-2.5 min-h-[44px] border border-gray-300 hover:bg-gray-50 rounded-xl font-bold text-xs text-gray-700 active:scale-95 transition-all"
+                            className="flex-1 md:flex-initial px-5 py-2.5 min-h-[44px] border border-gray-300 hover:bg-gray-50 rounded-xl font-bold text-xs text-gray-700 active:scale-95 transition-all"
                         >
                             关闭
                         </button>
@@ -676,7 +675,7 @@ export const TranslationManager: React.FC<TranslationManagerProps> = ({ onClose 
                             onClick={handleSave}
                             disabled={saving}
                             style={{ touchAction: 'manipulation' }}
-                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 min-h-[44px] bg-[#111111] text-[#FFD200] rounded-xl font-black text-xs shadow-lg hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+                            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 min-h-[44px] bg-[#111111] text-[#FFD200] rounded-xl font-black text-xs shadow-lg hover:bg-black transition-all active:scale-95 disabled:opacity-50"
                         >
                             {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
                             <span>{saving ? '正在部署保存...' : `确认并保存当前更改 (${unsavedCount})`}</span>

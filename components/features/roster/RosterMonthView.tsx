@@ -1,8 +1,7 @@
 import React from 'react';
 import { RosterCell } from './RosterCell';
-import { getDayOfWeekText, getEmployeeDept, getDeptLabel } from './rosterUtils';
-import { ROSTER_STATUSES } from './rosterConstants';
-import { AlertCircle, Users, CheckSquare } from 'lucide-react';
+import { getDayOfWeekText, getEmployeeDept } from './rosterUtils';
+import { AlertCircle } from 'lucide-react';
 
 interface RosterMonthViewProps {
     employees: any[];

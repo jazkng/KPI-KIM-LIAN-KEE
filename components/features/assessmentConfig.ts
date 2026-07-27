@@ -1,8 +1,6 @@
 import React from 'react';
 import { 
-    Flame, Users, DollarSign, Zap, BookOpen, Heart, 
-    Sparkles, Timer, Shield, Crown, ChefHat, Coffee,
-    ClipboardCheck, Target, Car, Trash2 
+    Flame, Users, Zap, BookOpen, Sparkles, Shield, Target 
 } from 'lucide-react';
 
 // ============================================================================

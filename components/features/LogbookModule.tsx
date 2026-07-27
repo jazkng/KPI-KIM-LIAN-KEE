@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-    BookOpen, AlertCircle, CheckCircle2, Clock, Trash2, Shield, AlertTriangle,
-    FileText, Camera, X, Loader2, ChevronDown, Zap, PenTool, Maximize2,
+    BookOpen, AlertCircle, CheckCircle2, Clock, Trash2, Shield, FileText, Camera, X, Loader2, ChevronDown, Zap, PenTool, Maximize2,
     Gavel, Coins, Check, Calendar, Languages, MessageCircle, UserCheck, Send, ArrowLeft,
 } from 'lucide-react';
 import {
@@ -957,11 +956,11 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
 
             {/* ── ADD LOG FORM ──────────────────────────────────────────────── */}
             {!viewOnly && (
-                <div className="bg-white p-5 rounded-2xl shadow-lg border border-[#FFD700]/20 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#FFD700] to-[#1A1A1A]" />
+                <div className="bg-white p-5 rounded-2xl shadow-lg border border-[#FFD200]/20 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#FFD200] to-[#111111]" />
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-black text-[#1A1A1A] flex items-center gap-2">
-                            <BookOpen size={20} className="text-[#FFD700] fill-current" />
+                        <h3 className="text-lg font-black text-[#111111] flex items-center gap-2">
+                            <BookOpen size={20} className="text-[#FFD200] fill-current" />
                             {t.addLogTitle}
                         </h3>
                         <ModuleGuideButton module="LOGBOOK" dark />
@@ -975,7 +974,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 value={form.category}
                                 onChange={e => setForm({ ...form, category: e.target.value as LogCategory })}
                                 style={noTapHighlight}
-                                className="w-full p-3 min-h-[44px] bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD700]"
+                                className="w-full p-3 min-h-[44px] bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none focus:border-[#FFD200]"
                             >
                                 <option value="OTHER">{t.categoryGeneral}</option>
                                 <option value="COMPLAINT">{t.categoryComplaint}</option>
@@ -986,7 +985,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 value={form.priority}
                                 onChange={e => setForm({ ...form, priority: e.target.value as LogPriority })}
                                 style={noTapHighlight}
-                                className={`w-full p-3 min-h-[44px] border rounded-xl text-xs font-bold outline-none focus:border-[#FFD700] ${form.priority === 'HIGH' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 border-gray-200'}`}
+                                className={`w-full p-3 min-h-[44px] border rounded-xl text-xs font-bold outline-none focus:border-[#FFD200] ${form.priority === 'HIGH' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 border-gray-200'}`}
                             >
                                 <option value="NORMAL">{t.priorityNormal}</option>
                                 <option value="HIGH">{t.priorityHigh}</option>
@@ -1024,7 +1023,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                             <textarea
                                 value={form.issue}
                                 onChange={e => setForm({ ...form, issue: e.target.value })}
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-[#FFD700] transition-colors resize-none h-20 placeholder:font-normal"
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-[#FFD200] transition-colors resize-none h-20 placeholder:font-normal"
                                 placeholder={t.issuePlaceholder}
                             />
                         </div>
@@ -1152,7 +1151,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 onClick={handleAddLog}
                                 disabled={isUploading || isSubmitting}
                                 style={noTapHighlight}
-                                className="flex-grow bg-[#1A1A1A] text-[#FFD700] h-14 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2 hover:bg-black disabled:opacity-50 disabled:scale-100 select-none"
+                                className="flex-grow bg-[#111111] text-[#FFD200] h-14 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2 hover:bg-black disabled:opacity-50 disabled:scale-100 select-none"
                             >
                                 {isSubmitting
                                     ? <Loader2 size={20} className="animate-spin" />
@@ -1257,7 +1256,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                             key={tab.key}
                             onClick={() => setActiveFilter(tab.key)}
                             style={noTapHighlight}
-                            className={`px-3 md:px-4 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all select-none active:scale-95 ${activeFilter === tab.key ? `bg-white shadow-sm ${tab.extra || 'text-[#1A1A1A]'}` : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 md:px-4 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all select-none active:scale-95 ${activeFilter === tab.key ? `bg-white shadow-sm ${tab.extra || 'text-[#111111]'}` : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             {tab.label}
                         </button>
@@ -1334,12 +1333,12 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
 
                                     <div className="flex gap-3">
                                         <div className="flex-grow space-y-2 min-w-0">
-                                            <h5 className="font-bold text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-wrap break-words">
+                                            <h5 className="font-bold text-sm text-[#111111] leading-relaxed whitespace-pre-wrap break-words">
                                                 {log.issue}
                                             </h5>
 
                                             {/* 负责人和处理状态 */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 <div className="min-h-[42px] bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 flex items-center gap-2">
                                                     <UserCheck size={13} className="text-amber-600 shrink-0" />
                                                     {canManageLog ? (
@@ -1614,7 +1613,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
             {/* 图片放大 (Photo Fullscreen Viewer) */}
             {viewImage && (
                 <div
-                    className="fixed inset-0 bg-black/95 z-[250] flex flex-col items-center justify-between p-4 sm:p-6 animate-in fade-in duration-200 select-none cursor-pointer"
+                    className="fixed inset-0 bg-black/95 z-[250] flex flex-col items-center justify-between p-4 md:p-6 animate-in fade-in duration-200 select-none cursor-pointer"
                     style={{
                         paddingTop: 'max(env(safe-area-inset-top, 16px), 16px)',
                         paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
@@ -1637,7 +1636,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                             <span>{t.back}</span>
                         </button>
 
-                        <span className="text-white/80 font-bold text-xs sm:text-sm tracking-wide bg-white/10 px-3.5 py-1.5 rounded-full border border-white/10">
+                        <span className="text-white/80 font-bold text-xs md:text-sm tracking-wide bg-white/10 px-3.5 py-1.5 rounded-full border border-white/10">
                             {t.viewPhotoTitle}
                         </span>
 
@@ -1687,7 +1686,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                 <MessageCircle size={17} />
                             </div>
                             <div>
-                                <h4 className="font-black text-[#1A1A1A]">{t.addReplyTitle}</h4>
+                                <h4 className="font-black text-[#111111]">{t.addReplyTitle}</h4>
                                 <p className="text-[10px] font-bold text-stone-400">
                                     {t.addReplySub}
                                 </p>

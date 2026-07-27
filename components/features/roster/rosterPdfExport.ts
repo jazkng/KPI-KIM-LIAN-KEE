@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { getDayOfWeekText, getEmployeeDept } from './rosterUtils';
+import { getDayOfWeekText } from './rosterUtils';
 
 interface ExportOptions {
     showEmployeeId: boolean;
@@ -98,7 +98,6 @@ export async function exportRosterToPdf(
                 </thead>
                 <tbody>
                     ${pageEmployees.map(emp => {
-                        const dept = getEmployeeDept(emp);
                         return `
                             <tr style="height: 32px; border-bottom: 1px solid #E5E7EB; background: #FFFFFF;">
                                 <td style="border: 1px solid #E5E7EB; text-align: left; padding-left: 12px; font-weight: 700; font-size: 12px; color: #111111; white-space: nowrap;">

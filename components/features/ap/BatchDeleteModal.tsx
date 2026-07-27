@@ -31,7 +31,7 @@ export const BatchDeleteModal: React.FC<BatchDeleteModalProps> = ({
                 <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                     <Trash2 size={32}/>
                 </div>
-                <h3 className="font-black text-xl text-[#1A1A1A] mb-2">危险操作：批量删除</h3>
+                <h3 className="font-black text-xl text-[#111111] mb-2">危险操作：批量删除</h3>
                 <p className="text-xs text-gray-500 font-bold mb-4">
                     你即将永久删除选中的 <span className="text-red-600 font-black text-base">{selectedCount}</span> 笔账单。
                     <br/><br/>

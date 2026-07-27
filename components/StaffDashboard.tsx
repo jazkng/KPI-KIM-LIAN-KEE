@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Crown, BookOpen, Languages, AlertTriangle, User, Calendar, 
-  Award, Clock, CheckCircle2, ChevronDown, ChevronUp, Check, LogOut, Shield, 
-  MapPin, ChevronRight, CheckSquare, Sparkles, AlertOctagon, HelpCircle, 
-  Smartphone, BookMarked, Settings, UserCheck, ShieldAlert
+  ClipboardList, Crown, BookOpen, User, Calendar, 
+  Award, Clock, CheckCircle2, ChevronDown, ChevronUp, Check, LogOut, MapPin, Sparkles, AlertOctagon, HelpCircle, 
+  Smartphone, BookMarked, ShieldAlert
 } from 'lucide-react';
 import { SOPItem, Employee, RoleGuide, AttendanceRecord, AppModule, AppLanguage, normalizeLanguage } from '../types';
 import { LanguageSelector } from './ui/LanguageSelector';
@@ -25,9 +24,7 @@ import {
   st, 
   localizeStaffContent, 
   getStaffModuleLabel, 
-  getStaffModuleDesc, 
-  getStaffModuleGuide,
-  StaffLang 
+  getStaffModuleDesc 
 } from '../constants/staffTranslations';
 
 interface StaffDashboardProps { 
@@ -96,7 +93,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const [todayRosterStatus, setTodayRosterStatus] = useState<string>('WORK');
   const [todayShiftTimes, setTodayShiftTimes] = useState<{ checkInStr: string; checkOutStr: string }>({ checkInStr: '15:00', checkOutStr: '02:00' });
   const [attendanceRecord, setAttendanceRecord] = useState<AttendanceRecord | null>(null);
-  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [, setLoadingAttendance] = useState(false);
   const [rosterData3Days, setRosterData3Days] = useState<{ date: string; label: string; status: string }[]>([]);
   
   // Selected module for full screen Work Tools (hides bottom bar)
@@ -106,7 +103,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const [expandedSopId, setExpandedSopId] = useState<string | null>(null);
 
   // Roster Calendar State
-  const [rosterMonth, setRosterMonth] = useState<string>(() => {
+  const [rosterMonth, ] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });

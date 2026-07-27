@@ -81,7 +81,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
             <div className="bg-white w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
 
                 {/* 顶栏 — iOS safe-area */}
-                <div className="bg-[#1A1A1A] px-4 pb-4 text-white flex justify-between items-center shrink-0 border-b-4 border-[#FFD700] safe-area-top">
+                <div className="bg-[#111111] px-4 pb-4 text-white flex justify-between items-center shrink-0 border-b-4 border-[#FFD200] safe-area-top">
                     <div className="flex items-center gap-3">
                         <button
                             style={noTap}
@@ -92,10 +92,10 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
                         <h3 className="font-black text-lg flex items-center gap-2">
-                            <Users className="text-[#FFD700]" />
+                            <Users className="text-[#FFD200]" />
                             <span className="hidden md:inline">御膳智控 · </span>人事中心
                             {isSuperAdminMode && (
-                                <span className="text-[9px] md:text-[10px] bg-[#FFD700] text-black px-2 py-1 rounded-full tracking-wider">
+                                <span className="text-[9px] md:text-[10px] bg-[#FFD200] text-black px-2 py-1 rounded-full tracking-wider">
                                     SYSTEM ADMIN
                                 </span>
                             )}
@@ -129,7 +129,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                 </div>
 
                 {/* 内容区 */}
-                <div className="flex-grow overflow-hidden relative bg-[#F5F7FA]">
+                <div className="flex-grow overflow-hidden relative bg-[#F6F7FB]">
                     {activeTab === 'PROFILES' && (
                         <HRProfiles
                             employees={employees}

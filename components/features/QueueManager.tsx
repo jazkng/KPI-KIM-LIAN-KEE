@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Armchair, Users, Bell, Trash2, CheckCircle, RotateCcw, Tv, Plus, User, Clock, Check, X, Phone, UserPlus, Volume2 } from 'lucide-react';
+import { Armchair, Users, RotateCcw, Tv, Plus, User, Clock, Check, X, Phone, UserPlus, Volume2 } from 'lucide-react';
 import { QueueTicket, QueueSize, QueueStatus } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -130,12 +130,12 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
             {/* HEADER */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
                  <div className="flex items-center gap-3">
-                    <div className="bg-black p-2 rounded-xl text-[#FFD700]"><Armchair size={24} /></div>
-                    <div><h3 className="font-black text-xl text-[#1A1A1A]">排队取号系统</h3><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Queue Control Center</p></div>
+                    <div className="bg-black p-2 rounded-xl text-[#FFD200]"><Armchair size={24} /></div>
+                    <div><h3 className="font-black text-xl text-[#111111]">排队取号系统</h3><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Queue Control Center</p></div>
                  </div>
                  <div className="flex gap-2 w-full md:w-auto">
                     <ModuleGuideButton module="QUEUE" dark />
-                    <button onClick={onOpenTV} className="flex-1 md:flex-none bg-[#1A1A1A] text-[#FFD700] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><Tv size={18}/> 启动电视大屏</button>
+                    <button onClick={onOpenTV} className="flex-1 md:flex-none bg-[#111111] text-[#FFD200] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><Tv size={18}/> 启动电视大屏</button>
                     <button onClick={clearQueue} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors" title="重置排队 (Reset Queue)"><RotateCcw size={18}/></button>
                  </div>
             </div>
@@ -159,15 +159,15 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
                             </div>
                             <div className="h-px bg-gray-100"></div>
                             <div className="space-y-4">
-                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">人数 (Pax Count)</label><input type="number" value={paxInput} onChange={e => setPaxInput(e.target.value)} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-2xl font-black text-center focus:border-[#FFD700] outline-none transition-all" placeholder="0"/></div>
-                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">手机号 (Phone - Optional)</label><input type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-[#FFD700]" placeholder="012..."/></div>
-                                <button onClick={() => issueTicket()} disabled={!paxInput || isIssuing} className="w-full py-4 bg-black text-[#FFD700] rounded-2xl font-black text-lg shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2">{isIssuing ? '正在发号…' : '确认发号 (Confirm)'}</button>
+                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">人数 (Pax Count)</label><input type="number" value={paxInput} onChange={e => setPaxInput(e.target.value)} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-2xl font-black text-center focus:border-[#FFD200] outline-none transition-all" placeholder="0"/></div>
+                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">手机号 (Phone - Optional)</label><input type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-[#FFD200]" placeholder="012..."/></div>
+                                <button onClick={() => issueTicket()} disabled={!paxInput || isIssuing} className="w-full py-4 bg-black text-[#FFD200] rounded-2xl font-black text-lg shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2">{isIssuing ? '正在发号…' : '确认发号 (Confirm)'}</button>
                             </div>
                         </div>
                     </div>
                     
                     {/* STATS MINI CARD */}
-                    <div className="bg-[#1A1A1A] p-4 rounded-2xl text-white">
+                    <div className="bg-[#111111] p-4 rounded-2xl text-white">
                         <div className="text-[10px] text-gray-400 uppercase font-bold text-center mb-2">当前排队人数 (Waiting Only)</div>
                         <div className="flex justify-around items-center text-center">
                             <div><div className="text-green-500 text-lg font-black">{groupedWaiting.A.length}</div><div className="text-[8px] text-gray-400 uppercase">A 小桌</div></div>
@@ -182,7 +182,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
                 {/* RIGHT: QUEUE LIST PANEL */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex justify-between items-center px-1">
-                        <h4 className="font-bold text-[#1A1A1A] flex items-center gap-2"><Clock size={16}/> 待入座列表 ({activeTickets.length})</h4>
+                        <h4 className="font-bold text-[#111111] flex items-center gap-2"><Clock size={16}/> 待入座列表 ({activeTickets.length})</h4>
                         <div className="text-[10px] font-bold text-gray-400 uppercase">Sorted by Waiting Time</div>
                     </div>
                     <div className="space-y-3">
@@ -205,7 +205,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({ onOpenTV }) => {
                                             </div>
                                         </div>
                                         <div className="flex gap-2 w-full md:w-auto">
-                                            <button onClick={() => updateStatus(ticket.id, 'CALLING')} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isCalling ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-[#1A1A1A] hover:text-white'}`}><Volume2 size={18}/><span>{isCalling ? '重呼 (Recall)' : '呼叫 (Call)'}</span></button>
+                                            <button onClick={() => updateStatus(ticket.id, 'CALLING')} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isCalling ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-[#111111] hover:text-white'}`}><Volume2 size={18}/><span>{isCalling ? '重呼 (Recall)' : '呼叫 (Call)'}</span></button>
                                             <button onClick={() => updateStatus(ticket.id, 'SEATED')} className="flex-1 md:flex-none bg-green-500 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-md hover:bg-green-600 active:scale-95 transition-all"><Check size={20} strokeWidth={3}/><span>入座</span></button>
                                             <button onClick={() => updateStatus(ticket.id, 'CANCELLED')} className="p-3 text-gray-300 hover:text-red-500 transition-colors bg-white hover:bg-red-50 rounded-xl border border-transparent hover:border-red-100"><X size={20}/></button>
                                         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Calendar, AlertTriangle, Check, Loader2, Plus, Trash2 } from 'lucide-react';
+import { X, Clock, Check, Loader2, Plus, Trash2 } from 'lucide-react';
 import { DataManager, AttendanceShiftSettings, PenaltyTier } from '../../utils/dataManager';
 
 interface AttendanceSettingsModalProps {
@@ -189,7 +189,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col border-t-8 border-[#FFD700] overflow-hidden max-h-[90vh]">
+            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col border-t-8 border-[#FFD200] overflow-hidden max-h-[90vh]">
                 
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -198,7 +198,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                             <Clock size={24}/>
                         </div>
                         <div>
-                            <h3 className="font-black text-xl text-[#1A1A1A]">考勤排班与规则设置</h3>
+                            <h3 className="font-black text-xl text-[#111111]">考勤排班与规则设置</h3>
                             <p className="text-xs text-gray-400 font-bold mt-0.5">Configure shifts, special dates, and grace thresholds</p>
                         </div>
                     </div>
@@ -213,7 +213,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                     {/* Standard Weekday/Weekend Shifts */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
-                            <h4 className="font-black text-sm text-[#1A1A1A] flex items-center gap-2 uppercase tracking-wider">
+                            <h4 className="font-black text-sm text-[#111111] flex items-center gap-2 uppercase tracking-wider">
                                 <span>🕒 基础周排班时间 (Weekly Shift)</span>
                             </h4>
                             {/* Shift tabs */}
@@ -247,7 +247,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayIn} 
                                                 onChange={e => setWeekdayIn(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                         <div>
@@ -256,7 +256,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayOut} 
                                                 onChange={e => setWeekdayOut(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                     </div>
@@ -307,7 +307,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendIn} 
                                                 onChange={e => setWeekendIn(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                         <div>
@@ -316,7 +316,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendOut} 
                                                 onChange={e => setWeekendOut(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                     </div>
@@ -369,7 +369,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayIn2} 
                                                 onChange={e => setWeekdayIn2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                         <div>
@@ -378,7 +378,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayOut2} 
                                                 onChange={e => setWeekdayOut2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                     </div>
@@ -429,7 +429,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendIn2} 
                                                 onChange={e => setWeekendIn2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                         <div>
@@ -438,7 +438,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendOut2} 
                                                 onChange={e => setWeekendOut2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                             />
                                         </div>
                                     </div>
@@ -485,7 +485,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                     {/* Specific Date-Range Shift Settings */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
-                            <h4 className="font-black text-sm text-[#1A1A1A] flex items-center gap-2 uppercase tracking-wider">
+                            <h4 className="font-black text-sm text-[#111111] flex items-center gap-2 uppercase tracking-wider">
                                 <span>📅 特定日期时间规则 (Date Range Override)</span>
                             </h4>
                             <label className="relative inline-flex items-center cursor-pointer">
@@ -495,7 +495,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                     onChange={e => setHasSpecial(e.target.checked)} 
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FFD700]"></div>
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FFD200]"></div>
                             </label>
                         </div>
 
@@ -508,7 +508,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="date" 
                                             value={specialStart} 
                                             onChange={e => setSpecialStart(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD700] outline-none"
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD200] outline-none"
                                         />
                                     </div>
                                     <div>
@@ -517,7 +517,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="date" 
                                             value={specialEnd} 
                                             onChange={e => setSpecialEnd(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD700] outline-none"
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD200] outline-none"
                                         />
                                     </div>
                                 </div>
@@ -529,7 +529,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="time" 
                                             value={specialIn} 
                                             onChange={e => setSpecialIn(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                         />
                                     </div>
                                     <div>
@@ -538,7 +538,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="time" 
                                             value={specialOut} 
                                             onChange={e => setSpecialOut(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD700] outline-none"
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
                                         />
                                     </div>
                                 </div>
@@ -550,7 +550,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
                     {/* Grace threshold settings */}
                     <div className="space-y-4">
-                        <h4 className="font-black text-sm text-[#1A1A1A] flex items-center gap-2 pb-1.5 border-b border-gray-100 uppercase tracking-wider">
+                        <h4 className="font-black text-sm text-[#111111] flex items-center gap-2 pb-1.5 border-b border-gray-100 uppercase tracking-wider">
                             <span>⏱️ 考勤宽限与迟到判定 (Grace Period)</span>
                         </h4>
                         
@@ -575,7 +575,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
                             <div className="pt-3 border-t border-dashed border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {/* Late Check Switch */}
-                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-150 shadow-sm">
+                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm">
                                     <div className="flex flex-col">
                                         <span className="text-[11px] font-black text-gray-700">迟到开关</span>
                                         <span className="text-[9px] text-gray-400 font-bold">启用后计算迟到</span>
@@ -589,7 +589,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                 </div>
 
                                 {/* Early Out Check Switch */}
-                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-150 shadow-sm">
+                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm">
                                     <div className="flex flex-col">
                                         <span className="text-[11px] font-black text-gray-700">早退开关</span>
                                         <span className="text-[9px] text-gray-400 font-bold">启用后计算早退</span>
@@ -603,7 +603,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                 </div>
 
                                 {/* Late & Early Out Check Switch */}
-                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-150 shadow-sm">
+                                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm">
                                     <div className="flex flex-col">
                                         <span className="text-[11px] font-black text-gray-700">迟到早退并存</span>
                                         <span className="text-[9px] text-gray-400 font-bold">总计迟到和早退</span>
@@ -622,7 +622,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                     {/* Late Penalty Rules */}
                     <div className="space-y-4 pt-2">
                         <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
-                            <h4 className="font-black text-sm text-[#1A1A1A] flex items-center gap-2 uppercase tracking-wider">
+                            <h4 className="font-black text-sm text-[#111111] flex items-center gap-2 uppercase tracking-wider">
                                 <span>🪙 迟到扣薪规则 (Late Penalty Rules)</span>
                             </h4>
                             <label className="relative inline-flex items-center cursor-pointer">
@@ -632,7 +632,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                     onChange={e => setEnablePenalty(e.target.checked)} 
                                     className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FFD700]"></div>
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FFD200]"></div>
                             </label>
                         </div>
 
@@ -659,7 +659,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             <select
                                                 value={tier.deductionType}
                                                 onChange={e => handleTierChange(tier.id, 'deductionType', e.target.value)}
-                                                className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-black outline-none focus:border-[#FFD700]"
+                                                className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-black outline-none focus:border-[#FFD200]"
                                             >
                                                 <option value="AMOUNT">每次扣除固定金额 (RM)</option>
                                                 <option value="HALF_DAY">扣除半天薪资 / Half-Day Absent</option>
@@ -693,7 +693,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
                                 <button
                                     onClick={handleAddTier}
-                                    className="w-full py-3 border-2 border-dashed border-gray-200 hover:border-[#FFD700] hover:bg-yellow-50/10 text-gray-500 hover:text-yellow-600 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2"
+                                    className="w-full py-3 border-2 border-dashed border-gray-200 hover:border-[#FFD200] hover:bg-yellow-50/10 text-gray-500 hover:text-yellow-600 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2"
                                 >
                                     <Plus size={14} />
                                     <span>添加扣款阶梯 (Add Penalty Tier)</span>
@@ -718,16 +718,16 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                     <button 
                         onClick={handleSaveClick} 
                         disabled={saving || success}
-                        className="px-6 py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 text-sm min-w-[120px] justify-center disabled:opacity-50"
+                        className="px-6 py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 text-sm min-w-[120px] justify-center disabled:opacity-50"
                     >
                         {saving ? (
                             <>
-                                <Loader2 size={16} className="animate-spin text-[#FFD700]"/>
+                                <Loader2 size={16} className="animate-spin text-[#FFD200]"/>
                                 <span>保存中...</span>
                             </>
                         ) : success ? (
                             <>
-                                <Check size={16} className="text-[#FFD700]"/>
+                                <Check size={16} className="text-[#FFD200]"/>
                                 <span>已保存</span>
                             </>
                         ) : (

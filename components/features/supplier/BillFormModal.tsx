@@ -14,10 +14,10 @@ export const BillFormModal: React.FC<BillFormModalProps> = ({
     newBill, onChange, onSave, onClose
 }) => {
     return (
-        <div className="fixed inset-0 bg-[#1A1A1A]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-[#111111]/80 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2"><Receipt size={20}/> 录入新账单</h3>
+                    <h3 className="font-black text-lg text-[#111111] flex items-center gap-2"><Receipt size={20}/> 录入新账单</h3>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X size={18}/></button>
                 </div>
                 <div className="space-y-4">
@@ -40,7 +40,7 @@ export const BillFormModal: React.FC<BillFormModalProps> = ({
                         <label className={SUP_LABEL_STYLE}>Note (备注说明)</label>
                         <input className={SUP_INPUT_STYLE} value={newBill.note || ''} onChange={e => onChange({...newBill, note: e.target.value})} placeholder="Optional..." />
                     </div>
-                    <button onClick={onSave} className="w-full py-3.5 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-sm shadow-lg hover:bg-black mt-2 active:scale-95 transition-all">确认生成账单</button>
+                    <button onClick={onSave} className="w-full py-3.5 bg-[#111111] text-[#FFD200] rounded-xl font-black text-sm shadow-lg hover:bg-black mt-2 active:scale-95 transition-all">确认生成账单</button>
                 </div>
             </div>
         </div>

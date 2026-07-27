@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { MessageSquare, Calendar } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 
 interface RosterCellProps {
     status: string;

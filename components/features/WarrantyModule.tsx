@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Plus, Search, X, Save, Trash2, Calendar, Link as LinkIcon, ExternalLink, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { WarrantyRecord } from '../../types';
 import { DataManager } from '../../utils/dataManager';
@@ -73,10 +73,10 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
-            <div className="bg-[#F5F7FA] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
+            <div className="bg-[#F6F7FB] w-full h-full md:max-w-5xl md:h-[95vh] md:rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
                 
                 {/* Header */}
-                <div className="bg-[#1A1A1A] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
+                <div className="bg-[#111111] px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)] flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200]">
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={onClose}
@@ -86,7 +86,7 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                         >
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
-                        <div className="bg-[#FFD700] text-black p-2.5 rounded-xl shadow-lg shrink-0"><ShieldCheck size={24}/></div>
+                        <div className="bg-[#FFD200] text-black p-2.5 rounded-xl shadow-lg shrink-0"><ShieldCheck size={24}/></div>
                         <div>
                             <h3 className="font-serif font-black text-xl tracking-wide">保修记录管理</h3>
                             <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">WARRANTY TRACKER</p>
@@ -111,10 +111,10 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                                 placeholder="搜索产品名称..." 
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD700]"
+                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD200]"
                             />
                         </div>
-                        <button onClick={() => { setForm({}); setIsFormOpen(true); }} className="bg-[#1A1A1A] text-[#FFD700] px-6 py-3 rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:bg-black transition-colors">
+                        <button onClick={() => { setForm({}); setIsFormOpen(true); }} className="bg-[#111111] text-[#FFD200] px-6 py-3 rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:bg-black transition-colors">
                             <Plus size={16}/> 新增记录
                         </button>
                     </div>
@@ -126,10 +126,10 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                             const StatusIcon = status.icon;
 
                             return (
-                                <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:border-[#FFD700] transition-colors group">
+                                <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:border-[#FFD200] transition-colors group">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
-                                            <h4 className="font-black text-lg text-[#1A1A1A] leading-tight">{item.productName}</h4>
+                                            <h4 className="font-black text-lg text-[#111111] leading-tight">{item.productName}</h4>
                                             <button onClick={() => handleDelete(item.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                                         </div>
                                         
@@ -144,7 +144,7 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                                             </div>
                                             <div className="flex justify-between border-b border-dashed border-gray-100 pb-1">
                                                 <span className="text-gray-400 flex items-center gap-1"><ShieldCheck size={12}/> Expiry Date</span>
-                                                <span className="font-mono font-bold text-[#1A1A1A]">{item.expiryDate}</span>
+                                                <span className="font-mono font-bold text-[#111111]">{item.expiryDate}</span>
                                             </div>
                                         </div>
                                         
@@ -173,12 +173,12 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                     <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="font-black text-xl text-[#1A1A1A]">{form.id ? '编辑保修记录' : '新增保修记录'}</h3>
+                                <h3 className="font-black text-xl text-[#111111]">{form.id ? '编辑保修记录' : '新增保修记录'}</h3>
                                 <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
                             </div>
                             
                             <div className="space-y-4">
-                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Product Name (产品名称)</label><input className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#FFD700]" value={form.productName || ''} onChange={e => setForm({...form, productName: e.target.value})} placeholder="e.g. 2-Door Chiller" /></div>
+                                <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Product Name (产品名称)</label><input className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#FFD200]" value={form.productName || ''} onChange={e => setForm({...form, productName: e.target.value})} placeholder="e.g. 2-Door Chiller" /></div>
                                 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Purchase Date</label><input type="date" className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" value={form.purchaseDate || ''} onChange={e => setForm({...form, purchaseDate: e.target.value})} /></div>
@@ -189,7 +189,7 @@ export const WarrantyModule: React.FC<WarrantyModuleProps> = ({ onClose }) => {
                                 
                                 <div><label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Notes</label><textarea className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none h-20 resize-none" value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Serial Number, Supplier Contact..." /></div>
 
-                                <button onClick={handleSave} className="w-full py-4 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-4 flex items-center justify-center gap-2">
+                                <button onClick={handleSave} className="w-full py-4 bg-[#111111] text-[#FFD200] rounded-xl font-black text-lg shadow-lg hover:bg-black mt-4 flex items-center justify-center gap-2">
                                     <Save size={18}/> 保存 (Save)
                                 </button>
                             </div>

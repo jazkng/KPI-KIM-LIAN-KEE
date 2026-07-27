@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     Briefcase, BookOpen, Sparkles, AlertOctagon, Save, RotateCcw, ChevronRight,
     ClipboardList, Sun, Moon, Plus, ArrowLeft, X, ChevronDown, User,
 } from 'lucide-react';
-import { RoleDefinition, RoleGuide, Employee, SOPItem } from '../../../types';
+import { RoleDefinition, RoleGuide, Employee } from '../../../types';
 import { DEFAULT_ROLE_GUIDES, ROLE_SOP_DETAILS } from '../../constants';
 import { mapRoleToCode } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
@@ -179,7 +179,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
             <div className={`w-full md:w-80 bg-white border-r flex-col shrink-0 h-full min-h-0 ${selectedId ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b flex justify-between items-center bg-white shrink-0">
                     <div>
-                        <h3 className="font-black text-sm text-[#1A1A1A] uppercase tracking-widest">职位标准</h3>
+                        <h3 className="font-black text-sm text-[#111111] uppercase tracking-widest">职位标准</h3>
                         <p className="text-[10px] text-gray-400 font-bold">可针对个人单独设置</p>
                     </div>
                     {/* iOS: 扩大热区 */}
@@ -274,7 +274,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                                             {selectionType === 'EMPLOYEE'
                                                 ? <User size={18} className="text-blue-600" />
                                                 : <Briefcase size={18} className="text-[#8B0000]" />}
-                                            <h2 className="text-sm md:text-xl font-black text-[#1A1A1A] truncate max-w-[200px] md:max-w-none">
+                                            <h2 className="text-sm md:text-xl font-black text-[#111111] truncate max-w-[200px] md:max-w-none">
                                                 {selectionType === 'EMPLOYEE' ? selectedEmployee?.name : selectedRoleDef?.title}
                                             </h2>
                                         </div>
@@ -298,7 +298,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                                         style={noTap}
                                         onClick={handleSave}
                                         disabled={isSaving}
-                                        className="flex-1 md:flex-none bg-[#1A1A1A] text-[#FFD700] px-4 md:px-6 py-2.5 min-h-[44px] rounded-xl font-black shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-transform select-none disabled:opacity-50"
+                                        className="flex-1 md:flex-none bg-[#111111] text-[#FFD200] px-4 md:px-6 py-2.5 min-h-[44px] rounded-xl font-black shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-transform select-none disabled:opacity-50"
                                     >
                                         <Save size={16} /> {isSaving ? '保存中...' : '保存设定'}
                                     </button>
@@ -317,13 +317,13 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
                                 <h3 className="text-[10px] font-black uppercase text-gray-400 flex items-center gap-2 mb-4 tracking-widest"><BookOpen size={14} /> 岗位职责与守则</h3>
                                 <textarea
-                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-24 mb-4 outline-none focus:ring-1 focus:ring-[#FFD700]/30 resize-none"
+                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-24 mb-4 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none"
                                     value={draftGuide.description}
                                     onChange={e => setDraftGuide({ ...draftGuide, description: e.target.value })}
                                     placeholder="职责描述..."
                                 />
                                 <textarea
-                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-32 outline-none focus:ring-1 focus:ring-[#FFD700]/30 resize-none"
+                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-32 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none"
                                     value={draftGuide.employeeRules?.join('\n') || ''}
                                     onChange={e => setDraftGuide({ ...draftGuide, employeeRules: e.target.value.split('\n') })}
                                     placeholder="每行一个员工守则..."
@@ -390,7 +390,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                         className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95"
                         style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
                     >
-                        <h4 className="font-black text-xl text-[#1A1A1A] mb-2">{confirmModal.title}</h4>
+                        <h4 className="font-black text-xl text-[#111111] mb-2">{confirmModal.title}</h4>
                         <p className="text-sm text-gray-500 mb-6">{confirmModal.body}</p>
                         <div className="grid grid-cols-2 gap-3">
                             <button
@@ -456,7 +456,7 @@ const SopSection: React.FC<SopSectionProps> = ({ label, color, Icon, tasks, onAd
                             value={task.label}
                             onChange={e => onUpdate(idx, 'label', e.target.value)}
                         />
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex flex-col md:flex-row gap-2">
                             <input
                                 className="flex-1 bg-white p-2.5 min-h-[40px] rounded-xl text-[10px] border-none outline-none"
                                 placeholder="标准 (Standard)"

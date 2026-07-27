@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, X, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Loader2, X, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Employee, AppModule } from '../../types';
 import { DataManager } from '../../utils/dataManager';
+import { useIsMobile, MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import { DepartmentMigrationBanner } from './hr/DepartmentMigrationBanner';
 
 // Import our modular sub-components
@@ -13,7 +14,6 @@ import { RosterEmployeeView } from './roster/RosterEmployeeView';
 import { RosterMobileView } from './roster/RosterMobileView';
 import { RosterStatusPicker } from './roster/RosterStatusPicker';
 import { RosterNoteEditor } from './roster/RosterNoteEditor';
-import { RosterAnomalyPanel } from './roster/RosterAnomalyPanel';
 import { RosterPublishDialog } from './roster/RosterPublishDialog';
 import { RosterResetDialog } from './roster/RosterResetDialog';
 import { RosterExportModal, ExportOptions } from './roster/RosterExportModal';
@@ -47,8 +47,8 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
     // Cloud states loaded from database
     const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT');
     const [revision, setRevision] = useState<number>(0);
-    const [publishedAt, setPublishedAt] = useState<string | null>(null);
-    const [publishedBy, setPublishedBy] = useState<string | null>(null);
+    const [, setPublishedAt] = useState<string | null>(null);
+    const [, setPublishedBy] = useState<string | null>(null);
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
     const [lastSavedBy, setLastSavedBy] = useState<string | null>(null);
     
@@ -58,9 +58,9 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
     const [isModified, setIsModified] = useState<boolean>(false);
     
     // Responsive view mode
-    const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+    const isMobile = useIsMobile();
     const [currentView, setCurrentView] = useState<'MONTH' | 'WEEK' | 'DAILY' | 'PERSONAL'>(
-        window.innerWidth < 768 ? 'WEEK' : 'MONTH'
+        window.innerWidth < MOBILE_BREAKPOINT ? 'WEEK' : 'MONTH'
     );
     const [deptFilter, setDeptFilter] = useState<string>('ALL');
 
@@ -90,18 +90,12 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
     const [isResetOpen, setIsResetOpen] = useState<boolean>(false);
     const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
 
-    // Monitor resize
+    // 切换到手机布局时，月视图信息密度过高，自动退回周视图
     useEffect(() => {
-        const handleResize = () => {
-            const mobile = window.innerWidth < 768;
-            setIsMobile(mobile);
-            if (mobile && currentView === 'MONTH') {
-                setCurrentView('WEEK'); // default mobile to Week View for optimal HIG
-            }
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [currentView]);
+        if (isMobile && currentView === 'MONTH') {
+            setCurrentView('WEEK'); // default mobile to Week View for optimal HIG
+        }
+    }, [isMobile, currentView]);
 
     // Load configurations and employee list on mount
     const loadInitialMeta = useCallback(async () => {
@@ -342,14 +336,6 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
         try {
             // Cold Cloud Backup: write copy under backup key
             const now = Date.now();
-            const backupDoc = {
-                monthKey: `${monthKey}_backup_${now}`,
-                roster,
-                notes,
-                backedUpAt: new Date().toISOString(),
-                backedUpBy: authorizedBy,
-                originalRevision: revision
-            };
             // Save to backing sub-document
             await DataManager.saveRosterData(roster, notes, `${monthKey}_bk_${now}`, {
                 status: 'DRAFT',

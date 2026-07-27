@@ -36,7 +36,7 @@ export const TreasurySettingsTab: React.FC<TreasurySettingsTabProps> = ({
     <div className="max-w-2xl mx-auto animate-in fade-in duration-200">
       {!isSettingsUnlocked ? (
         /* 🔐 Lock screen password verification */
-        <div className="bg-white p-6 md:p-10 rounded-[2rem] shadow-sm border border-gray-150 text-center space-y-6">
+        <div className="bg-white p-6 md:p-10 rounded-[2rem] shadow-sm border border-gray-200 text-center space-y-6">
           <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto select-none">
             <Lock size={28} className="text-gray-400" />
           </div>
@@ -84,8 +84,8 @@ export const TreasurySettingsTab: React.FC<TreasurySettingsTabProps> = ({
         </div>
       ) : (
         /* 🔓 Unlocked Initial config setup screen */
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-150 space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-gray-150">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-200 space-y-6">
+          <div className="flex justify-between items-center pb-4 border-b border-gray-200">
             <div className="flex items-center gap-2">
               <Settings size={20} className="text-[#111111]" />
               <h3 className="font-extrabold text-base md:text-lg text-[#111111]">

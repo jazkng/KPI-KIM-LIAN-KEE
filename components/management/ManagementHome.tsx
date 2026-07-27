@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-    Users, Crown, CheckSquare, BookOpen, ShieldCheck,
-    AlertTriangle, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Languages
+    Users, Crown, CheckSquare, BookOpen, AlertTriangle, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Languages
 } from 'lucide-react';
 import { Employee, AppModule, OrgLevel, normalizeLanguage } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { getBusinessDateString } from '../../utils/dateHelper';
-import { MODULE_DEFINITIONS } from '../constants';
 import { mt, ManagementLang } from '../../constants/managementTranslations';
 import { needsReplenishment } from '../../utils/unitConversion';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
@@ -269,7 +267,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             list.push({ module: 'ROSTER', label: mt('module_roster', lang), icon: '📅', bg: 'bg-sky-50 border-sky-200/80', text: 'text-sky-600 font-extrabold' });
         }
         if (allowedModules.includes('ATTENDANCE_CONSOLE')) {
-            list.push({ module: 'ATTENDANCE_CONSOLE', label: mt('module_attendance_console', lang), icon: '⏱️', bg: 'bg-indigo-50 border-indigo-200/80', text: 'text-indigo-650 font-extrabold' });
+            list.push({ module: 'ATTENDANCE_CONSOLE', label: mt('module_attendance_console', lang), icon: '⏱️', bg: 'bg-indigo-50 border-indigo-200/80', text: 'text-indigo-700 font-extrabold' });
         }
         if (allowedModules.includes('LOGBOOK')) {
             list.push({ module: 'LOGBOOK', label: mt('module_logbook_view', lang), icon: '📝', bg: 'bg-amber-50 border-amber-200/80', text: 'text-amber-600 font-extrabold' });
@@ -306,7 +304,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
     }, [allPossibleShortcuts, customShortcutKeys]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#F6F7FB] text-stone-850 pb-32">
+        <div className="flex flex-col min-h-screen bg-[#F6F7FB] text-stone-900 pb-32">
             {/* 1. Header with iOS Notch Safety & Identity Section */}
             <header className="pt-[calc(1.25rem+env(safe-area-inset-top))] pb-6 px-4 md:px-6 bg-white border-b border-stone-200/80 sticky top-0 z-30 shadow-sm">
                 <div className="flex items-center justify-between gap-2">
@@ -491,12 +489,12 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                 {/* Custom Shortcut Modal */}
                 <AnimatePresence>
                     {isEditingShortcuts && (
-                        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-4">
+                        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-end md:items-center justify-center p-4">
                             <motion.div
                                 initial={{ opacity: 0, y: 50 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: 50 }}
-                                className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md overflow-hidden shadow-xl border border-stone-200 flex flex-col max-h-[85vh] pb-[env(safe-area-inset-bottom)] animate-none"
+                                className="bg-white rounded-t-3xl md:rounded-2xl w-full max-w-md overflow-hidden shadow-xl border border-stone-200 flex flex-col max-h-[85vh] pb-[env(safe-area-inset-bottom)] animate-none"
                             >
                                 {/* Modal Header */}
                                 <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50">

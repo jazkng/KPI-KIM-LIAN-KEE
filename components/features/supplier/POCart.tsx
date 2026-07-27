@@ -25,22 +25,22 @@ export const POCart: React.FC<POCartProps> = ({
                 <div className={`px-4 md:px-8 flex justify-between items-center bg-white cursor-pointer select-none shrink-0 ${isCartExpanded ? 'h-20 pt-4' : 'h-full'}`} onClick={onToggleExpand}>
                     <div className="flex items-center gap-3 md:gap-4">
                         <div className="relative">
-                            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-[#1A1A1A] to-gray-800 rounded-[14px] flex items-center justify-center text-[#FFD700] shadow-md">
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-[#111111] to-gray-800 rounded-[14px] flex items-center justify-center text-[#FFD200] shadow-md">
                                 <ShoppingBag size={20} className="md:w-6 md:h-6"/>
                             </div>
                             <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] md:text-xs font-black w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{cart.length}</div>
                         </div>
                         <div>
-                            <h3 className="font-black text-sm md:text-lg text-[#1A1A1A]">采购车 (PO Cart)</h3>
+                            <h3 className="font-black text-sm md:text-lg text-[#111111]">采购车 (PO Cart)</h3>
                             <p className="text-[10px] md:text-xs text-gray-500 font-bold truncate max-w-[120px] md:max-w-xs">To: {selectedSupplier?.name}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3 md:gap-6">
-                        <div className="text-right hidden sm:block">
+                        <div className="text-right hidden md:block">
                             <p className="text-[9px] md:text-[10px] text-gray-400 font-bold uppercase tracking-widest">Est. Total</p>
-                            <p className="text-base md:text-xl font-mono font-black text-[#1A1A1A]">RM {total.toFixed(2)}</p>
+                            <p className="text-base md:text-xl font-mono font-black text-[#111111]">RM {total.toFixed(2)}</p>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); onCreatePO(); }} className="px-5 md:px-8 py-2.5 md:py-3 bg-[#1A1A1A] text-[#FFD700] rounded-xl font-black text-xs md:text-sm shadow-lg hover:bg-black transition-all active:scale-95">生成订单</button>
+                        <button onClick={(e) => { e.stopPropagation(); onCreatePO(); }} className="px-5 md:px-8 py-2.5 md:py-3 bg-[#111111] text-[#FFD200] rounded-xl font-black text-xs md:text-sm shadow-lg hover:bg-black transition-all active:scale-95">生成订单</button>
                         <div className="text-gray-300 hidden md:block">{isCartExpanded ? <ChevronDown size={24}/> : <ChevronUp size={24}/>}</div>
                     </div>
                 </div>
@@ -49,9 +49,9 @@ export const POCart: React.FC<POCartProps> = ({
                     <div className="flex-grow overflow-y-auto p-4 md:p-8 bg-gray-50/80 border-t border-gray-100">
                         <div className="space-y-3 max-w-4xl mx-auto">
                             {cart.map((item, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:border-[#FFD700]/50 transition-colors">
+                                <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:border-[#FFD200]/50 transition-colors">
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="font-black text-sm text-[#1A1A1A] truncate">{item.name}</h4>
+                                        <h4 className="font-black text-sm text-[#111111] truncate">{item.name}</h4>
                                         <p className="text-[10px] font-mono text-gray-400 mt-0.5">{item.stockId}</p>
                                     </div>
                                     <div className="flex items-center justify-between md:justify-end gap-4">
@@ -68,8 +68,8 @@ export const POCart: React.FC<POCartProps> = ({
                                     </div>
                                 </div>
                             ))}
-                            <div className="sm:hidden mt-6 p-4 bg-[#1A1A1A] text-white rounded-2xl flex justify-between items-center shadow-lg">
-                                <span className="text-xs font-bold uppercase tracking-widest text-[#FFD700]">Total</span>
+                            <div className="md:hidden mt-6 p-4 bg-[#111111] text-white rounded-2xl flex justify-between items-center shadow-lg">
+                                <span className="text-xs font-bold uppercase tracking-widest text-[#FFD200]">Total</span>
                                 <span className="text-xl font-mono font-black">RM {total.toFixed(2)}</span>
                             </div>
                         </div>

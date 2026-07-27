@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Settings2, Syringe, GraduationCap, Shirt, Ruler, Weight, History, Hash, HardDrive, LogOut, FileDown, Loader2, X, MapPin, Mail, Phone, Calendar, Briefcase, CreditCard, Eye, EyeOff, Activity, AlertTriangle, Zap, ClipboardList, Stethoscope, BookOpen, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Image as ImageIcon, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet } from 'lucide-react';
-import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, AttendanceRecord, ReviewRecord, LoanRecord, AssessmentRecordV2, InventoryAccessConfig, PortalRole } from '../../../types';
+import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet } from 'lucide-react';
+import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, ReviewRecord, LoanRecord, AssessmentRecordV2, InventoryAccessConfig, PortalRole } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { uploadToCloudinary } from '../../utils';
 import { DEFAULT_ROLES, NATIONALITY_OPTS, BANK_OPTIONS, MODULE_DEFINITIONS } from '../../constants';
 import { AssessmentHistoryPanel } from '../AssessmentHistoryPanel';
-import { JOB_METRICS, EMPLOYEE_DIMENSIONS, MANAGEMENT_DIMENSIONS, classifyJob } from '../assessmentConfig';
+import { JOB_METRICS, EMPLOYEE_DIMENSIONS, classifyJob } from '../assessmentConfig';
 import { DepartmentMigrationBanner, DEPARTMENTS, getRecommendedDept } from './DepartmentMigrationBanner';
 import { getOrgLevel, getOrgLevelLabel, getPortalRole, ORG_LEVEL_OPTIONS, PORTAL_ROLE_OPTIONS } from '../../../utils/orgAccess';
 import { INVENTORY_PERMISSION_LABELS, INVENTORY_PERMISSIONS, INVENTORY_SCOPE_LABELS, resolveInventoryAccess } from '../../../utils/inventoryAccess';
@@ -14,16 +14,6 @@ import { InventoryAccessModal } from './InventoryAccessModal';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
-
-
-// --- SHARED HELPERS (SYNCED WITH ASSESSMENT MODULE) ---
-const getAverageScore = (attrs?: EmployeeAttributes) => {
-    if (!attrs) return 0;
-    const values = Object.values(attrs);
-    if (values.length === 0) return 0;
-    const sum = values.reduce((a, b) => a + b, 0);
-    return Math.round(sum / values.length);
-};
 
 const ABILITY_TIERS = [
     { label: 'SSS', score: 100, desc: '卓越传奇 (Legendary)', color: 'bg-amber-100 text-amber-800 border-amber-300 ring-amber-500', icon: Trophy },
@@ -62,12 +52,12 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", isEdit
                 value={value || ''} 
                 onChange={onChange} 
                 inputMode={type === 'number' ? 'decimal' : undefined}
-                className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#1A1A1A] outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700]/50 transition-all" 
+                className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#111111] outline-none focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200]/50 transition-all" 
                 style={{ fontSize: '16px', minHeight: '48px' }}
                 placeholder={placeholder} 
             />
         ) : (
-            <div className="text-sm font-bold text-[#1A1A1A] p-2 border border-transparent break-words min-h-[36px]">{value || '-'}</div>
+            <div className="text-sm font-bold text-[#111111] p-2 border border-transparent break-words min-h-[36px]">{value || '-'}</div>
         )}
     </div>
 );
@@ -79,7 +69,7 @@ const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
             <select 
                 value={value || ''} 
                 onChange={onChange} 
-                className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#1A1A1A] outline-none focus:border-[#FFD700]"
+                className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#111111] outline-none focus:border-[#FFD200]"
                 style={{ fontSize: '16px', minHeight: '48px' }}
             >
                 <option value="">Select...</option>
@@ -90,61 +80,12 @@ const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
                 })}
             </select>
         ) : (
-            <div className="text-sm font-bold text-[#1A1A1A] p-2 border border-transparent truncate">{
+            <div className="text-sm font-bold text-[#111111] p-2 border border-transparent truncate">{
                 typeof options[0] === 'string' ? (value || '-') : (options.find((o: any) => o.value === value)?.label || value || '-')
             }</div>
         )}
     </div>
 );
-
-const AbilityRadar = ({ attributes }: { attributes?: EmployeeAttributes }) => {
-    const isAssessing = !attributes || Object.keys(attributes).length === 0 || Object.values(attributes).every((val: number) => val === 0);
-    const avgScore = getAverageScore(attributes);
-    const overallGrade = getGradeInfo(avgScore);
-
-    if (isAssessing) {
-        return (
-            <div className="flex flex-col items-center justify-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 min-h-[180px] animate-in fade-in">
-                <div className="bg-white p-4 rounded-full shadow-sm mb-3 border border-gray-100"><ClipboardList size={28} className="text-gray-300"/></div>
-                <span className="text-sm font-black text-gray-500">评估中... (Assessing)</span>
-                <span className="text-[10px] text-gray-400 mt-1 font-bold bg-white px-2 py-0.5 rounded border border-gray-100">暂无评分数据 (No Data)</span>
-            </div>
-        );
-    }
-    
-    return (
-        <div className="space-y-3">
-             <div className={`p-3 rounded-xl border flex items-center justify-between ${overallGrade.color.replace('text-', 'bg-opacity-10 text-')}`}>
-                <div className="flex items-center gap-2">
-                    <div className={`p-2 rounded-lg bg-white shadow-sm ${overallGrade.color.split(' ')[1]}`}>
-                        <overallGrade.icon size={16}/>
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black uppercase opacity-60">Overall Grade</p>
-                        <p className="text-lg font-black leading-none">{overallGrade.label}-Tier</p>
-                    </div>
-                </div>
-                <div className="text-right">
-                    <p className="text-[10px] font-black uppercase opacity-60">Score</p>
-                    <p className="text-lg font-mono font-black leading-none">{avgScore}</p>
-                </div>
-             </div>
-
-            <div className="grid grid-cols-1 gap-2">
-                {Object.entries(attributes!).map(([key, val]) => {
-                    const config = ATTRIBUTE_CONFIG[key] || { label: key, desc: '' };
-                    const grade = getGradeInfo(val as number);
-                    return (
-                        <div key={key} className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                            <div className="flex flex-col"><span className="text-[10px] font-black text-gray-500 uppercase tracking-wide">{config.label.split('(')[0]}</span><span className="text-[8px] text-gray-400 font-bold">{config.label.split('(')[1]?.replace(')', '')}</span></div>
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm border ${grade.color} shadow-sm`}>{grade.label}</div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
 
 const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) => {
     if (!isOpen) return null;
@@ -153,20 +94,20 @@ const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                <div className="bg-[#1A1A1A] p-4 flex justify-between items-center text-white shrink-0"><h3 className="font-black text-lg flex items-center gap-2"><Trophy size={18} className="text-[#FFD700]"/> 能力评估 (Assessment)</h3><button onClick={onClose}><X size={20} className="text-white/50 hover:text-white"/></button></div>
+                <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0"><h3 className="font-black text-lg flex items-center gap-2"><Trophy size={18} className="text-[#FFD200]"/> 能力评估 (Assessment)</h3><button onClick={onClose}><X size={20} className="text-white/50 hover:text-white"/></button></div>
                 <div className="p-6 overflow-y-auto space-y-6 bg-gray-50 flex-grow">
                     {Object.keys(attrs).map(key => {
                         const config = ATTRIBUTE_CONFIG[key] || { label: key, desc: 'N/A' };
                         const currentVal = attrs[key as keyof EmployeeAttributes];
                         return (
                             <div key={key} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
-                                <div className="mb-3"><h4 className="text-sm font-black text-[#1A1A1A]">{config.label}</h4><p className="text-[10px] text-gray-400 font-bold mt-0.5">{config.desc}</p></div>
+                                <div className="mb-3"><h4 className="text-sm font-black text-[#111111]">{config.label}</h4><p className="text-[10px] text-gray-400 font-bold mt-0.5">{config.desc}</p></div>
                                 <div className="flex justify-between gap-1">{ABILITY_TIERS.slice().reverse().map(tier => { const isSelected = getGradeInfo(currentVal).label === tier.label; return (<button key={tier.label} onClick={() => onChange({...attrs, [key]: tier.score})} className={`flex-1 py-2 rounded-lg flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${isSelected ? `${tier.color} ring-2 ring-offset-1 border-transparent shadow-md font-black` : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100'}`}><span className="text-sm">{tier.label}</span>{isSelected && <span className="text-[8px] uppercase mt-0.5">{tier.desc.split(' ')[0]}</span>}</button>) })}</div>
                             </div>
                         );
                     })}
                 </div>
-                <div className="p-4 bg-white border-t border-gray-100 shrink-0"><button onClick={onClose} className="w-full bg-[#1A1A1A] hover:bg-black text-[#FFD700] py-4 rounded-xl font-black shadow-lg transition-colors flex items-center justify-center gap-2"><CheckCircle2 size={18}/> 完成评估 (Complete)</button></div>
+                <div className="p-4 bg-white border-t border-gray-100 shrink-0"><button onClick={onClose} className="w-full bg-[#111111] hover:bg-black text-[#FFD200] py-4 rounded-xl font-black shadow-lg transition-colors flex items-center justify-center gap-2"><CheckCircle2 size={18}/> 完成评估 (Complete)</button></div>
             </div>
         </div>
     );
@@ -274,7 +215,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                         </div>
                     ))}
                 </div>
-                <div className="p-4 border-t"><button onClick={() => setIsTargetConfigOpen(false)} className="w-full bg-[#1A1A1A] text-white py-3 rounded-xl font-bold">完成配置 (Done)</button></div>
+                <div className="p-4 border-t"><button onClick={() => setIsTargetConfigOpen(false)} className="w-full bg-[#111111] text-white py-3 rounded-xl font-bold">完成配置 (Done)</button></div>
             </div>
         );
     };
@@ -290,7 +231,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} className="text-gray-400"/></button>
                 </div>
                 
-                <div className="p-6 overflow-y-auto bg-[#F5F7FA] space-y-6">
+                <div className="p-6 overflow-y-auto bg-[#F6F7FB] space-y-6">
                     {MODULE_GROUPS.map(group => {
                         const allSelected = group.modules.every(m => allowedModules.includes(m));
                         return (
@@ -314,17 +255,17 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                                         return (
                                             <div 
                                                 key={mod} 
-                                                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white shadow-md' : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'}`}
+                                                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'bg-[#111111] border-[#111111] text-white shadow-md' : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'}`}
                                             >
                                                 <div 
                                                     className="flex-grow flex items-center gap-3 cursor-pointer"
                                                     onClick={() => onToggle(mod)} 
                                                 >
-                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-[#FFD700]' : 'bg-gray-100 text-gray-400'}`}>
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-[#FFD200]' : 'bg-gray-100 text-gray-400'}`}>
                                                         <def.icon size={16}/>
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <div className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-[#1A1A1A]'}`}>{def.label.split('(')[0]}</div>
+                                                        <div className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-[#111111]'}`}>{def.label.split('(')[0]}</div>
                                                         <div className={`text-[9px] truncate ${isSelected ? 'text-white/60' : 'text-gray-400'}`}>{def.desc}</div>
                                                     </div>
                                                 </div>
@@ -332,7 +273,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                                                 {mod === 'ASSESSMENT' && isSelected && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); setIsTargetConfigOpen(true); }}
-                                                        className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg text-[#FFD700] ml-2"
+                                                        className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg text-[#FFD200] ml-2"
                                                         title="配置评测对象"
                                                     >
                                                         <Settings size={14}/>
@@ -352,7 +293,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                 </div>
 
                 <div className="p-4 bg-white border-t border-gray-100 shrink-0">
-                    <button onClick={onClose} className="w-full bg-[#1A1A1A] text-[#FFD700] py-4 rounded-xl font-black text-lg shadow-lg hover:bg-black transition-transform active:scale-[0.98]">
+                    <button onClick={onClose} className="w-full bg-[#111111] text-[#FFD200] py-4 rounded-xl font-black text-lg shadow-lg hover:bg-black transition-transform active:scale-[0.98]">
                         保存配置 (Save Configuration)
                     </button>
                 </div>
@@ -397,7 +338,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [isEditing, setIsEditing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [form, setForm] = useState<Partial<Employee>>({});
-    const [isUploading, setIsUploading] = useState(false);
+    const [, setIsUploading] = useState(false);
     const [showPin, setShowPin] = useState(false);
     const [showResigned, setShowResigned] = useState(false); 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -459,7 +400,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     
     const [attendanceSnapshot, setAttendanceSnapshot] = useState<{ late: number, lateDates: string[], absent: number, work: number }>({ late: 0, lateDates: [], absent: 0, work: 0 });
     const [latestV2Assessment, setLatestV2Assessment] = useState<AssessmentRecordV2 | null>(null);
-    const [loadingAssessment, setLoadingAssessment] = useState(false);
+    const [, setLoadingAssessment] = useState(false);
 
     const activeDimensions = useMemo(() => {
         const category = classifyJob(form.role || '');
@@ -876,17 +817,17 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         <div className="flex h-full overflow-hidden relative">
 
             {/* 🍎 iOS 优化版侧边栏 (Sidebar) */}
-            <div className={`w-full md:w-80 lg:w-96 bg-[#F8F9FA] border-r border-gray-200 flex flex-col shrink-0 h-full relative ${selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-80 lg:w-96 bg-[#F6F7FB] border-r border-gray-200 flex flex-col shrink-0 h-full relative ${selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
                 
                 {/* 顶部操作区 (带 iOS 毛玻璃效果) */}
-                <div className="sticky top-0 z-20 bg-[#F8F9FA]/80 backdrop-blur-xl border-b border-gray-200/60 p-4 pb-3 space-y-4">
+                <div className="sticky top-0 z-20 bg-[#F6F7FB]/80 backdrop-blur-xl border-b border-gray-200/60 p-4 pb-3 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h3 className="font-black text-xl text-[#1A1A1A] tracking-tight">员工通讯录</h3>
+                        <h3 className="font-black text-xl text-[#111111] tracking-tight">员工通讯录</h3>
                         <div className="flex gap-2">
                             <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded-full transition-all active:scale-90" title="导出名录">
                                 {isGeneratingPdf ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
                             </button>
-                            <button onClick={handleAddNew} className="w-8 h-8 flex items-center justify-center bg-[#1A1A1A] text-[#FFD700] rounded-full hover:bg-black transition-all active:scale-90 shadow-md">
+                            <button onClick={handleAddNew} className="w-8 h-8 flex items-center justify-center bg-[#111111] text-[#FFD200] rounded-full hover:bg-black transition-all active:scale-90 shadow-md">
                                 <Plus size={18} />
                             </button>
                         </div>
@@ -900,13 +841,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             placeholder="搜索姓名 / ID..." 
                             value={searchTerm} 
                             onChange={e => setSearchTerm(e.target.value)} 
-                            className="w-full pl-9 pr-4 py-2.5 bg-gray-200/60 border-transparent rounded-xl font-medium text-[#1A1A1A] placeholder-gray-500 outline-none focus:bg-white focus:border-[#FFD700] focus:ring-2 focus:ring-[#FFD700]/30 transition-all"
+                            className="w-full pl-9 pr-4 py-2.5 bg-gray-200/60 border-transparent rounded-xl font-medium text-[#111111] placeholder-gray-500 outline-none focus:bg-white focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/30 transition-all"
                             style={{ fontSize: '16px', minHeight: '40px' }}
                         />
                     </div>
                     
                     <label className="flex items-center gap-2 text-xs font-bold text-gray-500 cursor-pointer pl-1 active:opacity-70 select-none">
-                        <input type="checkbox" checked={showResigned} onChange={e => { setShowResigned(e.target.checked); setSelectedEmpId(null); }} className="w-4 h-4 rounded text-[#1A1A1A] focus:ring-[#1A1A1A] accent-[#1A1A1A]" />
+                        <input type="checkbox" checked={showResigned} onChange={e => { setShowResigned(e.target.checked); setSelectedEmpId(null); }} className="w-4 h-4 rounded text-[#111111] focus:ring-[#111111] accent-[#111111]" />
                         <Archive size={14} /> {showResigned ? '仅显示已离职档案' : '隐藏已离职员工'}
                     </label>
                 </div>
@@ -934,7 +875,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             return (
                                 <div key={section.id} className="space-y-2">
                                     {/* 部门 Header */}
-                                    <div className="sticky top-0 z-10 bg-[#F8F9FA]/90 backdrop-blur-md py-1 px-1 flex items-center justify-between">
+                                    <div className="sticky top-0 z-10 bg-[#F6F7FB]/90 backdrop-blur-md py-1 px-1 flex items-center justify-between">
                                         <span className={`text-xs font-black uppercase tracking-wider ${section.text}`}>
                                             {section.label}
                                         </span>
@@ -955,13 +896,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     onClick={() => handleSelect(emp)} 
                                                     className={`group relative p-3 rounded-2xl cursor-pointer transition-all duration-200 active:scale-[0.98] flex items-center gap-3 border ${
                                                         isSelected 
-                                                        ? 'bg-[#1A1A1A] text-white border-black shadow-lg shadow-black/10' 
+                                                        ? 'bg-[#111111] text-white border-black shadow-lg shadow-black/10' 
                                                         : 'bg-white text-gray-700 border-gray-100 hover:border-gray-300 hover:shadow-sm'
                                                     } ${isTerminated ? 'opacity-60 grayscale' : ''}`}
                                                 >
                                                     {/* 头像 */}
                                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-black shrink-0 overflow-hidden shadow-sm ${
-                                                        isSelected ? 'bg-gray-800 text-[#FFD700] ring-2 ring-[#FFD700]' : 'bg-gray-100 text-gray-400'
+                                                        isSelected ? 'bg-gray-800 text-[#FFD200] ring-2 ring-[#FFD200]' : 'bg-gray-100 text-gray-400'
                                                     }`}>
                                                         {emp.avatar ? <img src={emp.avatar} className="w-full h-full object-cover" /> : (emp.name || 'U').charAt(0)}
                                                     </div>
@@ -969,7 +910,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     <div className="min-w-0 flex-grow space-y-1">
                                                         {/* 第一行：名字 + 警告标识 */}
                                                         <div className="flex justify-between items-center">
-                                                            <div className={`text-sm font-black truncate ${isSelected ? 'text-white' : 'text-[#1A1A1A]'}`}>
+                                                            <div className={`text-sm font-black truncate ${isSelected ? 'text-white' : 'text-[#111111]'}`}>
                                                                 {emp.name}
                                                             </div>
                                                             <div className="flex gap-1 shrink-0">
@@ -983,7 +924,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         </div>
                                                         
                                                         {/* 第二行：主职 */}
-                                                        <div className={`text-[11px] font-bold truncate ${isSelected ? 'text-[#FFD700]' : 'text-gray-500'}`}>
+                                                        <div className={`text-[11px] font-bold truncate ${isSelected ? 'text-[#FFD200]' : 'text-gray-500'}`}>
                                                             {getRoleChinese(emp.role)}
                                                         </div>
 
@@ -1016,7 +957,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
                                                             {getOrgLevel(emp) !== 'CREW' && (
                                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
-                                                                    getOrgLevel(emp) === 'OWNER' ? 'bg-[#FFD700] text-black' : 
+                                                                    getOrgLevel(emp) === 'OWNER' ? 'bg-[#FFD200] text-black' : 
                                                                     isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
                                                                 }`}>
                                                                     {getOrgLevelLabel(emp)}
@@ -1043,7 +984,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             </div>
 
             {/* Detail View */}
-            <div className={`flex-grow flex flex-col h-full bg-[#F5F7FA] overflow-y-auto relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`flex-grow flex flex-col h-full bg-[#F6F7FB] overflow-y-auto relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
                 {!selectedEmpId ? (
                     <div className="m-auto text-gray-400 flex flex-col items-center gap-4 px-6 text-center max-w-xs md:max-w-sm">
                         <div className="w-24 h-24 bg-gray-200/60 rounded-full flex items-center justify-center animate-pulse shrink-0">
@@ -1056,7 +997,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 ) : (
                     <>
                         {/* Header Section */}
-                        <div className={`bg-gradient-to-br p-5 pb-20 md:p-6 md:pb-28 relative shadow-lg shrink-0 ${form.isArchived ? 'from-gray-800 to-gray-900 grayscale' : 'from-[#1A1A1A] to-[#2A2A2A]'}`}>
+                        <div className={`bg-gradient-to-br p-5 pb-20 md:p-6 md:pb-28 relative shadow-lg shrink-0 ${form.isArchived ? 'from-gray-800 to-gray-900 grayscale' : 'from-[#111111] to-[#2A2A2A]'}`}>
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                             
                             {/* 顶部按钮栏 */}
@@ -1075,16 +1016,16 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             )}
                                         </button>
                                     )}
-                                    <button onClick={() => setShowReviewModal(true)} className="p-2 sm:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="记录评语">
-                                        <MessageSquarePlus size={14}/> <span className="hidden sm:inline">评语</span>
+                                    <button onClick={() => setShowReviewModal(true)} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="记录评语">
+                                        <MessageSquarePlus size={14}/> <span className="hidden md:inline">评语</span>
                                     </button>
-                                    <button onClick={handleExportSinglePDF} disabled={isGeneratingSinglePdf} className="p-2 sm:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="导出档案">
-                                        {isGeneratingSinglePdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} <span className="hidden sm:inline">导出</span>
+                                    <button onClick={handleExportSinglePDF} disabled={isGeneratingSinglePdf} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="导出档案">
+                                        {isGeneratingSinglePdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} <span className="hidden md:inline">导出</span>
                                     </button>
                                     {isEditing ? (
                                         <>
                                             <button onClick={() => setIsEditing(false)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold text-white active:scale-95 shrink-0">取消</button>
-                                            <button onClick={handleSaveForm} className="px-4 py-2 bg-[#FFD700] hover:bg-[#E5C100] text-black rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 active:scale-95 shrink-0"><Save size={14}/> 保存</button>
+                                            <button onClick={handleSaveForm} className="px-4 py-2 bg-[#FFD200] hover:bg-[#E5C100] text-black rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 active:scale-95 shrink-0"><Save size={14}/> 保存</button>
                                         </>
                                     ) : (
                                         <button onClick={() => setIsEditing(true)} className="px-3 py-2 bg-white text-black rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 hover:bg-gray-100 active:scale-95 shrink-0"><Edit3 size={14}/> 编辑</button>
@@ -1120,14 +1061,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     {/* 职位与副职编辑区 */}
                                     {isEditing ? (
                                         <div className="flex flex-col gap-3 w-full bg-black/20 p-3 rounded-xl border border-white/10 mt-1">
-                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                                <span className="shrink-0 text-[#FFD700]">主职 (Primary):</span>
-                                                <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold w-full sm:w-auto" style={{ fontSize: '16px', minHeight: '40px' }}>
+                                            <div className="flex flex-col md:flex-row md:items-center gap-2">
+                                                <span className="shrink-0 text-[#FFD200]">主职 (Primary):</span>
+                                                <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold w-full md:w-auto" style={{ fontSize: '16px', minHeight: '40px' }}>
                                                     {DEFAULT_ROLES.map(r => <option key={r.id} value={r.title} className="text-black">{r.title}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="flex flex-col sm:flex-row sm:items-start sm:items-center gap-2 flex-wrap">
-                                                <span className="shrink-0 text-white/70 mt-1 sm:mt-0">副职 (Secondary):</span>
+                                            <div className="flex flex-col md:flex-row md:items-start md:items-center gap-2 flex-wrap">
+                                                <span className="shrink-0 text-white/70 mt-1 md:mt-0">副职 (Secondary):</span>
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {form.secondaryRoles?.map(sr => (
                                                         <span key={sr} className="bg-blue-500/20 text-blue-200 px-2 py-1 rounded-lg border border-blue-500/30 flex items-center gap-1 shrink-0">
@@ -1136,7 +1077,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         </span>
                                                     ))}
                                                 </div>
-                                                <select value="" onChange={e => { const newRole = e.target.value; if (newRole && !form.secondaryRoles?.includes(newRole) && newRole !== form.role) { setForm({...form, secondaryRoles: [...(form.secondaryRoles || []), newRole]}); } }} className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold cursor-pointer w-full sm:w-auto mt-1 sm:mt-0" style={{ fontSize: '16px', minHeight: '40px' }}>
+                                                <select value="" onChange={e => { const newRole = e.target.value; if (newRole && !form.secondaryRoles?.includes(newRole) && newRole !== form.role) { setForm({...form, secondaryRoles: [...(form.secondaryRoles || []), newRole]}); } }} className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold cursor-pointer w-full md:w-auto mt-1 md:mt-0" style={{ fontSize: '16px', minHeight: '40px' }}>
                                                     <option value="" className="text-black">+ 添加副职</option>
                                                     {DEFAULT_ROLES.filter(r => r.title !== form.role && !form.secondaryRoles?.includes(r.title)).map(r => <option key={r.id} value={r.title} className="text-black">{r.title}</option>)}
                                                 </select>
@@ -1147,7 +1088,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             {/* 主职 + 副职 (统一 flex-wrap 布局，桌面端不再浪费空间) */}
                                             <div className="flex items-start gap-2 flex-wrap">
                                                 <span className="text-[9px] font-black uppercase tracking-widest text-white/40 w-8 shrink-0 mt-1.5">主职</span>
-                                                <span className="bg-[#FFD700] text-black px-3 py-1.5 rounded-lg font-black text-xs shadow-md">
+                                                <span className="bg-[#FFD200] text-black px-3 py-1.5 rounded-lg font-black text-xs shadow-md">
                                                     {form.role}
                                                 </span>
                                                 {form.secondaryRoles && form.secondaryRoles.length > 0 && (
@@ -1174,19 +1115,19 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <div className="flex md:hidden bg-white/90 backdrop-blur-md p-1 rounded-2xl border border-gray-200 sticky top-14 z-30 mb-4 gap-1 shadow-sm">
                                 <button 
                                     onClick={() => setMobileDetailTab('basic')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'basic' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'basic' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     个人档案
                                 </button>
                                 <button 
                                     onClick={() => setMobileDetailTab('salary')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'salary' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'salary' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     薪资法定
                                 </button>
                                 <button 
                                     onClick={() => setMobileDetailTab('records')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'records' ? 'bg-[#1A1A1A] text-[#FFD700] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'records' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     评估记录
                                 </button>
@@ -1209,7 +1150,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {form.status}
                                             </div>
                                             {form.orgLevel && (
-                                                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shrink-0 ${getOrgLevel(form as Employee) === 'OWNER' ? 'bg-gray-800 text-[#FFD700] border-gray-800' : getOrgLevel(form as Employee) === 'BRANCH_MANAGER' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : getOrgLevel(form as Employee) === 'DEPARTMENT_HEAD' ? 'bg-red-100 text-red-700 border-red-200' : getOrgLevel(form as Employee) === 'TEAM_LEAD' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shrink-0 ${getOrgLevel(form as Employee) === 'OWNER' ? 'bg-gray-800 text-[#FFD200] border-gray-800' : getOrgLevel(form as Employee) === 'BRANCH_MANAGER' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : getOrgLevel(form as Employee) === 'DEPARTMENT_HEAD' ? 'bg-red-100 text-red-700 border-red-200' : getOrgLevel(form as Employee) === 'TEAM_LEAD' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
                                                     <Medal size={12}/> {getOrgLevelLabel(form as Employee)}
                                                 </div>
                                             )}
@@ -1240,18 +1181,18 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> 登录密码 (Access PIN)</h4>
                                         <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
-                                            <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#1A1A1A] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
+                                            <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
                                             <button onClick={() => setShowPin(!showPin)} className="p-2 text-gray-400 hover:text-black transition-colors active:scale-90">{showPin ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
                                         </div>
                                     </div>
 
                                     {/* 薪水卡片 */}
-                                    <div className={`bg-[#1A1A1A] rounded-[2rem] shadow-lg text-white relative overflow-hidden group transition-all duration-300 ${form.isArchived ? 'grayscale opacity-80' : ''} ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-[#111111] rounded-[2rem] shadow-lg text-white relative overflow-hidden group transition-all duration-300 ${form.isArchived ? 'grayscale opacity-80' : ''} ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
                                         <button onClick={() => setIsSalaryExpanded(!isSalaryExpanded)} className="w-full p-4 md:p-6 flex justify-between items-center text-left relative z-10 hover:bg-white/5 transition-colors">
                                             <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 pr-2">
-                                                <div className="p-2 bg-white/10 rounded-full text-[#FFD700] shrink-0"><div className="font-mono text-lg leading-none">$</div></div>
+                                                <div className="p-2 bg-white/10 rounded-full text-[#FFD200] shrink-0"><div className="font-mono text-lg leading-none">$</div></div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-[10px] font-bold text-[#FFD700] uppercase tracking-widest truncate">Salary ({form.salaryMode || 'MONTHLY'})</p>
+                                                    <p className="text-[10px] font-bold text-[#FFD200] uppercase tracking-widest truncate">Salary ({form.salaryMode || 'MONTHLY'})</p>
                                                     <p className="text-base md:text-xl font-mono font-black text-white truncate tabular-nums">RM {(form.basicSalary || 0).toLocaleString()}</p>
                                                     {/* 辅助信息做成 inline 小字，不再抢位置 */}
                                                     <div className="flex items-center gap-3 mt-1 text-[10px] font-bold text-white/50">
@@ -1274,9 +1215,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         
                                         {isSalaryExpanded && (
                                             <div className="px-4 md:px-6 pb-6 relative z-10 animate-in slide-in-from-top-2">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                                                     <div className="bg-white/10 p-3 rounded-xl border border-white/10">
-                                                        <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">Monthly Rest Days</label>
+                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Monthly Rest Days</label>
                                                         {isEditing ? (
                                                             <select value={form.monthlyRestDays || 4} onChange={e => setForm({...form, monthlyRestDays: parseInt(e.target.value)})} className="bg-white/10 text-white font-bold rounded p-2 w-full outline-none border border-white/20" style={{ fontSize: '16px', minHeight: '40px' }}>
                                                                 <option className="text-black" value={2}>2 Days</option>
@@ -1289,7 +1230,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     </div>
                                                     <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between">
                                                         <div>
-                                                            <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">Hostel</label>
+                                                            <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Hostel</label>
                                                             <div className="text-xs font-bold text-white flex items-center gap-1 mt-0.5">
                                                                 <Home size={14} className={form.hasHostel ? "text-green-400" : "text-white/40"}/> 
                                                                 <span className={form.hasHostel ? "text-green-400" : "text-white/40"}>{form.hasHostel ? 'Provided' : 'No'}</span>
@@ -1304,7 +1245,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {/* 👑 Payroll Eligibility Toggle */}
                                                 <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between mb-4">
                                                     <div>
-                                                        <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">薪资结算资格 (Payroll Eligibility)</label>
+                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">薪资结算资格 (Payroll Eligibility)</label>
                                                         <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
                                                             <Wallet size={14} className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}/> 
                                                             <span className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}>
@@ -1323,11 +1264,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 </div>
 
                                                 <div className="flex flex-wrap items-end justify-between gap-3 mb-4 bg-white/5 p-3 rounded-xl">
-                                                    <div className="flex-1 w-full sm:w-auto">
-                                                         <label className="text-[10px] font-bold text-[#FFD700] uppercase mb-1 block">Basic Salary / Mode</label>
+                                                    <div className="flex-1 w-full md:w-auto">
+                                                         <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Basic Salary / Mode</label>
                                                          {isEditing ? (
                                                              <div className="flex flex-wrap items-center gap-2">
-                                                                 <select value={form.salaryMode || 'MONTHLY'} onChange={(e) => setForm({...form, salaryMode: e.target.value as any})} className="bg-white/10 text-[#FFD700] font-bold uppercase tracking-widest border border-white/20 rounded px-2 py-2 outline-none cursor-pointer" style={{ fontSize: '16px', minHeight: '40px' }}>
+                                                                 <select value={form.salaryMode || 'MONTHLY'} onChange={(e) => setForm({...form, salaryMode: e.target.value as any})} className="bg-white/10 text-[#FFD200] font-bold uppercase tracking-widest border border-white/20 rounded px-2 py-2 outline-none cursor-pointer" style={{ fontSize: '16px', minHeight: '40px' }}>
                                                                      <option value="MONTHLY" className="text-black">Monthly</option>
                                                                      <option value="DAILY" className="text-black">Daily</option>
                                                                      <option value="HOURLY" className="text-black">Hourly</option>
@@ -1341,7 +1282,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                              <div className="text-xl md:text-2xl font-mono font-black break-all">RM {(form.basicSalary || 0).toLocaleString()}</div>
                                                          )}
                                                     </div>
-                                                    {isEditing && <button onClick={addSalaryRecord} className="text-[10px] bg-[#FFD700] text-black px-3 py-2 rounded-lg font-bold shadow-md active:scale-95 transition-all shrink-0">+ Increment</button>}
+                                                    {isEditing && <button onClick={addSalaryRecord} className="text-[10px] bg-[#FFD200] text-black px-3 py-2 rounded-lg font-bold shadow-md active:scale-95 transition-all shrink-0">+ Increment</button>}
                                                 </div>
                                                 
                                                 <div className="space-y-3 pt-4 border-t border-white/10 mb-4">
@@ -1351,7 +1292,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                                 <div className="pt-2 border-t border-white/10">
                                                     <p className="text-[9px] font-bold text-white/40 uppercase mb-2">History</p>
-                                                    <div className="space-y-2 max-h-32 overflow-y-auto pr-1">{form.salaryHistory?.length === 0 && <p className="text-[10px] text-white/30 italic">No records</p>}{form.salaryHistory?.map((rec, idx) => (<div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 p-2 rounded gap-2"><div><div className="font-bold text-white/80">{rec.date}</div><div className="text-white/50">{rec.reason}</div></div><div className="text-right shrink-0"><div className="font-mono font-bold text-[#FFD700]">RM {rec.amount}</div><div className={`${rec.adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>{rec.adjustment >= 0 ? '+' : ''}{rec.adjustment}</div></div>{isEditing && <button onClick={() => deleteSalaryRecord(idx)} className="text-red-400 ml-2 p-1 active:scale-90"><Trash2 size={12}/></button>}</div>))}</div>
+                                                    <div className="space-y-2 max-h-32 overflow-y-auto pr-1">{form.salaryHistory?.length === 0 && <p className="text-[10px] text-white/30 italic">No records</p>}{form.salaryHistory?.map((rec, idx) => (<div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 p-2 rounded gap-2"><div><div className="font-bold text-white/80">{rec.date}</div><div className="text-white/50">{rec.reason}</div></div><div className="text-right shrink-0"><div className="font-mono font-bold text-[#FFD200]">RM {rec.amount}</div><div className={`${rec.adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>{rec.adjustment >= 0 ? '+' : ''}{rec.adjustment}</div></div>{isEditing && <button onClick={() => deleteSalaryRecord(idx)} className="text-red-400 ml-2 p-1 active:scale-90"><Trash2 size={12}/></button>}</div>))}</div>
                                                 </div>
                                             </div>
                                         )}
@@ -1360,7 +1301,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     {/* 专业能力 (Special Skills) */}
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            <Trophy size={14} className="text-[#FFD700]"/> 专业能力 (Special Skills)
+                                            <Trophy size={14} className="text-[#FFD200]"/> 专业能力 (Special Skills)
                                         </h4>
                                         <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                                             {isEditing ? (
@@ -1379,7 +1320,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     {form.specialSkills ? (
                                                         <div className="flex flex-wrap gap-2">
                                                             {form.specialSkills.split(/[,，、\s]+/).filter(Boolean).map((skill, index) => (
-                                                                <span key={index} className="px-3 py-1.5 bg-stone-100 hover:bg-[#FFD700]/10 text-stone-800 hover:text-stone-900 border border-stone-200 hover:border-[#FFD700]/30 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-default">
+                                                                <span key={index} className="px-3 py-1.5 bg-stone-100 hover:bg-[#FFD200]/10 text-stone-800 hover:text-stone-900 border border-stone-200 hover:border-[#FFD200]/30 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-default">
                                                                     ✨ {skill}
                                                                 </span>
                                                             ))}
@@ -1425,18 +1366,18 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-blue-50 rounded text-blue-600"><Shield size={14}/></div><span className="text-xs font-bold text-gray-700">法定缴纳 (Statutory)</span></div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><InputField label="EPF No" value={form.epfNo} onChange={(e: any) => setForm({...form, epfNo: e.target.value})} placeholder="KWSP" isEditing={isEditing} /><InputField label="SOCSO No" value={form.socsoNo} onChange={(e: any) => setForm({...form, socsoNo: e.target.value})} placeholder="PERKESO" isEditing={isEditing} /></div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><InputField label="EPF No" value={form.epfNo} onChange={(e: any) => setForm({...form, epfNo: e.target.value})} placeholder="KWSP" isEditing={isEditing} /><InputField label="SOCSO No" value={form.socsoNo} onChange={(e: any) => setForm({...form, socsoNo: e.target.value})} placeholder="PERKESO" isEditing={isEditing} /></div>
                                             </div>
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-green-50 rounded text-green-600"><Stethoscope size={14}/></div><span className="text-xs font-bold text-gray-700">卫生认证 (Health)</span></div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><InputField label="打针有效 (Typhoid)" value={form.typhoidExpiry} onChange={(e: any) => setForm({...form, typhoidExpiry: e.target.value})} type="date" isEditing={isEditing} /><InputField label="餐馆课程 (Course Date)" value={form.foodHandlingDate} onChange={(e: any) => setForm({...form, foodHandlingDate: e.target.value})} type="date" isEditing={isEditing} /></div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><InputField label="打针有效 (Typhoid)" value={form.typhoidExpiry} onChange={(e: any) => setForm({...form, typhoidExpiry: e.target.value})} type="date" isEditing={isEditing} /><InputField label="餐馆课程 (Course Date)" value={form.foodHandlingDate} onChange={(e: any) => setForm({...form, foodHandlingDate: e.target.value})} type="date" isEditing={isEditing} /></div>
                                             </div>
                                         </div>
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Phone size={14}/> 紧急联系人 (Emergency Contact)</h4>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
                                     </div>
  
                                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 items-start ${mobileDetailTab === 'records' ? 'grid' : 'hidden md:grid'}`}>
@@ -1504,7 +1445,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <p className="mt-1 text-[10px] font-bold text-gray-400">控制库存范围与具体操作，不改变员工看到的其他模块</p>
                                             </div>
                                             {isEditing && canConfigureInventoryAccess && (
-                                                <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#1A1A1A] px-3 text-[10px] font-black text-[#FFD700] active:scale-95">设置</button>
+                                                <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#111111] px-3 text-[10px] font-black text-[#FFD200] active:scale-95">设置</button>
                                             )}
                                         </div>
                                         <div className="space-y-3">
@@ -1532,12 +1473,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
                                         <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> 奖惩记录 (Disciplinary)</h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95">+ Add Warning</button>}</div>
-                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#1A1A1A] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
-                                        <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#1A1A1A] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90"><Trash2 size={16}/></button>}</div>); })}</div>
+                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
+                                        <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90"><Trash2 size={16}/></button>}</div>); })}</div>
                                     </div>
 
                                     {isEditing && (
-                                        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+                                        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col md:flex-row gap-3">
                                             <button onClick={handleResetPin} className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><Lock size={14}/> 重置密码 (Reset PIN)</button>
                                             {form.isArchived ? (
                                                 <button onClick={handleRestore} className="flex-1 py-3.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><CheckCircle2 size={14}/> 复职 (Restore)</button>
@@ -1559,7 +1500,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-black text-xl text-[#1A1A1A]">员工表现评语 (Reviews)</h3>
+                            <h3 className="font-black text-xl text-[#111111]">员工表现评语 (Reviews)</h3>
                             <button onClick={() => setShowReviewModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
                         </div>
                         
@@ -1609,7 +1550,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <textarea 
                                 value={reviewFormState.content}
                                 onChange={e => setReviewFormState({...reviewFormState, content: e.target.value})}
-                                className="w-full p-3 bg-white border-2 border-gray-200 rounded-xl font-bold outline-none focus:border-[#1A1A1A] h-24 resize-none placeholder:font-normal"
+                                className="w-full p-3 bg-white border-2 border-gray-200 rounded-xl font-bold outline-none focus:border-[#111111] h-24 resize-none placeholder:font-normal"
                                 style={{ fontSize: '16px' }}
                                 placeholder="请输入评语内容..."
                             />
@@ -1638,7 +1579,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     <input type="file" ref={reviewFileInputRef} className="hidden" accept="image/*" onChange={handleReviewImageUpload} />
                                 </div>
                                 
-                                <button onClick={handleAddReview} disabled={isUploadingReviewImage} className="flex-grow bg-[#1A1A1A] text-[#FFD700] py-3 rounded-xl font-black shadow-lg hover:bg-black transition-all disabled:opacity-70">
+                                <button onClick={handleAddReview} disabled={isUploadingReviewImage} className="flex-grow bg-[#111111] text-[#FFD200] py-3 rounded-xl font-black shadow-lg hover:bg-black transition-all disabled:opacity-70">
                                     {isUploadingReviewImage ? 'Uploading...' : '提交记录 (Add Record)'}
                                 </button>
                             </div>
@@ -1650,7 +1591,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             {/* Image Viewer */}
             {viewImage && (
                 <div 
-                    className="fixed inset-0 bg-black/95 z-[300] flex flex-col items-center justify-between p-4 sm:p-6 animate-in fade-in duration-200 select-none cursor-pointer" 
+                    className="fixed inset-0 bg-black/95 z-[300] flex flex-col items-center justify-between p-4 md:p-6 animate-in fade-in duration-200 select-none cursor-pointer" 
                     style={{
                         paddingTop: 'max(env(safe-area-inset-top, 16px), 16px)',
                         paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
@@ -1713,7 +1654,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             {showTerminateModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
-                        <div className="bg-[#1A1A1A] p-5 text-center shrink-0">
+                        <div className="bg-[#111111] p-5 text-center shrink-0">
                             <div className="w-14 h-14 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-3"><LogOut size={28}/></div>
                             <h3 className="font-black text-xl text-white mb-1">办理离职手续</h3>
                             <p className="text-xs text-gray-400 font-bold">{form.name || 'Unknown'} • {(form.role || '未分配').split('(')[0]}</p>
@@ -1774,7 +1715,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 text-center border-t-8 border-red-600">
                         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><Trash2 size={32} className="text-red-600"/></div>
-                        <h3 className="font-black text-2xl text-[#1A1A1A] mb-2">确认永久删除?</h3>
+                        <h3 className="font-black text-2xl text-[#111111] mb-2">确认永久删除?</h3>
                         <p className="text-sm text-gray-500 font-bold mb-6">此操作将永久移除该员工的所有资料、薪资记录且<span className="text-red-600 underline">无法恢复</span>。</p>
                         <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setShowDeleteModal(false)} className="py-3 bg-gray-100 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-200">取消 (Cancel)</button>
@@ -1788,8 +1729,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             {showLoanModal && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
-                        <div className="bg-[#1A1A1A] p-4 flex justify-between items-center text-white shrink-0">
-                            <h3 className="font-black text-lg flex items-center gap-2"><Wallet size={18} className="text-[#FFD700]"/> 借还款记录 (Loan Tracker)</h3>
+                        <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0">
+                            <h3 className="font-black text-lg flex items-center gap-2"><Wallet size={18} className="text-[#FFD200]"/> 借还款记录 (Loan Tracker)</h3>
                             <button onClick={() => setShowLoanModal(false)}><X size={20} className="text-white/50 hover:text-white"/></button>
                         </div>
                         
@@ -1838,7 +1779,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${rec.type === 'BORROW' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{rec.type === 'BORROW' ? '借' : '还'}</div>
                                             <div className="min-w-0">
-                                                <div className="text-xs font-bold text-[#1A1A1A] truncate">{rec.note || '-'}</div>
+                                                <div className="text-xs font-bold text-[#111111] truncate">{rec.note || '-'}</div>
                                                 <div className="text-[10px] text-gray-400 flex items-center gap-2">
                                                     <span className="font-mono">{rec.date}</span>
                                                     {rec.via && <span className="bg-gray-100 px-1 rounded text-[9px]">{rec.via}</span>}
@@ -1908,7 +1849,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 <div ref={singleProfileRef} id="hr-profile-single-export-root" className="w-[794px] h-[1123px] bg-white p-10 font-sans text-black relative flex flex-col justify-between overflow-hidden">
                     <div className="flex justify-between items-start border-b-4 border-[#8B0000] pb-4 mb-5">
                         <div>
-                            <h1 className="text-3xl font-black uppercase tracking-wider text-[#1A1A1A] mb-1">{form.name || 'EMPLOYEE NAME'}</h1>
+                            <h1 className="text-3xl font-black uppercase tracking-wider text-[#111111] mb-1">{form.name || 'EMPLOYEE NAME'}</h1>
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{form.role || 'ROLE'}</p>
                             <div className="mt-3 flex gap-3 text-[10px] font-mono text-gray-600">
                                 <span className="bg-gray-100 px-2 py-0.5 rounded border border-gray-200">ID: {form.id}</span>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
-    ClipboardCheck, Layout, Box, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
+    ClipboardCheck, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, Sparkles, BellRing
+    FileText, Calculator, Star, Search, BellRing
 } from 'lucide-react';
 import { Employee } from '../types';
 import { HRSystem } from './features/HRSystem';
@@ -12,7 +12,7 @@ import { RecurringBillsModule } from './features/RecurringBillsModule';
 import { OrgChart } from './features/OrgChart';
 import { FinancialReport } from './features/FinancialReport';
 import { AttendanceConsole } from './features/AttendanceConsole';
-import { AccountsPayableModule } from './features/AccountsPayableModule';
+import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
 import { TreasuryModule } from './features/TreasuryModule'; 
 import { WarrantyModule } from './features/WarrantyModule'; 
 import { EventsPlanningModule } from './features/EventsPlanningModule';
@@ -88,7 +88,6 @@ const BOSS_DASHBOARD_SECTIONS = MODULE_CATEGORIES.map(category => ({
         card => card.target,
     ),
 })).filter(section => section.cards.length > 0);
-
 
 // Custom Hook for Alerts
 function useDashboardAlerts() {
@@ -468,7 +467,7 @@ export const BossDashboard: React.FC<{
                                 <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case">({favoriteCards.length})</span>
                             </h3>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+ <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
                             {favoriteCards.map(card => (
                                 <DashboardCard
                                     key={`fav-${card.id}`}
@@ -529,13 +528,13 @@ export const BossDashboard: React.FC<{
                 {filteredSections.map((section, idx) => (
                     <div key={idx} className="bg-white rounded-3xl p-5 border border-stone-200/50 shadow-sm space-y-4">
                         <div className="flex justify-between items-center pb-2 border-b border-stone-100">
-                            <h3 className="font-black text-stone-850 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
+                            <h3 className="font-black text-stone-900 text-xs md:text-sm flex items-center gap-1.5 uppercase tracking-widest">
                                 <span className="text-[#FFD200] font-black">■</span>
                                 {section.title}
                                 <span className="text-[10px] text-stone-400 font-bold tracking-normal normal-case"> · {section.sub}</span>
                             </h3>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+ <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
                             {section.cards.map((card) => (
                                 <DashboardCard 
                                     key={card.id}
@@ -557,7 +556,7 @@ export const BossDashboard: React.FC<{
                         <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center text-stone-400 mx-auto mb-3">
                             <Search size={20} />
                         </div>
-                        <p className="text-sm font-extrabold text-stone-850">未找到相关功能</p>
+                        <p className="text-sm font-extrabold text-stone-900">未找到相关功能</p>
                         <p className="text-xs text-stone-400 mt-1">没有找到匹配 "{searchQuery}" 的功能</p>
                     </div>
                 )}

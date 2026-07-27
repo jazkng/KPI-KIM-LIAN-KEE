@@ -35,9 +35,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 border-t-8 border-[#1A1A1A]">
+            <div className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 border-t-8 border-[#111111]">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-black text-xl text-[#1A1A1A] flex items-center gap-2"><Printer size={20}/> 导出库存报表</h3>
+                    <h3 className="font-black text-xl text-[#111111] flex items-center gap-2"><Printer size={20}/> 导出库存报表</h3>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
                 </div>
 
@@ -49,7 +49,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                                 <div key={key} onClick={() => onCategoryToggle(key as 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL')}
                                     className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${checked ? 'border-blue-500 bg-blue-50' : 'border-gray-100 hover:border-gray-300'}`}>
                                     {/* 替换: 使用正确的名称映射表解决生鲜/茶叶的显示 Bug */}
-                                    <span className="font-bold text-sm text-[#1A1A1A]">{MAIN_VIEW_LABELS[key] || key} 区域</span>
+                                    <span className="font-bold text-sm text-[#111111]">{MAIN_VIEW_LABELS[key] || key} 区域</span>
                                     {checked ? <CheckSquare size={20} className="text-blue-600"/> : <Square size={20} className="text-gray-300"/>}
                                 </div>
                             ))}
@@ -61,7 +61,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <div onClick={() => onConfigChange({...exportConfig, showCost: !exportConfig.showCost})}
                             className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${exportConfig.showCost ? 'border-green-500 bg-green-50' : 'border-gray-100 hover:border-gray-300'}`}>
                             <div>
-                                <span className="font-bold text-sm text-[#1A1A1A]">显示成本与价值 (Show Value)</span>
+                                <span className="font-bold text-sm text-[#111111]">显示成本与价值 (Show Value)</span>
                                 <p className="text-[10px] text-gray-500 mt-0.5">适合财务/老板查阅</p>
                             </div>
                             <div className={`w-10 h-6 rounded-full p-1 transition-colors ${exportConfig.showCost ? 'bg-green-500' : 'bg-gray-300'}`}>
@@ -71,7 +71,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <div onClick={() => onConfigChange({...exportConfig, lowStockOnly: !exportConfig.lowStockOnly})}
                             className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${exportConfig.lowStockOnly ? 'border-red-500 bg-red-50' : 'border-gray-100 hover:border-gray-300'}`}>
                             <div>
-                                <span className="font-bold text-sm text-[#1A1A1A]">仅导出缺货 (Low Stock Only)</span>
+                                <span className="font-bold text-sm text-[#111111]">仅导出缺货 (Low Stock Only)</span>
                                 <p className="text-[10px] text-gray-500 mt-0.5">适合快速补货</p>
                             </div>
                             <div className={`w-10 h-6 rounded-full p-1 transition-colors ${exportConfig.lowStockOnly ? 'bg-red-500' : 'bg-gray-300'}`}>
@@ -90,7 +90,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     </button>
 
                     <button onClick={onExport} disabled={isExportDisabled}
-                        className="flex-1 py-4 bg-[#1A1A1A] text-[#FFD700] rounded-2xl font-black text-sm shadow-lg hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100">
+                        className="flex-1 py-4 bg-[#111111] text-[#FFD200] rounded-2xl font-black text-sm shadow-lg hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100">
                         {isGeneratingPdf ? <Loader2 size={20} className="animate-spin"/> : <FileDown size={20}/>} 
                         导出 PDF
                     </button>

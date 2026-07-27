@@ -163,10 +163,10 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
     // ============================================================
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-[#F5F7FA] w-full h-[92vh] md:max-w-5xl md:h-[92vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
+            <div className="bg-[#F6F7FB] w-full h-[92vh] md:max-w-5xl md:h-[92vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
 
                 {/* Header */}
-                <div className="bg-[#1A1A1A] px-4 pt-[env(safe-area-inset-top,0px)] pb-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-amber-400">
+                <div className="bg-[#111111] px-4 pt-[env(safe-area-inset-top,0px)] pb-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-amber-400">
                     <div className="flex items-center gap-3 min-w-0">
                         {stage === 'PREVIEW' && (
                             <button onClick={() => setStage('PICK')} className="p-2 hover:bg-white/10 rounded-full">
@@ -238,7 +238,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                                     {selectedKeys.size === filteredGroups.length && filteredGroups.length > 0 ? '取消全选' : '全选'}
                                 </button>
                                 <div className="text-[10px] font-bold text-gray-500">
-                                    共 <span className="text-[#1A1A1A]">{filteredGroups.length}</span> 组 · 选中
+                                    共 <span className="text-[#111111]">{filteredGroups.length}</span> 组 · 选中
                                     <span className="text-amber-700 ml-1">{stats.groupCount}</span> 组
                                 </div>
                             </div>
@@ -275,7 +275,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                        <span className="font-black text-sm text-[#1A1A1A] truncate">{g.payeeName}</span>
+                                                        <span className="font-black text-sm text-[#111111] truncate">{g.payeeName}</span>
                                                         <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
                                                             g.paymentMethod === 'CASH' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                                                         }`}>
@@ -289,7 +289,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                                                     </div>
                                                 </div>
                                                 <div className="text-right shrink-0">
-                                                    <div className="text-base font-black font-mono text-[#1A1A1A]">RM {g.totalAmount.toFixed(2)}</div>
+                                                    <div className="text-base font-black font-mono text-[#111111]">RM {g.totalAmount.toFixed(2)}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -300,7 +300,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
 
                         {/* 底部:下一步预览 */}
                         {selectedKeys.size > 0 && (
-                            <div className="bg-[#1A1A1A] p-3 md:p-4 shrink-0 border-t border-amber-400/30" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+                            <div className="bg-[#111111] p-3 md:p-4 shrink-0 border-t border-amber-400/30" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="text-white">
                                         <div className="text-[10px] text-gray-400 font-bold uppercase">已选</div>
@@ -338,7 +338,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                                     <div className="flex items-start gap-3 flex-wrap">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                <span className="font-black text-sm text-[#1A1A1A]">{g.payeeName}</span>
+                                                <span className="font-black text-sm text-[#111111]">{g.payeeName}</span>
                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
                                                     g.paymentMethod === 'CASH' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                                                 }`}>
@@ -378,7 +378,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                             ))}
                         </div>
 
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 shrink-0 border-t border-amber-400/30" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+                        <div className="bg-[#111111] p-3 md:p-4 shrink-0 border-t border-amber-400/30" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
                             <div className="flex items-center justify-between gap-3">
                                 <button
                                     onClick={() => setStage('PICK')}
@@ -411,7 +411,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                             <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <CheckCircle2 size={28} />
                             </div>
-                            <h3 className="font-black text-lg text-[#1A1A1A] mb-1 text-center">补开完成</h3>
+                            <h3 className="font-black text-lg text-[#111111] mb-1 text-center">补开完成</h3>
                             <p className="text-xs text-gray-500 font-bold mb-4 text-center">
                                 成功 {resultModal.generated.length} 张{resultModal.failed > 0 ? ` · 失败 ${resultModal.failed} 张` : ''}
                             </p>
@@ -419,7 +419,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                                 {resultModal.generated.map(pv => (
                                     <div key={pv.pvNumber} className="flex items-center justify-between py-1.5 text-xs">
                                         <div className="min-w-0">
-                                            <div className="font-mono font-black text-[#1A1A1A]">{pv.pvNumber}</div>
+                                            <div className="font-mono font-black text-[#111111]">{pv.pvNumber}</div>
                                             <div className="text-[10px] text-gray-500 truncate">{pv.payeeName} · {new Date(pv.date).toLocaleDateString('en-GB')}</div>
                                         </div>
                                         <button
@@ -434,7 +434,7 @@ export const BackdatePVModule: React.FC<BackdatePVModuleProps> = ({ onClose, onR
                             </div>
                             <button
                                 onClick={() => setResultModal(null)}
-                                className="w-full py-3 bg-[#1A1A1A] text-amber-400 font-black rounded-xl text-sm hover:bg-black"
+                                className="w-full py-3 bg-[#111111] text-amber-400 font-black rounded-xl text-sm hover:bg-black"
                             >
                                 完成
                             </button>

@@ -127,7 +127,7 @@ export const KitchenAlertModule: React.FC<KitchenAlertModuleProps> = ({ employee
     const [showDishResults, setShowDishResults] = useState(false);
 
     const [tableNo, setTableNo] = useState('');
-    const [orderNo, setOrderNo] = useState('');
+    const [orderNo, ] = useState('');
     const [size, setSize] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [alertType, setAlertType] = useState<KitchenAlertType>('RUSH');

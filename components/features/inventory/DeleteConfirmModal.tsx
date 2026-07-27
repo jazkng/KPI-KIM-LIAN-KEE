@@ -14,7 +14,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({ itemName
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                     <Trash2 size={32} className="text-red-600"/>
                 </div>
-                <h3 className="font-black text-2xl text-[#1A1A1A] mb-2">确认删除?</h3>
+                <h3 className="font-black text-2xl text-[#111111] mb-2">确认删除?</h3>
                 <p className="text-sm text-gray-500 font-bold mb-6">您确定要删除 <span className="text-red-600">{itemName}</span> 吗？<br/>此操作无法撤销。</p>
                 <div className="grid grid-cols-2 gap-4">
                     <button onClick={onCancel} className="py-3 bg-gray-100 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-200 transition-colors">取消 (Cancel)</button>

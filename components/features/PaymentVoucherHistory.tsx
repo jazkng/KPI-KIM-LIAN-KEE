@@ -142,11 +142,11 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-[#F5F7FA] w-full h-[92vh] md:max-w-4xl md:h-[88vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
+            <div className="bg-[#F6F7FB] w-full h-[92vh] md:max-w-4xl md:h-[88vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
 
-                <div className="bg-[#1A1A1A] px-4 pt-[env(safe-area-inset-top,0px)] pb-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD700]">
+                <div className="bg-[#111111] px-4 pt-[env(safe-area-inset-top,0px)] pb-3 md:p-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200]">
                     <div className="flex items-center gap-3">
-                        <div className="bg-[#FFD700] text-black p-2 rounded-xl shadow-lg"><FileText size={20} /></div>
+                        <div className="bg-[#FFD200] text-black p-2 rounded-xl shadow-lg"><FileText size={20} /></div>
                         <div>
                             <h3 className="font-serif font-black text-base md:text-xl tracking-wide">付款凭单历史</h3>
                             <p className="text-[9px] text-gray-400 font-mono uppercase tracking-widest hidden md:block">Payment Voucher History</p>
@@ -163,7 +163,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                             placeholder="搜索凭单编号 / 收款人..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#FFD700] outline-none"
+                            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#FFD200] outline-none"
                             style={{ fontSize: 16 }}
                         />
                     </div>
@@ -189,7 +189,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                 </div>
 
                 {/* 👑 Added date selection filters bar */}
-                <div className="bg-white border-b border-gray-200 px-3 pb-3 md:px-4 md:pb-3 shrink-0 flex flex-col sm:flex-row gap-2.5 justify-between items-stretch sm:items-center text-xs text-gray-600">
+                <div className="bg-white border-b border-gray-200 px-3 pb-3 md:px-4 md:pb-3 shrink-0 flex flex-col md:flex-row gap-2.5 justify-between items-stretch md:items-center text-xs text-gray-600">
                     <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-bold text-gray-500 mr-1 flex items-center gap-1"><Calendar size={13}/>日期范围:</span>
                         <button
@@ -239,20 +239,20 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                             全部
                         </button>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 justify-between sm:justify-end">
+                    <div className="flex items-center gap-1.5 shrink-0 justify-between md:justify-end">
                         <div className="flex items-center gap-1 font-mono">
                             <input
                                 type="date"
                                 value={startDate}
                                 onChange={e => setStartDate(e.target.value)}
-                                className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 block text-gray-700 text-[11px] outline-none h-8 font-bold focus:ring-1 focus:ring-[#FFD700]"
+                                className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 block text-gray-700 text-[11px] outline-none h-8 font-bold focus:ring-1 focus:ring-[#FFD200]"
                             />
                             <span className="text-gray-400 font-bold px-0.5 text-[10px]">至</span>
                             <input
                                 type="date"
                                 value={endDate}
                                 onChange={e => setEndDate(e.target.value)}
-                                className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 block text-gray-700 text-[11px] outline-none h-8 font-bold focus:ring-1 focus:ring-[#FFD700]"
+                                className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 block text-gray-700 text-[11px] outline-none h-8 font-bold focus:ring-1 focus:ring-[#FFD200]"
                             />
                         </div>
                     </div>
@@ -291,7 +291,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                 <div
                                     key={pv.pvNumber}
                                     className={`bg-white rounded-2xl p-4 shadow-sm border-l-4 transition-all ${
-                                        isVoid ? 'border-l-gray-300 opacity-70' : pv.isBackdated ? 'border-l-amber-400' : 'border-l-[#FFD700]'
+                                        isVoid ? 'border-l-gray-300 opacity-70' : pv.isBackdated ? 'border-l-amber-400' : 'border-l-[#FFD200]'
                                     }`}
                                 >
                                     {/* 👑 Wrap the card header in a clean clickable container suitable for single-hand palm clicks with Apple touch constraints */}
@@ -302,7 +302,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                     >
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                <span className="font-mono font-black text-sm text-[#1A1A1A] group-hover:text-blue-600 transition-colors">{pv.pvNumber}</span>
+                                                <span className="font-mono font-black text-sm text-[#111111] group-hover:text-blue-600 transition-colors">{pv.pvNumber}</span>
                                                 {isVoid ? (
                                                     <span className="bg-gray-200 text-gray-600 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Void</span>
                                                 ) : pv.isBackdated ? (
@@ -326,7 +326,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                             )}
                                         </div>
                                         <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
-                                            <div className={`text-lg font-black font-mono leading-none ${isVoid ? 'text-gray-400 line-through' : 'text-[#1A1A1A]'}`}>
+                                            <div className={`text-lg font-black font-mono leading-none ${isVoid ? 'text-gray-400 line-through' : 'text-[#111111]'}`}>
                                                 RM {pv.totalAmount.toFixed(2)}
                                             </div>
                                             <div className="text-gray-400 flex items-center justify-center p-1 bg-gray-50 hover:bg-gray-100 rounded-lg group-hover:text-amber-500 transition-colors w-7 h-7">
@@ -341,12 +341,12 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">凭单明细 (Particulars)</div>
                                             <div className="space-y-2">
                                                 {pv.particulars.map((part, index) => (
-                                                    <div key={index} className="bg-white p-3 rounded-xl border border-gray-150 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5">
+                                                    <div key={index} className="bg-white p-3 rounded-xl border border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col md:flex-row justify-between items-start md:items-center gap-1.5">
                                                         <div className="min-w-0 flex-1">
-                                                            <div className="text-xs font-black text-[#1A1A1A] break-words">{part.description}</div>
+                                                            <div className="text-xs font-black text-[#111111] break-words">{part.description}</div>
                                                             <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                                                 {part.category && (
-                                                                    <span className="text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-150/50 px-1.5 py-0.5 rounded">
+                                                                    <span className="text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200/50 px-1.5 py-0.5 rounded">
                                                                         🏷️ {part.category}
                                                                     </span>
                                                                 )}
@@ -357,7 +357,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <div className="text-right font-mono font-bold text-[#1A1A1A] text-xs shrink-0 self-end sm:self-center bg-gray-50 px-2 py-1 rounded border border-gray-100">
+                                                        <div className="text-right font-mono font-bold text-[#111111] text-xs shrink-0 self-end md:self-center bg-gray-50 px-2 py-1 rounded border border-gray-100">
                                                             RM {part.amount.toFixed(2)}
                                                         </div>
                                                     </div>
@@ -368,7 +368,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-gray-100 text-[10.5px]">
                                                 <div>
                                                     <span className="text-gray-400 font-bold block">英文大写金额 (Amount in Words):</span>
-                                                    <span className="font-extrabold text-[#1A1A1A] italic leading-tight block mt-0.5">{pv.amountInWords}</span>
+                                                    <span className="font-extrabold text-[#111111] italic leading-tight block mt-0.5">{pv.amountInWords}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-400 font-bold block">付款渠道 & 经手参考 (Method & Bank Ref):</span>
@@ -378,7 +378,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                                     </span>
                                                 </div>
                                                 {pv.preparedBy && (
-                                                    <div className="md:col-span-2 border-t border-gray-100 pt-2 mt-1 flex justify-between items-center text-[9px] text-gray-405 font-bold">
+                                                    <div className="md:col-span-2 border-t border-gray-100 pt-2 mt-1 flex justify-between items-center text-[9px] text-gray-400 font-bold">
                                                         <span>经手人 (Prepared By): {pv.preparedBy}</span>
                                                         <span>建立时间 (Created At): {pv.createdAt ? pv.createdAt.replace('T', ' ').split('.')[0] : '-'}</span>
                                                     </div>
@@ -391,7 +391,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                                     <div className="grid grid-cols-12 gap-2 mt-3 pt-3 border-t border-gray-100">
                                         <button
                                             onClick={() => onReprint(pv)}
-                                            className="col-span-6 bg-[#1A1A1A] text-[#FFD700] py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 hover:bg-black active:scale-95 transition-all min-h-[40px] select-none"
+                                            className="col-span-6 bg-[#111111] text-[#FFD200] py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 hover:bg-black active:scale-95 transition-all min-h-[40px] select-none"
                                         >
                                             <Printer size={14} /> 重新 A4 PDF
                                         </button>
@@ -427,7 +427,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                         >
                             <div className="md:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 -mt-2"></div>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-serif font-black text-lg text-[#1A1A1A]">🔢 调整月度单号计数器</h3>
+                                <h3 className="font-serif font-black text-lg text-[#111111]">🔢 调整月度单号计数器</h3>
                                 <button onClick={() => setShowCounterEditor(false)} className="text-gray-400 p-1"><X size={20}/></button>
                             </div>
                             
@@ -484,7 +484,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                             </div>
 
                             <div className="grid grid-cols-2 gap-3 mt-auto">
-                                <button onClick={() => setShowCounterEditor(false)} className="py-3 bg-gray-150 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-200 select-none min-h-[44px]">取消</button>
+                                <button onClick={() => setShowCounterEditor(false)} className="py-3 bg-gray-200 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-200 select-none min-h-[44px]">取消</button>
                                 <button onClick={handleSaveCounter} className="py-3 bg-amber-500 text-white font-black rounded-xl text-xs shadow-lg hover:bg-amber-600 active:scale-95 transition-all select-none min-h-[44px]">
                                     保存计数器
                                 </button>
@@ -504,7 +504,7 @@ export const PaymentVoucherHistory: React.FC<PaymentVoucherHistoryProps> = ({ on
                             <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <AlertTriangle size={28} />
                             </div>
-                            <h3 className="font-black text-lg text-[#1A1A1A] mb-1 text-center">作废凭单 {voidTarget.pvNumber}?</h3>
+                            <h3 className="font-black text-lg text-[#111111] mb-1 text-center">作废凭单 {voidTarget.pvNumber}?</h3>
                             <p className="text-xs text-gray-500 font-bold mb-4 text-center">
                                 凭单不会被删除，只标记为 VOID（编号保留以维持连续性）。
                             </p>
