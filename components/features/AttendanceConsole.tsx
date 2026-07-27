@@ -18,7 +18,7 @@ import {
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface AttendanceConsoleProps {
     onClose: () => void;
@@ -306,6 +306,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
         setIsGeneratingPdf(true);
         try {
             await new Promise(r => setTimeout(r, 500)); 
+            await waitForPdfFonts();
             const canvas = await html2canvas(printRef.current, { 
                 scale: 2, 
                 useCORS: true, 
@@ -724,6 +725,7 @@ const EmployeeMonthlySheetModal: React.FC<{
         setIsExporting(true);
         try {
             await new Promise(r => setTimeout(r, 600));
+            await waitForPdfFonts();
             const canvas = await html2canvas(printAreaRef.current, {
                 scale: 2,
                 useCORS: true,

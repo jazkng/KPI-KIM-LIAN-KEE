@@ -20,7 +20,7 @@ import { StockEditModal } from './StockEditModal';
 import { jsPDF } from "jspdf";
 import ExcelJS from 'exceljs';
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
     needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase
@@ -1530,6 +1530,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
                 if (i > 0) pdf.addPage();
 
+                await waitForPdfFonts();
                 const canvas = await html2canvas(element, { 
                     scale: 2, 
                     useCORS: true, 

@@ -8,7 +8,7 @@ import { SelfIssuedVoucher, SelfVoucherItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 // Preset default voucher values for quick-fill
 const QUICK_CONTENT_PRESETS = [
@@ -417,6 +417,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
             // Wait a tiny bit for layout stability of the offscreen node
             await new Promise((resolve) => setTimeout(resolve, 300));
 
+            await waitForPdfFonts();
             const canvas = await html2canvas(captureNode, {
                 scale: 2.2, // high-res crisp typography
                 useCORS: true,

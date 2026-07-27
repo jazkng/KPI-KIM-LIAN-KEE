@@ -4,7 +4,7 @@ import { SettlementRecord, ExpenseItem, BillPaymentRecord, FundTransfer, Treasur
 import { DataManager } from '../../utils/dataManager';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from '../../firebaseConfig';
@@ -1705,6 +1705,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         setIsExporting(true);
         try {
             await new Promise(r => setTimeout(r, 800));
+            await waitForPdfFonts();
             const canvas = await html2canvas(printRef.current, {
                 scale: 2,
                 useCORS: true,
@@ -1751,6 +1752,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         if (!printCostRef.current) return; setIsExporting(true);
         try {
             await new Promise(r => setTimeout(r, 800));
+            await waitForPdfFonts();
             const canvas = await html2canvas(printCostRef.current, {
                 scale: 2,
                 useCORS: true,

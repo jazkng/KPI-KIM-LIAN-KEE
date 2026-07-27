@@ -515,8 +515,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             <div className="h-1.5 w-12 bg-[#FFD200] rounded-full mb-2.5" />
                             <div className="flex items-start justify-between gap-6">
                                 <div>
-                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111]">KIM LIAN KEE GROUP</h1>
-                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280]">Kepong Branch</p>
+                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111] whitespace-nowrap">KIM LIAN KEE GROUP</h1>
+                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280] whitespace-nowrap">Kepong Branch</p>
                                     <p className="text-[9px] leading-3.5 font-semibold text-[#6B7280]">甲洞分行</p>
                                 </div>
                                 <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
@@ -589,7 +589,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             <section className="space-y-4">
                                 <div className="space-y-2.5">
                                     <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
-                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407]">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412]">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
+                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407] whitespace-nowrap">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412] whitespace-nowrap">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
                                     {totalRecordExpenses > 0 && <div className="rounded-lg border border-[#FECACA] overflow-hidden"><div className="flex justify-between items-center bg-[#FEF2F2] px-3 py-2"><span><span className="block font-black text-[#991B1B]">Cash Expenses</span><span className="block text-[9px] text-[#B91C1C]">当日钱箱现金支出</span></span><span className="font-mono font-black text-[#B91C1C] whitespace-nowrap">- RM {totalRecordExpenses.toFixed(2)}</span></div><div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">{recordExpenses.map((e: any, idx: number) => <div key={e.id || idx} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span className="truncate">{e.company || '未知商户'} · {e.item || '杂物'}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(e.amount).toFixed(2)}</span></div>)}</div></div>}
                                     {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="rounded-lg bg-[#F6F7FB] px-3 py-2 text-[#6B7280]">今日无任何临时现金支出或业主提支</p>}
                                 </div>
@@ -618,8 +618,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Approved by</p><p>管理层</p></div>
                             </div>
                             <div className="mt-3 flex items-center justify-between text-[8px] text-[#9CA3AF]">
-                                <span>System-generated internal audit document</span>
-                                <span>Kepong Branch · 甲洞分行</span>
+                                <span className="whitespace-nowrap">System-generated internal audit document</span>
+                                <span className="whitespace-nowrap">Kepong Branch · 甲洞分行</span>
                             </div>
                         </div>
                     </div>

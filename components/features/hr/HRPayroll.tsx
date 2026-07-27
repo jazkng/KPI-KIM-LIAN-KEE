@@ -53,7 +53,7 @@ import {
 import { db } from "../../../firebaseConfig";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
-import { applyResolvedStylesForPdf } from "../../../utils/pdfStyleResolver";
+import { applyResolvedStylesForPdf, waitForPdfFonts } from "../../../utils/pdfStyleResolver";
 
 // --- INTERFACES ---
 
@@ -1815,6 +1815,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       await new Promise((r) => setTimeout(r, 1000));
       
       // Capture Page 1: Payslip
+      await waitForPdfFonts();
       const canvas1 = await html2canvas(printSlipRef.current, {
         scale: 2,
         useCORS: true,
@@ -1831,6 +1832,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       const imgData1 = canvas1.toDataURL("image/jpeg", 1.0);
       
       // Capture Page 2: Monthly Attendance Record
+      await waitForPdfFonts();
       const canvas2 = await html2canvas(attendancePrintRef.current, {
         scale: 2,
         useCORS: true,
@@ -1886,6 +1888,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     setIsGeneratingPdf(true);
     try {
       await new Promise((r) => setTimeout(r, 500));
+      await waitForPdfFonts();
       const canvas = await html2canvas(printSummaryRef.current, {
         scale: 2,
         useCORS: true,
@@ -4757,7 +4760,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   {/* EARNINGS */}
                   <div>
                     <div className="flex justify-between border-b-2 border-black pb-1.5 mb-3">
-                      <h4 className="text-[12px] font-black uppercase">
+                      <h4 className="text-[12px] font-black uppercase whitespace-nowrap">
                         EARNINGS (收入)
                       </h4>
                       <span className="text-[10px] font-bold text-gray-500">
@@ -4814,7 +4817,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         </div>
                       )}
                       <div className="flex justify-between font-bold pt-2.5 border-t border-gray-300 mt-2">
-                        <span>GROSS PAY (总收入)</span>
+                        <span className="whitespace-nowrap">GROSS PAY (总收入)</span>
                         <span className="font-mono">
                           {getTotals(editingEntry).gross.toFixed(2)}
                         </span>
@@ -4825,7 +4828,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   {/* DEDUCTIONS */}
                   <div>
                     <div className="flex justify-between border-b-2 border-black pb-1.5 mb-3">
-                      <h4 className="text-[12px] font-black uppercase">
+                      <h4 className="text-[12px] font-black uppercase whitespace-nowrap">
                         LESS / DEDUCTIONS (扣除)
                       </h4>
                       <span className="text-[10px] font-bold text-gray-500">
@@ -4951,7 +4954,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                               </div>
                             )}
                             <div className="flex justify-between font-bold pt-2.5 border-t border-gray-300 mt-2">
-                              <span>TOTAL DEDUCTIONS (总扣除)</span>
+                              <span className="whitespace-nowrap">TOTAL DEDUCTIONS (总扣除)</span>
                               <span className="font-mono">
                                 {pdfTotals.deductions.toFixed(2)}
                               </span>
@@ -5363,36 +5366,44 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
 
-          <table className="w-full text-left text-[10px] border-collapse">
+          <table className="w-full text-left text-[10px] border-collapse table-fixed">
+            {/* 固定列宽：不写死的话列宽会随当月员工数据变化，每次导出对不上，
+                金额列也容易被挤到换行。合计 100%。 */}
+            <colgroup>
+              <col className="w-[6%]" /><col className="w-[16%]" />
+              <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
+              <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
+              <col className="w-[9%]" /><col className="w-[10%]" /><col className="w-[5%]" />
+            </colgroup>
             <thead>
               <tr className="bg-gray-100 border-y border-black">
-                <th className="p-2 border-r border-gray-300">ID</th>
-                <th className="p-2 border-r border-gray-300">Name</th>
-                <th className="p-2 text-right border-r border-gray-300">
+                <th className="p-2 border-r border-gray-300 whitespace-nowrap">ID</th>
+                <th className="p-2 border-r border-gray-300 whitespace-nowrap">Name</th>
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
                   Basic
                 </th>
-                <th className="p-2 text-right border-r border-gray-300">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
                   Allow+Sub
                 </th>
-                <th className="p-2 text-right border-r border-gray-300">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
                   OT/Bonus
                 </th>
-                <th className="p-2 text-right border-r border-gray-300 text-green-700">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap text-green-700">
                   Other(Earn)
                 </th>
-                <th className="p-2 text-right border-r border-gray-300 text-red-700">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap text-red-700">
                   Other(Ded)
                 </th>
-                <th className="p-2 text-right border-r border-gray-300">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
                   Hostel+Adv
                 </th>
-                <th className="p-2 text-right border-r border-gray-300">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
                   EPF/SOCSO
                 </th>
-                <th className="p-2 text-right border-r border-gray-300 font-black">
+                <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap font-black">
                   NET PAY
                 </th>
-                <th className="p-2 text-center">Method</th>
+                <th className="p-2 text-center whitespace-nowrap">Method</th>
               </tr>
             </thead>
             <tbody>
@@ -5410,36 +5421,36 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     <td className="p-2 border-r border-gray-100 font-bold">
                       {emp.name}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums">
                       {entry.basic.toFixed(2)}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums">
                       {(entry.allowance + entry.extraSubsidy).toFixed(2)}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums">
                       {(entry.ot + entry.bonus).toFixed(2)}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100 text-green-700">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums text-green-700">
                       {entry.otherEarning > 0
                         ? entry.otherEarning.toFixed(2)
                         : "-"}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100 text-red-700">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums text-red-700">
                       {entry.otherDeduction > 0
                         ? `(${entry.otherDeduction.toFixed(2)})`
                         : "-"}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100 text-red-600">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums text-red-600">
                       {entry.hostelFee + entry.advanceLoan > 0
                         ? `(${(entry.hostelFee + entry.advanceLoan).toFixed(2)})`
                         : "-"}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100 text-red-600">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums text-red-600">
                       {entry.ee_epf + entry.ee_socso + entry.ee_eis > 0
                         ? `(${(entry.ee_epf + entry.ee_socso + entry.ee_eis).toFixed(2)})`
                         : "-"}
                     </td>
-                    <td className="p-2 text-right border-r border-gray-100 font-black">
+                    <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums font-black">
                       {t.netPay.toFixed(2)}
                     </td>
                     <td className="p-2 text-center text-[9px]">
@@ -5454,7 +5465,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 <td colSpan={9} className="p-2 text-right uppercase">
                   Total Net Pay:
                 </td>
-                <td className="p-2 text-right font-black">
+                <td className="p-2 text-right font-black font-mono tabular-nums">
                   RM{" "}
                   {(
                     Array.from(selectedEmpIds).reduce(

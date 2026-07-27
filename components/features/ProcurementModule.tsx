@@ -11,7 +11,7 @@ import {
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface ProcurementModuleProps {
     onClose?: () => void;
@@ -1109,6 +1109,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 if (!element) continue;
                 if (i > 0) pdf.addPage();
                 
+                await waitForPdfFonts();
                 const canvas = await html2canvas(element, {
                     scale: window.innerWidth < MOBILE_BREAKPOINT ? 1.2 : 1.8,
                     useCORS: true,

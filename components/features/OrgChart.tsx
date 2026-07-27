@@ -4,6 +4,7 @@ import { Employee, OrgLevel } from '../../types';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { DataManager } from '../../utils/dataManager';
 import html2canvas from 'html2canvas-pro';
+import { waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface OrgChartProps {
     onClose: () => void;
@@ -142,6 +143,7 @@ export const OrgChart: React.FC<OrgChartProps> = ({ onClose }) => {
         const el = document.getElementById('org-chart-container');
         if (!el) return;
         try {
+            await waitForPdfFonts();
             const canvas = await html2canvas(el, { backgroundColor: '#f5f5f4', scale: 2 });
             const url = canvas.toDataURL('image/png');
             const a = document.createElement('a');

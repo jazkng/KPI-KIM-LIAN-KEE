@@ -13,7 +13,7 @@ import { InventoryAccessModal } from './InventoryAccessModal';
 
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 
 const ABILITY_TIERS = [
     { label: 'SSS', score: 100, desc: '卓越传奇 (Legendary)', color: 'bg-amber-100 text-amber-800 border-amber-300 ring-amber-500', icon: Trophy },
@@ -756,6 +756,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setIsGeneratingPdf(true); 
         try { 
             await new Promise(resolve => setTimeout(resolve, 100)); 
+            await waitForPdfFonts();
             const canvas = await html2canvas(printRef.current, { 
                 scale: 2, 
                 useCORS: true, 
@@ -785,6 +786,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setIsGeneratingSinglePdf(true);
         try {
             await new Promise(resolve => setTimeout(resolve, 100));
+            await waitForPdfFonts();
             const canvas = await html2canvas(singleProfileRef.current, { 
                 scale: 2, 
                 useCORS: true, 

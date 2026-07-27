@@ -12,7 +12,7 @@ import { normalizeCatalogItem } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
 import { jsPDF } from "jspdf";
 import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import {
     calculateWeightedAverageCost,
     getCostPerBaseUnit,
@@ -685,6 +685,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     const pageElement = document.getElementById(`po-print-page-${i}`);
                     if (!pageElement) continue;
                     if (i > 0) pdf.addPage();
+                    await waitForPdfFonts();
                     const canvas = await html2canvas(pageElement, { 
                         scale: 2, 
                         useCORS: true, 
@@ -717,9 +718,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         }
         setSupplierPrintBills(unpaidBills);
         setIsExportingUnpaidBills(true);
-        setTimeout(() => {
+        setTimeout(async () => {
             const input = supplierPrintRef.current;
             if (!input) { setIsExportingUnpaidBills(false); return; }
+            await waitForPdfFonts();
             html2canvas(input, { 
                 scale: 2, 
                 useCORS: true,
@@ -763,9 +765,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         }
         setSupplierPrintBills(allBills);
         setIsExportingAllBills(true);
-        setTimeout(() => {
+        setTimeout(async () => {
             const input = supplierPrintRef.current;
             if (!input) { setIsExportingAllBills(false); return; }
+            await waitForPdfFonts();
             html2canvas(input, { 
                 scale: 2, 
                 useCORS: true,

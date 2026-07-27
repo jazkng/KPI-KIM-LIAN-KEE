@@ -17,7 +17,13 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+    <!--
+      字重必须覆盖代码里实际用到的范围，否则浏览器会拿邻近字重顶替：
+      Inter 若不加载 700/900，font-bold 和 font-black 会双双落到 800，
+      粗细层级失效，且文字宽度与布局预期不符（PDF 导出时会挤出换行和重叠）。
+      用 `300..900` 区间语法拿到可变字体，单文件覆盖全字重，比拆成多个静态字重更省。
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
 
     <!--
       首屏防闪样式：只保留 styles.css 加载完成前、加载动画本身需要的规则。

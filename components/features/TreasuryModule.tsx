@@ -32,7 +32,7 @@ import {
 import { db } from "../../firebaseConfig";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
-import { applyResolvedStylesForPdf } from "../../utils/pdfStyleResolver";
+import { applyResolvedStylesForPdf, waitForPdfFonts } from "../../utils/pdfStyleResolver";
 
 import {
   SETTINGS_PASSWORD,
@@ -1404,6 +1404,7 @@ export const TreasuryModule: React.FC<TreasuryModuleProps> = ({ onClose }) => {
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
+        await waitForPdfFonts();
         const canvas = await html2canvas(printRef.current, {
           scale: 2,
           useCORS: true,
