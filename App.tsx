@@ -159,6 +159,7 @@ export default function App() {
         setCurrentEmployee(null);
         setBossTab(null);
         safeStorage.remove('kepong_erp_session_role');
+        DataManager.clearAllCache();
         safeStorage.remove('kepong_erp_session_employee');
     }, []);
 

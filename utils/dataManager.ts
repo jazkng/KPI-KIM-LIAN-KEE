@@ -68,38 +68,142 @@ export class DataManager {
 
     // ==========================================
     // 🛡️ 智能读配额优化与并发行程缓存 (Smart Read Cache System)
+    // v2：sessionStorage 持久化 + 分级 TTL
+    //     - 重整页面不再重抓（旧版记忆体一清就全没了）
+    //     - 慢变动资料（菜单、供应商、翻译）存活数十分钟
     // ==========================================
     private static cache: Record<string, { data: any; timestamp: number }> = {};
     private static cachedPromises: Record<string, Promise<any>> = {};
-    private static defaultTTL = 90 * 1000; // 90 seconds in-memory TTL
+    private static defaultTTL = 90 * 1000; // 未列入规则的 key 沿用 90 秒
 
-    private static getCachedData<T>(key: string, ttl: number = DataManager.defaultTTL): T | null {
-        const cachedItem = DataManager.cache[key];
-        if (cachedItem && (Date.now() - cachedItem.timestamp < ttl)) {
-            return cachedItem.data as T;
+    /** 快取格式版本。资料结构有异动时改这里，旧快取自动作废 */
+    private static readonly CACHE_PREFIX = 'klk_cache_v1_';
+
+    /**
+     * 分级 TTL：越少变动的资料，存活越久。
+     * 由上往下比对，第一个命中的前缀决定 TTL。
+     */
+    private static readonly TTL_RULES: ReadonlyArray<{ prefix: string; ttl: number }> = [
+        { prefix: 'translations_',   ttl: 60 * 60 * 1000 },  // 翻译：1 小时
+        { prefix: 'menu',            ttl: 30 * 60 * 1000 },  // 菜单：30 分
+        { prefix: 'suppliers',       ttl: 30 * 60 * 1000 },  // 供应商：30 分
+        { prefix: 'role_config',     ttl: 30 * 60 * 1000 },  // 角色设定：30 分
+        { prefix: 'employees',       ttl: 15 * 60 * 1000 },  // 员工：15 分
+        { prefix: 'recurring_bills', ttl: 10 * 60 * 1000 },  // 固定账单：10 分
+        { prefix: 'stock_',          ttl:  5 * 60 * 1000 },  // 库存：5 分
+        { prefix: 'roster_',         ttl:  5 * 60 * 1000 },  // 排班：5 分
+        { prefix: 'inventory_tasks', ttl:  3 * 60 * 1000 },  // 盘点任务：3 分
+        { prefix: 'inventory_logs_', ttl:  3 * 60 * 1000 },  // 库存日志：3 分
+    ];
+
+    /**
+     * ⚠️ 禁止写入 sessionStorage 的 key
+     * employees 目前含明文 PIN，只允许留在记忆体（关掉分页即消失）。
+     * 等 PIN 改成 hash 之后，这条可以拿掉。
+     */
+    private static readonly NO_PERSIST: ReadonlyArray<string> = ['employees'];
+
+    private static ttlFor(key: string): number {
+        const rule = DataManager.TTL_RULES.find(r => key.startsWith(r.prefix));
+        return rule ? rule.ttl : DataManager.defaultTTL;
+    }
+
+    private static canPersist(key: string): boolean {
+        if (typeof window === 'undefined' || !window.sessionStorage) return false;
+        return !DataManager.NO_PERSIST.some(p => key.startsWith(p));
+    }
+
+    private static readPersisted(key: string): { data: any; timestamp: number } | null {
+        if (!DataManager.canPersist(key)) return null;
+        try {
+            const raw = window.sessionStorage.getItem(DataManager.CACHE_PREFIX + key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed.timestamp !== 'number') return null;
+            return parsed;
+        } catch {
+            return null;
         }
+    }
+
+    private static writePersisted(key: string, entry: { data: any; timestamp: number }): void {
+        if (!DataManager.canPersist(key)) return;
+        try {
+            window.sessionStorage.setItem(DataManager.CACHE_PREFIX + key, JSON.stringify(entry));
+        } catch {
+            // 容量满或无法序列化 —— 清掉自家快取后放弃，绝不影响主流程
+            DataManager.purgePersistedCache();
+        }
+    }
+
+    private static purgePersistedCache(): void {
+        if (typeof window === 'undefined' || !window.sessionStorage) return;
+        try {
+            Object.keys(window.sessionStorage)
+                .filter(k => k.startsWith(DataManager.CACHE_PREFIX))
+                .forEach(k => window.sessionStorage.removeItem(k));
+        } catch { /* 忽略 */ }
+    }
+
+    private static getCachedData<T>(key: string, ttl?: number): T | null {
+        const effectiveTTL = ttl ?? DataManager.ttlFor(key);
+
+        const memItem = DataManager.cache[key];
+        if (memItem && (Date.now() - memItem.timestamp < effectiveTTL)) {
+            return memItem.data as T;
+        }
+
+        // 记忆体没有（例如刚重整页面）→ 回头看 sessionStorage
+        const persisted = DataManager.readPersisted(key);
+        if (persisted && (Date.now() - persisted.timestamp < effectiveTTL)) {
+            DataManager.cache[key] = persisted;   // 回填记忆体
+            return persisted.data as T;
+        }
+
         return null;
     }
 
     private static setCachedData(key: string, data: any): void {
-        DataManager.cache[key] = { data, timestamp: Date.now() };
+        const entry = { data, timestamp: Date.now() };
+        DataManager.cache[key] = entry;
+        DataManager.writePersisted(key, entry);
     }
 
     public static clearCacheKeys(keysGlob: string[]): void {
         keysGlob.forEach(pattern => {
+            const p = pattern.toLowerCase();
+
             Object.keys(DataManager.cache).forEach(k => {
-                if (k.toLowerCase().includes(pattern.toLowerCase())) {
+                if (k.toLowerCase().includes(p)) {
                     delete DataManager.cache[k];
                     delete DataManager.cachedPromises[k];
                 }
             });
+
+            if (typeof window === 'undefined' || !window.sessionStorage) return;
+            try {
+                Object.keys(window.sessionStorage).forEach(storageKey => {
+                    if (!storageKey.startsWith(DataManager.CACHE_PREFIX)) return;
+                    const bare = storageKey.slice(DataManager.CACHE_PREFIX.length);
+                    if (bare.toLowerCase().includes(p)) {
+                        window.sessionStorage.removeItem(storageKey);
+                    }
+                });
+            } catch { /* 忽略 */ }
         });
+    }
+
+    /** 登出或切换身份时呼叫，清掉本机所有快取 */
+    public static clearAllCache(): void {
+        DataManager.cache = {};
+        DataManager.cachedPromises = {};
+        DataManager.purgePersistedCache();
     }
 
     private static async runWithCache<T>(
         key: string,
         fetcher: () => Promise<T>,
-        ttl: number = DataManager.defaultTTL
+        ttl?: number
     ): Promise<T> {
         const cached = DataManager.getCachedData<T>(key, ttl);
         if (cached !== null) {
@@ -328,11 +432,19 @@ export class DataManager {
     // 🟢 财务与支出
     // ==========================================
     static async getRecurringBills(): Promise<RecurringBill[]> {
-        const snap = await getDocs(collection(db, 'recurring_bills'));
-        return snap.docs.map(d => d.data() as RecurringBill);
+        return DataManager.runWithCache('recurring_bills', async () => {
+            const snap = await getDocs(collection(db, 'recurring_bills'));
+            return snap.docs.map(d => d.data() as RecurringBill);
+        });
     }
-    static async saveRecurringBill(bill: RecurringBill): Promise<void> { await setDoc(doc(db, 'recurring_bills', bill.id), bill); }
-    static async deleteRecurringBill(id: string): Promise<void> { await deleteDoc(doc(db, 'recurring_bills', id)); }
+    static async saveRecurringBill(bill: RecurringBill): Promise<void> {
+        await setDoc(doc(db, 'recurring_bills', bill.id), bill);
+        DataManager.clearCacheKeys(['recurring_bills']);
+    }
+    static async deleteRecurringBill(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'recurring_bills', id));
+        DataManager.clearCacheKeys(['recurring_bills']);
+    }
 
     static async getBillPayments(forBackup: boolean = false): Promise<BillPaymentRecord[]> {
         const colRef = collection(db, 'bill_payments');
@@ -1100,15 +1212,21 @@ export class DataManager {
     // 🟢 菜单与排队
     // ==========================================
     static async getMenu(): Promise<MenuItem[]> {
-        const snap = await getDocs(collection(db, 'menu'));
-        return snap.docs.map(d => d.data() as MenuItem);
+        return DataManager.runWithCache('menu', async () => {
+            const snap = await getDocs(collection(db, 'menu'));
+            return snap.docs.map(d => d.data() as MenuItem);
+        });
     }
     static async saveMenu(items: MenuItem[]): Promise<void> {
         const batch = writeBatch(db);
         items.forEach(item => { batch.set(doc(db, 'menu', item.id), item); });
         await batch.commit();
+        DataManager.clearCacheKeys(['menu']);
     }
-    static async deleteMenuItem(id: string): Promise<void> { await deleteDoc(doc(db, 'menu', id)); }
+    static async deleteMenuItem(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'menu', id));
+        DataManager.clearCacheKeys(['menu']);
+    }
 
     static async getQueueTickets(): Promise<QueueTicket[]> {
         const snap = await getDocs(collection(db, 'queue_tickets'));
@@ -1725,10 +1843,15 @@ export class DataManager {
     }
     
     static async getRoleConfig(): Promise<{ guides?: Record<string, RoleGuide>, sops?: Record<string, any> } | null> {
-        const d = await getDoc(doc(db, 'config', 'roles'));
-        return d.exists() ? d.data() : null;
+        return DataManager.runWithCache('role_config', async () => {
+            const d = await getDoc(doc(db, 'config', 'roles'));
+            return d.exists() ? d.data() : null;
+        });
     }
-    static async saveRoleConfig(guides: Record<string, RoleGuide>, sops: Record<string, any>): Promise<void> { await setDoc(doc(db, 'config', 'roles'), { guides, sops }); }
+    static async saveRoleConfig(guides: Record<string, RoleGuide>, sops: Record<string, any>): Promise<void> {
+        await setDoc(doc(db, 'config', 'roles'), { guides, sops });
+        DataManager.clearCacheKeys(['role_config']);
+    }
 
     static async getSOPProgress(date: string, empId: string): Promise<any[]> {
         const d = await getDoc(doc(db, 'sop_progress', `${date}_${empId}`));

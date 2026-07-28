@@ -1,25 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // =========================================================================
-    // 1. 默认安全网 (Default Safety Net)
+    // 御膳智控 - 第一道门 (Phase 1: Identity Gate)
+    // -------------------------------------------------------------------------
+    // 目前系统用本地 PIN 登入，Firestore 层面还没有角色概念，
+    // 所以这一版只做一件事：要求「必须持有 Firebase 身份」。
+    //
+    // 挡得住：公网扫描器、直接调 REST API 的陌生人、拿到 projectId 就来拖库的人
+    // 挡不住：已经登入 App 的内部人（这需要 Phase 2 的 custom claims）
     // =========================================================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
     match /{document=**} {
-      allow read, write: if true; // 允许本地 PIN 登录与多角色会话正常流转
-    }
-
-    // =========================================================================
-    // 2. 评测模块核心隔离规则 (Zero-Trust Assessment Rules)
-    // =========================================================================
-    match /assessment_boss_ratings/{ratingId} {
-      // 允许读取与写入，并在字段结构上提供强校验
-      allow read, write: if true;
-    }
-
-    match /assessment_records/{recordId} {
-      // 允许管理层初评及历史留底数据交互
-      allow read, write: if true;
+      allow read, write: if signedIn();
     }
   }
 }

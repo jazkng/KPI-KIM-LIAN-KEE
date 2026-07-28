@@ -335,10 +335,19 @@ ${JSON.stringify(contextData, null, 2)}
 
       console.log(`[AP AI Proxy] Forwarding ${req.method} ${req.originalUrl} -> ${fullUrl}`);
 
+      // 🔐 内部密钥只在服务端注入，永远不会出现在前端 bundle
+      const internalKey = process.env.INTERNAL_API_KEY;
+      if (!internalKey) {
+        console.error("[AP AI Proxy] 缺少 INTERNAL_API_KEY 环境变量");
+        clearTimeout(timeoutId);
+        return res.status(500).json({ success: false, code: "PROXY_MISCONFIGURED", error: "服务端配置缺失" });
+      }
+
       const fetchOptions: RequestInit = {
         method: req.method,
         headers: {
           "Accept": "application/json",
+          "X-Internal-Key": internalKey,
           ...(req.headers["content-type"] ? { "Content-Type": req.headers["content-type"] as string } : {}),
         },
         signal: controller.signal,

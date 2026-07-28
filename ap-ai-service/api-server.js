@@ -26,6 +26,32 @@ app.use(cors({
     }
 }));
 
+/**
+ * 🔐 内部调用闸门 (Internal Gate)
+ * ---------------------------------------------------------------
+ * 本服务的 Service Account 持有完整 Drive 权限，绝不能对公网开放。
+ * 只接受来自 ERP 后端 (server.ts) 的调用，凭 X-Internal-Key 识别。
+ * 密钥只存在于两边的 Cloud Run 环境变量，不会进入浏览器。
+ *
+ * /health 不受此限（Cloud Run 健康检查需要）。
+ */
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
+if (!INTERNAL_API_KEY || INTERNAL_API_KEY.length < 32) {
+    console.error("❌ 严重错误: 缺少 INTERNAL_API_KEY 环境变量（或长度不足 32）");
+    process.exit(1);
+}
+const INTERNAL_KEY_BUF = Buffer.from(INTERNAL_API_KEY);
+
+app.use('/api', (req, res, next) => {
+    const provided = Buffer.from(req.get('X-Internal-Key') || '');
+    if (provided.length !== INTERNAL_KEY_BUF.length ||
+        !crypto.timingSafeEqual(provided, INTERNAL_KEY_BUF)) {
+        console.warn(`🚫 [闸门拦截] ${req.method} ${req.originalUrl} 来自 ${req.ip}`);
+        return res.status(401).json({ success: false, code: "UNAUTHORIZED", error: "未授权的调用" });
+    }
+    next();
+});
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
     console.error("❌ 严重错误: 缺少 GEMINI_API_KEY 环境变量");
@@ -96,15 +122,69 @@ const whitelist2_BankTransfers = ["RENTAL", "WATER_SELANGOR", "MAXIS", "INDAH_WA
 
 let scanningLocks = new Set(); 
 
+/**
+ * 🔐 Drive Query 转义
+ * 供应商名称来自 AI 辨识结果，可能含单引号（例如 O'BRIEN），
+ * 直接内插会破坏查询语义甚至被操纵，必须转义。
+ */
+function escapeDriveQ(value) {
+    return String(value == null ? '' : value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+}
+
+/**
+ * 🔐 父目录白名单校验
+ * ---------------------------------------------------------------
+ * 只允许操作「暂存区子树」内的档案。
+ * 这是纵深防御：即使闸门被绕过，也动不了暂存区以外的任何 Drive 档案。
+ */
+async function isInStagingArea(fileId, maxDepth = 6) {
+    let frontier = [String(fileId)];
+    const seen = new Set();
+
+    for (let depth = 0; depth < maxDepth; depth++) {
+        const next = [];
+        for (const id of frontier) {
+            if (id === currentStagingFolderId) return true;
+            if (seen.has(id)) continue;
+            seen.add(id);
+
+            const meta = await drive.files.get({ fileId: id, fields: 'parents' });
+            for (const parent of (meta.data.parents || [])) {
+                if (parent === currentStagingFolderId) return true;
+                next.push(parent);
+            }
+        }
+        if (next.length === 0) return false;
+        frontier = next;
+    }
+    return false;
+}
+
+/** 校验失败时直接回 403 并回传 true，供路由 early-return */
+async function rejectIfOutsideStaging(fileId, res) {
+    try {
+        if (await isInStagingArea(fileId)) return false;
+    } catch (err) {
+        console.error(`💥 [父目录校验失败] ${fileId}:`, err.message);
+        res.status(400).json({ success: false, code: "FILE_NOT_ACCESSIBLE", error: "无法读取该文件的位置信息" });
+        return true;
+    }
+    console.warn(`🚫 [越权拦截] 文件不在暂存区内: ${fileId}`);
+    res.status(403).json({ success: false, code: "FILE_OUT_OF_SCOPE", error: "该文件不在暂存区范围内，拒绝操作" });
+    return true;
+}
+
 async function getOrCreateFolder(name, parentId) {
-    const res = await drive.files.list({ q: `name = '${name}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, fields: 'files(id)' });
+    const res = await drive.files.list({ q: `name = '${escapeDriveQ(name)}' and '${escapeDriveQ(parentId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, fields: 'files(id)' });
     if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
     const folder = await drive.files.create({ requestBody: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }, fields: 'id' });
     return folder.data.id;
 }
 
 async function checkFileExistsInFolder(folderId, fileName) {
-    const res = await drive.files.list({ q: `'${folderId}' in parents and name = '${fileName}' and trashed = false`, fields: 'files(id)' });
+    const res = await drive.files.list({ q: `'${escapeDriveQ(folderId)}' in parents and name = '${escapeDriveQ(fileName)}' and trashed = false`, fields: 'files(id)' });
     return res.data.files && res.data.files.length > 0;
 }
 
@@ -411,6 +491,7 @@ app.post('/api/delete-pending', async (req, res) => {
     try {
         const { fileId } = req.body;
         if (!fileId) return res.status(400).json({ success: false, code: "MISSING_FILE_ID", error: "缺少参数 fileId" });
+        if (await rejectIfOutsideStaging(fileId, res)) return;
 
         console.log(`🗑️ [废单扔弃] 正在将文件移出暂存区, ID: ${fileId}`);
         const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
@@ -437,6 +518,7 @@ app.post('/api/hold-pending', async (req, res) => {
 
         const validReasons = ['MANUAL_REVIEW_REQUIRED', 'NO_AP_MATCH', 'UNCLEAR_AMOUNT', 'UNCLEAR_DATE', 'UNKNOWN_VENDOR', 'POSSIBLE_DUPLICATE', 'OTHER'];
         const holdReason = validReasons.includes(reason) ? reason : 'OTHER';
+        if (await rejectIfOutsideStaging(fileId, res)) return;
 
         console.log(`⏸️ [挂起暂存] 将文件移入保留区, ID: ${fileId}, 理由: ${holdReason}`);
         
@@ -470,6 +552,7 @@ app.post('/api/commit-bill', async (req, res) => {
     try {
         const { fileId, originalName, mimeType, verifiedVendor, verifiedDate, verifiedAmount, verifiedInvoiceNo, forceCommit } = req.body;
         if (!fileId) return res.status(400).json({ success: false, code: "MISSING_FILE_ID", error: "缺少参数 fileId" });
+        if (await rejectIfOutsideStaging(fileId, res)) return;
         console.log(`📦 收单归档指令: [${verifiedVendor}]`);
 
         const safeOriginalName = String(originalName || 'invoice');

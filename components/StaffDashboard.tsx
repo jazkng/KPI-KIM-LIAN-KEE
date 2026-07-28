@@ -392,7 +392,70 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
               {/* 3-Way Language Selector */}
               <LanguageSelector currentLang={lang} onSelectLang={handleLanguageSelect} dark={true} />
+
+              {/* Logout Button (Visually prominent for PC & Mobile users) */}
+              <button
+                onClick={handleLogoutClick}
+                title={st('logout', lang)}
+                className="flex items-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 hover:text-white px-2.5 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-sm"
+              >
+                <LogOut size={13} className="text-red-400 shrink-0" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wider">
+                  {st('logout', lang)}
+                </span>
+              </button>
             </div>
+          </div>
+
+          {/* DESKTOP / PC NAVIGATION TABS BAR (hidden on mobile, visible on md: flex) */}
+          <div className="hidden md:flex items-center gap-1 bg-stone-900/80 border border-white/10 rounded-xl p-1 mt-1 backdrop-blur-md">
+            <button
+              onClick={() => setActiveTab('TODAY')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                activeTab === 'TODAY' 
+                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
+                  : 'text-stone-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <ClipboardList size={14} />
+              <span>{st('todayWorkspace', lang)}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ROSTER')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                activeTab === 'ROSTER' 
+                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
+                  : 'text-stone-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Calendar size={14} />
+              <span>{st('schedule', lang)}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HANDBOOK')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                activeTab === 'HANDBOOK' 
+                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
+                  : 'text-stone-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <BookOpen size={14} />
+              <span>{st('handbook', lang)}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('PROFILE')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                activeTab === 'PROFILE' 
+                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
+                  : 'text-stone-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <User size={14} />
+              <span>{st('profile', lang)}</span>
+            </button>
           </div>
 
           {/* Profile Quick Snapshot */}

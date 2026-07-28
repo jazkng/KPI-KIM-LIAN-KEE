@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     AlertTriangle,
     Bell,
@@ -354,9 +355,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 </button>
             )}
 
-            {isOpen && (
+            {isOpen && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-[1200] bg-black/55 backdrop-blur-[2px] flex items-end md:items-center justify-center md:p-5"
+                    className="fixed inset-0 z-[9999] bg-black/55 backdrop-blur-[2px] flex items-end md:items-center justify-center md:p-5"
                     onMouseDown={event => {
                         if (event.currentTarget === event.target) setIsOpen(false);
                     }}
@@ -509,7 +510,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                             )}
                         </div>
                     </section>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

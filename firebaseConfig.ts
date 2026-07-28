@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
-import { getAuth, Auth } from "firebase/auth";
+import { getAuth, Auth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
 /**
  * 御膳智控 - 安全加固版配置
@@ -52,3 +52,37 @@ export const auth: Auth = createAuthProxy<Auth>(
   app ? getAuth(app) : null,
   "Firebase Auth 未能成功初始化。请检查您的 .env 环境变量配置。"
 );
+
+/**
+ * 👑 匿名身份守卫 (Anonymous Identity Guard)
+ * ---------------------------------------------------------------
+ * 目的：让 firestore.rules 可以要求 request.auth != null，
+ *      把公网上的自动扫描器挡在门外（他们没有身份，一律拒绝）。
+ *
+ * 对员工完全无感：不需要注册、不需要多输入任何东西。
+ * 身份会存进浏览器 IndexedDB，之后每次开 App 直接沿用同一个身份。
+ *
+ * 注意：必须先在 Firebase Console 启用 Anonymous 登录方式。
+ */
+export const authReady: Promise<boolean> = (async () => {
+  if (!app) return false;
+  try {
+    // 先看有没有已经存在的身份（离线也能读到，PWA 断网可正常启动）
+    const hasExisting = await new Promise<boolean>((resolve) => {
+      const unsub = onAuthStateChanged(
+        auth,
+        (user) => { unsub(); resolve(!!user); },
+        () => { unsub(); resolve(false); }
+      );
+    });
+    if (hasExisting) return true;
+
+    // 第一次使用这台设备 —— 建立一个新的匿名身份
+    await signInAnonymously(auth);
+    console.log("🛡️ [安全] 匿名身份已建立");
+    return true;
+  } catch (err) {
+    console.error("🔥 [匿名登录失败] Firestore 读写将被规则拒绝：", err);
+    return false;
+  }
+})();
