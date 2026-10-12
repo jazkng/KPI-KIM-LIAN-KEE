@@ -32,3 +32,9 @@ yarn-error.log*
 # 6. 系统默认隐藏文件 (如 Mac 的缩略图缓存)
 .DS_Store
 Thumbs.db
+# 7. Firebase Emulator 运行日志与导出的测试数据
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/
+emulator-data/

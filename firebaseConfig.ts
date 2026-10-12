@@ -1,12 +1,29 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
-import { getFirestore, Firestore } from "firebase/firestore";
-import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence, Auth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, Firestore, connectFirestoreEmulator } from "firebase/firestore";
+import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence, Auth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } from "firebase/auth";
 
 /**
  * 御膳智控 - 安全加固版配置
  * 使用 import.meta.env 确保密钥不被硬编码在代码中
  */
-const firebaseConfig = {
+/**
+ * 🧪 Emulator 模式（V2 开发 / 测试专用）
+ * ---------------------------------------------------------------
+ * VITE_USE_FIREBASE_EMULATOR=true 时：
+ *   - 完全不读取正式 Firebase 的 VITE_FIREBASE_* 变量
+ *   - 固定使用 demo- 开头的假项目 ID（Firebase 保证 demo- 项目永远不会连到云端）
+ *   - Firestore / Auth 全部连到本机 Emulator
+ * 这样即使开发机的 .env 里有正式配置，也不可能误写正式营业资料。
+ */
+export const isEmulatorMode = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+export const EMULATOR_PROJECT_ID = 'demo-klk-erp';
+const EMULATOR_HOST = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
+
+const firebaseConfig = isEmulatorMode ? {
+  apiKey: 'demo-api-key',
+  authDomain: `${EMULATOR_PROJECT_ID}.firebaseapp.com`,
+  projectId: EMULATOR_PROJECT_ID,
+} : {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -41,18 +58,29 @@ function createAuthProxy<T extends object>(instance: T | null, errorMessage: str
   });
 }
 
+const firestoreInstance = app ? getFirestore(app) : null;
+if (firestoreInstance && isEmulatorMode) {
+  connectFirestoreEmulator(firestoreInstance, EMULATOR_HOST, 8080);
+  console.warn(`🧪 [Emulator] Firestore → ${EMULATOR_HOST}:8080（项目 ${EMULATOR_PROJECT_ID}，不会写入正式资料）`);
+}
+
 // 导出具备类型保护的 Firestore 实例
 export const db: Firestore = createAuthProxy<Firestore>(
-  app ? getFirestore(app) : null,
+  firestoreInstance,
   "Firestore 未能成功初始化。请检查您的 .env 环境变量配置。"
 );
 
+// 📱 iPhone：Safari / 主画面 PWA 的 IndexedDB 偶尔会「打不开也不报错」，
+//    getAuth() 预设先用 IndexedDB，一卡住整个 App 就停在载入画面。
+//    改成 localStorage 优先，IndexedDB 备用；旧的身份如果在 IndexedDB 里会自动搬过来。
+const authInstance = app ? initializeAuth(app, { persistence: [browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence] }) : null;
+if (authInstance && isEmulatorMode) {
+  connectAuthEmulator(authInstance, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+}
+
 // 导出具备类型保护的 Auth 实例
 export const auth: Auth = createAuthProxy<Auth>(
-  // 📱 iPhone：Safari / 主画面 PWA 的 IndexedDB 偶尔会「打不开也不报错」，
-  //    getAuth() 预设先用 IndexedDB，一卡住整个 App 就停在载入画面。
-  //    改成 localStorage 优先，IndexedDB 备用；旧的身份如果在 IndexedDB 里会自动搬过来。
-  app ? initializeAuth(app, { persistence: [browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence] }) : null,
+  authInstance,
   "Firebase Auth 未能成功初始化。请检查您的 .env 环境变量配置。"
 );
 

@@ -18,6 +18,8 @@ export default defineConfig(() => {
         'import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
         'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(process.env.VITE_FIREBASE_APP_ID),
         'import.meta.env.VITE_FIREBASE_MEASUREMENT_ID': JSON.stringify(process.env.VITE_FIREBASE_MEASUREMENT_ID),
+        'import.meta.env.VITE_USE_FIREBASE_EMULATOR': JSON.stringify(process.env.VITE_USE_FIREBASE_EMULATOR),
+        'import.meta.env.VITE_FIREBASE_EMULATOR_HOST': JSON.stringify(process.env.VITE_FIREBASE_EMULATOR_HOST),
       },
       optimizeDeps: {
         include: [
