@@ -95,13 +95,13 @@ CHG-01 和 CHG-02 不改代码，批准后当天就可以完成。CHG-03 和 CHG
 
 - **目的**：关闭「任何人都能通过 V1 网址操作 Drive 发票」的漏洞。
 - **改动**（`server.ts` 中的 `/api/ap-ai`）：
-  1. 只放行前端实际调用的路径：`GET /api/scan-pending`、`POST /api/commit-bill`、`POST /api/hold-pending`、`POST /api/delete-pending`、`GET /health`。其余一律返回 404。
+  1. 只放行前端实际调用的路径：`GET /api/scan-pending`、`GET /api/vendor-config`（供应商归档设定弹窗读取）、`POST /api/commit-bill`、`POST /api/hold-pending`、`POST /api/delete-pending`、`GET /health`。其余一律返回 404。实作时用 `grep` 再次核对前端全部调用点（`AccountsPayableModule.tsx`、`VendorConfigModal.tsx`）。
   2. 要求请求头 `X-AP-Access` 与服务端 Secret `AP_ACCESS_CODE` 相符，使用常数时间比较。
      - **未设置该 Secret 时拒绝所有请求**，确保不会因为漏配而放行。
   3. 前端「应付账款」第一次使用时，请老板或会计输入访问码，保存在该设备。
 - **前提**：在两个 V1 App 的 Secrets 中加入 `AP_ACCESS_CODE`（随机生成，至少 32 位）。
 - **验证**：
-  - 带正确访问码 → 扫描、提交、搁置、删除功能正常；
+  - 带正确访问码 → 扫描、提交、搁置、删除、供应商归档设定功能正常；
   - 不带访问码 → 401；
   - 访问不在白名单的路径 → 404。
 - **回滚**：在 AI Studio 重新部署上一版。不涉及数据变更。

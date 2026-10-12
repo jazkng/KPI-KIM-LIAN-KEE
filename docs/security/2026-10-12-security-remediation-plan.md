@@ -68,7 +68,7 @@ Emulator 复现结果（实际运行）：未登录 → 读写被拒；匿名身
 ### E1 · 小型代码补丁（约半天，V1 套用，几乎无感）
 
 1. **发票扫描代理加锁（P3）**
-   - 在 `server.ts` 中，`/api/ap-ai` 只放行实际用到的路径与方法：`GET /api/scan-pending`、`POST /api/commit-bill`、`POST /api/hold-pending`、`POST /api/delete-pending`、`GET /health`。前端从未调用 `vendor-config`，所以不放行。
+   - 在 `server.ts` 中，`/api/ap-ai` 只放行实际用到的路径与方法：`GET /api/scan-pending`、`GET /api/vendor-config`（供应商归档设定弹窗读取，只读）、`POST /api/commit-bill`、`POST /api/hold-pending`、`POST /api/delete-pending`、`GET /health`。清单来自前端全部调用点（`AccountsPayableModule.tsx`、`VendorConfigModal.tsx`），实作时需再次核对。
    - 另外要求请求头带上 `X-AP-Access`。它的值等于新的服务端 Secret `AP_ACCESS_CODE`，用常数时间比较。
    - 老板或会计第一次在某台设备打开「应付账款」时输入一次访问码，之后保存在该设备。
    - 这是临时措施，E2 完成后改为验证登录身份。
