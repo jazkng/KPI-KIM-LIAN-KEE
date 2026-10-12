@@ -1,13 +1,12 @@
+import { html2canvas, loadJsPDF, loadPdfjs, loadXLSX } from '../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     Clock, LogIn, Search, CheckCircle2, AlertCircle, Calendar, X, 
     Briefcase, Coffee, Edit3, Lock, ListChecks, FileBarChart, 
     XCircle, TrendingUp, ChefHat, Trash2, Check, CalendarOff, Palmtree, Home, Zap, ChevronDown, Users, FileDown, Loader2, Droplets 
 } from 'lucide-react';
-import * as XLSX from "xlsx";
-import * as pdfjsLib from "pdfjs-dist";
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import { Employee, AttendanceRecord, RosterStatus } from '../../types';
+import { mergeAttendanceRecords, distributeTimes } from '../../utils/attendanceHelpers';
 import { 
     DataManager, 
     AttendanceShiftSettings, 
@@ -16,8 +15,6 @@ import {
     getAttendanceStatus 
 } from '../../utils/dataManager';
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface AttendanceConsoleProps {
@@ -27,24 +24,6 @@ const DEFAULT_LOCAL_REST = 4;
 const DEFAULT_FOREIGN_REST = 2;
 
 let currentShiftSettings = DEFAULT_ATTENDANCE_SETTINGS;
-
-/** 合并考勤记录：如果同一个人在同一天既有手机打卡又有打卡机导入，优先使用打卡机记录 */
-export const mergeAttendanceRecords = (raw: AttendanceRecord[]): AttendanceRecord[] => {
-    const mergedMap = new Map<string, AttendanceRecord>();
-    raw.forEach(rec => {
-        const key = `${rec.employeeId}_${rec.date}`;
-        const existing = mergedMap.get(key);
-        if (!existing) {
-            mergedMap.set(key, rec);
-        } else {
-            // 优先选择 face_machine，或者非 app source
-            if (rec.source === 'face_machine' && existing.source !== 'face_machine') {
-                mergedMap.set(key, rec);
-            }
-        }
-    });
-    return Array.from(mergedMap.values());
-};
 
 /** 获取指定日期的上班时间 */
 const getShiftStart = (dateStr: string, shiftGroup = 1): Date => {
@@ -175,7 +154,7 @@ const RollCallModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[95vh] md:max-h-[90vh] relative">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-3xl">
                     <div>
@@ -213,22 +192,22 @@ const RollCallModal: React.FC<{
                                     ) : isPresent ? (
                                         <div className="flex items-center gap-1.5 w-full">
                                             <span className="flex-1 bg-green-50 text-green-700 py-1.5 rounded-lg text-[11px] font-bold text-center flex items-center justify-center gap-1"><CheckCircle2 size={12}/> Present</span>
-                                            <button onClick={() => setDeleteCandidateId(staff.id)} disabled={!!processingId} className="p-2 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 border border-red-100 shrink-0">
+                                            <button onClick={() => setDeleteCandidateId(staff.id)} disabled={!!processingId} className="p-2 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 border border-red-100 shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                                                 <X size={14}/>
                                             </button>
                                         </div>
                                     ) : customTimeId === staff.id ? (
                                         <div className="flex items-center gap-1.5 w-full animate-in fade-in bg-gray-50 p-1.5 rounded-lg">
-                                            <input type="time" value={customTimeValue} onChange={(e) => setCustomTimeValue(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-sm font-bold flex-1 min-w-0 outline-none focus:border-[#FFD200]"/>
-                                            <button onClick={() => handleTimeClockIn(staff)} disabled={!!processingId} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 shrink-0"><Check size={16} strokeWidth={3}/></button>
-                                            <button onClick={() => setCustomTimeId(null)} className="bg-white text-gray-500 p-2 rounded-lg hover:bg-gray-200 shrink-0"><X size={16}/></button>
+                                            <input type="time" value={customTimeValue} onChange={(e) => setCustomTimeValue(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-2 py-1.5 font-bold flex-1 min-w-0 outline-none focus:border-[#FFD200] text-[16px] md:text-sm" />
+                                            <button onClick={() => handleTimeClockIn(staff)} disabled={!!processingId} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Check size={16} strokeWidth={3}/></button>
+                                            <button onClick={() => setCustomTimeId(null)} className="bg-white text-gray-500 p-2 rounded-lg hover:bg-gray-200 shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={16}/></button>
                                         </div>
                                     ) : (
                                         <div className="flex gap-1.5 w-full">
-                                            <button onClick={() => { setCustomTimeId(staff.id); const now = new Date(); setCustomTimeValue(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`); }} disabled={!!processingId || !!customTimeId} className="flex-1 py-2.5 min-h-[40px] bg-white border border-gray-200 text-gray-600 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-95">
+                                            <button onClick={() => { setCustomTimeId(staff.id); const now = new Date(); setCustomTimeValue(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`); }} disabled={!!processingId || !!customTimeId} className="flex-1 py-2.5 min-h-[40px] bg-white border border-gray-200 text-gray-600 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-95 min-h-[44px] md:min-h-0">
                                                 <Clock size={13}/> 打卡
                                             </button>
-                                            <button onClick={() => handleQuickPresent(staff)} disabled={!!processingId || !!customTimeId} className="flex-1 py-2.5 min-h-[40px] bg-green-500 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-95">
+                                            <button onClick={() => handleQuickPresent(staff)} disabled={!!processingId || !!customTimeId} className="flex-1 py-2.5 min-h-[40px] bg-green-500 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-95 min-h-[44px] md:min-h-0">
                                                 <CheckCircle2 size={13}/> 全天
                                             </button>
                                         </div>
@@ -279,7 +258,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
             setRecords(mergeAttendanceRecords(data));
         } catch (error) {
             console.error("Failed to load compliance report", error);
-            alert("读取报表失败");
+            alert("❌ 读取报表失败");
         } finally {
             setLoading(false);
         }
@@ -321,7 +300,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
             });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
-            const pdf = new jsPDF('p', 'mm', 'a4'); 
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a4'); 
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
             
@@ -329,7 +308,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
             pdf.save(`Attendance_Report_${month}.pdf`);
         } catch (e) {
             console.error(e);
-            alert("PDF Export Failed");
+            alert("❌ 导出 PDF 失败");
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -338,7 +317,7 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[95vh] md:max-h-[90vh]">
                 <div className="p-4 md:p-6 border-b border-gray-100 shrink-0">
                     <div className="flex justify-between items-center">
@@ -347,11 +326,11 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
                             <h3 className="font-black text-base md:text-xl text-[#111111]">达标检查</h3>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="flex items-center gap-1 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-lg text-[10px] md:text-xs font-bold shadow-md disabled:opacity-50">
+                            <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="flex items-center gap-1 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-lg text-[10px] md:text-xs font-bold shadow-md disabled:opacity-50 min-h-[44px] md:min-h-0">
                                 {isGeneratingPdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} PDF
                             </button>
-                            <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none w-32 md:w-auto"/>
-                            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={18}/></button>
+                            <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 font-bold outline-none w-32 md:w-auto text-[16px] md:text-xs" />
+                            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={18}/></button>
                         </div>
                     </div>
                 </div>
@@ -480,7 +459,7 @@ const SecurityPinModal: React.FC<{ isOpen: boolean; onClose: () => void; onSucce
     const handleVerify = () => { if (pin === targetPin) { onSuccess(); onClose(); } else { setError('Wrong PIN'); setPin(''); } };
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl flex flex-col items-center border-t-8 border-[#FFD200] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
                 <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mb-6"><Lock size={40} className="text-yellow-600"/></div>
                 <h3 className="font-black text-2xl text-[#111111] mb-2">身份验证</h3>
@@ -526,7 +505,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
     const handleSave = () => {
         const cleanTimes = punchTimes.map(t => t.trim()).filter(Boolean);
         if (cleanTimes.length === 0) {
-            alert('请至少添加一个有效的打卡时间');
+            alert('⚠️ 请至少添加一个有效的打卡时间');
             return;
         }
 
@@ -570,7 +549,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
     if (!isOpen) return null;
     
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl pb-[max(env(safe-area-inset-bottom),1.5rem)] flex flex-col max-h-[90vh]">
                 <h3 className="font-black text-2xl text-[#111111] mb-2 shrink-0">修正考勤记录</h3>
                 <p className="text-xs text-gray-400 mb-6 shrink-0 font-bold uppercase tracking-wider">
@@ -628,50 +607,40 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
 // ============================================================
 // MULTI-PUNCH DISTRIBUTOR HELPER
 // ============================================================
-const distributeTimes = (times: string[]) => {
-    const res = { amIn: '—', amOut: '—', pmIn: '—', pmOut: '—', otIn: '—', otOut: '—' };
-    if (!times || times.length === 0) return res;
-    
-    const toMins = (t: string) => {
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-    };
-    
-    if (times.length === 4) {
-        res.amIn = times[0];
-        res.amOut = times[1];
-        res.pmIn = times[2];
-        res.pmOut = times[3];
-    } else if (times.length === 2) {
-        const m0 = toMins(times[0]);
-        const m1 = toMins(times[1]);
-        if (m0 < 720) { // before 12:00
-            res.amIn = times[0];
-            if (m1 < 900) { // before 15:00
-                res.amOut = times[1];
-            } else {
-                res.pmOut = times[1];
-            }
-        } else {
-            res.pmIn = times[0];
-            res.pmOut = times[1];
-        }
-    } else if (times.length === 1) {
-        const m0 = toMins(times[0]);
-        if (m0 < 720) {
-            res.amIn = times[0];
-        } else {
-            res.pmIn = times[0];
-        }
-    } else {
-        const slots = ['amIn', 'amOut', 'pmIn', 'pmOut', 'otIn', 'otOut'];
-        times.forEach((t, i) => {
-            if (i < slots.length) {
-                (res as any)[slots[i]] = t;
-            }
-        });
+// 🟢 从打卡机报表的文字里认出「这份报表是哪个月」
+// 支援: 2026-08-01 / 2026/8/1 / 01-08-2026 / 2026年8月 / Aug 2026
+const MONTH_NAME_MAP: Record<string, number> = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+export const detectMonthFromText = (text: string): string | null => {
+    if (!text) return null;
+    const t = String(text);
+
+    // 2026-08-01 / 2026/08/01 / 2026.08.01
+    let m = t.match(/(20\d{2})[\/\-.](0?[1-9]|1[0-2])[\/\-.](?:0?[1-9]|[12]\d|3[01])/);
+    if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+    // 2026年8月
+    m = t.match(/(20\d{2})\s*年\s*(0?[1-9]|1[0-2])\s*月/);
+    if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+    // 01-08-2026 / 01/08/2026 (日-月-年)
+    m = t.match(/\b(0?[1-9]|[12]\d|3[01])[\/\-.](0?[1-9]|1[0-2])[\/\-.](20\d{2})\b/);
+    if (m) return `${m[3]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+    // Aug 2026 / August-2026
+    m = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-\/,]*(20\d{2})\b/i);
+    if (m) {
+        const mm = MONTH_NAME_MAP[m[1].toLowerCase()];
+        if (mm) return `${m[2]}-${String(mm).padStart(2, "0")}`;
     }
-    return res;
+
+    // 2026-08 (最後才試, 避免誤中)
+    m = t.match(/\b(20\d{2})[\/\-](0?[1-9]|1[0-2])\b/);
+    if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+    return null;
 };
 
 // ============================================================
@@ -740,7 +709,7 @@ const EmployeeMonthlySheetModal: React.FC<{
                 }
             });
             const imgData = canvas.toDataURL("image/jpeg", 1.0);
-            const pdf = new jsPDF("p", "mm", "a4");
+            const pdf = new (await loadJsPDF())("p", "mm", "a4");
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
             
@@ -761,7 +730,7 @@ const EmployeeMonthlySheetModal: React.FC<{
             pdf.save(`Attendance_${selectedMonth}_${employee.name}.pdf`);
         } catch (err) {
             console.error(err);
-            alert("Export PDF Failed");
+            alert("❌ 导出 PDF 失败");
         } finally {
             setIsExporting(false);
         }
@@ -771,7 +740,7 @@ const EmployeeMonthlySheetModal: React.FC<{
     const lateDays = records.filter(r => r.status === 'LATE' || r.status === 'COMPLETED_LATE').length;
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[150] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col h-[100vh] md:h-[90vh] relative overflow-hidden">
                 
                 {/* Header (Non-printing) */}
@@ -788,21 +757,21 @@ const EmployeeMonthlySheetModal: React.FC<{
                     
                     <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                         <div className="flex items-center bg-white border border-gray-200 rounded-xl px-1 py-1 shadow-sm shrink-0">
-                            <button onClick={handlePrevMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 font-bold">&lt;</button>
+                            <button onClick={handlePrevMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 font-bold min-h-[44px] md:min-h-0">&lt;</button>
                             <span className="font-black text-sm md:text-base px-3 text-gray-800 font-mono">{selectedMonth}</span>
-                            <button onClick={handleNextMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 font-bold">&gt;</button>
+                            <button onClick={handleNextMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 font-bold min-h-[44px] md:min-h-0">&gt;</button>
                         </div>
 
                         <button 
                             onClick={handleExportPDF} 
                             disabled={isExporting}
-                            className="bg-[#111111] text-[#FFD200] hover:bg-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg flex items-center gap-2 active:scale-95 transition-transform shrink-0 disabled:opacity-50"
+                            className="bg-[#111111] text-[#FFD200] hover:bg-black px-4 py-2.5 rounded-xl text-xs font-black shadow-lg flex items-center gap-2 active:scale-95 transition-transform shrink-0 disabled:opacity-50 min-h-[44px] md:min-h-0"
                         >
                             {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14}/>}
                             导出 PDF
                         </button>
                         
-                        <button onClick={onClose} className="p-2.5 bg-white border hover:bg-gray-100 rounded-xl shadow-sm shrink-0"><X size={18}/></button>
+                        <button onClick={onClose} className="p-2.5 bg-white border hover:bg-gray-100 rounded-xl shadow-sm shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={18}/></button>
                     </div>
                 </div>
 
@@ -943,7 +912,7 @@ const EmployeeMonthlySheetModal: React.FC<{
                                                                 };
                                                                 onEditRow(recordForDate as AttendanceRecord);
                                                             }}
-                                                            className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-500 hover:text-blue-600 rounded transition-colors"
+                                                            className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-500 hover:text-blue-600 rounded transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                                             title="修改此日打卡时间"
                                                         >
                                                             <Edit3 size={13} />
@@ -1027,6 +996,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const [isParsing, setIsParsing] = useState(false);
     const [parseError, setParseError] = useState<string | null>(null);
     const [importPreviews, setImportPreviews] = useState<any[]>([]);
+    // 🟢 导入打卡资料专用：包含已离职员工 (8月离职的人, 9月才导8月考勤时要绑得到)
+    const [importStaffList, setImportStaffList] = useState<Employee[]>([]);
+    // 🟢 这份报表要导入到哪个月 (自动从报表认出, 认不到就用当前月, 可手动改)
+    const [importTargetMonth, setImportTargetMonth] = useState<string>("");
     const [isSavingImport, setIsSavingImport] = useState(false);
     
     // Monthly Sheet States & Loaders
@@ -1040,11 +1013,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         setIsLoading(true);
         try {
             const [records, { roster }] = await Promise.all([
-                DataManager.getAttendanceByMonth(monthlySelectedMonth),
+                DataManager.getAttendanceByMonth(monthlySelectedMonth, selectedMonthlyEmployee.id),
                 DataManager.getRosterData(monthlySelectedMonth)
             ]);
-            const filtered = mergeAttendanceRecords(records).filter(r => r.employeeId === selectedMonthlyEmployee.id);
-            setMonthlyRecords(filtered);
+            setMonthlyRecords(mergeAttendanceRecords(records));
             setMonthlyRoster(roster || {});
         } catch (error) {
             console.error("loadMonthlyData failed:", error);
@@ -1068,7 +1040,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const batchMenuRef = useRef<HTMLDivElement>(null);
     const mobileBatchMenuRef = useRef<HTMLDivElement>(null);
 
-    const staffCacheRef = useRef<{ data: Employee[]; ts: number } | null>(null);
+    const staffCacheRef = useRef<{ data: Employee[]; all: Employee[]; ts: number } | null>(null);
     const STAFF_CACHE_TTL = 5 * 60 * 1000;
 
     useEffect(() => {
@@ -1101,11 +1073,19 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                               (now - staffCacheRef.current.ts < STAFF_CACHE_TTL) && 
                               !forceRefreshStaff;
 
+            if (cacheValid && staffCacheRef.current) {
+                if (importStaffList.length === 0) {
+                    setImportStaffList(staffCacheRef.current.all || staffCacheRef.current.data);
+                }
+            }
+
             if (!cacheValid) {
                 const allStaff = await DataManager.getEmployees();
                 const filtered = allStaff.filter(s => !s.isArchived && !(s.role || '').includes('Owner'));
-                staffCacheRef.current = { data: filtered, ts: now };
+                const withResigned = allStaff.filter(s => !(s.role || '').includes('Owner'));
+                staffCacheRef.current = { data: filtered, all: withResigned, ts: now };
                 setStaffList(filtered);
+                setImportStaffList(withResigned);
             }
 
             const [attendanceData, { roster }] = await Promise.all([
@@ -1198,7 +1178,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
 
                     if (isPdf) {
 
-                        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+                        const loadingTask = (await loadPdfjs()).getDocument({ data: new Uint8Array(arrayBuffer) });
                         const pdf = await loadingTask.promise;
                         const numPages = pdf.numPages;
 
@@ -1224,6 +1204,8 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                         };
 
                         const allParsedEmployees: Map<string, { scannerId: string; scannerName: string; daysMap: Map<number, Set<string>> }> = new Map();
+                        // 🟢 PDF 报表是哪个月 (以前没解析, 8月的报表会被写进当前月份)
+                        let pdfSourceMonth: string | null = null;
 
                         for (let p = 1; p <= numPages; p++) {
                             const page = await pdf.getPage(p);
@@ -1238,6 +1220,18 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                 width: item.width || 0,
                                 height: item.height || 0
                             })).filter(item => item.str.length > 0);
+
+                            // 🟢 从表头文字认出报表月份 (只认第一页找到的)
+                            if (!pdfSourceMonth) {
+                                for (const it of pageItems.slice(0, 60)) {
+                                    const hit = detectMonthFromText(it.str);
+                                    if (hit) { pdfSourceMonth = hit; break; }
+                                }
+                                if (!pdfSourceMonth) {
+                                    const joined = pageItems.slice(0, 60).map(o => o.str).join(" ");
+                                    pdfSourceMonth = detectMonthFromText(joined);
+                                }
+                            }
 
                             const pageLines: { y: number; items: typeof pageItems; text: string }[] = [];
                             pageItems.forEach(item => {
@@ -1652,7 +1646,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             let matchedSystemEmp: Employee | null = null;
                             if (item.scannerId) {
                                 const cleanScannerId = String(item.scannerId).trim();
-                                matchedSystemEmp = staffList.find(
+                                matchedSystemEmp = importStaffList.find(
                                     (e) => String(e.id).trim() === cleanScannerId
                                 ) || null;
                             }
@@ -1660,22 +1654,25 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             if (!matchedSystemEmp && item.scannerName) {
                                 matchedSystemEmp = findMatchedEmployeeLocal(
                                     item.scannerName,
-                                    staffList,
+                                    importStaffList,
                                 );
                             }
 
                             return {
                                 scannerName: item.scannerName,
                                 scannerId: item.scannerId,
+                                sourceMonth: pdfSourceMonth,
                                 systemEmployee: matchedSystemEmp,
                                 rawRows: item.rows,
                                 selected: !!matchedSystemEmp,
                             };
                         });
 
+                        setImportTargetMonth(pdfSourceMonth || selectedDate.slice(0, 7));
                         setImportPreviews(finalMatches);
                     } else {
                         // FACE3000-U USB Excel (.xls/.xlsx) monthly attendance report
+                        const XLSX = await loadXLSX();
                         const workbook = XLSX.read(arrayBuffer, {
                             type: "array",
                             cellDates: true,
@@ -1822,13 +1819,13 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             let matchedSystemEmp: Employee | null = null;
                             if (item.scannerId) {
                                 const cleanScannerId = String(item.scannerId).trim();
-                                matchedSystemEmp = staffList.find(
+                                matchedSystemEmp = importStaffList.find(
                                     (employee) => String(employee.id).trim() === cleanScannerId,
                                 ) || null;
                             }
 
                             if (!matchedSystemEmp && item.scannerName) {
-                                matchedSystemEmp = findMatchedEmployeeLocal(item.scannerName, staffList);
+                                matchedSystemEmp = findMatchedEmployeeLocal(item.scannerName, importStaffList);
                             }
 
                             return {
@@ -1841,6 +1838,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             };
                         });
 
+                        setImportTargetMonth(
+                            finalMatches.find((m) => m.sourceMonth)?.sourceMonth ||
+                                selectedDate.slice(0, 7),
+                        );
                         setImportPreviews(finalMatches);
                     }
                 } catch (err) {
@@ -1862,7 +1863,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const handleSaveImportLocal = async () => {
         const selectedPreviews = importPreviews.filter((p) => p.selected && p.systemEmployee);
         if (selectedPreviews.length === 0) {
-            alert("请选择至少一个有效匹配的员工进行导入。");
+            alert("⚠️ 请选择至少一个有效匹配的员工进行导入");
             return;
         }
 
@@ -1871,7 +1872,8 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             let totalSaved = 0;
             for (const preview of selectedPreviews) {
                 const emp = preview.systemEmployee;
-                const targetMonth = preview.sourceMonth || selectedDate.slice(0, 7);
+                const targetMonth =
+                    importTargetMonth || preview.sourceMonth || selectedDate.slice(0, 7);
                 for (const row of preview.rawRows) {
                     const dateStr = `${targetMonth}-${String(row.day).padStart(2, "0")}`;
                     const times = row.times;
@@ -1905,14 +1907,14 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             }
 
             alert(
-                `🎉 成功导入了 ${selectedPreviews.length} 名员工，共 ${totalSaved} 条打卡记录！\n系统已自动覆盖合并。`,
+                `🎉 成功导入了 ${selectedPreviews.length} 名员工，共 ${totalSaved} 条打卡记录！\n导入月份：${importTargetMonth || selectedDate.slice(0, 7)}\n系统已自动覆盖合并。`,
             );
             setIsFaceImportOpen(false);
             setImportPreviews([]);
             await loadData(selectedDate);
         } catch (err) {
             console.error("Error saving import", err);
-            alert("保存打卡记录失败: " + (err as Error).message);
+            alert("❌ 保存打卡记录失败：" + (err as Error).message);
         } finally {
             setIsSavingImport(false);
         }
@@ -2008,7 +2010,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         });
 
         if (eligibleStaff.length === 0) {
-            alert(`没有需要打卡的${targetGroup === 'FLOOR' ? '楼面' : targetGroup === 'KITCHEN' ? '厨房' : ''}员工 (No eligible staff)`);
+            alert(`⚠️ 没有需要打卡的${targetGroup === 'FLOOR' ? '楼面' : targetGroup === 'KITCHEN' ? '厨房' : ''}员工 (No eligible staff)`);
             return;
         }
 
@@ -2046,7 +2048,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             alert(`✅ 已为 ${eligibleStaff.length} 位员工打卡`);
         } catch (error) {
             console.error(error);
-            alert("Batch operation failed");
+            alert("❌ 批量操作失败");
         } finally {
             setIsLoading(false);
         }
@@ -2085,7 +2087,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             }
         } catch (e) {
             console.error(e);
-            alert('状态更新失败');
+            alert('❌ 状态更新失败');
         } finally {
             setIsLoading(false);
         }
@@ -2104,7 +2106,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             }
         } catch (e) {
             console.error(e);
-            alert('班次更新失败');
+            alert('❌ 班次更新失败');
         } finally {
             setIsLoading(false);
         }
@@ -2173,7 +2175,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             <h3 className="font-black text-sm md:text-lg text-[#111111] leading-none">{staff.name}</h3>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); toggleExemptStatus(staff); }} 
-                                className={`text-[9px] px-1.5 py-0.5 rounded font-bold transition-colors shadow-sm active:scale-95 ${staff.isAttendanceExempt ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                                className={`min-h-[44px] md:min-h-0 text-[9px] px-1.5 py-0.5 rounded font-bold transition-colors shadow-sm active:scale-95 ${staff.isAttendanceExempt ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
                             >
                                 {staff.isAttendanceExempt ? '免打卡' : '设为免打卡'}
                             </button>
@@ -2185,10 +2187,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                     const val = Number(e.target.value);
                                     await handleUpdateStaffShiftGroup(staff, val);
                                 }}
-                                className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-yellow-50 text-yellow-800 border border-yellow-200 shadow-sm outline-none cursor-pointer"
-                            >
-                                <option value={1}>班次 1</option>
-                                <option value={2}>班次 2</option>
+                                className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-yellow-50 text-yellow-800 border border-yellow-200 shadow-sm outline-none cursor-pointer text-[16px] md:text-sm" >
+                                <option value={1}>Group A</option>
+                                <option value={2}>Group B</option>
                             </select>
                         </div>
                         <p className="text-xs text-gray-400 font-bold mt-1">{(staff.role || '').split('(')[0]}</p>
@@ -2205,7 +2206,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             </span>
                             <button 
                                 onClick={() => setSelectedMonthlyEmployee(staff)} 
-                                className="p-2.5 bg-gray-100 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors"
+                                className="p-2.5 bg-gray-100 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                 title="月度考勤明细"
                             >
                                 <Calendar size={16}/>
@@ -2232,10 +2233,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                             </div>
                             <div className="flex gap-1.5 items-center">
                                 <span className="bg-blue-50 text-blue-600 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Done</span>
-                                <button onClick={() => { setEditingRecord(record as AttendanceRecord); setEditModalOpen(true); }} className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600"><Edit3 size={15}/></button>
+                                <button onClick={() => { setEditingRecord(record as AttendanceRecord); setEditModalOpen(true); }} className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Edit3 size={15}/></button>
                                 <button 
                                     onClick={() => setSelectedMonthlyEmployee(staff)} 
-                                    className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
+                                    className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600 transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                     title="月度考勤明细"
                                 >
                                     <Calendar size={15}/>
@@ -2250,11 +2251,11 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                     <LogIn size={16}/> {isPlannedOff ? '加班 (OT)' : '上班 (In)'}
                                 </button>
                                 {record && (
-                                    <button onClick={() => { setEditingRecord(record as AttendanceRecord); setEditModalOpen(true); }} className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600"><Edit3 size={15}/></button>
+                                    <button onClick={() => { setEditingRecord(record as AttendanceRecord); setEditModalOpen(true); }} className="p-2 bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Edit3 size={15}/></button>
                                 )}
                                 <button 
                                     onClick={() => setSelectedMonthlyEmployee(staff)} 
-                                    className="p-2.5 bg-gray-100 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors"
+                                    className="p-2.5 bg-gray-100 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                     title="月度考勤明细"
                                 >
                                     <Calendar size={15}/>
@@ -2347,7 +2348,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                         <button onClick={() => setShowReport(true)} className="bg-white/10 hover:bg-white/20 px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-white/10 flex items-center gap-2 active:scale-95 whitespace-nowrap"><FileBarChart size={14}/> 达标</button>
                         <button onClick={() => setIsSettingsOpen(true)} className="bg-white/10 hover:bg-white/20 px-5 py-3 rounded-2xl text-sm font-bold transition-all border border-white/10 flex items-center gap-2 active:scale-95 whitespace-nowrap"><Clock size={14}/> 排班设置</button>
                         <button onClick={handleResetMonthlyAttendance} className="bg-rose-600 hover:bg-rose-500 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-md flex items-center gap-2 active:scale-95 whitespace-nowrap text-white"><Trash2 size={14}/> 重置本月</button>
-                        <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-md flex items-center gap-2 active:scale-95 whitespace-nowrap text-white"><Calendar size={14}/> 导入打卡</button>
+                        <button onClick={() => { setImportTargetMonth(selectedDate.slice(0, 7)); setIsFaceImportOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-md flex items-center gap-2 active:scale-95 whitespace-nowrap text-white"><Calendar size={14}/> 导入打卡</button>
                     </div>
                     <div className="h-10 w-px bg-white/10 mx-2"></div>
                     {onClose && <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-full transition-colors shrink-0"><X size={20}/></button>}
@@ -2390,7 +2391,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                     <button onClick={() => setShowReport(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><FileBarChart size={12}/> 达标</button>
                     <button onClick={() => setIsSettingsOpen(true)} className="bg-white hover:bg-gray-50 border border-[#E5E7EB] text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Clock size={12}/> 排班设置</button>
                     <button onClick={handleResetMonthlyAttendance} className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Trash2 size={12}/> 重置本月</button>
-                    <button onClick={() => setIsFaceImportOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Calendar size={12}/> 导入打卡</button>
+                    <button onClick={() => { setImportTargetMonth(selectedDate.slice(0, 7)); setIsFaceImportOpen(true); }} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm min-h-[44px] whitespace-nowrap"><Calendar size={12}/> 导入打卡</button>
                 </div>
             </div>
 
@@ -2399,9 +2400,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                 <div className="bg-white md:bg-transparent p-3 md:p-0 rounded-2xl border border-[#E5E7EB] md:border-none shadow-sm md:shadow-none flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4">
                     <div className="flex items-center justify-between w-full md:w-auto gap-2">
                         <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-300 shrink-0">
-                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16} className="rotate-180"/></button>
-                            <input type="date" value={selectedDate} onChange={handleDateChange} className="bg-transparent font-black text-xs md:text-lg outline-none text-center w-28 md:w-40 text-[#111111] font-mono" />
-                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95"><TrendingUp size={16}/></button>
+                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><TrendingUp size={16} className="rotate-180"/></button>
+                            <input type="date" value={selectedDate} onChange={handleDateChange} className="bg-transparent font-black outline-none text-center w-28 md:w-40 text-[#111111] font-mono text-[16px] md:text-lg" />
+                            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); loadData(d.toISOString().split('T')[0]); }} className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-lg text-gray-500 active:scale-95 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><TrendingUp size={16}/></button>
                         </div>
                         
                         <div className="flex gap-1.5 text-[10px] md:text-sm font-bold shrink-0">
@@ -2412,7 +2413,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
 
                     <div className="relative w-full md:w-80">
                         <Search className="absolute left-3.5 top-3 text-gray-400" size={16}/>
-                        <input type="text" placeholder="搜索员工名称..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2.5 md:py-3 bg-gray-50 border border-gray-300 md:border-none md:bg-gray-100 rounded-xl text-xs md:text-sm font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px]"/>
+                        <input type="text" placeholder="搜索员工名称..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2.5 md:py-3 bg-gray-50 border border-gray-300 md:border-none md:bg-gray-100 rounded-xl font-bold focus:bg-white focus:border-[#FFD200] focus:ring-4 focus:ring-[#FFD200]/10 transition-all outline-none min-h-[44px] text-[16px] md:text-sm" />
                     </div>
                 </div>
             </div>
@@ -2512,8 +2513,8 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
 
             {/* === FACE ATTENDANCE IMPORT MODAL === */}
             {isFaceImportOpen && (
-                <div className="fixed inset-0 bg-black/60 z-[320] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
+                <div className="fixed inset-0 bg-black/60 z-[320] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
                         {/* Header */}
                         <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                             <div>
@@ -2521,7 +2522,8 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                     <span>📅</span> 导入人脸打卡数据
                                 </h3>
                                 <p className="text-[10px] text-gray-500 font-bold mt-0.5 uppercase tracking-wide">
-                                    Import Face Scanner Attendance ({selectedDate.slice(0, 7)})
+                                    Import Face Scanner Attendance (
+                                    {importTargetMonth || selectedDate.slice(0, 7)})
                                 </p>
                             </div>
                             <button
@@ -2545,6 +2547,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                 <div className="space-y-1">
                                     <p className="font-bold">
                                         数据双源高精度融合 (Dual-Source Syncing):
+                                    </p>
+                                    <p className="leading-relaxed">
+                                        <b>已离职的员工也可以绑定</b>（例如 8 月做到、9
+                                        月才导入 8 月考勤），导入前请先确认下面的「导入月份」。
                                     </p>
                                     <p className="leading-relaxed">
                                         导入打卡机数据将<b>自动覆盖合并</b>
@@ -2589,6 +2595,40 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                 </div>
                             )}
 
+                            {/* 🟢 导入月份 (报表是哪个月, 就写进哪个月) */}
+                            {importPreviews.length > 0 && (
+                                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 space-y-2">
+                                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                                        <div>
+                                            <p className="text-xs font-black text-amber-900">
+                                                📆 导入月份 (Target Month)
+                                            </p>
+                                            <p className="text-[10px] font-bold text-amber-700 mt-0.5">
+                                                {importPreviews.find((p) => p.sourceMonth)?.sourceMonth
+                                                    ? `已从报表认出：${importPreviews.find((p) => p.sourceMonth)?.sourceMonth}`
+                                                    : "报表里找不到月份，请自己确认"}
+                                            </p>
+                                        </div>
+                                        <input
+                                            type="month"
+                                            value={importTargetMonth || selectedDate.slice(0, 7)}
+                                            onChange={(e) => setImportTargetMonth(e.target.value)}
+                                            className="px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono font-black text-amber-900 outline-none text-[16px] md:text-sm"
+                                            style={{ minHeight: "44px" }}
+                                        />
+                                    </div>
+                                    {(importTargetMonth || selectedDate.slice(0, 7)) !==
+                                        selectedDate.slice(0, 7) && (
+                                        <p className="text-[10px] font-black text-amber-800 bg-amber-100 rounded-lg p-2 leading-relaxed">
+                                            ⚠️ 这批记录会写进{" "}
+                                            <b>{importTargetMonth}</b>，不是你现在看的{" "}
+                                            {selectedDate.slice(0, 7)}。导入后请把上面的日期切到{" "}
+                                            {importTargetMonth} 才看得到。
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Match Previews */}
                             {importPreviews.length > 0 && (
                                 <div className="space-y-3">
@@ -2606,14 +2646,14 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                                     prev.map((p) => ({ ...p, selected: !allSelected })),
                                                 );
                                             }}
-                                            className="text-[10px] font-black text-blue-600 hover:underline"
+                                            className="text-[10px] font-black text-blue-600 hover:underline min-h-[44px] md:min-h-0"
                                         >
                                             全选 / 反选
                                         </button>
                                     </div>
 
-                                    <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[280px] overflow-y-auto shadow-inner bg-gray-50">
-                                        <table className="w-full text-left border-collapse">
+                                    <div className="border border-gray-200 rounded-xl max-h-[280px] overflow-y-auto overflow-x-auto shadow-inner bg-gray-50">
+                                        <table className="w-full min-w-[460px] text-left border-collapse">
                                             <thead>
                                                 <tr className="bg-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-wider border-b border-gray-200">
                                                     <th className="p-3 w-10">选择</th>
@@ -2634,7 +2674,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                                                 <button
                                                                     onClick={() => {
                                                                         if (!item.systemEmployee) {
-                                                                            alert("请先绑定系统员工后再选择导入。");
+                                                                            alert("⚠️ 请先绑定系统员工后再选择导入");
                                                                             return;
                                                                         }
                                                                         setImportPreviews((prev) =>
@@ -2692,7 +2732,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                                                                     ),
                                                                                 );
                                                                             }}
-                                                                            className="text-[10px] text-gray-400 hover:text-red-500 underline ml-1"
+                                                                            className="text-[10px] text-gray-400 hover:text-red-500 underline ml-1 min-h-[44px] md:min-h-0"
                                                                         >
                                                                             解绑
                                                                         </button>
@@ -2703,8 +2743,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                                                         onChange={(e) => {
                                                                             const empId = e.target.value;
                                                                             const selectedEmp =
-                                                                                staffList.find((x) => x.id === empId) ||
-                                                                                null;
+                                                                                importStaffList.find(
+                                                                                    (x) => x.id === empId,
+                                                                                ) || null;
                                                                             setImportPreviews((prev) =>
                                                                                 prev.map((p, idx) => {
                                                                                     if (idx === index) {
@@ -2718,15 +2759,18 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
                                                                                 }),
                                                                             );
                                                                         }}
-                                                                        className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-black outline-none text-amber-900 w-full"
+                                                                        className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-black outline-none text-amber-900 w-full text-[16px] md:text-sm"
                                                                         style={{ minHeight: "38px" }}
                                                                     >
                                                                         <option value="">
                                                                             ⚠️ 未找到匹配，请手动匹配...
                                                                         </option>
-                                                                        {staffList.map((e) => (
+                                                                        {importStaffList.map((e) => (
                                                                             <option key={e.id} value={e.id}>
-                                                                                {e.name} {e.isArchived ? "(离职)" : ""}
+                                                                                {e.id} - {e.name}
+                                                                                {e.isArchived || e.status === "TERMINATED"
+                                                                                    ? " (已离职)"
+                                                                                    : ""}
                                                                             </option>
                                                                         ))}
                                                                     </select>

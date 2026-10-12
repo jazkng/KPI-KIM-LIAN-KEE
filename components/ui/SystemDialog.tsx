@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -304,17 +303,19 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const alertCustom = async (message: string, moduleName: string = '系统提示'): Promise<void> => {
     console.log('[SystemDialog Alert Intercepted]:', message);
     
-    // Check if success
-    const isSuccess = message.includes('✅') || message.includes('成功');
-    const isError = message.includes('失败') || message.includes('Error') || message.includes('错误') || message.includes('invalid') || message.includes('unsupported');
-
-    if (isSuccess) {
-      await showStructuredSuccess(message, moduleName);
-      return;
-    }
+    // 👑 先判断失败，再判断成功：
+    //    「❌ 扫描失败：这批 1 张全部没成功」里面有「成功」两个字（没成功），
+    //    以前先判断成功 → 失败讯息被显示成绿色「操作成功」+「已自动录入应付账款」，完全误导。
+    const isError = message.includes('❌') || message.includes('⚠️') || message.includes('失败') || message.includes('没成功') || message.includes('Error') || message.includes('错误') || message.includes('invalid') || message.includes('unsupported');
+    const isSuccess = !isError && (message.includes('✅') || message.includes('成功'));
 
     if (isError) {
       await showStructuredError(message, moduleName);
+      return;
+    }
+
+    if (isSuccess) {
+      await showStructuredSuccess(message, moduleName);
       return;
     }
 
@@ -395,81 +396,75 @@ export const SystemDialogProvider: React.FC<{ children: React.ReactNode }> = ({ 
   return (
     <SystemDialogContext.Provider value={{ show: showDialog, alert: alertCustom, confirm: confirmCustom }}>
       {children}
-      <AnimatePresence>
-        {isOpen && options && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-x-hidden overflow-y-auto bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="relative w-full max-w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col my-8"
-              style={{ width: 'calc(100% - 32px)' }}
-            >
-              {/* Header */}
-              <div className="bg-[#111111] p-4 text-white relative">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-black tracking-wider text-white">
-                      金莲记 ERP
-                    </h3>
-                    {options.module && (
-                      <p className="text-xs text-gray-300 font-medium mt-0.5 tracking-wide">
-                        {options.module}
-                      </p>
-                    )}
-                  </div>
-                  {options.showCloseButton !== false && (
-                    <button
-                      onClick={handleCancel}
-                      className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-                      aria-label="关闭"
-                    >
-                      <X size={18} />
-                    </button>
+      {isOpen && options && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-x-hidden overflow-y-auto bg-black/60 backdrop-blur-sm transition-opacity duration-200">
+          <div
+            className="relative w-full max-w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col my-8 transition-all duration-200 transform scale-100"
+            style={{ width: 'calc(100% - 32px)' }}
+          >
+            {/* Header */}
+            <div className="bg-[#111111] p-4 text-white relative">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black tracking-wider text-white">
+                    金莲记 ERP
+                  </h3>
+                  {options.module && (
+                    <p className="text-xs text-gray-300 font-medium mt-0.5 tracking-wide">
+                      {options.module}
+                    </p>
                   )}
                 </div>
-                {/* Gold Fine Line bottom */}
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D4AF37] via-[#FFD200] to-[#D4AF37]" />
-              </div>
-
-              {/* Body */}
-              <div className="p-4 md:p-5 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin">
-                {options.cards.map((card, idx) => (
-                  <StatusCard
-                    key={card.id || `card-${idx}`}
-                    status={card.status}
-                    title={card.title}
-                    description={card.description}
-                    icon={card.icon}
-                  />
-                ))}
-              </div>
-
-              {/* Action Footer */}
-              <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row-reverse gap-2 safe-area-bottom">
-                <button
-                  onClick={handleConfirm}
-                  disabled={isActionLoading}
-                  className="w-full md:w-auto px-6 py-3 bg-[#EAA308] hover:bg-[#D49206] active:bg-[#B37B04] text-white font-bold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 select-none min-h-[48px]"
-                >
-                  {isActionLoading && <RefreshCw size={16} className="animate-spin" />}
-                  {options.primaryButtonText || '确定'}
-                </button>
-                {options.secondaryButtonText && (
+                {options.showCloseButton !== false && (
                   <button
                     onClick={handleCancel}
-                    disabled={isActionLoading}
-                    className="w-full md:w-auto px-6 py-3 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 border border-gray-300 font-bold text-sm rounded-xl shadow-sm transition-all duration-150 flex items-center justify-center select-none min-h-[48px]"
+                    className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+                    aria-label="关闭"
                   >
-                    {options.secondaryButtonText}
+                    <X size={18} />
                   </button>
                 )}
               </div>
-            </motion.div>
+              {/* Gold Fine Line bottom */}
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D4AF37] via-[#FFD200] to-[#D4AF37]" />
+            </div>
+
+            {/* Body */}
+            <div className="p-4 md:p-5 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin">
+              {options.cards.map((card, idx) => (
+                <StatusCard
+                  key={card.id || `card-${idx}`}
+                  status={card.status}
+                  title={card.title}
+                  description={card.description}
+                  icon={card.icon}
+                />
+              ))}
+            </div>
+
+            {/* Action Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row-reverse gap-2 safe-area-bottom">
+              <button
+                onClick={handleConfirm}
+                disabled={isActionLoading}
+                className="w-full md:w-auto px-6 py-3 bg-[#EAA308] hover:bg-[#D49206] active:bg-[#B37B04] text-white font-bold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 select-none min-h-[48px]"
+              >
+                {isActionLoading && <RefreshCw size={16} className="animate-spin" />}
+                {options.primaryButtonText || '确定'}
+              </button>
+              {options.secondaryButtonText && (
+                <button
+                  onClick={handleCancel}
+                  disabled={isActionLoading}
+                  className="w-full md:w-auto px-6 py-3 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 border border-gray-300 font-bold text-sm rounded-xl shadow-sm transition-all duration-150 flex items-center justify-center select-none min-h-[48px]"
+                >
+                  {options.secondaryButtonText}
+                </button>
+              )}
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </SystemDialogContext.Provider>
   );
 };

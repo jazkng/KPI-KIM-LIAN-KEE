@@ -385,7 +385,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     <div className={`rounded-2xl px-4 py-3 flex items-start gap-3 font-bold text-sm shadow-sm ${notice.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
                         {notice.type === 'success' ? <CheckCircle2 size={20} className="shrink-0" /> : <AlertTriangle size={20} className="shrink-0" />}
                         <span className="flex-1">{notice.message}</span>
-                        <button onClick={() => setNotice(null)} className="p-1" aria-label="关闭提示"><X size={16} /></button>
+                        <button onClick={() => setNotice(null)} className="p-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" aria-label="关闭提示"><X size={16} /></button>
                     </div>
                 )}
 
@@ -415,8 +415,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                             value={search}
                             onChange={event => setSearch(event.target.value)}
                             placeholder="搜索设备编号、名称、位置或备注"
-                            className="w-full min-h-[44px] rounded-xl bg-gray-100 border border-transparent focus:border-[#FFD200] focus:bg-white outline-none pl-10 pr-4 font-bold text-sm"
-                        />
+                            className="w-full min-h-[44px] rounded-xl bg-gray-100 border border-transparent focus:border-[#FFD200] focus:bg-white outline-none pl-10 pr-4 font-bold text-[16px] md:text-sm" />
                     </div>
                 </div>
 
@@ -488,23 +487,23 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                                         {device.notes && <p className="mt-4 rounded-xl bg-amber-50 text-amber-900 p-3 text-xs font-bold line-clamp-3">备注：{device.notes}</p>}
 
                                         <div className="mt-5 pt-4 border-t grid grid-cols-2 gap-2">
-                                            <button disabled={busy} onClick={() => openEdit(device)} className="min-h-[42px] rounded-xl bg-gray-100 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                            <button disabled={busy} onClick={() => openEdit(device)} className="min-h-[42px] rounded-xl bg-gray-100 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[44px] md:min-h-0">
                                                 <Pencil size={15} /> 编辑资料
                                             </button>
-                                            <button disabled={busy} onClick={() => openPin(device)} className="min-h-[42px] rounded-xl bg-gray-100 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                            <button disabled={busy} onClick={() => openPin(device)} className="min-h-[42px] rounded-xl bg-gray-100 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[44px] md:min-h-0">
                                                 <KeyRound size={15} /> 更换 PIN
                                             </button>
-                                            <button disabled={busy} onClick={() => handleRevokeSessions(device)} className="min-h-[42px] rounded-xl bg-blue-50 text-blue-800 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                            <button disabled={busy} onClick={() => handleRevokeSessions(device)} className="min-h-[42px] rounded-xl bg-blue-50 text-blue-800 font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[44px] md:min-h-0">
                                                 <RefreshCw size={15} className={busy ? 'animate-spin' : ''} /> 撤销登录
                                             </button>
-                                            <button disabled={busy} onClick={() => handleStatusChange(device)} className={`min-h-[42px] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 ${device.status === 'DISABLED' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+                                            <button disabled={busy} onClick={() => handleStatusChange(device)} className={`min-h-[44px] md:min-h-0 min-h-[42px] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 ${device.status === 'DISABLED' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
                                                 <Power size={15} /> {device.status === 'DISABLED' ? '重新启用' : '停用设备'}
                                             </button>
                                         </div>
 
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             {device.allowedScreens.map(screen => (
-                                                <button key={screen} onClick={() => openScreen(screen)} className="flex-1 min-w-[140px] min-h-[40px] rounded-xl border font-black text-[11px] flex items-center justify-center gap-1.5">
+                                                <button key={screen} onClick={() => openScreen(screen)} className="flex-1 min-w-[140px] min-h-[40px] rounded-xl border font-black text-[11px] flex items-center justify-center gap-1.5 min-h-[44px] md:min-h-0">
                                                     <ExternalLink size={14} /> 打开{getScreenLabel(screen)}
                                                 </button>
                                             ))}
@@ -518,7 +517,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
             </div>
 
             {modalMode && (
-                <div className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-end md:items-center justify-center md:p-5" onMouseDown={event => {
+                <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center md:p-5" onMouseDown={event => {
                     if (event.currentTarget === event.target) closeModal();
                 }}>
                     <div className="bg-white w-full md:max-w-2xl max-h-[94vh] rounded-t-[2rem] md:rounded-[2rem] shadow-2xl flex flex-col overflow-hidden">
@@ -538,7 +537,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                                 <div className="rounded-2xl px-4 py-3 flex items-start gap-3 font-bold text-sm shadow-sm bg-red-50 text-red-800 border border-red-200">
                                     <AlertTriangle size={20} className="shrink-0 text-red-600 mt-0.5" />
                                     <span className="flex-1 leading-relaxed">{notice.message}</span>
-                                    <button onClick={() => setNotice(null)} className="p-1 hover:bg-red-100 rounded" aria-label="关闭提示"><X size={16} /></button>
+                                    <button onClick={() => setNotice(null)} className="p-1 hover:bg-red-100 rounded min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" aria-label="关闭提示"><X size={16} /></button>
                                 </div>
                             )}
 
@@ -560,8 +559,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                                                 onChange={event => updateForm('deviceCode', event.target.value.toUpperCase())}
                                                 placeholder="请输入登入 ID，例如 KITCHEN-01"
                                                 maxLength={40}
-                                                className="form-input font-mono uppercase disabled:bg-gray-100 disabled:text-gray-500"
-                                            />
+                                                className="form-input font-mono uppercase disabled:bg-gray-100 disabled:text-gray-500" />
                                         </Field>
                                         <Field label="设备名称">
                                             <input value={form.deviceName} onChange={event => updateForm('deviceName', event.target.value)} placeholder="例如 厨房主荧幕" maxLength={100} className="form-input" />
@@ -603,7 +601,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                                     </fieldset>
 
                                     <Field label="登录后默认画面">
-                                        <select value={form.defaultScreen} onChange={event => updateForm('defaultScreen', event.target.value as DeviceScreen)} className="form-input" disabled={form.allowedScreens.length === 0}>
+                                        <select value={form.defaultScreen} onChange={event => updateForm('defaultScreen', event.target.value as DeviceScreen)} className="form-input" disabled={form.allowedScreens.length === 0} >
                                             {SCREEN_OPTIONS.filter(option => form.allowedScreens.includes(option.id)).map(option => (
                                                 <option key={option.id} value={option.id}>{option.label}</option>
                                             ))}
@@ -636,9 +634,13 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     border: 1px solid #d1d5db;
                     background: white;
                     padding: 0.7rem 0.85rem;
-                    font-size: 0.875rem;
+                    /* 手机固定 16px：iOS Safari 遇到 <16px 的输入框会把整页放大 */
+                    font-size: 16px;
                     font-weight: 700;
                     outline: none;
+                }
+                @media (min-width: 768px) {
+                    .form-input { font-size: 0.875rem; }
                 }
                 .form-input:focus { border-color: #e3bd00; box-shadow: 0 0 0 3px rgba(255, 210, 0, 0.18); }
             `}</style>
@@ -678,9 +680,8 @@ const PinFields: React.FC<PinFieldsProps> = ({ form, showPin, setShowPin, update
                     value={form.pin}
                     onChange={event => updateForm('pin', event.target.value.replace(/\D/g, '').slice(0, 8))}
                     placeholder="输入新 PIN"
-                    className="form-input pr-12"
-                />
-                <button type="button" onClick={() => setShowPin(previous => !previous)} className="absolute right-1 top-1 min-w-[40px] min-h-[40px] flex items-center justify-center text-gray-500" aria-label={showPin ? '隐藏 PIN' : '显示 PIN'}>
+                    className="form-input pr-12" />
+                <button type="button" onClick={() => setShowPin(previous => !previous)} className="absolute right-1 top-1 min-w-[40px] min-h-[40px] flex items-center justify-center text-gray-500 min-h-[44px] md:min-h-0" aria-label={showPin ? '隐藏 PIN' : '显示 PIN'}>
                     {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
             </div>
@@ -693,8 +694,7 @@ const PinFields: React.FC<PinFieldsProps> = ({ form, showPin, setShowPin, update
                 value={form.confirmPin}
                 onChange={event => updateForm('confirmPin', event.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="再次输入 PIN"
-                className="form-input"
-            />
+                className="form-input" />
         </Field>
     </div>
 );

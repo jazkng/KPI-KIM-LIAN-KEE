@@ -1,3 +1,4 @@
+import { html2canvas, loadJsPDF } from '../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ShoppingCart, Package, Truck, AlertTriangle, Plus, FileText, Send, Printer, CheckCircle2, X, RefreshCw, Search, ClipboardCheck, ArrowDownToLine, Loader2, Info, ChevronDown, Filter, Utensils, Coffee, Wrench, Minus, ChevronUp, History, Clock, Zap, Trash2, Fish, Beef, Wheat, Carrot, ArrowLeft, Percent, Bus, Scale, Calculator, Flame } from 'lucide-react';
 import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, CatalogItem } from '../../types';
@@ -9,8 +10,6 @@ import {
     getBaseUnit, getDisplayToBaseRatio, needsReplenishment
 } from '../../utils/unitConversion';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 
 interface ProcurementModuleProps {
@@ -1100,7 +1099,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
         setIsGeneratingPdf(true);
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
         const totalPages = Math.ceil(po.items.length / ITEMS_PER_PAGE);
 
         try {
@@ -1253,6 +1252,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             const billCategory = supplier?.category || 'SUPPLIER';
             
             const stockUpdates = new Map<string, { qtyDelta: number, costDelta: number }>();
+            // 没关联到库存品项的会被跳过（库存不动），必须让使用者知道，不能静默
+            const skippedNoLink: string[] = [];
             
             receivedItems.forEach((item) => {
                 let inventoryId: string | null = null;
@@ -1280,8 +1281,21 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                             costDelta: existing.costDelta + line.finalLineTotal
                         });
                     }
+                } else if (line.receivedBaseQty > 0) {
+                    // 收了货但找不到对应的库存品项 —— 库存不会动
+                    skippedNoLink.push(item.name);
                 }
             });
+
+            if (skippedNoLink.length > 0) {
+                const proceed = confirm(
+                    `⚠️ 有 ${skippedNoLink.length} 个品项没有关联库存，收货后「库存数量不会变」：\n\n` +
+                    `${skippedNoLink.slice(0, 8).join('\n')}${skippedNoLink.length > 8 ? `\n…还有 ${skippedNoLink.length - 8} 项` : ''}\n\n` +
+                    `账单和收货记录仍然会存。要先去「供应商 → 关联库存」补好再收货吗？\n\n` +
+                    `按「确定」= 照样收货（库存不动）\n按「取消」= 先去补关联`
+                );
+                if (!proceed) return;
+            }
 
             // ⚡ 增量更新：只写有变动的物品，避免全量写回爆配额
             const changedItems: (StockItem & { diff?: number })[] = [];

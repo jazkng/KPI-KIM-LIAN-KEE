@@ -1,3 +1,4 @@
+import { html2canvas, loadExcelJS, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     Search, Layers, AlertTriangle, ChevronUp, ChevronDown, 
@@ -17,9 +18,6 @@ import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
 import { StockEditModal } from './StockEditModal';
-import { jsPDF } from "jspdf";
-import ExcelJS from 'exceljs';
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
@@ -1402,7 +1400,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             });
 
             // 1. 创建工作簿和表格
-            const workbook = new ExcelJS.Workbook();
+            const workbook = new (await loadExcelJS()).Workbook();
             const worksheet = workbook.addWorksheet('Price Comparison');
 
             // 2. 设定列宽 (设置你截图里想要的阔度)
@@ -1520,7 +1518,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
             if (!printRef.current) throw new Error("Print ref not found");
 
-            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             
             for (let i = 0; i < chunks.length; i++) {

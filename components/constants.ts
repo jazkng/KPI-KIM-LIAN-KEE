@@ -3,7 +3,7 @@ import {
     Wallet, CalendarOff, BookOpen, ClipboardCheck, Utensils, Coffee, Package,
     Users, FileText, Truck, Armchair, Eye, CheckSquare, CreditCard, Banknote,
     Landmark, ShieldCheck, Clock, AlertTriangle, ChefHat, ShoppingCart, Flame, Award,
-    Sparkles, BellRing
+    Sparkles, BellRing, TrendingUp, Layout, Target, Languages
 } from 'lucide-react';
 
 export * from '../constants/suppliers';
@@ -164,6 +164,10 @@ export const MODULE_DEFINITIONS = {
         label: '自开凭单 (Voucher Maker)', desc: '生成与自制支出凭证', icon: FileText, tab: 'SELF_INVOICE',
         guide: '1. 一键或批量自开凭单。\n2. 用于记录无正规发票的零散支出。',
     },
+    'STAFF_CASH': {
+        label: '兼职与预支 (Part-Time & Advance)', desc: '主管登记预支 / 兼职，A5 三方签收单', icon: Wallet, tab: 'STAFF_CASH',
+        guide: '1. 预支：选员工、填金额，保存即生效，自动在当月薪水扣回。\n2. 兼职：时薪员工按天登记，当场付现金。\n3. 记录·打印：勾选后批量打印 A5 签收单（员工 / 主管 / 人事签名），一笔一张或一人一张汇总。\n4. 主管不能删除，记错请找人事在「薪资结算」修改。',
+    },
     'TREASURY': {
         label: '资金管理 (Treasury)', desc: '现金流与股东资金', icon: Landmark, tab: 'TREASURY',
         guide: '查看公司总资金状况，记录转账和注资。',
@@ -179,6 +183,23 @@ export const MODULE_DEFINITIONS = {
     'AI_ASSISTANT': {
         label: 'AI 智控脑库 (AI Assistant)', desc: 'AI经营稽查与语音决策问答', icon: Sparkles, tab: 'AI_ASSISTANT',
         guide: '1. AI 经营稽查：点击或语音唤醒AI对账与异常问答。\n2. 决策脑库：查询店内实时数据与多维经营决策分析。',
+    },
+    // ── 以下为补齐项：原本只有老板界面写死显示，没有独立权限开关 ──
+    'PRICE_MONITOR': {
+        label: '成本监控 (Price Monitor)', desc: '供应商价格波动追踪', icon: TrendingUp, tab: 'PRICE_MONITOR',
+        guide: '追踪食材进货价的历史波动，发现涨价立即预警。',
+    },
+    'ORG_CHART': {
+        label: '组织结构 (Org Chart)', desc: '公司架构与汇报关系', icon: Layout, tab: 'ORG',
+        guide: '查看公司组织架构图与各岗位汇报关系。',
+    },
+    'PLANNING': {
+        label: '决策与规划 (Planning)', desc: '投票 / OKR / 营销 / 节日活动', icon: Target, tab: 'PLANNING',
+        guide: '包含决策投票、目标规划 (OKR)、营销推广 ROI 与节日活动日历。',
+    },
+    'TRANSLATION': {
+        label: '翻译管理 (Translation)', desc: '多语言词条维护', icon: Languages, tab: 'TRANSLATION',
+        guide: '维护系统内中／英／缅文的词条翻译。',
     },
 } satisfies Record<string, ModuleDefinition>;
 

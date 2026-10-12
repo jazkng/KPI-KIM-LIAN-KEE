@@ -1,3 +1,4 @@
+import { html2canvas, loadJsPDF } from '../../utils/lazyLibs';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -6,9 +7,8 @@ import {
 } from 'lucide-react';
 import { SelfIssuedVoucher, SelfVoucherItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
+import { guardWrite } from '../../utils/readOnlyMode';
 
 // Preset default voucher values for quick-fill
 const QUICK_CONTENT_PRESETS = [
@@ -332,6 +332,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     };
 
     const handleSave = async () => {
+    if (!guardWrite('保存凭单')) return;
         if (!editingVoucher.payeeName?.trim()) {
             alert("⚠️ 请填写收款人 / 临时司机姓名");
             return;
@@ -391,6 +392,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     };
 
     const handleDelete = async (id: string) => {
+    if (!guardWrite('删除凭单')) return;
         if (!confirm("⚠️ 确定要删除该张自开凭单记录吗？删除后将无法恢复。")) return;
         await DataManager.deleteSelfIssuedVoucher(id);
         if (previewVoucher?.id === id) setPreviewVoucher(null);
@@ -438,7 +440,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
 
             const imgData = canvas.toDataURL('image/jpeg', 0.95);
             // Change page format to A5 size
-            const pdf = new jsPDF('p', 'mm', 'a5');
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a5');
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -494,6 +496,7 @@ export const SelfInvoiceModule: React.FC<SelfInvoiceModuleProps> = ({ onClose })
     };
 
     const handleBatchDeleteVouchers = async () => {
+    if (!guardWrite('批量删除凭单')) return;
         if (selectedVoucherIds.length === 0) return;
         if (!confirm(`⚠️ 确定要批量删除这 ${selectedVoucherIds.length} 张自开凭单记录吗？此操作不可恢复！`)) return;
         
@@ -2400,7 +2403,9 @@ const A5VoucherDocument: React.FC<A5VoucherDocumentProps> = ({ voucher }) => {
 
             <div className="flex items-start justify-between border-b-2 border-[#111111] pb-5">
                 <div>
-                    <h1 className="text-[22px] font-black tracking-tight">kim lian kee Group</h1>
+                    {/* 👑 原本印公司名，导致这张凭单被 AI 重新扫描时误把
+                        「Kim Lian Kee Group」当成供应商。改成 CASH BILL，公司名保留在下方小字。 */}
+                    <h1 className="text-[22px] font-black tracking-tight">CASH BILL</h1>
                     <p className="text-[9px] text-[#6b7280] mt-1">{(voucher.companyName || '金莲记甲洞').replace(/吉隆坡金莲记/g,'金莲记甲洞')}</p>
                 </div>
                 <div className="text-right">

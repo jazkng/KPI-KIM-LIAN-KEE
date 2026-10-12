@@ -77,3 +77,96 @@ export const calculatePercentage = (value: number, total: number): number => {
   if (!total) return 0;
   return (value / total) * 100;
 };
+
+// 👑 对账用 CSV 生成器 (LedgerModal 单月导出 与 区间导出 共用同一份逻辑)
+// 注意：期初结转 (INIT) 是显示用虚拟行，不是真实交易，一律排除。
+export const buildLedgerCsv = (
+  items: Array<{
+    id?: string;
+    date?: string;
+    desc?: string;
+    category?: string;
+    account?: string;
+    type: "IN" | "OUT";
+    amount: number;
+  }>,
+  defaultAccount: string,
+): { csv: string; count: number; totalIn: number; totalOut: number } => {
+  const realItems = items.filter(
+    (item) => item.category !== "INIT" && item.id !== "init",
+  );
+
+  const escapeCsv = (val: any) => {
+    const s = val === undefined || val === null ? "" : String(val);
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+
+  const sorted = [...realItems].sort((a, b) =>
+    (a.date || "").localeCompare(b.date || ""),
+  );
+
+  const header = [
+    "日期 Date",
+    "摘要 Description",
+    "分类 Category",
+    "账户 Account",
+    "方向 Type",
+    "流入 In",
+    "流出 Out",
+    "金额 Amount",
+    "记录ID Ref",
+  ];
+
+  const rows: string[][] = sorted.map((item) => [
+    item.date || "",
+    item.desc || "",
+    item.category || "",
+    item.account || defaultAccount,
+    item.type,
+    item.type === "IN" ? item.amount.toFixed(2) : "",
+    item.type === "OUT" ? item.amount.toFixed(2) : "",
+    item.amount.toFixed(2),
+    item.id || "",
+  ]);
+
+  const totalIn = sorted
+    .filter((i) => i.type === "IN")
+    .reduce((a, b) => a + b.amount, 0);
+  const totalOut = sorted
+    .filter((i) => i.type === "OUT")
+    .reduce((a, b) => a + b.amount, 0);
+
+  rows.push([]);
+  rows.push([
+    "合计 TOTAL (不含期初结转)",
+    "",
+    "",
+    "",
+    "",
+    totalIn.toFixed(2),
+    totalOut.toFixed(2),
+    (totalIn - totalOut).toFixed(2),
+    "",
+  ]);
+
+  const csv = [header, ...rows]
+    .map((r) => r.map(escapeCsv).join(","))
+    .join("\r\n");
+
+  return { csv, count: sorted.length, totalIn, totalOut };
+};
+
+// 触发浏览器下载 CSV (BOM 确保 Excel 中文不乱码)
+export const downloadCsv = (csvBody: string, filename: string): void => {
+  const blob = new Blob(["\uFEFF" + csvBody], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};

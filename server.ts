@@ -386,26 +386,56 @@ ${JSON.stringify(contextData, null, 2)}
     }
   });
 
-  // Digital Asset Links verification for Android TWA
+  // ==========================================================================
+  // Digital Asset Links — Android TWA 验证
+  // --------------------------------------------------------------------------
+  // 这支路由让 Android 确认「这个 APK 有权代表这个网域」，验证通过 APK 才会全屏
+  // 显示（没有浏览器网址列）。包名或指纹对不上，APK 打开就会顶一条网址列。
+  //
+  // 🔧 换 keystore 或加新 APK 时，改环境变数就好，不用改程式重新 build：
+  //    TWA_PACKAGES='包名A:指纹A;包名B:指纹B'
+  //    多组用分号隔开 —— 过渡期可以让旧 APK 和新 APK 同时有效。
+  //
+  // 没设环境变数时，用下面的预设值（目前线上那组）。
+  // ==========================================================================
+  const DEFAULT_TWA_PACKAGES = [
+    // 目前主力：Android Studio 打包，keystore = kimliankee-erp2.jks，alias = kimliankee
+    "com.kimliankee.erp:25:59:5D:06:64:ED:26:AE:FC:9F:D3:70:6D:1B:C4:9E:F9:31:C2:EE:C6:88:9F:5D:B6:14:0F:4A:0A:BE:EB:80",
+    // 旧版：之前 PWABuilder 打的那支，留着让旧 APK 继续能用；确定没人在用可以整行删掉
+    "studio.ai.service_5174.twa:5D:4C:BC:CE:EA:19:2A:C7:58:CF:4C:AA:E6:CD:13:AE:C8:A1:B5:27:91:D4:C8:BC:8C:9F:30:C3:1D:45:26:2D",
+  ].join(";");
+
+  const parseTwaPackages = (raw: string) =>
+    raw
+      .split(";")
+      .map(entry => entry.trim())
+      .filter(Boolean)
+      .map(entry => {
+        // 指纹本身含冒号，所以只切第一个冒号
+        const idx = entry.indexOf(":");
+        if (idx <= 0) return null;
+        const packageName = entry.slice(0, idx).trim();
+        const fingerprint = entry.slice(idx + 1).trim().toUpperCase();
+        if (!packageName || !fingerprint) return null;
+        return {
+          relation: ["delegate_permission/common.handle_all_urls"],
+          target: {
+            namespace: "android_app",
+            package_name: packageName,
+            sha256_cert_fingerprints: [fingerprint],
+          },
+        };
+      })
+      .filter(Boolean);
+
   app.get("/.well-known/assetlinks.json", (_req, res) => {
+    const raw = process.env.TWA_PACKAGES || DEFAULT_TWA_PACKAGES;
+    const payload = parseTwaPackages(raw);
     res
       .status(200)
       .type("application/json")
       .set("Cache-Control", "no-store")
-      .send([
-        {
-          relation: [
-            "delegate_permission/common.handle_all_urls",
-          ],
-          target: {
-            namespace: "android_app",
-            package_name: "studio.ai.service_5174.twa",
-            sha256_cert_fingerprints: [
-              "5D:4C:BC:CE:EA:19:2A:C7:58:CF:4C:AA:E6:CD:13:AE:C8:A1:B5:27:91:D4:C8:BC:8C:9F:30:C3:1D:45:26:2D",
-            ],
-          },
-        },
-      ]);
+      .send(payload.length > 0 ? payload : parseTwaPackages(DEFAULT_TWA_PACKAGES));
   });
 
   // Vite middleware for development

@@ -32,19 +32,38 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
   return (
     <TreasuryBottomSheet
       open={open}
-      title="还钱给股东 (Repayment)"
+      title="还钱给股东"
       subtitle="Repayment to Shareholder"
       onClose={onClose}
-      icon={<ArrowLeftCircle size={20} className="text-indigo-600" />}
+      icon={<ArrowLeftCircle size={20} className="text-[#111111]" />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant="danger"
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                确认还款
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
-        <p className="text-xs text-gray-500 font-bold leading-relaxed">
+        <p className="text-xs text-stone-500 font-bold leading-relaxed">
           偿还股东之前的注资或垫资，将作为支出从公司资金池扣除。
         </p>
 
         {/* Shareholder selection */}
         <TreasurySelect
-          label="Shareholder (股东)"
+          label="股东"
           id="rep-sh"
           value={form.shareholderId || ""}
           onChange={(e) => setForm({ ...form, shareholderId: e.target.value })}
@@ -54,7 +73,7 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
 
         {/* Amount Field */}
         <TreasuryFormField
-          label="Amount (金额)"
+          label="金额"
           id="rep-amount"
           type="number"
           step="any"
@@ -69,7 +88,7 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
         {/* Account selection (From Account) */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-bold text-[#111111]">
-            Funds From (资金来源) <span className="text-red-500 font-extrabold">*</span>
+            Funds From (资金来源) <span className="text-rose-600 font-extrabold">*</span>
           </span>
           <div className="flex gap-2">
             <button
@@ -77,8 +96,8 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
               onClick={() => setForm({ ...form, fromAccount: "BANK" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.fromAccount === "BANK"
-                  ? "bg-blue-50 border-blue-500 text-blue-600"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-[#F6F7FB] border-blue-500 text-[#111111]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               BANK
@@ -88,8 +107,8 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
               onClick={() => setForm({ ...form, fromAccount: "CASH" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.fromAccount === "CASH"
-                  ? "bg-green-50 border-[#22C55E] text-[#22C55E]"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-emerald-50 border-[#22C55E] text-[#22C55E]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               CASH
@@ -99,7 +118,7 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
 
         {/* Date Field */}
         <TreasuryFormField
-          label="Date (日期)"
+          label="日期"
           id="rep-date"
           type="date"
           value={form.date || ""}
@@ -109,32 +128,13 @@ export const TreasuryRepaymentModal: React.FC<TreasuryRepaymentModalProps> = ({
 
         {/* Note Field */}
         <TreasuryFormField
-          label="Note (备注)"
+          label="备注"
           id="rep-note"
           type="text"
           value={form.note || ""}
           onChange={(e) => setForm({ ...form, note: e.target.value })}
           placeholder="例如：还清垫付资金"
         />
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-2">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant="danger"
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            确认还款
-          </TreasuryButton>
-        </div>
       </div>
     </TreasuryBottomSheet>
   );

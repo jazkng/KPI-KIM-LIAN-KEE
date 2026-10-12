@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRightLeft, PlusCircle, History } from "lucide-react";
+import { ArrowRightLeft, PlusCircle, Archive } from "lucide-react";
 
 interface TreasuryQuickActionsProps {
   onTransferClick: () => void;
@@ -7,60 +7,36 @@ interface TreasuryQuickActionsProps {
   onHistoryClick: () => void;
 }
 
+const ACTIONS = [
+  { key: "transfer", label: "内部划转", icon: ArrowRightLeft },
+  { key: "income", label: "额外收入", icon: PlusCircle },
+  { key: "history", label: "历史账本", icon: Archive },
+] as const;
+
 export const TreasuryQuickActions: React.FC<TreasuryQuickActionsProps> = ({
   onTransferClick,
   onIncomeClick,
   onHistoryClick,
 }) => {
+  const handlers: Record<string, () => void> = {
+    transfer: onTransferClick,
+    income: onIncomeClick,
+    history: onHistoryClick,
+  };
+
   return (
-    <div className="grid grid-cols-3 gap-2.5">
-      <button
-        onClick={onTransferClick}
-        type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-[#FFD200] active:scale-[0.96] transition-all touch-pan-y shadow-xs"
-      >
-        <div className="p-2 bg-[#FFD200]/20 rounded-xl text-[#111111]">
-          <ArrowRightLeft size={18} strokeWidth={2.5} />
-        </div>
-        <span className="text-xs font-black text-[#111111]">
-          内部划转
-        </span>
-        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
-          Transfer
-        </span>
-      </button>
-
-      <button
-        onClick={onIncomeClick}
-        type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-emerald-400 active:scale-[0.96] transition-all touch-pan-y shadow-xs"
-      >
-        <div className="p-2 bg-emerald-100/70 rounded-xl text-emerald-700">
-          <PlusCircle size={18} strokeWidth={2.5} />
-        </div>
-        <span className="text-xs font-black text-[#111111]">
-          额外收入
-        </span>
-        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
-          Income
-        </span>
-      </button>
-
-      <button
-        onClick={onHistoryClick}
-        type="button"
-        className="flex h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200/80 bg-white hover:border-indigo-400 active:scale-[0.96] transition-all touch-pan-y shadow-xs"
-      >
-        <div className="p-2 bg-indigo-100/70 rounded-xl text-indigo-700">
-          <History size={18} strokeWidth={2.5} />
-        </div>
-        <span className="text-xs font-black text-[#111111]">
-          调拨历史
-        </span>
-        <span className="text-[9px] font-mono text-stone-400 font-bold -mt-0.5">
-          History
-        </span>
-      </button>
+    <div className="grid grid-cols-3 divide-x divide-[#E5E7EB] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+      {ACTIONS.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          onClick={handlers[key]}
+          type="button"
+          className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 px-1 transition-colors hover:bg-[#F6F7FB] active:bg-stone-100"
+        >
+          <Icon size={18} strokeWidth={2.5} className="text-[#111111]" />
+          <span className="text-[11px] font-bold text-[#111111]">{label}</span>
+        </button>
+      ))}
     </div>
   );
 };

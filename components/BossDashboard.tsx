@@ -3,7 +3,7 @@ import {
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, BellRing
+    FileText, Calculator, Star, Search, BellRing, Lock
 } from 'lucide-react';
 import { Employee } from '../types';
 import { HRSystem } from './features/HRSystem';
@@ -20,6 +20,7 @@ import { PriceMonitorModule } from './features/PriceMonitorModule';
 import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule';
 import { TranslationManager } from './features/TranslationManager'; 
 import { SelfInvoiceModule } from './features/SelfInvoiceModule';
+import { DailyBusinessReportModal } from './features/DailyBusinessReportModal';
 import { AIOperationsAssistant } from './features/AIOperationsAssistant';
 import { DataManager } from '../utils/dataManager';
 import { needsReplenishment } from '../utils/unitConversion';
@@ -28,12 +29,14 @@ import {
     getModuleNavigationRule,
     sortNavigationItems,
 } from '../constants/moduleNavigation';
+import { canUseBossTarget } from '../utils/bossPortalAccess';
+import { isReadOnlyMode } from '../utils/readOnlyMode';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
 const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 mins cache
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 type PlanningTab  = 'VOTE' | 'OKR' | 'CAMPAIGN' | 'EVENTS';
 
 type CardConfig = {
@@ -50,6 +53,7 @@ type CardConfig = {
 };
 
 const BOSS_CARDS: CardConfig[] = [
+    { id: "daily_report", title: "经营日报", sub: "DAILY REPORT", icon: FileBarChart, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'MODAL', target: 'DAILY_REPORT' },
     { id: "settlement", title: "每日结算", sub: "SETTLEMENT", icon: Calculator, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'SETTLEMENT' },
     { id: "kitchen_alert", title: "厨房通知", sub: "KITCHEN ALERT", icon: BellRing, colorClass: "bg-red-50", iconColor: "text-red-500", actionType: 'NAVIGATE', target: 'KITCHEN_ALERT' },
     { id: "queue", title: "排队叫号", sub: "QUEUE TV", icon: Armchair, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'QUEUE' },
@@ -67,6 +71,7 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "bills", title: "经常性支出", sub: "RECURRING EXPENSES", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
     { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
     { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
+    { id: "staff_cash", title: "兼职与预支", sub: "PART-TIME & ADVANCE", icon: Banknote, colorClass: "bg-emerald-50", iconColor: "text-emerald-700", actionType: 'NAVIGATE', target: 'STAFF_CASH' },
     { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
     { id: "attendance", title: "考勤管理", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
     { id: "roster", title: "排班管理", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
@@ -303,27 +308,35 @@ export const BossDashboard: React.FC<{
         return () => window.removeEventListener('storage-sync-navigation', checkNav);
     }, []);
 
-    // Flatten all cards list
-    const allCards = useMemo(() => {
-        return BOSS_CARDS;
-    }, []);
+    // 🔐 权限闸门：L1 老板看全部；L2 等被指派进老板界面的人只看已勾选模块
+    const canUseCard = useCallback(
+        (card: CardConfig) => canUseBossTarget(currentEmployee, card.target),
+        [currentEmployee],
+    );
 
-    // Filter cards by Search Query
+    // Flatten all cards list (已过滤权限)
+    const allCards = useMemo(() => {
+        return BOSS_CARDS.filter(canUseCard);
+    }, [canUseCard]);
+
+    // Filter cards by Search Query (已过滤权限)
     const filteredSections = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        if (!q) return BOSS_DASHBOARD_SECTIONS;
 
         return BOSS_DASHBOARD_SECTIONS.map(section => {
-            const filteredCards = section.cards.filter(card => 
-                card.title.toLowerCase().includes(q) || 
-                card.sub.toLowerCase().includes(q)
-            );
+            const filteredCards = section.cards
+                .filter(canUseCard)
+                .filter(card =>
+                    !q ||
+                    card.title.toLowerCase().includes(q) ||
+                    card.sub.toLowerCase().includes(q)
+                );
             return {
                 ...section,
                 cards: filteredCards
             };
         }).filter(section => section.cards.length > 0);
-    }, [searchQuery]);
+    }, [searchQuery, canUseCard]);
 
     // Favorites cards configurations
     const favoriteCards = useMemo(() => {
@@ -343,6 +356,12 @@ export const BossDashboard: React.FC<{
 
     // Handle Card Click - Updates Recently Used storage as well
     const handleCardClick = useCallback((card: CardConfig) => {
+        // 🔐 防御：即使从收藏／最近使用点进来，也要有权限
+        if (!canUseCard(card)) {
+            alert('你没有此功能的权限，请联系老板开通。');
+            return;
+        }
+
         setRecent(prev => {
             const filtered = prev.filter(id => id !== card.id);
             const next = [card.id, ...filtered].slice(0, 4);
@@ -362,7 +381,7 @@ export const BossDashboard: React.FC<{
             setPlanningTab(card.target as PlanningTab);
             setActiveModal('PLANNING');
         }
-    }, [onNavigate]);
+    }, [onNavigate, canUseCard]);
 
     // Toggle Favorites Action
     const toggleFavorite = useCallback((cardId: string) => {
@@ -398,7 +417,22 @@ export const BossDashboard: React.FC<{
             'PRICE_MONITOR': <PriceMonitorModule onClose={close} />,
             'ASSESSMENT': <EmployeeAssessmentModule onClose={close} currentEmployee={currentEmployee} />,
             'TRANSLATION': <TranslationManager onClose={close} />,
-            'SELF_INVOICE': <SelfInvoiceModule onClose={close} />
+            'SELF_INVOICE': <SelfInvoiceModule onClose={close} />,
+            'DAILY_REPORT': (
+                <DailyBusinessReportModal
+                    isOpen={activeModal === 'DAILY_REPORT'}
+                    onClose={close}
+                    settlements={[]}
+                    onNavigateToSettlement={(date) => {
+                        close();
+                        onNavigate('SETTLEMENT');
+                    }}
+                    onNavigateToReports={() => {
+                        close();
+                        setActiveModal('REPORTS');
+                    }}
+                />
+            )
         };
         return activeModal !== 'NONE' ? modalMap[activeModal] : null;
     };
@@ -406,7 +440,17 @@ export const BossDashboard: React.FC<{
     return (
         <div className="w-full min-h-screen bg-[#F6F7FB] px-4 md:px-8 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-12" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
             <div className="max-w-7xl mx-auto space-y-6">
-                
+
+                {/* 🔒 只读模式提示条 */}
+                {isReadOnlyMode() && (
+                    <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-3">
+                        <Lock size={16} className="text-amber-600 shrink-0" strokeWidth={2.5} />
+                        <p className="text-xs font-bold text-amber-800 leading-relaxed">
+                            只读模式 (Read-only) — 你可以查看资料，但无法新增、修改或删除。
+                        </p>
+                    </div>
+                )}
+
                 {/* 1. TOP HEADER & SEARCH TOOLS */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2 border-b border-stone-200/50">
                     <div className="flex flex-col">

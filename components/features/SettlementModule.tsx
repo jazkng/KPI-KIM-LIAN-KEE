@@ -1,15 +1,24 @@
+import { html2canvas, loadJsPDF } from '../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
     Trash2, Check, AlertTriangle, Calculator, Play, Power, History, 
     Wallet, Banknote, CreditCard, X, Calendar, Truck, CheckCircle2, 
-    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft
+    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft, Edit3, Save, ListChecks, FileSpreadsheet
 } from 'lucide-react';
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
-import { applyResolvedStylesForPdf } from '../../utils/pdfStyleResolver';
-import { SettlementRecord, StoreConfig, ExpenseItem } from '../../types';
+import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
+import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS } from '../../types';
+import { guardWrite } from '../../utils/readOnlyMode';
 import { DataManager } from '../../utils/dataManager';
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+// 🔐 管理员密码：跟资金管理设定同一组（改 treasuryConstants 一处就好）
+import { SETTINGS_PASSWORD } from './treasury/treasuryConstants';
+import { isChannelReconciled, getReconActual, applyRecon, recalcSettlement, getReconChannels } from '../../utils/settlementRecon';
+import { SettlementBatchRecon } from './settlement/SettlementBatchRecon';
+import { SettlementExcelExportDialog } from './settlement/SettlementExcelExportDialog';
+import { SettlementHistoryTable } from './settlement/SettlementHistoryTable';
+import { SettlementOps, EMPTY_OPS, OPS_FIELDS, getOps, hasOps, perPax, perBill, fmtMoneyOrDash } from './settlement/settlementOps';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 
 interface SettlementModuleProps {
@@ -38,16 +47,7 @@ const getCalendarTodayStr = () => {
     return `${year}-${month}-${day}`;
 };
 
-const isChannelReconciled = (reconStatus: any, key: string): boolean => {
-    const val = reconStatus?.[key];
-    return val === true || (typeof val === 'number');
-};
-
-const getReconActual = (reconStatus: any, key: string): number | null => {
-    const val = reconStatus?.[key];
-    if (typeof val === 'number') return val;
-    return null;
-};
+// isChannelReconciled / getReconActual 已搬到 utils/settlementRecon.ts（明细、列表、批量核对共用同一份）
 
 // 🟢 ReconItem：补回对账后的手续费/调节费的百分比展示
 const ReconItem = ({ 
@@ -67,8 +67,9 @@ const ReconItem = ({
     actualAmount: number | null,
     onReconcile: () => void 
 }) => { 
-    // 实际应入账标准：如果有 net 则为 net - ads，否则退回使用 gross
-    const expected = net !== undefined ? (net - ads) : gross;
+    // 实际应入账标准：如果有 net (且 > 0) 则为 net - ads，否则退回使用 gross - ads
+    const effectiveNet = (net !== undefined && Number(net) > 0) ? Number(net) : Number(gross);
+    const expected = effectiveNet - ads;
     if (expected <= 0 && gross <= 0) return null;
 
     const displayActual = actualAmount !== null ? actualAmount : (isReconciled ? expected : null);
@@ -118,9 +119,16 @@ const ReconItem = ({
             
             <div className="flex justify-end shrink-0 w-full md:w-auto">
                 {isReconciled ? (
-                    <span className="flex items-center justify-center w-full md:w-auto gap-1 text-[10px] font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200">
-                        <CheckCircle2 size={14}/> 已过账
-                    </span>
+                    <div className="flex items-center gap-1.5 w-full md:w-auto">
+                        <span className="flex items-center justify-center flex-1 md:flex-none gap-1 text-[10px] font-black text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200">
+                            <CheckCircle2 size={14}/> 已过账
+                        </span>
+                        {/* 👑 已核对也能直接改，不用撤销重来 */}
+                        <button onClick={onReconcile}
+                            className="flex items-center justify-center gap-1 text-[10px] font-black text-gray-600 bg-white border border-gray-300 px-3 py-1.5 rounded-lg active:scale-95 transition-all shrink-0 min-h-[36px]">
+                            <Edit3 size={12}/> 改
+                        </button>
+                    </div>
                 ) : (
                     <button 
                         onClick={onReconcile}
@@ -149,30 +157,148 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     const [reconActual, setReconActual] = useState<string>('');
     const [isProcessingRecon, setIsProcessingRecon] = useState(false);
 
+    // ✏️ 直接编辑整笔结算（不用撤销重来）
+    const [editMode, setEditMode] = useState(false);
+    const [editForm, setEditForm] = useState<Record<string, number>>({});
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+    const openEdit = () => {
+        const r = localRecord;
+        const d = (r.sales.deliveryBreakdown || {}) as any;
+        setEditForm({
+            openingCash: Number(r.openingCash) || 0,
+            closingCash: Number(r.closingCash) || 0,
+            ownerWithdrawal: Number((r as any).ownerWithdrawal) || 0,
+            cash: Number(r.sales.cash) || 0,
+            tng: Number(r.sales.tng) || 0,
+            duitnow: Number(r.sales.duitnow) || 0,
+            card: Number(r.sales.card) || 0,
+            amex: Number(r.sales.amex) || 0,
+            grabGross: Number(d.grabGross) || 0,
+            grabNet: Number(d.grabNet) || 0,
+            grabAds: Number(d.grabAds) || 0,
+            pandaGross: Number(d.pandaGross) || 0,
+            pandaNet: Number(d.pandaNet) || 0,
+            pandaAds: Number(d.pandaAds) || 0,
+            shopeeGross: Number(d.shopeeGross) || 0,
+            shopeeNet: Number(d.shopeeNet) || 0,
+            shopeeAds: Number(d.shopeeAds) || 0,
+            lalamove: Number(d.lalamove) || 0,
+            // 📊 营运数据
+            ...Object.fromEntries(OPS_FIELDS.map(f => [`ops_${f.key}`, getOps(r)[f.key]])),
+        });
+        setEditMode(true);
+    };
+
+    const setEF = (k: string, v: string) => setEditForm(p => ({ ...p, [k]: parseFloat(v) || 0 }));
+
+    const saveEdit = async () => {
+        if (!guardWrite('直接编辑结算')) return;
+        const f = editForm;
+        const before = getReconChannels(localRecord);
+        const draft = recalcSettlement({
+            ...localRecord,
+            openingCash: f.openingCash,
+            closingCash: f.closingCash,
+            ownerWithdrawal: f.ownerWithdrawal,
+            ops: Object.fromEntries(OPS_FIELDS.map(k => [k.key, Math.max(0, Math.round(f[`ops_${k.key}`] || 0))])) as unknown as SettlementOps,
+            sales: {
+                ...localRecord.sales,
+                cash: f.cash, tng: f.tng, duitnow: f.duitnow, card: f.card, amex: f.amex,
+                deliveryBreakdown: {
+                    ...(localRecord.sales.deliveryBreakdown || {}),
+                    grabGross: f.grabGross, grabNet: f.grabNet, grabAds: f.grabAds,
+                    pandaGross: f.pandaGross, pandaNet: f.pandaNet, pandaAds: f.pandaAds,
+                    shopeeGross: f.shopeeGross, shopeeNet: f.shopeeNet, shopeeAds: f.shopeeAds,
+                    lalamove: f.lalamove,
+                } as any,
+            },
+        } as SettlementRecord);
+
+        // 👑 金额改了，原本核对好的通道就对不上了 —— 这些通道要退回「待核对」，
+        //    连同它自动记的平账费用一起清掉，不然账会错。
+        const after = getReconChannels(draft);
+        const resetKeys = before
+            .filter(b => b.isReconciled)
+            .filter(b => {
+                const a = after.find(x => x.key === b.key);
+                return a && Math.abs(a.expected - b.expected) > 0.005;
+            })
+            .map(b => b.key);
+
+        const msg = `确认修改 ${localRecord.date} 的结算？\n\n` +
+            `总营业额：RM ${localRecord.sales.total.toFixed(2)} → RM ${draft.sales.total.toFixed(2)}\n` +
+            `现金差异：${localRecord.variance.toFixed(2)} → ${draft.variance.toFixed(2)}` +
+            (resetKeys.length > 0
+                ? `\n\n⚠️ 这几个通道的金额变了，会退回「待核对」并清掉它们的自动平账费用，请重新核对：\n${resetKeys.map(k => before.find(b => b.key === k)?.label).join('、')}`
+                : '');
+        if (!confirm(msg)) return;
+
+        setIsSavingEdit(true);
+        try {
+            const rs = { ...((localRecord as any).reconStatus || {}) };
+            for (const k of resetKeys) {
+                await DataManager.clearReconFees(localRecord.id, k);
+                rs[k] = false;
+            }
+            const finalRecord = { ...draft, reconStatus: rs } as SettlementRecord;
+            await DataManager.saveSettlement(finalRecord);
+            setLocalRecord(finalRecord);
+            setEditMode(false);
+            window.dispatchEvent(new Event('klk-settlements-updated'));
+            alert(`✅ 已更新 ${localRecord.date} 的结算` + (resetKeys.length > 0 ? `\n${resetKeys.length} 个通道已退回待核对` : ''));
+            onRefresh();
+        } catch (e) {
+            console.error('直接编辑失败', e);
+            alert('❌ 保存失败，请重试');
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
+    // 点「改」时把原本的实收金额预填进去，不用重打
+    useEffect(() => {
+        if (!reconTarget) { setReconActual(''); return; }
+        const prev = getReconActual((localRecord as any)?.reconStatus || {}, reconTarget.key);
+        setReconActual(prev !== null ? String(prev) : '');
+    }, [reconTarget]);
+
     if (!localRecord) return null;
 
     const deliveryBreakdown = localRecord.sales.deliveryBreakdown || {} as any;
+    const reconStatus = (localRecord as any).reconStatus || {};
     
     // 抓取 Grab 专属数据
     const grabGross = Number(deliveryBreakdown.grabGross) || 0;
-    const grabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
+    const rawGrabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
+    const grabNet = rawGrabNet > 0 ? rawGrabNet : grabGross;
     const grabAds = Number(deliveryBreakdown.grabAds) || 0;
     const grabExpected = grabNet - grabAds; 
+    const grabActual = getReconActual(reconStatus, 'grab');
+    const grabReportValue = grabActual !== null ? grabActual : grabExpected;
     
-    const pandaNet = deliveryBreakdown.pandaNet !== undefined ? Number(deliveryBreakdown.pandaNet) : (Number(deliveryBreakdown.panda) || 0);
+    // FoodPanda 专属数据（若未填写 Net 则自动以 Gross 兜底）
+    const rawPandaNet = deliveryBreakdown.pandaNet !== undefined && deliveryBreakdown.pandaNet !== null ? Number(deliveryBreakdown.pandaNet) : (Number(deliveryBreakdown.panda) || 0);
+    const pandaGross = Number(deliveryBreakdown.pandaGross) || (rawPandaNet > 0 ? rawPandaNet : (Number(deliveryBreakdown.panda) || 0));
+    const pandaNet = rawPandaNet > 0 ? rawPandaNet : pandaGross;
     const pandaAds = Number(deliveryBreakdown.pandaAds) || 0;
+    // 👑 判断此笔记录是否含新版拆分栏位（旧记录只有单一 panda 栏位）
+    const hasPandaNet = Number(deliveryBreakdown.pandaNet) > 0 || Number(deliveryBreakdown.pandaGross) > 0;
     const pandaExpected = pandaNet - pandaAds;
-    const pandaGross = Number(deliveryBreakdown.pandaGross) || (deliveryBreakdown.pandaNet !== undefined ? pandaNet : (Number(deliveryBreakdown.panda) || 0));
+    const pandaActual = getReconActual(reconStatus, 'panda');
+    const pandaReportValue = pandaActual !== null ? pandaActual : pandaExpected;
     
-    // 🌟 抓取 Shopee 拆分数据（加入强力覆盖逻辑，确保不走 Gross 旧数据）
-    const shopeeNet = deliveryBreakdown.shopeeNet !== undefined ? Number(deliveryBreakdown.shopeeNet) : (Number(deliveryBreakdown.shopee) || 0);
+    // 🌟 抓取 Shopee 拆分数据（若未填写 Net 则自动以 Gross 兜底）
+    const rawShopeeNet = deliveryBreakdown.shopeeNet !== undefined && deliveryBreakdown.shopeeNet !== null ? Number(deliveryBreakdown.shopeeNet) : (Number(deliveryBreakdown.shopee) || 0);
+    const shopeeGross = Number(deliveryBreakdown.shopeeGross) || (rawShopeeNet > 0 ? rawShopeeNet : 0);
+    const shopeeNet = rawShopeeNet > 0 ? rawShopeeNet : shopeeGross;
     const shopeeAds = Number(deliveryBreakdown.shopeeAds) || 0;
     const shopeeExpected = shopeeNet - shopeeAds;
-    // 如果 shopeeGross 为 0 但 shopeeNet 有值，说明是新版数据，强制让 Gross 等于 Net 以便显示
-    const shopeeGross = Number(deliveryBreakdown.shopeeGross) || shopeeNet;
+    const shopeeActual = getReconActual(reconStatus, 'shopee');
+    const shopeeReportValue = shopeeActual !== null ? shopeeActual : shopeeExpected;
 
-    // 🌟 重新计算彻底挤干水分的外卖总额
-    const totalDelivery = grabExpected + (deliveryBreakdown.pandaNet !== undefined ? pandaExpected : pandaGross) + shopeeExpected + (Number(deliveryBreakdown.lalamove) || 0);
+    // 🌟 重新计算彻底挤干水分的外卖总额（已核对的通道按实际到账汇总）
+    const totalDelivery = grabReportValue + pandaReportValue + shopeeReportValue + (Number(deliveryBreakdown.lalamove) || 0);
 
     // 🌟 读取历史记录中保存的临时支出和老板抽款（做防空保护）
     const recordExpenses = (localRecord as any).dayExpenses || [];
@@ -180,19 +306,24 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
     const totalRecordExpenses = recordExpenses.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
     const totalDebit = (localRecord.sales.duitnow || 0);
     const totalCard = localRecord.sales.card || 0;
-    
-    const reconStatus = (localRecord as any).reconStatus || {};
+
+    // 🌤️ 天气状况（旧记录没有此字段时不显示）
+    const recordWeather = WEATHER_OPTIONS.find(o => o.value === (localRecord as any).weather);
+
+    // 📊 营运数据（旧记录没有 → 全 0）
+    const recOps = getOps(localRecord);
+    const recHasOps = hasOps(recOps);
+    const recPerPax = perPax(localRecord.sales.storeHubTotal, recOps);
+    const recPerBill = perBill(localRecord.sales.storeHubTotal, recOps);
 
     const handleDownloadPDF = async () => {
         const originalElement = printRef.current;
         if (!originalElement) return;
         setIsGenerating(true);
         try {
-            // Wait for web fonts and two completed layout frames. A fixed timeout
-            // can still capture the hidden report while its styles are settling.
-            if (document.fonts?.ready) {
-                await document.fonts.ready;
-            }
+            // 👑 必须显式加载打印模板用到的每个字重（含 CJK 分片），
+            // document.fonts.ready 只等已请求过的字体，隐藏模板的字重根本没发起请求。
+            await waitForPdfFonts();
             await new Promise<void>(resolve => {
                 requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
             });
@@ -207,7 +338,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                 windowWidth: 794,
                 scrollX: 0,
                 scrollY: 0,
-                onclone: clonedDocument => {
+                onclone: async clonedDocument => {
+                    // 👑 clone 在独立 iframe 里，字体需在该文档内「真的载入」后才可量测
+                    //    （只等 fonts.ready 在 iPhone 上不够 —— 见 prepareClonedDocumentForPdf 说明）
+                    await prepareClonedDocumentForPdf(clonedDocument);
                     const clonedElement = clonedDocument.getElementById("pdf-print-root-content");
                     const clonedWrapper = clonedDocument.getElementById("pdf-print-root");
 
@@ -230,7 +364,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
             // very long non-standard page.
             const A4_WIDTH_MM = 210;
             const A4_HEIGHT_MM = 297;
-            const pdf = new jsPDF({
+            const pdf = new (await loadJsPDF())({
                 orientation: 'portrait',
                 unit: 'mm',
                 format: 'a4',
@@ -306,43 +440,26 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
         }
 
         const diff = Number((targetExpected - actualNum).toFixed(2));
+        const wasDone = isChannelReconciled(reconStatus, reconTarget.key);
+        if (wasDone && !confirm(`这笔之前核对过（实收 RM ${(getReconActual(reconStatus, reconTarget.key) || 0).toFixed(2)}）。\n\n改成 RM ${actualNum.toFixed(2)}？\n旧的自动平账费用会先清掉再重记，不会重复记账。`)) return;
         setIsProcessingRecon(true);
 
         try {
-            if (diff > 0) {
-                const isPlatform = ['grab', 'panda', 'shopee'].includes(reconTarget.key);
-                const feeCategory = isPlatform ? 'MARKETING_FEE' : 'BANK_FEE';
-                const feeLabel = isPlatform ? '广告/异常扣款' : '银行手续费';
+            // 👑 统一走 utils/settlementRecon 的 applyRecon：
+            //    它会先清掉这个通道旧的自动平账费用（含旧版带时间戳的），再按新差额重记一笔，
+            //    所以同一笔可以改几次都不会重复记账。
+            const updatedReconStatus = await applyRecon(
+                localRecord,
+                { key: reconTarget.key, label: reconTarget.label, expected: targetExpected },
+                actualNum,
+            );
+            setLocalRecord({ ...localRecord, reconStatus: updatedReconStatus } as SettlementRecord);
 
-                const expense: ExpenseItem = {
-                    id: `recon_fee_${localRecord.id}_${reconTarget.key}_${Date.now()}`,
-                    category: feeCategory, 
-                    expenseType: 'GENERAL',
-                    company: `${reconTarget.label} (${feeLabel})`,
-                    amount: diff,
-                    totalBillAmount: diff,
-                    outstandingAmount: 0,
-                    paymentStatus: 'PAID',
-                    paymentMethod: 'BANK_TRANSFER', 
-                    time: `${localRecord.date}T12:00:00.000Z`, 
-                    createdAt: new Date().toISOString(), 
-                    note: `[系统自动平账] 预期记账: ${targetExpected} | 实收: ${actualNum} | ${reconTarget.label}`,
-                    paidBy: 'COMPANY'
-                };
-                await DataManager.saveStandaloneExpense(expense);
-            }
-
-            const updatedReconStatus = { ...reconStatus, [reconTarget.key]: actualNum };
-            const updatedRecord = { ...localRecord, reconStatus: updatedReconStatus };
-            
-            await DataManager.updateSettlementReconStatus(localRecord.id, updatedReconStatus);
-            setLocalRecord(updatedRecord as SettlementRecord);
-            
             const matchText = perfectMatch ? '(完美对账)' : '';
-            alert(`✅ ${reconTarget.label} 核对成功！${matchText}\n实际到账 RM ${actualNum.toFixed(2)}${diff > 0 ? `\n自动记入费用 RM ${diff.toFixed(2)}` : ''}`);
+            alert(`✅ ${reconTarget.label} ${wasDone ? '已更新' : '核对成功'}！${matchText}\n实际到账 RM ${actualNum.toFixed(2)}${diff > 0 ? `\n自动记入费用 RM ${diff.toFixed(2)}` : ''}`);
             setReconTarget(null);
             setReconActual('');
-            onRefresh(); 
+            onRefresh();
         } catch (e) {
             console.error(e);
             alert("核对失败，请重试");
@@ -466,13 +583,81 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                     <span className="font-mono text-[10px] md:text-xs font-black text-orange-800 whitespace-nowrap bg-orange-100/50 px-2 py-0.5 rounded">记账总额: RM {totalDelivery.toFixed(2)}</span>
                                 </div>
                                 <ReconItem label="GrabFood" gross={grabGross} net={grabNet} ads={grabAds} isReconciled={isChannelReconciled(reconStatus, 'grab')} actualAmount={getReconActual(reconStatus, 'grab')} onReconcile={() => setReconTarget({key: 'grab', label: 'GrabFood', expectedAmount: grabExpected, grossAmount: grabGross})} />
-                                <ReconItem label="FoodPanda" gross={pandaGross} net={pandaNet} ads={pandaAds} isReconciled={isChannelReconciled(reconStatus, 'panda')} actualAmount={getReconActual(reconStatus, 'panda')} onReconcile={() => setReconTarget({key: 'panda', label: 'FoodPanda', expectedAmount: (deliveryBreakdown.pandaNet !== undefined ? pandaExpected : pandaGross), grossAmount: pandaGross})} />
+                                <ReconItem label="FoodPanda" gross={pandaGross} net={pandaNet} ads={pandaAds} isReconciled={isChannelReconciled(reconStatus, 'panda')} actualAmount={getReconActual(reconStatus, 'panda')} onReconcile={() => setReconTarget({key: 'panda', label: 'FoodPanda', expectedAmount: pandaReportValue, grossAmount: pandaGross})} />
                                 {/* 🌟 修复：把拆分好的 net 和 ads 属性完美塞进 ShopeeFood 标签，对账期望改为 shopeeExpected */}
                                 <ReconItem label="ShopeeFood" gross={shopeeGross} net={shopeeNet} ads={shopeeAds} isReconciled={isChannelReconciled(reconStatus, 'shopee')} actualAmount={getReconActual(reconStatus, 'shopee')} onReconcile={() => setReconTarget({key: 'shopee', label: 'ShopeeFood', expectedAmount: shopeeExpected, grossAmount: shopeeGross})} />
                             </div>
                         )}
                     </div>
                     
+                    {/* 📊 营运数据 */}
+                    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                        <p className="text-[10px] font-black text-violet-800 uppercase flex items-center gap-1.5">📊 营运数据 (Operations)</p>
+                        {recHasOps ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                                        <p className="text-[10px] font-black text-violet-700">人均消费</p>
+                                        <p className="font-mono font-black text-lg text-violet-900">RM {fmtMoneyOrDash(recPerPax)}</p>
+                                    </div>
+                                    <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                                        <p className="text-[10px] font-black text-violet-700">单均</p>
+                                        <p className="font-mono font-black text-lg text-violet-900">RM {fmtMoneyOrDash(recPerBill)}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {OPS_FIELDS.map(f => (
+                                        <div key={f.key} className="bg-[#F6F7FB] rounded-xl px-2.5 py-2 min-w-0">
+                                            <p className="text-[10px] font-bold text-gray-500 truncate">{f.emoji} {f.short}</p>
+                                            <p className="font-mono font-black text-[#111111]">{recOps[f.key] || '—'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-xs font-bold text-gray-400 bg-[#F6F7FB] rounded-xl px-3 py-2.5">这天没有记录人数 / VIP / WhatsApp（可按下面「直接编辑」补填）</p>
+                        )}
+                    </div>
+
+                    {/* 💸 现金扣除明细 —— 以前只有下载 PDF 才看得到，现在直接显示在画面上 */}
+                    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                        <div className="flex justify-between items-center gap-2">
+                            <p className="text-[10px] font-black text-red-800 uppercase flex items-center gap-1.5"><Wallet size={12}/> 现金扣除 (Cash Deductions)</p>
+                            <span className="font-mono text-xs font-black text-red-700 whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span>
+                        </div>
+                        {recordWithdrawal === 0 && totalRecordExpenses === 0 ? (
+                            <p className="text-xs font-bold text-gray-400 bg-[#F6F7FB] rounded-xl px-3 py-2.5">当日没有钱箱现金支出，也没有业主提支</p>
+                        ) : (
+                            <div className="rounded-xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+                                {recordWithdrawal > 0 && (
+                                    <div className="flex justify-between items-center gap-3 px-3 py-2.5 bg-orange-50/60">
+                                        <span className="text-sm font-bold text-orange-900">业主提支 <span className="text-[10px] text-orange-600">Owner's Drawings</span></span>
+                                        <span className="font-mono font-black text-orange-900 whitespace-nowrap">RM {recordWithdrawal.toFixed(2)}</span>
+                                    </div>
+                                )}
+                                {recordExpenses.map((e: any, idx: number) => (
+                                    <div key={e.id || idx} className="flex justify-between items-center gap-3 px-3 py-2.5">
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-bold text-[#111111] truncate">{e.company || '未知商户'}</span>
+                                            <span className="block text-[11px] font-bold text-gray-400 truncate">{e.item || '杂物'}</span>
+                                        </span>
+                                        <span className="font-mono font-black text-[#111111] whitespace-nowrap">RM {(Number(e.amount) || 0).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl py-2">
+                                <p className="text-[10px] font-black text-gray-500">系统应余 Expected</p>
+                                <p className="font-mono font-black text-[#111111] text-sm">RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}</p>
+                            </div>
+                            <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl py-2">
+                                <p className="text-[10px] font-black text-blue-600">实际点算 Actual</p>
+                                <p className="font-mono font-black text-blue-800 text-sm">RM {localRecord.closingCash.toFixed(2)}</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className={`flex flex-col md:flex-row md:justify-between md:items-center p-4 rounded-xl border-2 gap-2 ${localRecord.variance >= 0 ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
                         <div>
                             <span className="font-black uppercase tracking-widest text-xs block mb-1">Cash Variance</span>
@@ -481,6 +666,98 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         <span className="font-mono font-black text-2xl self-end md:self-auto whitespace-nowrap">{localRecord.variance > 0 ? '+' : ''}{localRecord.variance.toFixed(2)}</span>
                     </div>
                     
+                    {/* ✏️ 直接编辑：不用撤销重来，改完按确认 */}
+                    {editMode ? (
+                        <div className="border-2 border-[#FFD200] bg-amber-50/50 rounded-2xl p-4 space-y-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-black text-stone-900 flex items-center gap-1.5"><Edit3 size={14}/> 直接编辑 {localRecord.date}</p>
+                                <button onClick={() => setEditMode(false)} className="text-[11px] font-black text-gray-500 px-2 py-1 rounded-lg hover:bg-white min-h-[36px]">取消</button>
+                            </div>
+
+                            {(() => {
+                                // ⚠️ 一定要用「函数回传 JSX」，不可以在 render 里定义成组件 —— 
+                                //    那样每打一个字 React 就会把 input 重新挂载一次，游标会跳走。
+                                const numField = (k: string, label: string) => (
+                                    <div className="min-w-0" key={k}>
+                                        <label className="text-[9px] font-black text-gray-500 uppercase block mb-1 truncate">{label}</label>
+                                        <input type="number" inputMode="decimal" step="0.01"
+                                            value={editForm[k] ?? 0}
+                                            onChange={e => setEF(k, e.target.value)}
+                                            className="w-full bg-white border border-gray-300 rounded-lg px-2 font-mono font-black text-stone-900 outline-none focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/30"
+                                            style={{ fontSize: '16px', minHeight: '42px' }} />
+                                    </div>
+                                );
+                                return (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">现金 (Cash)</p>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                {numField('openingCash', '开班现金')}
+                                                {numField('cash', '现金营业额')}
+                                                {numField('ownerWithdrawal', '老板提支')}
+                                                {numField('closingCash', '收班现金')}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">电子支付 (POS)</p>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                {numField('tng', 'TNG')}
+                                                {numField('duitnow', 'Debit / DuitNow')}
+                                                {numField('card', 'Credit Card')}
+                                                {numField('amex', 'Amex')}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">外卖 (Delivery) — Gross / Net / 广告费</p>
+                                            <div className="space-y-2">
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {numField('grabGross', 'Grab Gross')}
+                                                    {numField('grabNet', 'Grab Net')}
+                                                    {numField('grabAds', 'Grab 广告')}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {numField('pandaGross', 'Panda Gross')}
+                                                    {numField('pandaNet', 'Panda Net')}
+                                                    {numField('pandaAds', 'Panda 广告')}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {numField('shopeeGross', 'Shopee Gross')}
+                                                    {numField('shopeeNet', 'Shopee Net')}
+                                                    {numField('shopeeAds', 'Shopee 广告')}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {numField('lalamove', 'Lalamove')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">营运数据 (Operations)</p>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                {OPS_FIELDS.map(f => numField(`ops_${f.key}`, f.label))}
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
+                            <p className="text-[10px] text-amber-800 font-bold flex items-start gap-1 bg-amber-100/60 rounded-lg p-2">
+                                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                                按确认后系统会重算总营业额和现金差异。已核对过、但金额被改动的通道会退回「待核对」，它的自动平账费用也会一起清掉，请记得重新核对。
+                            </p>
+
+                            <button onClick={saveEdit} disabled={isSavingEdit}
+                                className="w-full py-3.5 bg-[#111111] text-[#FFD200] rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40">
+                                {isSavingEdit ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                确认修改 (Confirm)
+                            </button>
+                        </div>
+                    ) : (
+                        <button onClick={openEdit}
+                            className="w-full py-3.5 bg-white border-2 border-[#FFD200] text-stone-900 rounded-2xl font-black text-sm hover:bg-amber-50 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm">
+                            <Edit3 size={18}/> 直接编辑金额（不用撤销）
+                        </button>
+                    )}
+
                     <div className="flex flex-col md:flex-row gap-3">
                         <button onClick={() => onUndoEdit(localRecord)} className="flex-[2] py-3.5 md:py-4 bg-[#111111] border-2 border-[#111111] text-[#FFD200] rounded-2xl font-black text-sm hover:bg-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
                             <RotateCcw size={18}/> 撤销并重新编辑 (Undo & Edit)
@@ -508,7 +785,9 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             zIndex: -9999
                         }}
                     >
-                    <div ref={printRef} id="pdf-print-root-content" className="w-[210mm] min-h-[297mm] bg-[#FFFFFF] px-[14mm] py-[12mm] font-sans text-[#111111] box-border flex flex-col leading-relaxed">
+                    <div ref={printRef} id="pdf-print-root-content"
+                        style={{ fontKerning: 'none', textRendering: 'geometricPrecision', wordSpacing: '0.08em' }}
+                        className="w-[794px] min-h-[1123px] bg-[#FFFFFF] px-[53px] py-[45px] font-sans text-[#111111] box-border flex flex-col leading-relaxed">
                         
                         {/* A4 头部：将报告身份、结算日期与编号分开，避免旧版流水号挤在一起。 */}
                         <div className="border-b-2 border-[#111111] pb-3 mb-4 shrink-0">
@@ -522,8 +801,11 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
                                     <p className="font-black tracking-[0.1em] uppercase text-[#111111]">Daily Settlement Report</p>
                                     <p className="font-medium">每日结算报告</p>
-                                    <p><span className="font-black text-[#111111]">Business date</span>: {localRecord.date}</p>
-                                    <p><span className="font-black text-[#111111]">Report no.</span>: SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                                    <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Business date</span>: {localRecord.date}</p>
+                                    <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Report no.</span>: SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
+                                    {recordWeather && (
+                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Weather</span>: {recordWeather.en} ({recordWeather.label})</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -552,12 +834,38 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                             </div>
                         </div>
 
+                        {/* 📊 营运数据：人数 / 人均 / 单均 / VIP / WhatsApp（旧记录没填就不显示这一行） */}
+                        {recHasOps && (
+                            <div className="grid grid-cols-4 border border-[#DDD6FE] rounded-xl overflow-hidden mb-5 shrink-0 bg-[#F5F3FF]">
+                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Pax · Avg Spend</p>
+                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.pax || '—'} 人 · RM {fmtMoneyOrDash(recPerPax)}</p>
+                                    <p className="text-[9px] text-[#6B7280]">顾客人数 · 人均消费</p>
+                                </div>
+                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Bills · Avg Bill</p>
+                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.bills || '—'} 单 · RM {fmtMoneyOrDash(recPerBill)}</p>
+                                    <p className="text-[9px] text-[#6B7280]">单数 · 单均</p>
+                                </div>
+                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">VIP</p>
+                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">+{recOps.vipNew} · {recOps.vipVisits}</p>
+                                    <p className="text-[9px] text-[#6B7280]">新会员 · 到店</p>
+                                </div>
+                                <div className="px-4 py-2.5">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">WhatsApp</p>
+                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">+{recOps.waJoin} · {recOps.waOrders}</p>
+                                    <p className="text-[9px] text-[#6B7280]">新加入 · 订单</p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* 一页式 A4 结算：左边看收入来源，右边完成现金结算。 */}
                         <div className="grid grid-cols-2 gap-6 text-[10px]">
                             <section className="space-y-3">
                                 <div className="border-b border-[#111111] pb-1.5">
                                     <h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#FFD200]" />1. Revenue</h3>
-                                    <p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">营业收入明细</p>
+                                    <p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">营业收入明细</p>
                                 </div>
                                 <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] overflow-hidden">
                                     <div className="flex justify-between items-center px-3 py-2.5">
@@ -578,9 +886,9 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                         <span className="font-mono font-black text-sm whitespace-nowrap">RM {totalDelivery.toFixed(2)}</span>
                                     </div>
                                     <div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">
-                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabExpected.toFixed(2)}</span></div>}
-                                        {pandaGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda <span className="text-[9px] text-[#9CA3AF]">Gross</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaGross.toFixed(2)}</span></div>}
-                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeExpected.toFixed(2)}</span></div>}
+                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabReportValue.toFixed(2)}</span></div>}
+                                        {pandaReportValue > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda <span className="text-[9px] text-[#9CA3AF]">{hasPandaNet ? <>Net {pandaNet.toFixed(1)} · Ads -{pandaAds.toFixed(1)}</> : 'Legacy total'}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaReportValue.toFixed(2)}</span></div>}
+                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeReportValue.toFixed(2)}</span></div>}
                                         {Number(deliveryBreakdown.lalamove) > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Lalamove</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span></div>}
                                     </div>
                                 </div>}
@@ -588,13 +896,13 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
 
                             <section className="space-y-4">
                                 <div className="space-y-2.5">
-                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
+                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
                                     {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407] whitespace-nowrap">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412] whitespace-nowrap">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
                                     {totalRecordExpenses > 0 && <div className="rounded-lg border border-[#FECACA] overflow-hidden"><div className="flex justify-between items-center bg-[#FEF2F2] px-3 py-2"><span><span className="block font-black text-[#991B1B]">Cash Expenses</span><span className="block text-[9px] text-[#B91C1C]">当日钱箱现金支出</span></span><span className="font-mono font-black text-[#B91C1C] whitespace-nowrap">- RM {totalRecordExpenses.toFixed(2)}</span></div><div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">{recordExpenses.map((e: any, idx: number) => <div key={e.id || idx} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span className="truncate">{e.company || '未知商户'} · {e.item || '杂物'}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(e.amount).toFixed(2)}</span></div>)}</div></div>}
                                     {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="rounded-lg bg-[#F6F7FB] px-3 py-2 text-[#6B7280]">今日无任何临时现金支出或业主提支</p>}
                                 </div>
                                 <div className="space-y-2.5 pt-1">
-                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
+                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
                                     <div className="space-y-1.5 px-1 text-[#6B7280]">
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float (开班备用金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
                                         <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales (今日现金收入)</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
@@ -639,6 +947,26 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [openingTotal, setOpeningTotal] = useState<number>(0);
+    // 🔗 开班备用金 = 上一笔结算的「实点 Actual」（closingCash），自动带入并锁定
+    const [prevClosing, setPrevClosing] = useState<{ date: string; closingCash: number } | null>(null);
+    const [prevClosingLoading, setPrevClosingLoading] = useState(false);
+    const [openingUnlocked, setOpeningUnlocked] = useState(false);
+    // 营业日期因为「当天已结算」被自动跳到下一天时，记下原本那天给画面提示
+    const [autoAdvancedFrom, setAutoAdvancedFrom] = useState<string | null>(null);
+    const [showOpeningPin, setShowOpeningPin] = useState(false);
+    const [openingPin, setOpeningPin] = useState('');
+    const [openingPinError, setOpeningPinError] = useState(false);
+    const submitOpeningPin = () => {
+        if (openingPin === SETTINGS_PASSWORD) {
+            setOpeningUnlocked(true);
+            setShowOpeningPin(false);
+            setOpeningPin('');
+            setOpeningPinError(false);
+        } else {
+            setOpeningPinError(true);
+            setOpeningPin('');
+        }
+    };
     const [businessDate, setBusinessDate] = useState<string>(getBusinessDateStr(storeConfig.businessDayCutoff || 4));
     
     // 🌟 核心数据模型更新：追加 grab 与 shopee 与 panda 的 Gross/Net/Ads 拆分
@@ -654,11 +982,14 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
 
     const [closingCashInput, setClosingCashInput] = useState<number>(0);
     const [varianceReason, setVarianceReason] = useState<string>('');
+    const [weather, setWeather] = useState<WeatherCondition | ''>('');
     
     // 🌟 新增：当日 Expected Cash 临时支出列表 (不连外部，仅当班记录)
     const [dayExpenses, setDayExpenses] = useState<{ id: string; company: string; item: string; amount: number }[]>([]);
     // 🌟 新增：老板提早抽走的大额现金
     const [ownerWithdrawal, setOwnerWithdrawal] = useState<number>(0);
+    // 📊 营运数据：顾客人数 / 单数 / VIP / WhatsApp
+    const [ops, setOps] = useState<SettlementOps>(EMPTY_OPS);
     
     // 🌟 新增：添加一行支出的快捷方法
     const handleAddDayExpense = () => {
@@ -676,6 +1007,8 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
     const [historyRecords, setHistoryRecords] = useState<SettlementRecord[]>([]);
     const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7)); 
     const [selectedRecord, setSelectedRecord] = useState<SettlementRecord | null>(null);
+    const [isBatchReconOpen, setIsBatchReconOpen] = useState(false);   // 批量核对
+    const [isExcelExportOpen, setIsExcelExportOpen] = useState(false); // 📊 批量导出 Excel
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => { loadData(); }, []);
@@ -714,8 +1047,10 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                 
                 setClosingCashInput(shift.closingCashInput || 0);
                 setVarianceReason(shift.varianceReason || '');
+                setWeather(shift.weather || '');
                 if (shift.dayExpenses) setDayExpenses(shift.dayExpenses);
                 if (shift.ownerWithdrawal !== undefined) setOwnerWithdrawal(shift.ownerWithdrawal);
+                setOps(getOps(shift));
                 setIsShiftOpen(true);
             } else {
                 setBusinessDate(getBusinessDateStr(storeConfig.businessDayCutoff || 4));
@@ -737,12 +1072,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                 businessDate: businessDate || getBusinessDateStr(4),
                 openingTotal, salesData, 
                 closingCashInput, varianceReason: varianceReason || '',
-                dayExpenses, ownerWithdrawal,
+                weather: weather || '',
+                dayExpenses, ownerWithdrawal, ops,
                 updatedAt: new Date().toISOString()
             };
             DataManager.saveActiveShift(shiftData);
         }
-    }, [isShiftOpen, businessDate, openingTotal, salesData, closingCashInput, varianceReason, dayExpenses, ownerWithdrawal, isLoading, activeTab, isSubmitting]);
+    }, [isShiftOpen, businessDate, openingTotal, salesData, closingCashInput, varianceReason, weather, dayExpenses, ownerWithdrawal, ops, isLoading, activeTab, isSubmitting]);
 
     // 🌟 核心计算引擎：自动化求和并剔除外卖水分
     const totals = useMemo(() => {
@@ -751,10 +1087,16 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         const posSales = (Number(s.cash)||0) + (Number(s.tng)||0) + (Number(s.duitnow)||0) + (Number(s.card)||0) + (Number(s.amex)||0);
         const storeHubTotal = posSales; // 👈 自动求和，不再依赖手动输入
         
-        // 2. 扣除广告费后的 Grab(实收) + Panda(实收) + Shopee(实收)
-        const grabVal = (Number(s.grabNet) || 0) - (Number(s.grabAds) || 0); // Grab(实收)
-        const shopeeVal = (Number(s.shopeeNet) || 0) - (Number(s.shopeeAds) || 0); // Shopee(实收)
-        const pandaVal = s.pandaNet !== undefined ? ((Number(s.pandaNet) || 0) - (Number(s.pandaAds) || 0)) : (Number(s.pandaGross) || 0); // FoodPanda(实收)
+        // 2. 扣除广告费后的 Grab(实收) + Panda(实收) + Shopee(实收)（若未单独填写 Net，默认以 Gross 为准）
+        const grabNetVal = Number(s.grabNet) > 0 ? Number(s.grabNet) : (Number(s.grabGross) || 0);
+        const grabVal = grabNetVal - (Number(s.grabAds) || 0);
+
+        const pandaNetVal = Number(s.pandaNet) > 0 ? Number(s.pandaNet) : (Number(s.pandaGross) || 0);
+        const pandaVal = pandaNetVal - (Number(s.pandaAds) || 0);
+
+        const shopeeNetVal = Number(s.shopeeNet) > 0 ? Number(s.shopeeNet) : (Number(s.shopeeGross) || 0);
+        const shopeeVal = shopeeNetVal - (Number(s.shopeeAds) || 0);
+
         const deliverySales = grabVal + pandaVal + shopeeVal + (Number(s.lalamove)||0);
         
         const totalRevenue = posSales + deliverySales;
@@ -770,8 +1112,60 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         return { posSales, deliverySales, totalRevenue, expectedCash, variance, storeHubTotal, salesVariance, totalDayExpenses };
     }, [openingTotal, salesData, closingCashInput, dayExpenses, ownerWithdrawal]); // 👈 别忘了追加依赖项
 
+    // 🔗 还没开班时：找「营业日期之前最近的一笔结算」，把它的实点 Actual 带进来当开班备用金
+    //    只读 1 笔（date < 营业日期，按日期倒序 limit 1），单栏位排序不用建复合索引
+    useEffect(() => {
+        if (isShiftOpen || isLoading || !businessDate) return;
+        let cancelled = false;
+        setPrevClosingLoading(true);
+        (async () => {
+            try {
+                // 👑 用 <= 营业日期：如果这一天已经结算过（例如凌晨 2 点还在 4 点换日之前，
+                //    营业日期还停在昨天），就自动跳到下一天，免得又带出前一天的实点、又开一次同一天
+                const q = query(
+                    collection(db, 'settlements'),
+                    where('date', '<=', businessDate),
+                    orderBy('date', 'desc'),
+                    limit(1)
+                );
+                const snap = await getDocs(q);
+                if (cancelled) return;
+                const last = snap.docs[0]?.data() as SettlementRecord | undefined;
+                if (last && last.date === businessDate) {
+                    const [y, m, d] = businessDate.split('-').map(Number);
+                    const next = new Date(y, m - 1, d + 1);
+                    const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+                    setAutoAdvancedFrom(businessDate);
+                    setBusinessDate(nextStr);   // effect 会用新日期再跑一次，带出刚结算那天的实点
+                    return;
+                }
+                if (last && typeof last.closingCash === 'number') {
+                    setPrevClosing({ date: last.date, closingCash: Number(last.closingCash) || 0 });
+                    setOpeningTotal(Number(last.closingCash) || 0);
+                    setOpeningUnlocked(false);
+                } else {
+                    // 第一次使用 / 找不到前一天：只能手动输入
+                    setPrevClosing(null);
+                    setOpeningUnlocked(true);
+                }
+            } catch (err) {
+                console.warn('读取上一笔实点失败，改为手动输入', err);
+                if (!cancelled) { setPrevClosing(null); setOpeningUnlocked(true); }
+            } finally {
+                if (!cancelled) setPrevClosingLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [isShiftOpen, isLoading, businessDate]);
+
+    const openingMismatch = !!prevClosing && Math.abs(openingTotal - prevClosing.closingCash) > 0.004;
+
     const handleStartShift = () => {
         if (openingTotal <= 0 && !confirm("点算总额为 RM 0，确定开班吗？")) return;
+        if (openingMismatch && !confirm(
+            `⚠️ 开班备用金 RM ${openingTotal.toFixed(2)} 跟 ${prevClosing!.date} 的实点 RM ${prevClosing!.closingCash.toFixed(2)} 不一样` +
+            `（相差 RM ${(openingTotal - prevClosing!.closingCash).toFixed(2)}）。\n\n确定要用手动输入的金额开班吗？`
+        )) return;
         setIsShiftOpen(true);
     };
 
@@ -821,8 +1215,10 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
             
             setClosingCashInput(record.closingCash || 0);
             setVarianceReason(record.varianceReason || '');
+            setWeather((record as any).weather || '');
             setOwnerWithdrawal(record.ownerWithdrawal || 0);
             setDayExpenses(record.dayExpenses || []);
+            setOps(getOps(record));
             
             setIsShiftOpen(true);
             setActiveTab('SHIFT');
@@ -836,6 +1232,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
     };
 
     const handleSubmitSettlement = async () => {
+        if (!guardWrite('提交结算')) return;
         setIsSubmitting(true);
         const isDuplicate = await DataManager.checkSettlementExists(businessDate);
         if (isDuplicate) {
@@ -846,32 +1243,41 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
             setIsSubmitting(false); return;
         }
         
+        const effGrabNet = Number(salesData.grabNet) > 0 ? Number(salesData.grabNet) : (Number(salesData.grabGross) || 0);
+        const effPandaNet = Number(salesData.pandaNet) > 0 ? Number(salesData.pandaNet) : (Number(salesData.pandaGross) || 0);
+        const effShopeeNet = Number(salesData.shopeeNet) > 0 ? Number(salesData.shopeeNet) : (Number(salesData.shopeeGross) || 0);
+
         const record: SettlementRecord = {
             id: `settle_${businessDate}_${Date.now()}`, date: businessDate, timestamp: new Date().toISOString(),
             openingCash: openingTotal, closingCash: closingCashInput,
+            // 🔗 留底：开班备用金从哪一天的实点带过来（手动改过就会对不上，方便以后查）
+            ...(prevClosing ? { openingCarriedFrom: prevClosing.date, openingCarriedAmount: prevClosing.closingCash } : {}),
             sales: {
                 total: totals.totalRevenue, storeHubTotal: totals.storeHubTotal, refundTotal: salesData.refundTotal || 0,
                 cash: salesData.cash || 0, tng: salesData.tng || 0, duitnow: salesData.duitnow || 0, 
                 card: salesData.card || 0, amex: salesData.amex || 0,
                 deliveryBreakdown: {
-                    grabGross: salesData.grabGross || 0, grabNet: salesData.grabNet || 0, grabAds: salesData.grabAds || 0,
-                    grab: (salesData.grabNet || 0) - (salesData.grabAds || 0),       
-                    pandaGross: salesData.pandaGross || 0,
-                    pandaNet: salesData.pandaNet || 0,
-                    pandaAds: salesData.pandaAds || 0,
-                    panda: (salesData.pandaNet || 0) - (salesData.pandaAds || 0),     
-                    shopeeGross: salesData.shopeeGross || 0,
-                    shopeeNet: salesData.shopeeNet || 0, // 👈 新增
-                    shopeeAds: salesData.shopeeAds || 0, // 👈 新增
-                    shopee: (salesData.shopeeNet || 0) - (salesData.shopeeAds || 0), // 👈 存放计算后净值兼容旧版本
-                    lalamove: salesData.lalamove || 0
+                    grabGross: Number(salesData.grabGross) || 0,
+                    grabNet: effGrabNet,
+                    grabAds: Number(salesData.grabAds) || 0,
+                    grab: effGrabNet - (Number(salesData.grabAds) || 0),       
+                    pandaGross: Number(salesData.pandaGross) || 0,
+                    pandaNet: effPandaNet,
+                    pandaAds: Number(salesData.pandaAds) || 0,
+                    panda: effPandaNet - (Number(salesData.pandaAds) || 0),     
+                    shopeeGross: Number(salesData.shopeeGross) || 0,
+                    shopeeNet: effShopeeNet,
+                    shopeeAds: Number(salesData.shopeeAds) || 0,
+                    shopee: effShopeeNet - (Number(salesData.shopeeAds) || 0), 
+                    lalamove: Number(salesData.lalamove) || 0
                 }
             },
             expenses: [], // 保持原样不改动外部接口
             variance: totals.variance, varianceReason: varianceReason,
+            weather: (weather || '') as any,  
             submittedBy: 'Manager', isClosed: true,
-            // 🌟 扩展保存当班本地临时数据，用于后续 PDF 和 PL 报表展示
             dayExpenses: dayExpenses, 
+            ops: ops,
             ownerWithdrawal: ownerWithdrawal,
             reconStatus: { tng: false, debit: false, credit: false, amex: false, grab: false, panda: false, shopee: false } as any
         };
@@ -882,16 +1288,19 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
             setBusinessDate(getBusinessDateStr(storeConfig.businessDayCutoff || 4));
             setOpeningTotal(0);
             setSalesData({ storeHubTotal: 0, refundTotal: 0, cash: 0, tng: 0, duitnow: 0, card: 0, amex: 0, grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0, grab: 0, panda: 0, shopee: 0 });
-            setClosingCashInput(0); setVarianceReason('');
+            setClosingCashInput(0); setVarianceReason(''); setWeather('');
             setOwnerWithdrawal(0);
             setDayExpenses([]);
+            setOps(EMPTY_OPS);
             setIsShiftOpen(false);
             alert("✅ 结算成功！数据已转入历史记录，请移步历史列表进行数字对账。");
             setActiveTab('HISTORY'); loadHistory();
         } catch (error: any) { 
             console.error("Settlement Error", error); 
-            if (error.message.includes('DATE_ALREADY_SETTLED')) alert("❌ 提交被拦截：该日期刚刚已被其他设备结算！");
-            else alert("❌ 提交失败，请检查网络后重试"); 
+            const msg = error?.message || String(error);          // 👑 防止 error.message 为 undefined 再炸一次
+            if (msg.includes('DATE_ALREADY_SETTLED')) alert("❌ 提交被拦截：该日期刚刚已被其他设备结算！");
+            else if (msg.includes('permission')) alert("❌ 权限不足：登录状态可能已失效，请重新整理页面");
+            else alert(`❌ 提交失败\n[${error?.code || 'UNKNOWN'}] ${msg}`); 
         } finally { setIsSubmitting(false); }
     };
 
@@ -990,6 +1399,25 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     <div className="h-px bg-white/10 my-2"></div>
                     <div className="flex justify-between items-center"><span className="text-xs font-black text-[#FFD200] uppercase">Expected Cash</span><span className="text-xl font-mono font-black text-white">RM {totals.expectedCash.toFixed(2)}</span></div>
                 </div>
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-2 tracking-widest">今日天气 (Weather)</label>
+                    <div className="grid grid-cols-4 gap-2">
+                        {WEATHER_OPTIONS.map(opt => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setWeather(prev => prev === opt.value ? '' : opt.value)}
+                                className={`py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 border ${
+                                    weather === opt.value
+                                        ? 'bg-[#FFD200] text-black border-[#FFD200]'
+                                        : 'bg-black/30 text-white/60 border-white/10'
+                                }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 <div className="bg-white/10 p-6 rounded-[2rem] border border-white/10 relative">
                     <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-3 text-center tracking-widest">钱箱实际结余 (Actual Closing Cash)</label>
                     <div className="relative">
@@ -1074,13 +1502,57 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                 <input type="date" value={businessDate} onChange={(e) => setBusinessDate(e.target.value)} className="w-full p-2.5 md:p-3 bg-white border-2 border-gray-200 rounded-xl font-black text-[#111111] outline-none focus:border-[#FFD200] text-center text-base md:text-lg shadow-sm min-h-[44px]"/>
                                                 <button onClick={handleForceToday} className="w-[44px] h-[44px] flex items-center justify-center bg-white border-2 border-gray-200 rounded-xl hover:border-[#FFD200] hover:text-[#FFD200] transition-colors"><RotateCcw size={18}/></button>
                                             </div>
+                                            {autoAdvancedFrom && autoAdvancedFrom !== businessDate && (
+                                                <p className="mt-2 text-[11px] font-bold text-emerald-700 text-center">✅ {autoAdvancedFrom} 已经结算过，自动跳到 {businessDate}</p>
+                                            )}
                                         </div>
                                         <div className="bg-gray-50 p-4 md:p-6 rounded-2xl mb-6 md:mb-8 border border-gray-100 text-left">
                                             <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">开班现金金额 (Opening Float)</label>
-                                            <div className="relative">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xl md:text-2xl">RM</span>
-                                                <input type="number" value={openingTotal || ''} onChange={e => setOpeningTotal(parseFloat(e.target.value) || 0)} className="w-full pl-12 pr-4 py-3 md:py-4 bg-white border-2 border-gray-200 rounded-xl font-mono text-2xl md:text-3xl font-black text-[#111111] outline-none focus:border-[#FFD200] transition-all shadow-sm min-h-[48px]" placeholder="0.00" />
-                                            </div>
+                                            {prevClosingLoading ? (
+                                                <div className="flex items-center justify-center gap-2 py-4 text-gray-400 text-sm font-bold"><Loader2 size={16} className="animate-spin"/> 读取上一天的实点…</div>
+                                            ) : prevClosing && !openingUnlocked ? (
+                                                /* 🔗 锁定：直接用上一天的实点，不给改，就不会错 */
+                                                <div>
+                                                    <div className="flex items-center justify-between gap-2 bg-white border-2 border-emerald-300 rounded-xl px-4 py-3 min-h-[48px]">
+                                                        <span className="text-gray-400 font-black text-xl md:text-2xl">RM</span>
+                                                        <span className="font-mono text-2xl md:text-3xl font-black text-[#111111]">{openingTotal.toFixed(2)}</span>
+                                                    </div>
+                                                    <p className="mt-2 text-[11px] font-bold text-emerald-700 flex items-center gap-1"><CheckCircle2 size={13}/> 自动带入 {prevClosing.date} 的实点 Actual</p>
+                                                    <button type="button" onClick={() => { setShowOpeningPin(true); setOpeningPin(''); setOpeningPinError(false); }} className="mt-1 text-[11px] font-bold text-gray-400 underline min-h-[36px]">钱箱数目不对？手动修改（需管理员密码）</button>
+                                                    {showOpeningPin && (
+                                                        <div className="mt-2 bg-white border-2 border-[#111111] rounded-xl p-3 space-y-2">
+                                                            <p className="text-[11px] font-black text-[#111111] flex items-center gap-1"><ShieldCheck size={13}/> 请输入管理员密码</p>
+                                                            <div className="flex gap-2">
+                                                                <input type="password" inputMode="numeric" autoComplete="off" autoFocus value={openingPin}
+                                                                    onChange={e => { setOpeningPin(e.target.value); setOpeningPinError(false); }}
+                                                                    onKeyDown={e => { if (e.key === 'Enter') submitOpeningPin(); }}
+                                                                    className={`flex-1 min-w-0 px-3 bg-gray-50 border-2 rounded-lg text-center font-black tracking-[0.4em] outline-none ${openingPinError ? 'border-red-400' : 'border-gray-200 focus:border-[#FFD200]'}`}
+                                                                    style={{ fontSize: '18px', minHeight: '44px' }} placeholder="••••" />
+                                                                <button type="button" onClick={submitOpeningPin} className="px-4 bg-[#111111] text-[#FFD200] rounded-lg font-black text-sm min-h-[44px] active:scale-95">解锁</button>
+                                                                <button type="button" onClick={() => { setShowOpeningPin(false); setOpeningPin(''); setOpeningPinError(false); }} className="w-11 bg-gray-100 text-gray-500 rounded-lg flex items-center justify-center min-h-[44px] active:scale-95" aria-label="取消"><X size={16}/></button>
+                                                            </div>
+                                                            {openingPinError && <p className="text-[11px] font-bold text-red-600">密码错误</p>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <div className="relative">
+                                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xl md:text-2xl">RM</span>
+                                                        <input type="number" inputMode="decimal" value={openingTotal || ''} onChange={e => setOpeningTotal(parseFloat(e.target.value) || 0)} className={`w-full pl-12 pr-4 py-3 md:py-4 bg-white border-2 rounded-xl font-mono text-2xl md:text-3xl font-black text-[#111111] outline-none focus:border-[#FFD200] transition-all shadow-sm min-h-[48px] ${openingMismatch ? 'border-red-300' : 'border-gray-200'}`} style={{ fontSize: '24px' }} placeholder="0.00" />
+                                                    </div>
+                                                    {prevClosing ? (
+                                                        <div className="mt-2 space-y-1">
+                                                            {openingMismatch && (
+                                                                <p className="text-[11px] font-bold text-red-600 flex items-start gap-1"><AlertTriangle size={13} className="shrink-0 mt-0.5"/> 跟 {prevClosing.date} 实点 RM {prevClosing.closingCash.toFixed(2)} 相差 RM {(openingTotal - prevClosing.closingCash).toFixed(2)}</p>
+                                                            )}
+                                                            <button type="button" onClick={() => { setOpeningTotal(prevClosing.closingCash); setOpeningUnlocked(false); }} className="text-[11px] font-bold text-emerald-700 underline min-h-[36px]">↩ 改回 {prevClosing.date} 的实点 RM {prevClosing.closingCash.toFixed(2)}</button>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="mt-2 text-[11px] font-bold text-gray-400">找不到之前的结算记录，请手动点算输入（之后每天会自动带入前一天的实点）</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                         <button onClick={handleStartShift} className="w-full bg-[#FFD200] active:bg-yellow-500 text-black py-3.5 md:py-4 rounded-xl font-black text-sm md:text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"><Play size={18} fill="currentColor"/> 确认开班 (Start)</button>
                                     </div>
@@ -1344,7 +1816,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <span className="text-gray-600 font-sans tracking-wide uppercase">Delivery Mix Total</span>
                                                     <span className="font-mono text-orange-600 text-lg">RM {totals.deliverySales.toFixed(2)}</span>
                                                 </div>
-                                                <p className="text-[9px] text-orange-700 font-black tracking-wide font-sans mt-0.5">Grab(实收) + Panda(Gross) + Shopee(Net)</p>
+                                                <p className="text-[9px] text-orange-700 font-black tracking-wide font-sans mt-0.5">Grab(Net) + FoodPanda(Net) + ShopeeFood(Net)</p>
                                             </div>
                                         </div>
                                     </div>
@@ -1357,6 +1829,36 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                         <div className={`text-xl font-black font-mono ${Math.abs(totals.salesVariance) < 1 ? 'text-green-700' : 'text-red-700'}`}>{totals.salesVariance > 0 ? '+' : ''}{totals.salesVariance.toFixed(2)}</div>
                                     </div>
                                     
+                                    {/* 📊 营运数据：顾客人数 / 单数 / VIP / WhatsApp —— 自动算人均消费、单均 */}
+                                    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <h4 className="text-xs font-black text-[#111111] uppercase flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-violet-500"></span>营运数据 (Operations)</h4>
+                                            <span className="text-[10px] font-bold text-gray-400">选填</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                                            {OPS_FIELDS.map(f => (
+                                                <div key={f.key} className="min-w-0">
+                                                    <label className="text-[10px] font-black text-gray-500 block mb-1 truncate">{f.emoji} {f.label}</label>
+                                                    <input type="number" inputMode="numeric" min={0} step={1}
+                                                        value={ops[f.key] || ''}
+                                                        onChange={e => setOps(prev => ({ ...prev, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                                                        className="w-full px-3 bg-gray-50 border border-gray-200 focus:border-violet-400 rounded-xl text-right font-mono font-black text-[#111111] outline-none"
+                                                        style={{ fontSize: '16px', minHeight: '44px' }} placeholder="0" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2.5">
+                                            <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                                                <p className="text-[10px] font-black text-violet-700">人均消费 (店内实收 ÷ 人数)</p>
+                                                <p className="font-mono font-black text-lg text-violet-900">RM {fmtMoneyOrDash(perPax(totals.storeHubTotal, ops))}</p>
+                                            </div>
+                                            <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                                                <p className="text-[10px] font-black text-violet-700">单均 (店内实收 ÷ 单数)</p>
+                                                <p className="font-mono font-black text-lg text-violet-900">RM {fmtMoneyOrDash(perBill(totals.storeHubTotal, ops))}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="md:hidden pb-[calc(5rem+env(safe-area-inset-bottom,16px))]">{renderSummarySection()}</div>
                                 </div>
                                 <div className="hidden md:block md:w-[350px] lg:w-[400px] h-full overflow-hidden">{renderSummarySection()}</div>
@@ -1373,15 +1875,33 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             <p className="hidden md:block text-[10px] text-gray-400 font-bold uppercase mt-0.5">Archive & Reconciliation History</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 bg-gray-50 p-1.5 md:p-2 rounded-xl border border-gray-200">
-                                        <span className="hidden md:inline text-xs font-black text-gray-400 px-2">月份:</span>
-                                        <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm md:text-base outline-none w-[110px] md:w-auto" />
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => setIsExcelExportOpen(true)}
+                                            className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            title="批量导出 Excel：选日期范围，每日汇总 + 现金支出明细 + 外卖明细">
+                                            <FileSpreadsheet size={15}/> <span className="hidden sm:inline">导出 Excel</span>
+                                        </button>
+                                        <button onClick={() => setIsBatchReconOpen(true)}
+                                            className="flex items-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            title="批量核对：整个月的账目摊开来对，也可以只对 TNG">
+                                            <ListChecks size={15}/> <span className="hidden sm:inline">批量核对</span>
+                                        </button>
+                                        <div className="flex items-center gap-2 bg-gray-50 p-1.5 md:p-2 rounded-xl border border-gray-200">
+                                            <span className="hidden md:inline text-xs font-black text-gray-400 px-2">月份:</span>
+                                            <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm md:text-base outline-none w-[110px] md:w-auto" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex-grow overflow-y-auto p-4 md:p-6 pb-[calc(6rem+env(safe-area-inset-bottom,16px))]">
-                                <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                                {/* 🧾 电脑：Excel 式表格；手机：下面的卡片 */}
+                                {!isLoading && historyRecords.length > 0 && (
+                                    <div className="hidden md:block">
+                                        <SettlementHistoryTable records={historyRecords} onSelect={setSelectedRecord} />
+                                    </div>
+                                )}
+                                <div className={`max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 ${!isLoading && historyRecords.length > 0 ? 'md:hidden' : ''}`}>
                                     {isLoading ? (
                                         <div className="flex flex-col items-center justify-center py-20 text-gray-400 lg:col-span-2">
                                             <Loader2 size={48} className="animate-spin mb-4 text-[#FFD200]"/>
@@ -1399,17 +1919,33 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             const cash = record.sales.cash || 0;
                                             const rs = (record as any).reconStatus || {};
                                             const deliveryBreakdown = record.sales.deliveryBreakdown || {} as any;
-                                            const grabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
+                                            const grabGross = Number(deliveryBreakdown.grabGross) || 0;
+                                            const rawGrabNet = Number(deliveryBreakdown.grabNet) || Number(deliveryBreakdown.grab) || 0;
+                                            const grabNet = rawGrabNet > 0 ? rawGrabNet : grabGross;
                                             const grabAds = Number(deliveryBreakdown.grabAds) || 0;
                                             const grabExpected = grabNet - grabAds;
+                                            const grabActual = getReconActual(rs, 'grab');
+                                            const grabVal = grabActual !== null ? grabActual : grabExpected;
                                             
                                             const pandaGross = Number(deliveryBreakdown.pandaGross) || Number(deliveryBreakdown.panda) || 0;
-                                            const shopeeNet = deliveryBreakdown.shopeeNet !== undefined ? Number(deliveryBreakdown.shopeeNet) : (Number(deliveryBreakdown.shopee) || 0);
+                                            const rawPandaNet = deliveryBreakdown.pandaNet !== undefined && deliveryBreakdown.pandaNet !== null ? Number(deliveryBreakdown.pandaNet) : (Number(deliveryBreakdown.panda) || 0);
+                                            const pandaNet = rawPandaNet > 0 ? rawPandaNet : pandaGross;
+                                            const pandaAds = Number(deliveryBreakdown.pandaAds) || 0;
+                                            const pandaExpected = pandaNet - pandaAds;
+                                            const pandaActual = getReconActual(rs, 'panda');
+                                            const pandaVal = pandaActual !== null ? pandaActual : pandaExpected;
+
+                                            const shopeeGross = Number(deliveryBreakdown.shopeeGross) || Number(deliveryBreakdown.shopee) || 0;
+                                            const rawShopeeNet = deliveryBreakdown.shopeeNet !== undefined && deliveryBreakdown.shopeeNet !== null ? Number(deliveryBreakdown.shopeeNet) : (Number(deliveryBreakdown.shopee) || 0);
+                                            const shopeeNet = rawShopeeNet > 0 ? rawShopeeNet : shopeeGross;
                                             const shopeeAds = Number(deliveryBreakdown.shopeeAds) || 0;
                                             const shopeeExpected = shopeeNet - shopeeAds;
+                                            const shopeeActual = getReconActual(rs, 'shopee');
+                                            const shopeeVal = shopeeActual !== null ? shopeeActual : shopeeExpected;
+
                                             const lalamoveVal = deliveryBreakdown.lalamove || 0;
                                             
-                                            const totalDeliveryVal = grabExpected + pandaGross + shopeeExpected + lalamoveVal;
+                                            const totalDeliveryVal = grabVal + pandaVal + shopeeVal + lalamoveVal;
                                             const totalCardVal = debit + credit + amex;
 
                                             let hasPending = false;
@@ -1418,7 +1954,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             if (credit > 0 && !isChannelReconciled(rs, 'credit')) hasPending = true;
                                             if (amex > 0 && !isChannelReconciled(rs, 'amex')) hasPending = true;
                                             if (grabExpected > 0 && !isChannelReconciled(rs, 'grab')) hasPending = true;
-                                            if (pandaGross > 0 && !isChannelReconciled(rs, 'panda')) hasPending = true;
+                                            if (pandaExpected > 0 && !isChannelReconciled(rs, 'panda')) hasPending = true;
                                             if (shopeeExpected > 0 && !isChannelReconciled(rs, 'shopee')) hasPending = true;
 
                                             return (
@@ -1434,6 +1970,29 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                             <div>
                                                                 <div className="text-xs font-bold text-gray-400">当日总营业额</div>
                                                                 <div className="text-lg md:text-xl font-black text-gray-95" style={{ color: '#111111' }}>RM {record.sales.total.toFixed(2)}</div>
+                                                                {(() => {
+                                                                    const exps = ((record as any).dayExpenses || []) as any[];
+                                                                    const expTotal = exps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                                                                    const wd = Number((record as any).ownerWithdrawal) || 0;
+                                                                    if (expTotal <= 0 && wd <= 0) return null;
+                                                                    return (
+                                                                        <div className="text-[11px] font-bold text-red-600 mt-0.5">
+                                                                            {expTotal > 0 && <>现金支出 RM {expTotal.toFixed(2)} · {exps.length} 笔</>}
+                                                                            {expTotal > 0 && wd > 0 && ' · '}
+                                                                            {wd > 0 && <>提支 RM {wd.toFixed(2)}</>}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                                {(() => {
+                                                                    const o = getOps(record);
+                                                                    if (!o.pax) return null;
+                                                                    const avg = perPax(record.sales.storeHubTotal, o);
+                                                                    return (
+                                                                        <div className="text-[11px] font-bold text-violet-700 mt-0.5">
+                                                                            👥 {o.pax} 人 · 人均 RM {fmtMoneyOrDash(avg)}
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         </div>
                                                         {/* Right side Status Badges */}
@@ -1478,22 +2037,22 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     {/* Delivery Detail Badges - Color dot representation, no text labels, no decimals */}
                                                     {totalDeliveryVal > 0 && (
                                                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5 px-0.5">
-                                                            {grabExpected > 0 && (
+                                                            {grabVal > 0 && (
                                                                 <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(grabExpected)}</span>
+                                                                    <span className="font-mono font-extrabold">RM {Math.round(grabVal)}</span>
                                                                 </span>
                                                             )}
-                                                            {pandaGross > 0 && (
+                                                            {pandaVal > 0 && (
                                                                 <span className="flex items-center gap-1.5 text-[10px] font-bold text-pink-900 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(pandaGross)}</span>
+                                                                    <span className="font-mono font-extrabold">RM {Math.round(pandaVal)}</span>
                                                                 </span>
                                                             )}
-                                                            {shopeeExpected > 0 && (
+                                                            {shopeeVal > 0 && (
                                                                 <span className="flex items-center gap-1.5 text-[10px] font-bold text-orange-950 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(shopeeExpected)}</span>
+                                                                    <span className="font-mono font-extrabold">RM {Math.round(shopeeVal)}</span>
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1505,6 +2064,19 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                 </div>
                             </div>
                             <HistoryDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} onDelete={handleDeleteClick} onRefresh={loadHistory} onUndoEdit={handleUndoAndEdit} />
+                            <SettlementExcelExportDialog
+                                isOpen={isExcelExportOpen}
+                                onClose={() => setIsExcelExportOpen(false)}
+                                defaultMonth={filterMonth}
+                            />
+                            {isBatchReconOpen && (
+                                <SettlementBatchRecon
+                                    isOpen={isBatchReconOpen}
+                                    onClose={() => { setIsBatchReconOpen(false); loadHistory(); }}
+                                    defaultMonth={filterMonth}
+                                    onChanged={loadHistory}
+                                />
+                            )}
                         </div>
                     )}
                 </div>

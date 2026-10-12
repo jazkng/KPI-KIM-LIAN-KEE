@@ -12,8 +12,8 @@ import {
     SelfIssuedVoucher, AppLanguage, LogStatus, OperationalLogReply,
     OperationalLogReadReceipt, SystemNotification
 } from "../types";
-import { APP_VERSION } from "../constants/versionHistory";
 import { PaymentVoucher } from "./paymentVoucherUtils";
+import { StorehubMonthlySales } from "./storehubImport";
 import { normalizeInventoryItem } from "./unitConversion";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
 import { buildOperationalLogNotifications } from "./notificationUtils";
@@ -94,6 +94,13 @@ export class DataManager {
         { prefix: 'roster_',         ttl:  5 * 60 * 1000 },  // 排班：5 分
         { prefix: 'inventory_tasks', ttl:  3 * 60 * 1000 },  // 盘点任务：3 分
         { prefix: 'inventory_logs_', ttl:  3 * 60 * 1000 },  // 库存日志：3 分
+        { prefix: 'attendance_',     ttl:  3 * 60 * 1000 },  // 👑 考勤：3 分
+        // 👑 以下为新纳入快取的全集合扫描。战略规划类几乎不变动，给长 TTL；
+        //    薪资与保固变动较频繁，给中等 TTL。写入端都有 clearCacheKeys 立即失效。
+        { prefix: 'strategy_',           ttl: 30 * 60 * 1000 },  // 战略规划：30 分
+        { prefix: 'warranties',          ttl: 15 * 60 * 1000 },  // 保固：15 分
+        { prefix: 'self_issued_vouchers',ttl: 10 * 60 * 1000 },  // 自签凭单：10 分
+        { prefix: 'payroll_records',     ttl:  5 * 60 * 1000 },  // 薪资记录：5 分
     ];
 
     /**
@@ -285,7 +292,14 @@ export class DataManager {
         return employees.filter((employee): employee is Employee => employee !== null);
     }
     static async saveEmployee(employee: Employee): Promise<void> {
-        await setDoc(doc(db, 'employees', employee.id), normalizeEmployeeOrgFields(employee));
+        // ⚠️ Firestore 没开 ignoreUndefinedProperties，物件里只要有一个 undefined，
+        //    setDoc 就会整个抛错（例如复职时把 terminationDate 设成 undefined）。
+        //    这里统一过滤掉；setDoc 不带 merge 是整份覆盖，所以「拿掉 key」= 从数据库删掉那个栏位，
+        //    正是复职 / 清空选填栏位要的效果。
+        await setDoc(
+            doc(db, 'employees', employee.id),
+            DataManager.removeUndefined(normalizeEmployeeOrgFields(employee))
+        );
         DataManager.clearCacheKeys(['employees']);
     }
     static async deleteEmployee(id: string): Promise<void> {
@@ -380,6 +394,97 @@ export class DataManager {
     }
 
     // ==========================================
+    // 📒 STOREHUB 月度销售 (传统账目用)
+    // ------------------------------------------
+    // doc id = 'YYYY-MM'，一个月一笔。重复导入同一个月会覆盖，不会累加。
+    // 读写量很小（每月 1 笔文件），在 Firestore 免费额度内。
+    // ==========================================
+    static async getStorehubSales(month: string): Promise<StorehubMonthlySales | null> {
+        const snap = await getDoc(doc(db, 'storehubSales', month));
+        return snap.exists() ? (snap.data() as StorehubMonthlySales) : null;
+    }
+    static async getStorehubSalesRange(startMonth: string, endMonth: string): Promise<StorehubMonthlySales[]> {
+        const q = query(
+            collection(db, 'storehubSales'),
+            where('month', '>=', startMonth),
+            where('month', '<=', endMonth),
+            orderBy('month', 'desc'),
+            limit(24)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map(d => d.data() as StorehubMonthlySales);
+    }
+    // ------------------------------------------
+    // 销售分类规则设定档（doc: config/sales_rules）
+    // 一笔文件，读写量极小。读不到就回 null，由呼叫端退回内建规则。
+    // ------------------------------------------
+    // ------------------------------------------
+    // AI 扫描修正记录（collection: ap_ai_corrections）
+    // 记「AI 读成 X、你改成 Y」，下次同一家自动预填
+    // ------------------------------------------
+    static async getApAiCorrections(): Promise<any[]> {
+        try {
+            const snap = await getDocs(collection(db, 'ap_ai_corrections'));
+            return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+            console.warn('读取 AI 修正记录失败', e);
+            return [];
+        }
+    }
+    static async saveApAiCorrection(key: string, rec: any): Promise<void> {
+        await setDoc(doc(db, 'ap_ai_corrections', key), withoutUndefined(rec), { merge: true });
+    }
+    static async deleteApAiCorrection(key: string): Promise<void> {
+        await deleteDoc(doc(db, 'ap_ai_corrections', key));
+    }
+
+    // ------------------------------------------
+    // AP 供应商归档设定（doc: config/ap_vendor_rules）
+    // 存 Firestore 不存 Drive —— Service Account 没有 Drive 储存配额
+    // ------------------------------------------
+    static async getApVendorConfig(): Promise<any | null> {
+        try {
+            const snap = await getDoc(doc(db, 'config', 'ap_vendor_rules'));
+            return snap.exists() ? snap.data() : null;
+        } catch (e) {
+            console.warn('读取供应商归档设定失败，改用内建表', e);
+            return null;
+        }
+    }
+    static async saveApVendorConfig(cfg: any): Promise<void> {
+        await setDoc(doc(db, 'config', 'ap_vendor_rules'), withoutUndefined(cfg));
+    }
+
+    static async getSalesRulesConfig(): Promise<any | null> {
+        try {
+            const snap = await getDoc(doc(db, 'config', 'sales_rules'));
+            return snap.exists() ? snap.data() : null;
+        } catch (e) {
+            console.warn('读取销售分类规则失败，改用内建规则', e);
+            return null;
+        }
+    }
+    static async saveSalesRulesConfig(cfg: any): Promise<void> {
+        await setDoc(doc(db, 'config', 'sales_rules'), withoutUndefined(cfg));
+    }
+    /** 列出所有已导入的月份（重算历史用） */
+    static async getAllStorehubSales(): Promise<StorehubMonthlySales[]> {
+        const snap = await getDocs(collection(db, 'storehubSales'));
+        return snap.docs
+            .map(d => d.data() as StorehubMonthlySales)
+            .sort((a, b) => a.month.localeCompare(b.month));
+    }
+
+    static async saveStorehubSales(record: StorehubMonthlySales): Promise<void> {
+        await setDoc(doc(db, 'storehubSales', record.month), withoutUndefined(record));
+        DataManager.clearCacheKeys(['storehubSales']);
+    }
+    static async deleteStorehubSales(month: string): Promise<void> {
+        await deleteDoc(doc(db, 'storehubSales', month));
+        DataManager.clearCacheKeys(['storehubSales']);
+    }
+
+    // ==========================================
     // 🟢 SETTLEMENTS
     // ==========================================
     static async getSettlements(monthStr?: string, forBackup: boolean = false): Promise<SettlementRecord[]> {
@@ -414,6 +519,23 @@ export class DataManager {
     }
     static async updateSettlementReconStatus(settlementId: string, reconStatus: Record<string, boolean>): Promise<void> {
         await updateDoc(doc(db, 'settlements', settlementId), { reconStatus });
+    }
+    /**
+     * 清掉某一笔结算、某一个通道以前产生的「自动平账费用」。
+     * 用前缀范围查询，旧版带时间戳的 (recon_fee_<id>_<key>_1699...) 和
+     * 新版固定 ID 的 (recon_fee_<id>_<key>) 都会一起清掉，
+     * 所以同一个通道重新核对几次都不会重复记账。
+     */
+    static async clearReconFees(settlementId: string, channelKey: string): Promise<number> {
+        const prefix = `recon_fee_${settlementId}_${channelKey}`;
+        const colRef = collection(db, 'standalone_expenses');
+        const q = query(colRef, where('id', '>=', prefix), where('id', '<=', `${prefix}\uf8ff`));
+        const snap = await getDocs(q);
+        if (snap.empty) return 0;
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        return snap.size;
     }
     static async updateExpenseInSettlement(settlementId: string, expense: ExpenseItem): Promise<void> {
         const ref = doc(db, 'settlements', settlementId);
@@ -456,12 +578,21 @@ export class DataManager {
     static async deleteBillPayment(id: string): Promise<void> { await deleteDoc(doc(db, 'bill_payments', id)); }
 
     static async getWarranties(): Promise<WarrantyRecord[]> {
-        const snap = await getDocs(collection(db, 'warranties'));
-        return snap.docs.map(d => d.data() as WarrantyRecord);
+        return DataManager.runWithCache('warranties', async () => {
+            const snap = await getDocs(collection(db, 'warranties'));
+            return snap.docs.map(d => d.data() as WarrantyRecord);
+        });
     }
-    static async saveWarranty(record: WarrantyRecord): Promise<void> { await setDoc(doc(db, 'warranties', record.id), record); }
-    static async deleteWarranty(id: string): Promise<void> { await deleteDoc(doc(db, 'warranties', id)); }
+    static async saveWarranty(record: WarrantyRecord): Promise<void> {
+        await setDoc(doc(db, 'warranties', record.id), record);
+        DataManager.clearCacheKeys(['warranties']);
+    }
+    static async deleteWarranty(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'warranties', id));
+        DataManager.clearCacheKeys(['warranties']);
+    }
     static async saveStandaloneExpense(expense: ExpenseItem): Promise<void> { await setDoc(doc(db, 'standalone_expenses', expense.id), DataManager.removeUndefined(expense)); }
+    static async deleteStandaloneExpense(id: string): Promise<void> { await deleteDoc(doc(db, 'standalone_expenses', id)); }
 
     // ==========================================
     // 🟢 进销存 与 缓存优化区
@@ -741,7 +872,9 @@ export class DataManager {
             if (existingIdx >= 0) entries[existingIdx] = newEntry;
             else entries.push(newEntry);
             entries.sort((a, b) => a.date.localeCompare(b.date));
-            if (entries.length > 2000) entries = entries.slice(-2000);
+            // 👑 上限 2000 笔时单份文件可达 ~220KB，而每次 append 都要整份读+整份写，
+            //    流量会二次成长。降到 180 笔（约半年进货记录）把天花板压掉 10 倍。
+            if (entries.length > 180) entries = entries.slice(-180);
             const lastEntry = entries[entries.length - 1];
             transaction.set(ref, {
                 stockId, entries,
@@ -1623,10 +1756,15 @@ export class DataManager {
     // 🟢 考勤与排班
     // ==========================================
     static async getPayrollRecords(): Promise<PayrollRecord[]> {
-        const snap = await getDocs(collection(db, 'payroll'));
-        return snap.docs.map(d => d.data() as PayrollRecord);
+        return DataManager.runWithCache('payroll_records', async () => {
+            const snap = await getDocs(collection(db, 'payroll'));
+            return snap.docs.map(d => d.data() as PayrollRecord);
+        });
     }
-    static async savePayrollRecord(record: PayrollRecord): Promise<void> { await setDoc(doc(db, 'payroll', record.id), record); }
+    static async savePayrollRecord(record: PayrollRecord): Promise<void> {
+        await setDoc(doc(db, 'payroll', record.id), record);
+        DataManager.clearCacheKeys(['payroll_records']);
+    }
 
     static async getActiveShift(): Promise<any | null> {
         const d = await getDoc(doc(db, 'config', 'active_shift'));
@@ -1817,13 +1955,28 @@ export class DataManager {
             id: attendance.id || snap.docs[0].id,
         };
     }
-    static async getAttendanceByMonth(month: string): Promise<AttendanceRecord[]> {
-        const q = query(collection(db, 'attendance'), where('date', '>=', `${month}-01`), where('date', '<=', `${month}-31`));
-        const snap = await getDocs(q);
-        return snap.docs.map(d => d.data() as AttendanceRecord);
+    static async getAttendanceByMonth(month: string, employeeId?: string): Promise<AttendanceRecord[]> {
+        // 👑 只要指定了 employeeId 就下推到 Firestore，别整月拉回来再前端 filter
+        const key = employeeId ? `attendance_${month}_${employeeId}` : `attendance_${month}`;
+        return DataManager.runWithCache(key, async () => {
+            const q = employeeId
+                ? query(collection(db, 'attendance'),
+                        where('employeeId', '==', employeeId),
+                        where('date', '>=', `${month}-01`), where('date', '<=', `${month}-31`))
+                : query(collection(db, 'attendance'),
+                        where('date', '>=', `${month}-01`), where('date', '<=', `${month}-31`));
+            const snap = await getDocs(q);
+            return snap.docs.map(d => d.data() as AttendanceRecord);
+        });
     }
-    static async saveAttendance(record: AttendanceRecord): Promise<void> { await setDoc(doc(db, 'attendance', record.id), record); }
-    static async deleteAttendance(id: string): Promise<void> { await deleteDoc(doc(db, 'attendance', id)); }
+    static async saveAttendance(record: AttendanceRecord): Promise<void> {
+        await setDoc(doc(db, 'attendance', record.id), record);
+        DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新
+    }
+    static async deleteAttendance(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'attendance', id));
+        DataManager.clearCacheKeys(['attendance_']);   // 👑 同上
+    }
 
     // ==========================================
     // 🟢 门店配置与资金
@@ -1915,32 +2068,64 @@ export class DataManager {
     // 🟢 战略规划
     // ==========================================
     static async getProposals(): Promise<Proposal[]> {
-        const snap = await getDocs(collection(db, 'strategy_proposals'));
-        return snap.docs.map(d => d.data() as Proposal).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return DataManager.runWithCache('strategy_proposals', async () => {
+            const snap = await getDocs(collection(db, 'strategy_proposals'));
+            return snap.docs.map(d => d.data() as Proposal).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        });
     }
-    static async saveProposal(proposal: Proposal): Promise<void> { await setDoc(doc(db, 'strategy_proposals', proposal.id), proposal); }
-    static async deleteProposal(id: string): Promise<void> { await deleteDoc(doc(db, 'strategy_proposals', id)); }
+    static async saveProposal(proposal: Proposal): Promise<void> {
+        await setDoc(doc(db, 'strategy_proposals', proposal.id), proposal);
+        DataManager.clearCacheKeys(['strategy_proposals']);
+    }
+    static async deleteProposal(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'strategy_proposals', id));
+        DataManager.clearCacheKeys(['strategy_proposals']);
+    }
 
     static async getOKRs(): Promise<OKR[]> {
-        const snap = await getDocs(collection(db, 'strategy_okrs'));
-        return snap.docs.map(d => d.data() as OKR);
+        return DataManager.runWithCache('strategy_okrs', async () => {
+            const snap = await getDocs(collection(db, 'strategy_okrs'));
+            return snap.docs.map(d => d.data() as OKR);
+        });
     }
-    static async saveOKR(okr: OKR): Promise<void> { await setDoc(doc(db, 'strategy_okrs', okr.id), okr); }
-    static async deleteOKR(id: string): Promise<void> { await deleteDoc(doc(db, 'strategy_okrs', id)); }
+    static async saveOKR(okr: OKR): Promise<void> {
+        await setDoc(doc(db, 'strategy_okrs', okr.id), okr);
+        DataManager.clearCacheKeys(['strategy_okrs']);
+    }
+    static async deleteOKR(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'strategy_okrs', id));
+        DataManager.clearCacheKeys(['strategy_okrs']);
+    }
 
     static async getCampaigns(): Promise<MarketingCampaign[]> {
-        const snap = await getDocs(collection(db, 'strategy_campaigns'));
-        return snap.docs.map(d => d.data() as MarketingCampaign).sort((a, b) => b.startDate.localeCompare(a.startDate));
+        return DataManager.runWithCache('strategy_campaigns', async () => {
+            const snap = await getDocs(collection(db, 'strategy_campaigns'));
+            return snap.docs.map(d => d.data() as MarketingCampaign).sort((a, b) => b.startDate.localeCompare(a.startDate));
+        });
     }
-    static async saveCampaign(campaign: MarketingCampaign): Promise<void> { await setDoc(doc(db, 'strategy_campaigns', campaign.id), campaign); }
-    static async deleteCampaign(id: string): Promise<void> { await deleteDoc(doc(db, 'strategy_campaigns', id)); }
+    static async saveCampaign(campaign: MarketingCampaign): Promise<void> {
+        await setDoc(doc(db, 'strategy_campaigns', campaign.id), campaign);
+        DataManager.clearCacheKeys(['strategy_campaigns']);
+    }
+    static async deleteCampaign(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'strategy_campaigns', id));
+        DataManager.clearCacheKeys(['strategy_campaigns']);
+    }
 
     static async getEvents(): Promise<StoreEvent[]> {
-        const snap = await getDocs(collection(db, 'strategy_events'));
-        return snap.docs.map(d => d.data() as StoreEvent).sort((a, b) => a.date.localeCompare(b.date));
+        return DataManager.runWithCache('strategy_events', async () => {
+            const snap = await getDocs(collection(db, 'strategy_events'));
+            return snap.docs.map(d => d.data() as StoreEvent).sort((a, b) => a.date.localeCompare(b.date));
+        });
     }
-    static async saveEvent(event: StoreEvent): Promise<void> { await setDoc(doc(db, 'strategy_events', event.id), event); }
-    static async deleteEvent(id: string): Promise<void> { await deleteDoc(doc(db, 'strategy_events', id)); }
+    static async saveEvent(event: StoreEvent): Promise<void> {
+        await setDoc(doc(db, 'strategy_events', event.id), event);
+        DataManager.clearCacheKeys(['strategy_events']);
+    }
+    static async deleteEvent(id: string): Promise<void> {
+        await deleteDoc(doc(db, 'strategy_events', id));
+        DataManager.clearCacheKeys(['strategy_events']);
+    }
 
     // ==========================================
     // 🟢 Assessment V2
@@ -2116,52 +2301,6 @@ export class DataManager {
     static async getAvailableBackups(): Promise<SystemBackup[]> {
         const snap = await getDocs(collection(db, 'system_backups'));
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as SystemBackup)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }
-
-    static async exportSystemData(): Promise<SystemBackup> {
-        const [
-            employees, settlements, recurringBills, billPayments, stockKitchen, stockBar, stockGeneral, stockFuel,
-            suppliers, purchaseOrders, menu, queue, logs, payroll, attendance, roster, config,
-            treasuryConfig, fundTransfers, warranties, standaloneExpenses, proposals, okrs, campaigns, events,
-            taskCompletions, assessmentRecords,
-            stockPriceHistory,
-            paymentVouchers
-        ] = await Promise.all([
-            this.getEmployees(), 
-            this.getSettlements(undefined, true),
-            this.getRecurringBills(), 
-            this.getBillPayments(true),
-            this.getStock('KITCHEN'), this.getStock('BAR'), this.getStock('GENERAL'), this.getStock('FUEL'),
-            this.getSuppliers(), 
-            this.getPurchaseOrders(true),
-            this.getMenu(), this.getQueueTickets(),
-            this.getLogs(true),
-            this.getPayrollRecords(), 
-            getDocs(collection(db, 'attendance')).then(s => s.docs.map(d => d.data() as AttendanceRecord)),
-            this.getRosterData(), this.getConfig(), this.getTreasuryConfig(), 
-            this.getFundTransfers(true),
-            this.getWarranties(), 
-            getDocs(collection(db, 'standalone_expenses')).then(s => s.docs.map(d => d.data() as ExpenseItem)),
-            this.getProposals(), this.getOKRs(), this.getCampaigns(), this.getEvents(),
-            getDocs(collection(db, 'task_completions')).then(s => s.docs.map(d => d.data() as TaskCompletion)),
-            getDocs(collection(db, 'assessment_records')).then(s => s.docs.map(d => d.data())),
-            getDocs(collection(db, 'stock_price_history')).then(s => s.docs.map(d => d.data() as StockPriceHistory)),
-            getDocs(collection(db, 'payment_vouchers')).then(s => s.docs.map(d => d.data() as PaymentVoucher))
-        ]);
-
-        return {
-            version: APP_VERSION, timestamp: new Date().toISOString(),
-            data: {
-                employees, settlements, recurringBills, billPayments, stockKitchen, stockBar, stockGeneral, stockFuel,
-                suppliers, purchaseOrders, menu, queue, logs, payroll, attendance, roster, config,
-                treasuryConfig: treasuryConfig || undefined, fundTransfers: fundTransfers || undefined, warranties: warranties || undefined,
-                standaloneExpenses: standaloneExpenses || [], strategy: { proposals, okrs, campaigns, events },
-                taskCompletions: taskCompletions || [],
-                assessmentRecords: assessmentRecords || [],
-                stockPriceHistory: stockPriceHistory || [],
-                paymentVouchers: paymentVouchers || []
-            } as any
-        };
     }
 
     static async restoreSystem(backup: SystemBackup): Promise<void> {
@@ -2411,8 +2550,10 @@ export class DataManager {
     // ==========================================
     static async getSelfIssuedVouchers(): Promise<SelfIssuedVoucher[]> {
         try {
-            const snap = await getDocs(collection(db, 'self_issued_vouchers'));
-            return snap.docs.map(d => d.data() as SelfIssuedVoucher);
+            return await DataManager.runWithCache('self_issued_vouchers', async () => {
+                const snap = await getDocs(collection(db, 'self_issued_vouchers'));
+                return snap.docs.map(d => d.data() as SelfIssuedVoucher);
+            });
         } catch (e) {
             console.warn("Firebase not active; reading vouchers from localstorage fallback.", e);
             const local = localStorage.getItem('klk_self_issued_vouchers');

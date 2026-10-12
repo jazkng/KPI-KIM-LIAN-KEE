@@ -210,6 +210,49 @@ export const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                                         ))}
                                     </select>
                                 </div>
+                                <div className="md:col-span-2">
+                                    <label className={SUP_LABEL_STYLE}>常用科目 (Secondary Categories — 可多选)</label>
+                                    <p className="text-[10px] text-gray-500 mb-2 leading-relaxed">
+                                        这家供应商还会卖到哪些科目？例如卖菜也卖水果，就把「食材-水果」勾起来。
+                                        勾了之后，开单拆分科目时这几个会排在最上面，不用在长列表里翻。
+                                        <b>不影响任何金额与记账</b>，纯粹是开单方便。
+                                    </p>
+                                    <div className="max-h-[180px] overflow-auto border border-gray-200 rounded-xl p-2 bg-white grid grid-cols-1 md:grid-cols-2 gap-1">
+                                        {Object.entries(ACCOUNTING_CATEGORIES_OPTIONS).map(([group, options]) => (
+                                            <React.Fragment key={group}>
+                                                <div className="md:col-span-2 text-[9px] font-black text-gray-400 uppercase tracking-wider px-1 pt-1">{group}</div>
+                                                {options.map(opt => {
+                                                    const list = supplierForm.secondaryCategories || [];
+                                                    const checked = list.includes(opt.id);
+                                                    const isMain = supplierForm.category === opt.id;
+                                                    return (
+                                                        <label
+                                                            key={opt.id}
+                                                            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] min-h-[36px] ${
+                                                                isMain ? 'opacity-40' : 'cursor-pointer hover:bg-gray-50'
+                                                            }`}
+                                                            title={isMain ? '这是主科目，不用重复勾选' : ''}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                disabled={isMain}
+                                                                checked={checked}
+                                                                onChange={e => {
+                                                                    const next = e.target.checked
+                                                                        ? [...list, opt.id]
+                                                                        : list.filter(c => c !== opt.id);
+                                                                    onChange({ ...supplierForm, secondaryCategories: next.length ? next : undefined });
+                                                                }}
+                                                                className="accent-indigo-600 shrink-0"
+                                                            />
+                                                            <span className="truncate">{opt.label}{isMain ? '（主科目）' : ''}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
                                 <div>
                                     <label className={SUP_LABEL_STYLE}>Payment Term (付款账期天数)</label>
                                     <select className={SUP_INPUT_STYLE} value={supplierForm.paymentTerm || 'COD'} onChange={e => onChange({...supplierForm, paymentTerm: e.target.value})}>

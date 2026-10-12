@@ -131,7 +131,6 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
     
     const [bossAccounts, setBossAccounts] = useState<Employee[]>([]);
     const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
-    const [isExporting, setIsExporting] = useState(false);
     const [showChangelog, setShowChangelog] = useState(false);
     const [printerStatus, setPrinterStatus] = useState<'IDLE' | 'TESTING' | 'SUCCESS'>('IDLE');
     
@@ -561,30 +560,9 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
       else alert("❌ 重置失败 (Reset Failed)");
     };
 
-    const handleExportData = async () => {
-        if (!confirm("确定要导出全系统数据并下载到本地吗？(Export All Data)")) return;
-        setIsExporting(true);
-        try {
-            const data = await DataManager.exportSystemData();
-            const jsonString = JSON.stringify(data, null, 2);
-            const blob = new Blob([jsonString], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            const dateStr = new Date().toISOString().split('T')[0];
-            link.download = `KLK_ERP_BACKUP_V${APP_VERSION}_${dateStr}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            alert("✅ 备份文件下载成功！请妥善保管。");
-        } catch (e) {
-            console.error(e);
-            alert("❌ 导出失败 (Export Failed)");
-        } finally {
-            setIsExporting(false);
-        }
-    };
+    // 👑 「下载本地备份」已移除：exportSystemData() 一次读取 29 个集合全表
+    //    （含 attendance / inventory_logs / stock_price_history），误触一次就是数万次读取。
+    //    备份改由 Firestore 的 PITR（7 天）+ 排程备份（每日留 14 天、每周日留 14 天）负责。
 
     const performRestore = async (backupData: any, source: 'CLOUD' | 'FILE') => {
         const confirmStr = prompt(`⚠️ 严重警告：系统回滚 (SYSTEM RESTORE - ${source})\n\n您即将把系统恢复到备份状态。\n\n当前所有的数据（库存、账单、日志等）将被覆盖或清除！\n\n请输入 "RESTORE" 确认操作：`);
@@ -1240,18 +1218,18 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                                     <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-[#8B0000] mb-2 shadow-inner">
                                         <Download size={16}/>
                                     </div>
-                                    <h4 className="text-xs font-black text-[#111111] mb-1">一键导出系统全量数据</h4>
-                                    <p className="text-[10px] text-stone-400 mb-3 font-semibold">打包下载全店所有数据并另存为 JSON 文件，确保双重安全备份。</p>
+                                    <h4 className="text-xs font-black text-[#111111] mb-1">云端自动备份已启用</h4>
+                                    <p className="text-[10px] text-stone-400 mb-3 font-semibold">
+                                        时间点恢复 (PITR) 保留 7 天，排程备份每日保留 14 天、每周日保留 14 天。
+                                        无需手动下载，如需还原请在 Firebase 控制台操作。
+                                    </p>
                                 </div>
-                                <button 
-                                    onClick={handleExportData} 
-                                    disabled={isExporting} 
+                                <div
                                     style={{ minHeight: '44px' }}
-                                    className="w-full py-2 bg-stone-900 text-[#FFD200] text-xs font-black rounded-lg hover:bg-black transition-all flex justify-center items-center gap-2 shadow-sm"
+                                    className="w-full py-2 bg-stone-100 text-stone-500 text-xs font-black rounded-lg flex justify-center items-center gap-2"
                                 >
-                                    {isExporting ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>} 
-                                    {isExporting ? '生成中...' : '下载本地备份 (.json)'}
-                                </button>
+                                    ✅ 由 Firestore 自动管理
+                                </div>
                             </div>
 
                             {/* IMPORT */}

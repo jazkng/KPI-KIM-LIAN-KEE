@@ -1,5 +1,4 @@
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
+import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import { ROSTER_STATUSES } from './rosterConstants';
 import { getDayOfWeekText } from './rosterUtils';
 import { waitForPdfFonts } from '../../../utils/pdfStyleResolver';
@@ -32,7 +31,7 @@ export async function exportRosterToPdf(
     document.body.appendChild(container);
 
     // Initialize jsPDF A3 landscape
-    const pdf = new jsPDF({
+    const pdf = new (await loadJsPDF())({
         orientation: 'landscape',
         unit: 'mm',
         format: 'a3'

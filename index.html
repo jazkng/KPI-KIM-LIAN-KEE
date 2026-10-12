@@ -22,8 +22,23 @@
       Inter 若不加载 700/900，font-bold 和 font-black 会双双落到 800，
       粗细层级失效，且文字宽度与布局预期不符（PDF 导出时会挤出换行和重叠）。
       用 `300..900` 区间语法拿到可变字体，单文件覆盖全字重，比拆成多个静态字重更省。
+
+      👑 字体家族必须与 styles.css 里 --font-sans 实际声明的一致：
+      之前这里加载的是 "Noto Serif SC"，但 --font-sans 的中文后备字体是
+      "Noto Sans SC"——两者是完全不同的字体，从未被加载过的 "Noto Sans SC"
+      永远不会被浏览器解析到，中文只能落到系统默认字体（Windows/服务器上
+      往往是无衬线但字宽表完全不同的替代字体）。html2canvas 量字宽时用的
+      是这个未被预热、未必稳定的后备字体，画的时候字体又可能刚好加载完成，
+      两次量出的宽度对不上——这正是导出 PDF 里中文和数字被"挤"在一起的根因。
     -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+    <!--
+      📱 字体改成「不挡画面」：以前这条是会阻塞渲染的 stylesheet，
+      iPhone 网络慢、或连不上 Google Fonts 时，整个画面要等它载完才出来（看起来像卡住）。
+      现在先用系统字体显示，字体到了再换上；PDF 导出前本来就会等字体（waitForPdfFonts）。
+    -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Sans+SC:wght@400;500;600;700;800;900&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Sans+SC:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400..800&family=Noto+Sans+SC:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
 
     <!--
       首屏防闪样式：只保留 styles.css 加载完成前、加载动画本身需要的规则。
@@ -86,11 +101,11 @@
         });
       }
 
-      // 针对 iOS 的补充逻辑：防止触摸移动穿透到 body
+      // 针对 iOS 的补充逻辑：只挡「直接拖 body / html」造成的整页回弹。
+      // ⚠️ 以前是「不在 #root 里面就全部挡掉」，但很多弹窗是用 createPortal 挂在 body 下，
+      //    结果 iPhone 上那些弹窗完全滑不动，看起来像卡死。
       document.addEventListener('touchmove', function (e) {
-          if (e.target.id === 'root' || document.getElementById('root').contains(e.target)) {
-              // 允许 root 内部滚动
-          } else {
+          if (e.target === document.body || e.target === document.documentElement) {
               e.preventDefault();
           }
       }, { passive: false });

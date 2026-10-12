@@ -300,7 +300,7 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                                         disabled={isSaving}
                                         className="flex-1 md:flex-none bg-[#111111] text-[#FFD200] px-4 md:px-6 py-2.5 min-h-[44px] rounded-xl font-black shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-transform select-none disabled:opacity-50"
                                     >
-                                        <Save size={16} /> {isSaving ? '保存中...' : '保存设定'}
+                                        <Save size={16} /> {isSaving ? '保存中...' : '保存设置'}
                                     </button>
                                 </div>
                             </div>
@@ -317,17 +317,15 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
                                 <h3 className="text-[10px] font-black uppercase text-gray-400 flex items-center gap-2 mb-4 tracking-widest"><BookOpen size={14} /> 岗位职责与守则</h3>
                                 <textarea
-                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-24 mb-4 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none"
+                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl font-bold h-24 mb-4 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none text-[16px] md:text-xs"
                                     value={draftGuide.description}
                                     onChange={e => setDraftGuide({ ...draftGuide, description: e.target.value })}
-                                    placeholder="职责描述..."
-                                />
+                                    placeholder="职责描述..." />
                                 <textarea
-                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl text-xs font-bold h-32 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none"
+                                    className="w-full p-4 bg-gray-50 border-none rounded-2xl font-bold h-32 outline-none focus:ring-1 focus:ring-[#FFD200]/30 resize-none text-[16px] md:text-xs"
                                     value={draftGuide.employeeRules?.join('\n') || ''}
                                     onChange={e => setDraftGuide({ ...draftGuide, employeeRules: e.target.value.split('\n') })}
-                                    placeholder="每行一个员工守则..."
-                                />
+                                    placeholder="每行一个员工守则..." />
                             </div>
 
                             {/* 核心价值 & 安全红线 */}
@@ -335,18 +333,16 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
                                     <h3 className="text-[10px] font-black uppercase text-gray-400 flex items-center gap-2 mb-4 tracking-widest"><Sparkles size={14} /> 核心价值</h3>
                                     <input
-                                        className="w-full p-4 min-h-[44px] bg-gray-50 border-none rounded-2xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-gray-100 transition-all"
+                                        className="w-full p-4 min-h-[44px] bg-gray-50 border-none rounded-2xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-gray-100 transition-all text-[16px] md:text-xs"
                                         value={draftGuide.coreValue}
-                                        onChange={e => setDraftGuide({ ...draftGuide, coreValue: e.target.value })}
-                                    />
+                                        onChange={e => setDraftGuide({ ...draftGuide, coreValue: e.target.value })} />
                                 </div>
                                 <div className="bg-red-50 p-6 rounded-[2rem] shadow-sm border border-red-100">
                                     <h3 className="text-[10px] font-black uppercase text-red-400 flex items-center gap-2 mb-4 tracking-widest"><AlertOctagon size={14} /> 安全红线</h3>
                                     <input
-                                        className="w-full p-4 min-h-[44px] bg-white border-none rounded-2xl text-xs font-bold text-red-700 outline-none focus:ring-2 focus:ring-red-200 transition-all"
+                                        className="w-full p-4 min-h-[44px] bg-white border-none rounded-2xl font-bold text-red-700 outline-none focus:ring-2 focus:ring-red-200 transition-all text-[16px] md:text-xs"
                                         value={draftGuide.safetyRedLine}
-                                        onChange={e => setDraftGuide({ ...draftGuide, safetyRedLine: e.target.value })}
-                                    />
+                                        onChange={e => setDraftGuide({ ...draftGuide, safetyRedLine: e.target.value })} />
                                 </div>
                             </div>
 
@@ -385,9 +381,9 @@ export const HRRoleStandards: React.FC<HRRoleStandardsProps> = ({
 
             {/* Fix #1: 自定义确认弹窗 */}
             {confirmModal.open && (
-                <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 bg-black/60 z-[300] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
                     <div
-                        className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95"
+                        className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto"
                         style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
                     >
                         <h4 className="font-black text-xl text-[#111111] mb-2">{confirmModal.title}</h4>
@@ -451,29 +447,26 @@ const SopSection: React.FC<SopSectionProps> = ({ label, color, Icon, tasks, onAd
                         className={`bg-gray-50 p-3 rounded-2xl grid grid-cols-1 gap-2 relative group hover:shadow-md transition-all border border-transparent ${hover}`}
                     >
                         <input
-                            className="w-full bg-white p-2.5 min-h-[40px] rounded-xl text-xs font-black border-none outline-none"
+                            className="w-full bg-white p-2.5 min-h-[40px] rounded-xl font-black border-none outline-none text-[16px] md:text-xs"
                             placeholder="任务名"
                             value={task.label}
-                            onChange={e => onUpdate(idx, 'label', e.target.value)}
-                        />
+                            onChange={e => onUpdate(idx, 'label', e.target.value)} />
                         <div className="flex flex-col md:flex-row gap-2">
                             <input
-                                className="flex-1 bg-white p-2.5 min-h-[40px] rounded-xl text-[10px] border-none outline-none"
+                                className="flex-1 bg-white p-2.5 min-h-[40px] rounded-xl text-[10px] border-none outline-none text-[16px] md:text-sm"
                                 placeholder="标准 (Standard)"
                                 value={task.standard}
-                                onChange={e => onUpdate(idx, 'standard', e.target.value)}
-                            />
+                                onChange={e => onUpdate(idx, 'standard', e.target.value)} />
                             <input
-                                className="flex-1 bg-white p-2.5 min-h-[40px] rounded-xl text-[10px] border-none outline-none italic"
+                                className="flex-1 bg-white p-2.5 min-h-[40px] rounded-xl text-[10px] border-none outline-none italic text-[16px] md:text-sm"
                                 placeholder="目的 (Why?)"
                                 value={task.why}
-                                onChange={e => onUpdate(idx, 'why', e.target.value)}
-                            />
+                                onChange={e => onUpdate(idx, 'why', e.target.value)} />
                         </div>
                         <button
                             style={noTapLocal}
                             onClick={() => onRemove(idx)}
-                            className="absolute -right-2 -top-2 bg-white text-red-500 p-1.5 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full shadow-sm border opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity select-none"
+                            className="absolute -right-2 -top-2 bg-white text-red-500 p-1.5 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full shadow-sm border opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity select-none min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                         >
                             <X size={12} />
                         </button>

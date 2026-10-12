@@ -36,6 +36,12 @@ export interface MonthlyClosing {
   bankIn: number;
   bankOut: number;
   bankEnd: number;
+  // 👑 实点对账 (Physical Count) — 月结以实物盘点为准，避免误差累积
+  cashEndActual?: number; // 月尾实际数出来的现金
+  bankEndActual?: number; // 月尾银行月结单余额
+  cashVariance?: number; // 实点 - 系统计算 (现金)
+  bankVariance?: number; // 实点 - 系统计算 (银行)
+  varianceNote?: string; // 差异说明
   status: "CLOSED" | "DRAFT";
   closedAt?: string;
   closedBy?: string;

@@ -334,6 +334,18 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               <h4 className="font-black text-xs text-[#111111]">{getStaffModuleLabel(selectedModule, lang, modInfo?.label)}</h4>
               <p className="text-[9px] text-gray-400 font-bold uppercase">{employee.name}</p>
             </div>
+            {/* Direct Logout / Exit Button for PC & Mobile users in Work Tools */}
+            <button
+              onClick={handleLogoutClick}
+              title={st('logout', lang)}
+              className="flex items-center gap-1.5 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ml-1.5 shrink-0"
+              style={{ minHeight: '38px' }}
+            >
+              <LogOut size={13} className="text-red-500 shrink-0" />
+              <span className="text-[10px] font-extrabold uppercase">
+                {st('logout', lang)}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -366,9 +378,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
       {/* ────────────────────────────────────────────────────────────────────────
           HEADER BRANDING & IDENT Zone (safe-area adapted)
           ──────────────────────────────────────────────────────────────────────── */}
-      <div className="bg-[#111111] text-white pt-[calc(env(safe-area-inset-top)+1rem)] pb-10 rounded-b-[2rem] border-b-4 border-[#FFD200] relative overflow-hidden shadow-lg">
+      <div className="bg-[#111111] text-white pt-[calc(env(safe-area-inset-top)+1rem)] pb-10 rounded-b-[2rem] border-b-4 border-[#FFD200] relative shadow-lg">
         {/* Subtle geometric grid background */}
-        <div className="absolute inset-0 opacity-5 bg-[linear-gradient(45deg,#ffffff_25%,transparent_25%),linear-gradient(-45deg,#ffffff_25%,transparent_25%)] bg-[size:20px_20px]"></div>
+        <div className="absolute inset-0 opacity-5 bg-[linear-gradient(45deg,#ffffff_25%,transparent_25%),linear-gradient(-45deg,#ffffff_25%,transparent_25%)] bg-[size:20px_20px] rounded-b-[2rem] overflow-hidden pointer-events-none"></div>
         
         <div className="max-w-xl mx-auto px-4 relative z-10 flex flex-col gap-4">
           
@@ -382,13 +394,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             </div>
             
             <div className="flex items-center gap-2">
-              {activeTab === 'TODAY' && (
-                <NotificationCenter
-                  employee={employee}
-                  onOpenLog={openOperationalLogFromNotification}
-                  variant="dark"
-                />
-              )}
+              <NotificationCenter
+                employee={employee}
+                onOpenLog={openOperationalLogFromNotification}
+                variant="dark"
+              />
 
               {/* 3-Way Language Selector */}
               <LanguageSelector currentLang={lang} onSelectLang={handleLanguageSelect} dark={true} />
@@ -1243,16 +1253,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                 <p className="text-center text-xs text-gray-400 py-3 italic">{st('noRating', lang)}</p>
               )}
             </div>
-
-            {/* Logout Action (touch targets >= 48px) */}
-            <button 
-              onClick={handleLogoutClick}
-              className="w-full py-3.5 border-2 border-red-500/20 hover:bg-red-500/5 text-red-500 rounded-2xl text-xs font-black transition-all active:scale-98 flex items-center justify-center gap-1.5"
-              style={{ minHeight: '48px' }}
-            >
-              <LogOut size={14} />
-              <span>{st('logout', lang)}</span>
-            </button>
 
           </div>
         )}

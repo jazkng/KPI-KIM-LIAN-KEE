@@ -1,5 +1,6 @@
+import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet } from 'lucide-react';
+import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet, Grid3x3 } from 'lucide-react';
 import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, ReviewRecord, LoanRecord, AssessmentRecordV2, InventoryAccessConfig, PortalRole } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { uploadToCloudinary } from '../../utils';
@@ -10,10 +11,19 @@ import { DepartmentMigrationBanner, DEPARTMENTS, getRecommendedDept } from './De
 import { getOrgLevel, getOrgLevelLabel, getPortalRole, ORG_LEVEL_OPTIONS, PORTAL_ROLE_OPTIONS } from '../../../utils/orgAccess';
 import { INVENTORY_PERMISSION_LABELS, INVENTORY_PERMISSIONS, INVENTORY_SCOPE_LABELS, resolveInventoryAccess } from '../../../utils/inventoryAccess';
 import { InventoryAccessModal } from './InventoryAccessModal';
+import { DEFAULT_PIC_AREAS, PIC_SCORE_LABELS, picAverage, PicArea } from '../../../constants/hrSkill';
 
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
+import { HRExportDialog } from './HRExportDialog';
+import { HRSkillMatrix } from './HRSkillMatrix';
+import { SkillStarPanel } from './skills/SkillStarPanel';
+import { SkillCatalogEditor } from './skills/SkillCatalogEditor';
+import { SkillPrintDialog } from './skills/SkillPrintDialog';
+import { useSkillCatalog } from './skills/skillCatalogStore';
+import { primarySkillScore } from '../../../constants/skillCatalog';
+import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
+import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
+import type { StarLevel } from '../../../constants/skillCatalog';
 
 const ABILITY_TIERS = [
     { label: 'SSS', score: 100, desc: '卓越传奇 (Legendary)', color: 'bg-amber-100 text-amber-800 border-amber-300 ring-amber-500', icon: Trophy },
@@ -92,9 +102,9 @@ const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) 
     const isUnset = !attributes || Object.values(attributes as Record<string, number>).every((v: number) => v === 0);
     const attrs = !isUnset ? attributes : { efficiency: 60, service: 60, culinary: 60, leadership: 60, discipline: 60 };
     return (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0"><h3 className="font-black text-lg flex items-center gap-2"><Trophy size={18} className="text-[#FFD200]"/> 能力评估 (Assessment)</h3><button onClick={onClose}><X size={20} className="text-white/50 hover:text-white"/></button></div>
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] md:max-h-[90vh]">
+                <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0"><h3 className="font-black text-lg flex items-center gap-2"><Trophy size={18} className="text-[#FFD200]"/> 能力评估 (Assessment)</h3><button onClick={onClose} className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20} className="text-white/50 hover:text-white"/></button></div>
                 <div className="p-6 overflow-y-auto space-y-6 bg-gray-50 flex-grow">
                     {Object.keys(attrs).map(key => {
                         const config = ATTRIBUTE_CONFIG[key] || { label: key, desc: 'N/A' };
@@ -102,7 +112,7 @@ const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) 
                         return (
                             <div key={key} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
                                 <div className="mb-3"><h4 className="text-sm font-black text-[#111111]">{config.label}</h4><p className="text-[10px] text-gray-400 font-bold mt-0.5">{config.desc}</p></div>
-                                <div className="flex justify-between gap-1">{ABILITY_TIERS.slice().reverse().map(tier => { const isSelected = getGradeInfo(currentVal).label === tier.label; return (<button key={tier.label} onClick={() => onChange({...attrs, [key]: tier.score})} className={`flex-1 py-2 rounded-lg flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${isSelected ? `${tier.color} ring-2 ring-offset-1 border-transparent shadow-md font-black` : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100'}`}><span className="text-sm">{tier.label}</span>{isSelected && <span className="text-[8px] uppercase mt-0.5">{tier.desc.split(' ')[0]}</span>}</button>) })}</div>
+                                <div className="flex justify-between gap-1">{ABILITY_TIERS.slice().reverse().map(tier => { const isSelected = getGradeInfo(currentVal).label === tier.label; return (<button key={tier.label} onClick={() => onChange({...attrs, [key]: tier.score})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${isSelected ? `${tier.color} ring-2 ring-offset-1 border-transparent shadow-md font-black` : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100'}`}><span className="text-sm">{tier.label}</span>{isSelected && <span className="text-[8px] uppercase mt-0.5">{tier.desc.split(' ')[0]}</span>}</button>) })}</div>
                             </div>
                         );
                     })}
@@ -114,7 +124,7 @@ const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) 
 };
 
 // --- UPDATED SYSTEM ACCESS MODAL WITH GROUPING ---
-const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessmentTargets, onUpdateTargets, allEmployees }: any) => {
+const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessmentTargets, onUpdateTargets, allEmployees, readOnlyAccess, onToggleReadOnly }: any) => {
     const [isTargetConfigOpen, setIsTargetConfigOpen] = useState(false);
 
     if (!isOpen) return null;
@@ -127,7 +137,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
         },
         {
             title: '日常运营 (Daily Operations)',
-            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'KITCHEN_ALERT'] as AppModule[],
+            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'KITCHEN_ALERT', 'STAFF_CASH'] as AppModule[],
             color: 'bg-blue-50 text-blue-700 border-blue-100'
         },
         {
@@ -139,6 +149,11 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
             title: '库存区域 (Inventory Areas)',
             modules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'INVENTORY_FUEL'] as AppModule[],
             color: 'bg-green-50 text-green-700 border-green-100'
+        },
+        {
+            title: '决策与其他 (Planning & Others)',
+            modules: ['PLANNING', 'PRICE_MONITOR', 'ORG_CHART', 'TRANSLATION', 'WARRANTY', 'AI_ASSISTANT', 'ROSTER_FLOOR'] as AppModule[],
+            color: 'bg-purple-50 text-purple-700 border-purple-100'
         }
     ];
 
@@ -191,14 +206,14 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                         <h4 className="font-black text-lg">评测对象配置 (Targets)</h4>
                         <p className="text-xs text-gray-500">勾选该员工允许评测的人员</p>
                     </div>
-                    <button onClick={() => setIsTargetConfigOpen(false)} className="bg-gray-200 p-2 rounded-full"><X size={20}/></button>
+                    <button onClick={() => setIsTargetConfigOpen(false)} className="bg-gray-200 p-2 rounded-full min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20}/></button>
                 </div>
                 <div className="flex-grow overflow-y-auto p-4 space-y-6">
                     {Object.keys(groupedStaff).map(key => (
                         <div key={key}>
                              <div className="flex justify-between items-center mb-2">
                                 <h5 className="font-black text-xs text-gray-500 uppercase tracking-widest">{key} TEAM</h5>
-                                <button onClick={() => toggleGroupTargets(key)} className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded">Toggle All</button>
+                                <button onClick={() => toggleGroupTargets(key)} className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded min-h-[44px] md:min-h-0">Toggle All</button>
                              </div>
                              <div className="grid grid-cols-2 gap-2">
                                  {groupedStaff[key].map((e: Employee) => (
@@ -221,17 +236,44 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] md:max-h-[90vh] overflow-hidden relative">
                 
                 {isTargetConfigOpen && <AssessmentTargetSelector />}
 
                 <div className="p-6 bg-white border-b border-gray-100 flex justify-between items-center shrink-0">
                     <h3 className="font-black text-xl flex items-center gap-2"><Shield size={24} className="text-blue-600"/> 系统权限配置 (Access)</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} className="text-gray-400"/></button>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20} className="text-gray-400"/></button>
                 </div>
                 
                 <div className="p-6 overflow-y-auto bg-[#F6F7FB] space-y-6">
+                    {/* 🔒 只读模式开关 */}
+                    <div className={`rounded-2xl border-2 p-4 transition-all ${readOnlyAccess ? 'bg-amber-50 border-amber-400' : 'bg-white border-gray-200'}`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <h4 className="font-black text-sm flex items-center gap-2">
+                                    <Shield size={14} className={readOnlyAccess ? 'text-amber-600' : 'text-gray-400'} />
+                                    只读模式 (Read-only Access)
+                                </h4>
+                                <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                                    开启后，此员工可以查看上面已勾选的模块，但<b>不能新增、修改或删除</b>任何资料。适合会计或外部人员。
+                                </p>
+                                <p className="text-[10px] text-amber-700 mt-1.5 leading-relaxed">
+                                    ⚠️ 这是App界面层的防护，不是数据库层。懂技术的人仍可能绕过。
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleReadOnly?.(!readOnlyAccess)}
+                                className={`min-h-[44px] md:min-h-0 shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                                    readOnlyAccess ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500'
+                                }`}
+                            >
+                                {readOnlyAccess ? '已开启' : '已关闭'}
+                            </button>
+                        </div>
+                    </div>
+
                     {MODULE_GROUPS.map(group => {
                         const allSelected = group.modules.every(m => allowedModules.includes(m));
                         return (
@@ -242,7 +284,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                                     </h4>
                                     <button 
                                         onClick={() => toggleGroup(group.modules)}
-                                        className="text-[10px] font-bold bg-white/50 px-2 py-1 rounded hover:bg-white transition-colors flex items-center gap-1"
+                                        className="text-[10px] font-bold bg-white/50 px-2 py-1 rounded hover:bg-white transition-colors flex items-center gap-1 min-h-[44px] md:min-h-0"
                                     >
                                         {allSelected ? <CheckSquare size={12}/> : <Square size={12}/>} {allSelected ? '取消全选' : '全选'}
                                     </button>
@@ -273,7 +315,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                                                 {mod === 'ASSESSMENT' && isSelected && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); setIsTargetConfigOpen(true); }}
-                                                        className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg text-[#FFD200] ml-2"
+                                                        className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg text-[#FFD200] ml-2 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                                         title="配置评测对象"
                                                     >
                                                         <Settings size={14}/>
@@ -338,13 +380,29 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [isEditing, setIsEditing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [form, setForm] = useState<Partial<Employee>>({});
+    const [newPicName, setNewPicName] = useState('');
+    const [newSecondaryRole, setNewSecondaryRole] = useState('');   // 👑 自己打字新增副职
+    // ⭐ 工作能力星级
+    const skillCatalog = useSkillCatalog();
+    const [showSkillPrint, setShowSkillPrint] = useState(false);
+    const [showSkillCatalog, setShowSkillCatalog] = useState(false);
+    const [skillSaving, setSkillSaving] = useState(false);
+    // 📱 手机版：往下滑后头部收起，只留名字 + 编辑
+    const [headerCollapsed, setHeaderCollapsed] = useState(false);
+    const detailScrollRef = useRef<HTMLDivElement>(null);
+    // 换人 → 回到最上面，头部展开
+    useEffect(() => {
+        setHeaderCollapsed(false);
+        if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
+    }, [selectedEmpId]);
     const [, setIsUploading] = useState(false);
     const [showPin, setShowPin] = useState(false);
     const [showResigned, setShowResigned] = useState(false); 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const printRef = useRef<HTMLDivElement>(null); 
+    const [isExportOpen, setIsExportOpen] = useState(false);   // 导出选项弹窗
+    const [isSkillMatrixOpen, setIsSkillMatrixOpen] = useState(false);   // 技能总表 / 批量录入
     const singleProfileRef = useRef<HTMLDivElement>(null); 
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingSinglePdf, setIsGeneratingSinglePdf] = useState(false);
     const [isSalaryExpanded, setIsSalaryExpanded] = useState(false);
     const [showAbilityModal, setShowAbilityModal] = useState(false);
@@ -465,6 +523,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         return 0;
     }, [latestV2Assessment, activeDimensions]);
 
+    /** 有没有任何评分资料（没有 → 不显示等级，不再出现 D） */
+    const hasAssessmentData = useMemo(
+        () => !!latestV2Assessment || activeDimensions.some(d => d.score > 0),
+        [latestV2Assessment, activeDimensions]
+    );
+
     const v2OverallGradeInfo = useMemo(() => {
         if (latestV2Assessment && latestV2Assessment.finalGrade) {
             return ABILITY_TIERS.find(t => t.label === latestV2Assessment.finalGrade) || ABILITY_TIERS[3];
@@ -479,6 +543,20 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             return matchesSearch && archiveMatch;
         });
     }, [employees, searchTerm, showResigned]);
+
+    // ✅ Directory export always includes everyone (still respects the search box),
+    // split into Active vs Resigned so departed staff are never silently dropped.
+    const exportActiveEmployees = useMemo(() => {
+        return employees
+            .filter(e => !e.isArchived && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.includes(searchTerm)))
+            .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    }, [employees, searchTerm]);
+
+    const exportResignedEmployees = useMemo(() => {
+        return employees
+            .filter(e => e.isArchived && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.includes(searchTerm)))
+            .sort((a, b) => (b.terminationDate || '').localeCompare(a.terminationDate || ''));
+    }, [employees, searchTerm]);
 
     const groupedEmployees = useMemo(() => {
         const groups: Record<string, Employee[]> = { 
@@ -520,8 +598,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         if (!selectedEmpId) return;
         
         const fetchAttendance = async () => {
-            const currentMonth = new Date().toISOString().slice(0, 7);
-            const records = await DataManager.getAttendanceByMonth(currentMonth);
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            // 只读这个员工的记录（下推到 Firestore），不再整月全员拉回来
+            const records = await DataManager.getAttendanceByMonth(currentMonth, selectedEmpId);
             const myRecords = records.filter(r => r.employeeId === selectedEmpId);
             
             let late = 0;
@@ -643,7 +723,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     };
 
     const handleSaveForm = async () => {
-        if (!form.name || !form.id) return alert("姓名和ID必填");
+        if (!form.name || !form.id) return alert("⚠️ 姓名和工号必填");
         const newEmployee = form as Employee;
         await DataManager.saveEmployee(newEmployee);
         const existingIdx = employees.findIndex(e => e.id === newEmployee.id);
@@ -654,10 +734,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         alert("✅ 档案已保存 (Saved)");
     };
 
-    const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; setIsUploadingReviewImage(true); try { const url = await uploadToCloudinary(file); setReviewFormState(prev => ({ ...prev, image: url })); } catch (error) { alert('Upload Failed'); } finally { setIsUploadingReviewImage(false); if(reviewFileInputRef.current) reviewFileInputRef.current.value = ''; } };
+    const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; setIsUploadingReviewImage(true); try { const url = await uploadToCloudinary(file); setReviewFormState(prev => ({ ...prev, image: url })); } catch (error) { alert('❌ 上传失败'); } finally { setIsUploadingReviewImage(false); if(reviewFileInputRef.current) reviewFileInputRef.current.value = ''; } };
     const handleAddReview = async () => { if (!reviewFormState.content.trim()) return; const newReview: ReviewRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], author: currentBossId ? 'Manager' : 'Admin', content: reviewFormState.content, type: reviewFormState.type, image: reviewFormState.image }; const updatedReviews = [newReview, ...(form.reviews || [])]; const updatedEmp = { ...form, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(updatedEmp); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); setReviewFormState({ content: '', type: 'NOTE', image: '' }); };
     const handleDeleteReview = async (reviewId: string) => { if (!confirm("确定删除此条评语?")) return; const updatedReviews = (form.reviews || []).filter(r => r.id !== reviewId); const updatedEmp = { ...form, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(updatedEmp); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); };
-    const handleResetPin = () => { if(confirm(`Reset PIN for ${form.name} to 0000?`)) { setForm({ ...form, pin: '0000' }); alert("PIN Reset to 0000. Please save."); } };
+    const handleResetPin = () => { if(confirm(`Reset PIN for ${form.name} to 0000?`)) { setForm({ ...form, pin: '0000' }); alert("✅ PIN 已重置为 0000，记得按保存"); } };
     
     // --- LOAN HANDLERS ---
     const loanBalance = useMemo(() => {
@@ -665,8 +745,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     }, [form.loanRecords]);
     
     const handleAddLoan = async () => {
-        if (!loanFormState.amount || loanFormState.amount <= 0) return alert("请输入金额");
-        if (loanFormState.type === 'REPAY' && loanFormState.amount > loanBalance) return alert(`还款金额不能超过欠款余额 RM ${loanBalance.toFixed(2)}`);
+        if (!loanFormState.amount || loanFormState.amount <= 0) return alert("⚠️ 请输入金额");
+        if (loanFormState.type === 'REPAY' && loanFormState.amount > loanBalance) return alert(`⚠️ 还款金额不能超过欠款余额 RM ${loanBalance.toFixed(2)}`);
         const newRecord: LoanRecord = {
             id: Date.now().toString(),
             date: new Date().toISOString().split('T')[0],
@@ -681,17 +761,53 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setForm(updatedEmp);
         const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e);
         onSave(newList);
+
+        // 👑 同步资金管理：借出 = 现金支出 (STAFF_LOAN)，还款 = 现金流入 (代收)
+        // id 用 loanRecord.id 派生，方便删除记录时反向同步删掉对应的资金流水
+        if (newRecord.type === 'BORROW') {
+            await DataManager.saveStandaloneExpense({
+                id: `loan_${newRecord.id}`,
+                category: 'STAFF_LOAN',
+                expenseType: 'CASH_OUT',
+                company: form.name || '',
+                amount: newRecord.amount,
+                note: `员工借款 - ${form.name}${newRecord.note ? `: ${newRecord.note}` : ''}`,
+                time: newRecord.date,
+                createdAt: new Date().toISOString(),
+                paymentMethod: newRecord.via === 'BANK' ? 'BANK_TRANSFER' : newRecord.via === 'TNG' ? 'DUITNOW' : 'CASH',
+                paymentStatus: 'PAID',
+            });
+        } else {
+            await DataManager.saveFundTransfer({
+                id: `loanrepay_${newRecord.id}`,
+                date: newRecord.date,
+                amount: newRecord.amount,
+                fromAccount: 'OTHER',
+                toAccount: newRecord.via === 'BANK' ? 'BANK' : 'CASH',
+                type: 'DEPOSIT',
+                note: `[员工还款] ${form.name}${newRecord.note ? `: ${newRecord.note}` : ''}`,
+            });
+        }
+
         setLoanFormState({ type: 'BORROW', amount: 0, note: '', via: 'CASH' });
         setShowLoanModal(false);
     };
     const handleDeleteLoan = async (loanId: string) => {
-        if (!confirm("确定删除此借还款记录?")) return;
+        if (!confirm("确定删除此借还款记录?\n\n资金管理里对应的现金流水也会一并删除。")) return;
+        const targetRecord = (form.loanRecords || []).find(r => r.id === loanId);
         const updatedRecords = (form.loanRecords || []).filter(r => r.id !== loanId);
         const updatedEmp = { ...form, loanRecords: updatedRecords } as Employee;
         await DataManager.saveEmployee(updatedEmp);
         setForm(updatedEmp);
         const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e);
         onSave(newList);
+
+        // 👑 反向同步：删记录时把对应的资金流水也删掉，避免账对不上
+        if (targetRecord?.type === 'BORROW') {
+            await DataManager.deleteStandaloneExpense(`loan_${loanId}`);
+        } else if (targetRecord?.type === 'REPAY') {
+            await DataManager.deleteFundTransfer(`loanrepay_${loanId}`);
+        }
     };
     const handleTerminateClick = () => { 
         setTerminationData({ 
@@ -703,7 +819,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setShowTerminateModal(true); 
     };
     const confirmTermination = async () => { 
-        if (!terminationData.reason) return alert("请填写离职原因 (Reason required)"); 
+        if (!terminationData.reason) return alert("⚠️ 请填写离职原因"); 
         const updated = { 
             ...form, 
             status: 'TERMINATED', 
@@ -722,11 +838,28 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setIsEditing(false); 
         alert(`✅ 员工已离职归档${loanBalance > 0 ? `\n⚠️ 该员工仍欠 RM ${loanBalance.toFixed(2)}，结算状态：待处理` : ''}`); 
     };
-    const handleRestore = async () => { if (!confirm("确认复职该员工? (Restore Employee?)")) return; const updated = { ...form, status: 'PROBATION', isArchived: false, terminationReason: undefined, terminationDate: undefined }; setForm(updated as Employee); await DataManager.saveEmployee(updated as Employee); const newList = employees.map(e => e.id === updated.id ? updated as Employee : e); onSave(newList); setIsEditing(false); alert("✅ 员工已复职 (Restored)"); };
+    const handleRestore = async () => {
+        if (!confirm("确认复职该员工? (Restore Employee?)")) return;
+        // 👑 不可以写 undefined 进 Firestore（会整个抛错），直接把这两个 key 拿掉，
+        //    setDoc 整份覆盖时等于把栏位删掉。
+        const { terminationReason, terminationDate, ...rest } = form as any;
+        const updated = { ...rest, status: 'PROBATION', isArchived: false } as Employee;
+        try {
+            await DataManager.saveEmployee(updated);
+            setForm(updated);
+            const newList = employees.map(e => e.id === updated.id ? updated : e);
+            onSave(newList);
+            setIsEditing(true);   // 留在编辑模式，可以接着改资料再按「保存」
+            alert("✅ 员工已复职 (Restored)\n可以继续修改资料，改完按「保存」。");
+        } catch (e: any) {
+            console.error('复职失败', e);
+            alert(`❌ 复职失败：${e?.message || '未知错误'}`);
+        }
+    };
     const confirmDelete = async () => { if (!selectedEmpId || !form.name) return; try { await DataManager.deleteEmployee(selectedEmpId); const newList = employees.filter(e => e.id !== selectedEmpId); onSave(newList); setSelectedEmpId(null); setIsEditing(false); setShowDeleteModal(false); alert("✅ 档案已永久删除 (Deleted)"); } catch (e) { console.error(e); alert("❌ 删除失败 (Delete Failed)"); } };
     const addSalaryRecord = () => { const amountStr = prompt("输入新薪资 (New Amount):", form.basicSalary?.toString()); const reason = prompt("调整原因 (Reason):", "Annual Increment"); if(amountStr && reason) { const amount = parseFloat(amountStr); const newRecord: SalaryRecord = { date: new Date().toISOString().split('T')[0], amount: amount, adjustment: amount - (form.basicSalary || 0), percentage: 0, reason: reason }; setForm({ ...form, basicSalary: amount, salaryHistory: [newRecord, ...(form.salaryHistory || [])] }); } };
     const deleteSalaryRecord = (index: number) => { if(!form.salaryHistory) return; if(!confirm("确定删除此薪资记录? (Confirm Delete?)")) return; const newHistory = [...form.salaryHistory]; newHistory.splice(index, 1); setForm({...form, salaryHistory: newHistory}); };
-    const confirmAddWarning = () => { if(!warnReason) return alert("请填写原因"); const newWarning: WarningRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: warnType as any, reason: warnReason, issuer: currentBossId || 'Admin' }; setForm({ ...form, warningHistory: [newWarning, ...(form.warningHistory || [])] }); setShowWarningInput(false); setWarnReason(''); };
+    const confirmAddWarning = () => { if(!warnReason) return alert("⚠️ 请填写原因"); const newWarning: WarningRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: warnType as any, reason: warnReason, issuer: currentBossId || 'Admin' }; setForm({ ...form, warningHistory: [newWarning, ...(form.warningHistory || [])] }); setShowWarningInput(false); setWarnReason(''); };
     const handleToggleModule = (mod: AppModule) => {
         const current = form.allowedModules || [];
         let nextModules;
@@ -741,8 +874,87 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             hasKitchenAlertPermission: nextModules.includes('KITCHEN_ALERT')
         });
     };
+    /** 👑 新增副职：下拉选的、自己打的都走这里，统一去重 */
+    const handleAddSecondaryRole = (raw: string) => {
+        const name = (raw || '').trim();
+        if (!name) return;
+        if (name === form.role) { alert('⚠️ 这个已经是主职了，不用再加一次'); return; }
+        if ((form.secondaryRoles || []).includes(name)) { alert('⚠️ 这个副职已经加过了'); return; }
+        setForm({ ...form, secondaryRoles: [...(form.secondaryRoles || []), name] });
+        setNewSecondaryRole('');
+    };
+
     const handleUpdateAssessmentTargets = (targets: string[]) => { setForm({ ...form, assessmentTargets: targets }); };
     const handleApplyInventoryAccess = (inventoryAccess: InventoryAccessConfig) => { setForm({ ...form, inventoryAccess }); };
+
+
+    // ---------- 🧹 PIC 负责项目 ----------
+    const handleAddPicArea = (name: string) => {
+        const clean = (name || '').trim();
+        if (!clean) return;
+        if ((form.picAreas || []).some(a => a.name === clean)) { alert('⚠️ 这个负责项目已经加过了'); return; }
+        const next: PicArea[] = [...(form.picAreas || []), { id: `PIC_${Date.now()}`, name: clean }];
+        setForm({ ...form, picAreas: next });
+        setNewPicName('');
+    };
+    const handleRatePicArea = (id: string, score: number) => {
+        const next = (form.picAreas || []).map(a =>
+            a.id === id
+                ? (a.score === score
+                    ? { ...a, score: undefined, ratedAt: undefined, ratedBy: undefined }   // 再点一次 = 清掉分数
+                    : { ...a, score, ratedAt: new Date().toISOString().split('T')[0], ratedBy: currentEmployee?.name || 'Admin' })
+                : a
+        );
+        setForm({ ...form, picAreas: next });
+    };
+    const handleRemovePicArea = (id: string) => {
+        setForm({ ...form, picAreas: (form.picAreas || []).filter(a => a.id !== id) });
+    };
+
+    /** 外劳：国籍不是马来西亚 → 显示 / 编辑护照号码 */
+    const isForeignWorker = !!form.nationality && !/malaysia/i.test(form.nationality);
+
+    /** ⭐ 老板 / 管理员：可以给 ★4、★5，也可以改工作项目清单 */
+    const canRateSkillHigh = isSuperAdminMode || Boolean(
+        currentEmployee && (getPortalRole(currentEmployee) === PortalRole.BOSS || getOrgLevel(currentEmployee) === 'OWNER')
+    );
+
+    // 连续快速点星星时，用 ref 拿「最新」的 form，避免后一下盖掉前一下
+    const skillFormRef = useRef(form);
+    skillFormRef.current = form;
+    const skillSaveChain = useRef<Promise<void>>(Promise.resolve());
+
+    const handleRateSkill = (itemId: string, level: StarLevel | null) => {
+        const cur = skillFormRef.current;
+        if (!cur.id) return;
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const by = currentEmployee?.name || (isSuperAdminMode ? 'Admin' : 'Manager');
+        const prev = cur.skillRatings?.[itemId]?.level;
+        const ratings = { ...(cur.skillRatings || {}) };
+        if (level) ratings[itemId] = { level, ratedAt: today, ratedBy: by };
+        else delete ratings[itemId];
+        const logEntry: any = { itemId, at: now.toISOString(), by };
+        if (prev) logEntry.from = prev;
+        if (level) logEntry.to = level;
+        const updated = { ...cur, skillRatings: ratings, skillRatingLog: [logEntry, ...(cur.skillRatingLog || [])].slice(0, 300) } as Employee;
+        skillFormRef.current = updated;
+        setForm(updated);
+        // 编辑中 → 跟「保存」一起存；没在编辑 → 马上存
+        if (isEditing) return;
+        setSkillSaving(true);
+        skillSaveChain.current = skillSaveChain.current
+            .then(async () => {
+                const latest = skillFormRef.current as Employee;
+                await DataManager.saveEmployee(latest);
+                onSave(employees.map(e => (e.id === latest.id ? { ...e, skillRatings: latest.skillRatings, skillRatingLog: latest.skillRatingLog } : e)));
+            })
+            .catch(err => {
+                console.error('Save skill rating failed', err);
+                alert('❌ 评分没存到，请检查网络后再点一次');
+            })
+            .finally(() => setSkillSaving(false));
+    };
 
     const canConfigureInventoryAccess = isSuperAdminMode || Boolean(
         currentEmployee && getPortalRole(currentEmployee) === PortalRole.BOSS
@@ -751,36 +963,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const enabledInventoryPermissions = INVENTORY_PERMISSIONS.filter(permission => resolvedInventoryAccess.permissions[permission]);
     
     const getTenure = (dateStr: string) => { if(!dateStr) return '-'; const start = new Date(dateStr); const now = new Date(); const diffTime = Math.abs(now.getTime() - start.getTime()); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if(diffDays < 30) return `${diffDays} Days`; if(diffDays < 365) return `${Math.floor(diffDays/30)} Months`; return `${(diffDays/365).toFixed(1)} Years`; };
-    const handleExportPDF = async () => { 
-        if (!printRef.current) return; 
-        setIsGeneratingPdf(true); 
-        try { 
-            await new Promise(resolve => setTimeout(resolve, 100)); 
-            await waitForPdfFonts();
-            const canvas = await html2canvas(printRef.current, { 
-                scale: 2, 
-                useCORS: true, 
-                backgroundColor: '#ffffff',
-                onclone: (clonedDoc) => {
-                    const clonedEl = clonedDoc.getElementById('hr-profiles-all-export-root');
-                    if (printRef.current && clonedEl) {
-                        applyResolvedStylesForPdf(printRef.current as HTMLElement, clonedEl as HTMLElement);
-                    }
-                }
-            }); 
-            const imgData = canvas.toDataURL('image/jpeg', 1.0); 
-            const pdf = new jsPDF('p', 'mm', 'a4'); 
-            const pdfWidth = pdf.internal.pageSize.getWidth(); 
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width; 
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight); 
-            pdf.save(`Staff_Directory_${new Date().toISOString().split('T')[0]}.pdf`); 
-        } catch (err) { 
-            console.error("PDF Gen Error:", err); 
-            alert("PDF 生成失败，请重试。"); 
-        } finally { 
-            setIsGeneratingPdf(false); 
-        } 
-    };
+    // 旧的「一键导出 PDF」已被 HRExportDialog 取代（可选格式 / 部门 / 栏位）
+
     const handleExportSinglePDF = async () => {
         if (!singleProfileRef.current || !form.id) return;
         setIsGeneratingSinglePdf(true);
@@ -800,7 +984,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
-            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
             
@@ -808,7 +992,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             pdf.save(`Profile_${form.name}_${form.id}.pdf`);
         } catch (err) {
             console.error("Single PDF Gen Error:", err);
-            alert("档案生成失败，请重试。");
+            alert("❌ 档案生成失败，请重试");
         } finally {
             setIsGeneratingSinglePdf(false);
         }
@@ -826,10 +1010,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                     <div className="flex items-center justify-between">
                         <h3 className="font-black text-xl text-[#111111] tracking-tight">员工通讯录</h3>
                         <div className="flex gap-2">
-                            <button onClick={handleExportPDF} disabled={isGeneratingPdf} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded-full transition-all active:scale-90" title="导出名录">
-                                {isGeneratingPdf ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+                            <button onClick={() => setIsSkillMatrixOpen(true)} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-amber-100 text-gray-700 hover:text-amber-700 rounded-full transition-all active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" title="技能总表 / 批量录入等级">
+                                <Grid3x3 size={16} />
                             </button>
-                            <button onClick={handleAddNew} className="w-8 h-8 flex items-center justify-center bg-[#111111] text-[#FFD200] rounded-full hover:bg-black transition-all active:scale-90 shadow-md">
+                            <button onClick={() => setIsExportOpen(true)} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded-full transition-all active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" title="导出名录（可选格式、部门、内容）">
+                                <Printer size={16} />
+                            </button>
+                            <button onClick={handleAddNew} className="w-8 h-8 flex items-center justify-center bg-[#111111] text-[#FFD200] rounded-full hover:bg-black transition-all active:scale-90 shadow-md min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                                 <Plus size={18} />
                             </button>
                         </div>
@@ -910,10 +1097,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     </div>
                                                     
                                                     <div className="min-w-0 flex-grow space-y-1">
-                                                        {/* 第一行：名字 + 警告标识 */}
-                                                        <div className="flex justify-between items-center">
-                                                            <div className={`text-sm font-black truncate ${isSelected ? 'text-white' : 'text-[#111111]'}`}>
-                                                                {emp.name}
+                                                        {/* 第一行：工号 + 名字 + 警告标识 */}
+                                                        <div className="flex justify-between items-center gap-2">
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-black ${isSelected ? 'bg-white/15 text-[#FFD200]' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                                                                    {emp.id}
+                                                                </span>
+                                                                <div className={`text-sm font-black truncate ${isSelected ? 'text-white' : 'text-[#111111]'}`}>
+                                                                    {emp.name}
+                                                                </div>
                                                             </div>
                                                             <div className="flex gap-1 shrink-0">
                                                                 {(emp as any).loanRecords?.reduce((s: number, r: any) => s + (r.type === 'BORROW' ? r.amount : -r.amount), 0) > 0 && (
@@ -957,6 +1149,27 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                                         {/* 第三行：状态与职级 (Soft Badges) */}
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {shiftGroupOf(emp) !== 'NONE' && (() => {
+                                                                const g = SHIFT_GROUP_META[shiftGroupOf(emp)];
+                                                                return (
+                                                                    <span title="排班分组（跟考勤同步）" className="text-[9px] px-1.5 py-0.5 rounded-md font-black tracking-wider border"
+                                                                        style={isSelected ? { background: 'rgba(255,255,255,0.2)', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' } : { background: g.bg, color: g.fg, borderColor: g.border }}>
+                                                                        {g.label}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                            {(() => {
+                                                                const sc = primarySkillScore(emp, skillCatalog);
+                                                                if (sc === null) return null;
+                                                                return (
+                                                                    <span title="主职工作项目平均星级"
+                                                                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-black tracking-wider border ${
+                                                                            isSelected ? 'bg-white/20 text-white border-white/20' : 'bg-amber-50 text-amber-800 border-amber-200'
+                                                                        }`}>
+                                                                        ★{sc.toFixed(1)}
+                                                                    </span>
+                                                                );
+                                                            })()}
                                                             {getOrgLevel(emp) !== 'CREW' && (
                                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
                                                                     getOrgLevel(emp) === 'OWNER' ? 'bg-[#FFD200] text-black' : 
@@ -986,7 +1199,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             </div>
 
             {/* Detail View */}
-            <div className={`flex-grow flex flex-col h-full bg-[#F6F7FB] overflow-y-auto relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
+            <div
+                ref={detailScrollRef}
+                onScroll={e => {
+                    const collapsed = (e.currentTarget as HTMLDivElement).scrollTop > 140;
+                    if (collapsed !== headerCollapsed) setHeaderCollapsed(collapsed);
+                }}
+                className={`flex-grow flex flex-col h-full bg-[#F6F7FB] overflow-y-auto relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}
+            >
                 {!selectedEmpId ? (
                     <div className="m-auto text-gray-400 flex flex-col items-center gap-4 px-6 text-center max-w-xs md:max-w-sm">
                         <div className="w-24 h-24 bg-gray-200/60 rounded-full flex items-center justify-center animate-pulse shrink-0">
@@ -998,39 +1218,60 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                     </div>
                 ) : (
                     <>
+                        {/* 📱 手机版：往下滑后出现的精简头部（名字 + 编辑） */}
+                        <div className="md:hidden sticky top-0 z-40 h-0">
+                            <div
+                                className={`absolute inset-x-0 top-0 h-14 flex items-center gap-2 px-3 bg-[#111111] text-white shadow-lg transition-transform duration-200 ${headerCollapsed ? 'translate-y-0' : '-translate-y-full pointer-events-none'}`}
+                                aria-hidden={!headerCollapsed}
+                            >
+                                <button onClick={() => setSelectedEmpId(null)} className="w-11 h-11 -ml-1 rounded-full flex items-center justify-center bg-white/10 active:scale-95 shrink-0" aria-label="返回">
+                                    <ArrowLeft size={18}/>
+                                </button>
+                                <p className="flex-1 min-w-0 font-black text-base truncate">{form.name || 'New Staff'}</p>
+                                {isEditing ? (
+                                    <>
+                                        <button onClick={() => setIsEditing(false)} className="px-3 h-11 bg-white/10 rounded-xl text-xs font-bold active:scale-95 shrink-0">取消</button>
+                                        <button onClick={handleSaveForm} className="px-4 h-11 bg-[#FFD200] text-black rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 shrink-0"><Save size={14}/> 保存</button>
+                                    </>
+                                ) : (
+                                    <button onClick={() => setIsEditing(true)} className="px-3 h-11 bg-white text-black rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 shrink-0"><Edit3 size={14}/> 编辑</button>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Header Section */}
                         <div className={`bg-gradient-to-br p-5 pb-20 md:p-6 md:pb-28 relative shadow-lg shrink-0 ${form.isArchived ? 'from-gray-800 to-gray-900 grayscale' : 'from-[#111111] to-[#2A2A2A]'}`}>
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                             
                             {/* 顶部按钮栏 */}
                             <div className="flex justify-between items-start relative z-10 text-white gap-3">
-                                <button onClick={() => setSelectedEmpId(null)} className="md:hidden p-2 -ml-2 bg-white/10 rounded-full hover:bg-white/20 active:scale-95 transition-all shrink-0">
+                                <button onClick={() => setSelectedEmpId(null)} className="md:hidden p-2 -ml-2 bg-white/10 rounded-full hover:bg-white/20 active:scale-95 transition-all shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                                     <ArrowLeft size={20}/>
                                 </button>
                                 
                                 <div className="flex items-center justify-end gap-2 ml-auto flex-nowrap overflow-x-auto scrollbar-hide">
                                     {/* 借款按钮 —— 新加到前面，用户问过借款功能在哪 */}
                                     {!isEditing && !form.isArchived && (
-                                        <button onClick={() => setShowLoanModal(true)} className="relative p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="借还款">
+                                        <button onClick={() => setShowLoanModal(true)} className="relative p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0" title="借还款">
                                             <Wallet size={14}/>
                                             {loanBalance > 0 && (
                                                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[8px] font-black flex items-center justify-center">!</span>
                                             )}
                                         </button>
                                     )}
-                                    <button onClick={() => setShowReviewModal(true)} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="记录评语">
+                                    <button onClick={() => setShowReviewModal(true)} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0" title="记录评语">
                                         <MessageSquarePlus size={14}/> <span className="hidden md:inline">评语</span>
                                     </button>
-                                    <button onClick={handleExportSinglePDF} disabled={isGeneratingSinglePdf} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0" title="导出档案">
+                                    <button onClick={handleExportSinglePDF} disabled={isGeneratingSinglePdf} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0" title="导出档案">
                                         {isGeneratingSinglePdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} <span className="hidden md:inline">导出</span>
                                     </button>
                                     {isEditing ? (
                                         <>
-                                            <button onClick={() => setIsEditing(false)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold text-white active:scale-95 shrink-0">取消</button>
-                                            <button onClick={handleSaveForm} className="px-4 py-2 bg-[#FFD200] hover:bg-[#E5C100] text-black rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 active:scale-95 shrink-0"><Save size={14}/> 保存</button>
+                                            <button onClick={() => setIsEditing(false)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold text-white active:scale-95 shrink-0 min-h-[44px] md:min-h-0">取消</button>
+                                            <button onClick={handleSaveForm} className="px-4 py-2 bg-[#FFD200] hover:bg-[#E5C100] text-black rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0"><Save size={14}/> 保存</button>
                                         </>
                                     ) : (
-                                        <button onClick={() => setIsEditing(true)} className="px-3 py-2 bg-white text-black rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 hover:bg-gray-100 active:scale-95 shrink-0"><Edit3 size={14}/> 编辑</button>
+                                        <button onClick={() => setIsEditing(true)} className="px-3 py-2 bg-white text-black rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 hover:bg-gray-100 active:scale-95 shrink-0 min-h-[44px] md:min-h-0"><Edit3 size={14}/> 编辑</button>
                                     )}
                                 </div>
                             </div>
@@ -1041,7 +1282,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         {form.name || 'New Staff'}
                                     </h1>
                                     
-                                    {v2OverallGradeInfo.label !== 'Fail' && (
+                                    {hasAssessmentData && (
                                         <div className={`px-2 py-0.5 rounded-lg text-[10px] md:text-xs font-black uppercase flex items-center gap-1 border ${v2OverallGradeInfo.color} bg-opacity-100 shadow-lg shrink-0`}>
                                             {React.createElement(v2OverallGradeInfo.icon, { size: 12 })}
                                             {v2OverallGradeInfo.label}
@@ -1075,14 +1316,33 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     {form.secondaryRoles?.map(sr => (
                                                         <span key={sr} className="bg-blue-500/20 text-blue-200 px-2 py-1 rounded-lg border border-blue-500/30 flex items-center gap-1 shrink-0">
                                                             {sr.split('(')[0]}
-                                                            <button onClick={() => setForm({...form, secondaryRoles: form.secondaryRoles!.filter(r => r !== sr)})} className="hover:text-red-400 ml-1 p-0.5 active:scale-90"><X size={12}/></button>
+                                                            <button onClick={() => setForm({...form, secondaryRoles: form.secondaryRoles!.filter(r => r !== sr)})} className="hover:text-red-400 ml-1 p-0.5 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={12}/></button>
                                                         </span>
                                                     ))}
                                                 </div>
-                                                <select value="" onChange={e => { const newRole = e.target.value; if (newRole && !form.secondaryRoles?.includes(newRole) && newRole !== form.role) { setForm({...form, secondaryRoles: [...(form.secondaryRoles || []), newRole]}); } }} className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold cursor-pointer w-full md:w-auto mt-1 md:mt-0" style={{ fontSize: '16px', minHeight: '40px' }}>
-                                                    <option value="" className="text-black">+ 添加副职</option>
-                                                    {DEFAULT_ROLES.filter(r => r.title !== form.role && !form.secondaryRoles?.includes(r.title)).map(r => <option key={r.id} value={r.title} className="text-black">{r.title}</option>)}
-                                                </select>
+                                                <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto mt-1 md:mt-0">
+                                                    <select value="" onChange={e => handleAddSecondaryRole(e.target.value)}
+                                                        className="bg-white/10 text-white border border-white/20 rounded-lg px-2 py-2 outline-none font-bold cursor-pointer w-full md:w-auto"
+                                                        style={{ fontSize: '16px', minHeight: '40px' }}>
+                                                        <option value="" className="text-black">+ 从职位列表选</option>
+                                                        {DEFAULT_ROLES.filter(r => r.title !== form.role && !form.secondaryRoles?.includes(r.title)).map(r => <option key={r.id} value={r.title} className="text-black">{r.title}</option>)}
+                                                    </select>
+                                                    {/* 👑 列表里没有的，自己打 */}
+                                                    <div className="flex gap-1.5 w-full md:w-auto">
+                                                        <input
+                                                            value={newSecondaryRole}
+                                                            onChange={e => setNewSecondaryRole(e.target.value)}
+                                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSecondaryRole(newSecondaryRole); } }}
+                                                            placeholder="自己打，例如：打荷"
+                                                            className="flex-1 min-w-0 md:w-[150px] bg-white/10 text-white placeholder-white/40 border border-white/20 rounded-lg px-2 outline-none font-bold focus:border-[#FFD200]"
+                                                            style={{ fontSize: '16px', minHeight: '40px' }} />
+                                                        <button onClick={() => handleAddSecondaryRole(newSecondaryRole)}
+                                                            className="px-3 rounded-lg bg-[#FFD200] text-black font-black shrink-0 active:scale-95 flex items-center justify-center"
+                                                            style={{ minHeight: '40px' }}>
+                                                            <Plus size={16}/>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
@@ -1093,6 +1353,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <span className="bg-[#FFD200] text-black px-3 py-1.5 rounded-lg font-black text-xs shadow-md">
                                                     {form.role}
                                                 </span>
+                                                {shiftGroupOf(form) !== 'NONE' && (
+                                                    <span className="px-3 py-1.5 rounded-lg font-black text-xs shadow-md text-white" style={{ background: SHIFT_GROUP_META[shiftGroupOf(form)].solid }} title="排班分组（跟考勤、组织图同步）">
+                                                        {SHIFT_GROUP_META[shiftGroupOf(form)].label}
+                                                    </span>
+                                                )}
                                                 {form.secondaryRoles && form.secondaryRoles.length > 0 && (
                                                     <>
                                                         <span className="text-[9px] font-black uppercase tracking-widest text-white/40 shrink-0 mt-1.5 ml-2 border-l border-white/20 pl-3">副职</span>
@@ -1117,19 +1382,19 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <div className="flex md:hidden bg-white/90 backdrop-blur-md p-1 rounded-2xl border border-gray-200 sticky top-14 z-30 mb-4 gap-1 shadow-sm">
                                 <button 
                                     onClick={() => setMobileDetailTab('basic')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'basic' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'basic' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     个人档案
                                 </button>
                                 <button 
                                     onClick={() => setMobileDetailTab('salary')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'salary' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'salary' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     薪资法定
                                 </button>
                                 <button 
                                     onClick={() => setMobileDetailTab('records')} 
-                                    className={`flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'records' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'records' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
                                 >
                                     评估记录
                                 </button>
@@ -1144,7 +1409,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {form.avatar ? <img src={form.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-4xl md:text-5xl text-gray-300 font-black">{(form.name || 'U').charAt(0)}</div>}
                                             </div>
                                             {isEditing && <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white z-20"><Camera size={24}/></div>}
-                                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(!file) return; setIsUploading(true); try { const url = await uploadToCloudinary(file); setForm({...form, avatar: url}); } catch(err) { alert("Upload Failed"); } finally { setIsUploading(false); } }} />
+                                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(!file) return; setIsUploading(true); try { const url = await uploadToCloudinary(file); setForm({...form, avatar: url}); } catch(err) { alert("❌ 上传失败"); } finally { setIsUploading(false); } }} />
                                         </div>
                                         <div className="flex gap-2 flex-wrap justify-center">
                                             <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 shrink-0 ${form.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : form.status === 'TERMINATED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -1184,7 +1449,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> 登录密码 (Access PIN)</h4>
                                         <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
                                             <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
-                                            <button onClick={() => setShowPin(!showPin)} className="p-2 text-gray-400 hover:text-black transition-colors active:scale-90">{showPin ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                                            <button onClick={() => setShowPin(!showPin)} className="p-2 text-gray-400 hover:text-black transition-colors active:scale-90 min-h-[44px] md:min-h-0">{showPin ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
                                         </div>
                                     </div>
 
@@ -1200,7 +1465,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     <div className="flex items-center gap-3 mt-1 text-[10px] font-bold text-white/50">
                                                         <span className="flex items-center gap-1">
                                                             <span className="text-white/30">休</span>
-                                                            <span className="text-white/70">{form.monthlyRestDays || '-'}d</span>
+                                                            <span className="text-white/70">{form.monthlyRestDays ?? 4}d</span>
                                                         </span>
                                                         <span className="w-px h-3 bg-white/20"/>
                                                         <span className="flex items-center gap-1">
@@ -1227,7 +1492,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                 <option className="text-black" value={4}>4 Days</option>
                                                             </select>
                                                         ) : (
-                                                            <p className="text-sm font-bold text-white">{form.monthlyRestDays || '-'} Days</p>
+                                                            <p className="text-sm font-bold text-white">{form.monthlyRestDays ?? 4} Days</p>
                                                         )}
                                                     </div>
                                                     <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between">
@@ -1284,7 +1549,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                              <div className="text-xl md:text-2xl font-mono font-black break-all">RM {(form.basicSalary || 0).toLocaleString()}</div>
                                                          )}
                                                     </div>
-                                                    {isEditing && <button onClick={addSalaryRecord} className="text-[10px] bg-[#FFD200] text-black px-3 py-2 rounded-lg font-bold shadow-md active:scale-95 transition-all shrink-0">+ Increment</button>}
+                                                    {isEditing && <button onClick={addSalaryRecord} className="text-[10px] bg-[#FFD200] text-black px-3 py-2 rounded-lg font-bold shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0">+ Increment</button>}
                                                 </div>
                                                 
                                                 <div className="space-y-3 pt-4 border-t border-white/10 mb-4">
@@ -1292,9 +1557,41 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     <div className="flex flex-wrap justify-between items-center text-xs gap-2"><span className="text-white/60 shrink-0">Account</span>{isEditing ? <input value={form.bankAccount || ''} onChange={e => setForm({...form, bankAccount: e.target.value})} className="bg-white/10 text-white rounded p-2 outline-none flex-1 max-w-[180px] text-right font-mono" style={{ fontSize: '16px', minHeight: '40px' }} inputMode="numeric" /> : <span className="font-mono font-bold">{form.bankAccount || '-'}</span>}</div>
                                                 </div>
 
+                                                {/* 💳 薪资付款方式 + 🛡️ LINDUNG 24 Jam —— 薪资结算会自动带入 */}
+                                                <div className="space-y-3 pb-4 mb-4 border-b border-white/10">
+                                                    <div className="flex flex-wrap justify-between items-center text-xs gap-2">
+                                                        <span className="text-white/60 shrink-0">薪资付款方式</span>
+                                                        {isEditing ? (
+                                                            <div className="flex bg-white/10 rounded-lg p-0.5">
+                                                                {(['BANK', 'CASH'] as const).map(m => (
+                                                                    <button key={m} type="button" onClick={() => setForm({ ...form, payrollPaymentMethod: m })}
+                                                                        className={`px-3 rounded-md font-black min-h-[40px] ${(form.payrollPaymentMethod || 'BANK') === m ? (m === 'BANK' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white') : 'text-white/50'}`}>
+                                                                        {m === 'BANK' ? '🏦 银行' : '💵 现金'}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="font-bold">{(form.payrollPaymentMethod || 'BANK') === 'CASH' ? '💵 现金' : '🏦 银行转账'}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap justify-between items-center text-xs gap-2">
+                                                        <span className="text-white/60 shrink-0">LINDUNG 24 Jam</span>
+                                                        {isEditing ? (
+                                                            <div className="flex bg-white/10 rounded-lg p-0.5">
+                                                                <button type="button" onClick={() => setForm({ ...form, lindungOptOut: false })}
+                                                                    className={`px-3 rounded-md font-black min-h-[40px] ${!form.lindungOptOut ? 'bg-[#FFD200] text-black' : 'text-white/50'}`}>扣</button>
+                                                                <button type="button" onClick={() => setForm({ ...form, lindungOptOut: true })}
+                                                                    className={`px-3 rounded-md font-black min-h-[40px] ${form.lindungOptOut ? 'bg-white text-black' : 'text-white/50'}`}>不扣</button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="font-bold">{form.lindungOptOut ? '不扣' : '扣'}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
                                                 <div className="pt-2 border-t border-white/10">
                                                     <p className="text-[9px] font-bold text-white/40 uppercase mb-2">History</p>
-                                                    <div className="space-y-2 max-h-32 overflow-y-auto pr-1">{form.salaryHistory?.length === 0 && <p className="text-[10px] text-white/30 italic">No records</p>}{form.salaryHistory?.map((rec, idx) => (<div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 p-2 rounded gap-2"><div><div className="font-bold text-white/80">{rec.date}</div><div className="text-white/50">{rec.reason}</div></div><div className="text-right shrink-0"><div className="font-mono font-bold text-[#FFD200]">RM {rec.amount}</div><div className={`${rec.adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>{rec.adjustment >= 0 ? '+' : ''}{rec.adjustment}</div></div>{isEditing && <button onClick={() => deleteSalaryRecord(idx)} className="text-red-400 ml-2 p-1 active:scale-90"><Trash2 size={12}/></button>}</div>))}</div>
+                                                    <div className="space-y-2 max-h-32 overflow-y-auto pr-1">{form.salaryHistory?.length === 0 && <p className="text-[10px] text-white/30 italic">No records</p>}{form.salaryHistory?.map((rec, idx) => (<div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 p-2 rounded gap-2"><div><div className="font-bold text-white/80">{rec.date}</div><div className="text-white/50">{rec.reason}</div></div><div className="text-right shrink-0"><div className="font-mono font-bold text-[#FFD200]">RM {rec.amount}</div><div className={`${rec.adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>{rec.adjustment >= 0 ? '+' : ''}{rec.adjustment}</div></div>{isEditing && <button onClick={() => deleteSalaryRecord(idx)} className="text-red-400 ml-2 p-1 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={12}/></button>}</div>))}</div>
                                                 </div>
                                             </div>
                                         )}
@@ -1312,9 +1609,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         value={form.specialSkills || ''} 
                                                         onChange={e => setForm({...form, specialSkills: e.target.value})} 
                                                         placeholder="请填写员工专业技能，如：会电工、会养鱼、会剖鱼、修水管等 (使用空格、逗号或顿号隔开)..." 
-                                                        className="bg-white text-gray-800 border border-gray-200 rounded-xl p-3 outline-none w-full text-sm resize-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all font-medium" 
-                                                        rows={3}
-                                                    />
+                                                        className="bg-white text-gray-800 border border-gray-200 rounded-xl p-3 outline-none w-full resize-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all font-medium text-[16px] md:text-sm" 
+                                                        rows={3} />
                                                     <span className="text-[10px] text-gray-400 font-bold">💡 支持多项专业技能，输入后用空格、逗号或顿号隔开会自动生成标签</span>
                                                 </div>
                                             ) : (
@@ -1334,6 +1630,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             )}
                                         </div>
                                     </div>
+
                                 </div>
 
                                 <div className="xl:col-span-8 flex flex-col gap-6">
@@ -1341,7 +1638,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><User size={14}/> 个人档案 (Personal)</h4>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-5 gap-x-3">
                                             <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
-                                            <InputField label="IC / Passport" value={form.icNumber} onChange={(e: any) => setForm({...form, icNumber: e.target.value})} placeholder="ID" isEditing={isEditing} />
+                                            {isForeignWorker
+                                                ? <InputField label="护照号码 (Passport)" value={form.passportNo || (isEditing ? '' : form.icNumber)} onChange={(e: any) => setForm({...form, passportNo: e.target.value})} placeholder="Passport No" isEditing={isEditing} />
+                                                : <InputField label="IC 号码 (MyKad)" value={form.icNumber} onChange={(e: any) => setForm({...form, icNumber: e.target.value})} placeholder="900101-14-5555" isEditing={isEditing} />}
                                             <InputField label="手机 (Phone)" value={form.phone} onChange={(e: any) => setForm({...form, phone: e.target.value})} placeholder="012..." isEditing={isEditing} />
                                             <SelectField label="性别 (Gender)" value={form.gender} onChange={(e: any) => setForm({...form, gender: e.target.value})} options={['Male', 'Female']} isEditing={isEditing} />
                                             <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
@@ -1359,6 +1658,123 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
                                             <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
                                             <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
+                                            {/* 👥 排班分组：跟考勤（班次 1 / 2）、组织图同一个栏位 */}
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">排班分组 (Group)</label>
+                                                {isEditing ? (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {([1, 2] as const).map(n => {
+                                                            const key = n === 1 ? 'A' : 'B';
+                                                            const m = SHIFT_GROUP_META[key];
+                                                            const on = form.shiftGroup === n;
+                                                            return (
+                                                                <button key={n} type="button"
+                                                                    onClick={() => setForm({ ...form, shiftGroup: on ? undefined : n })}
+                                                                    className="rounded-xl border-2 font-black text-sm active:scale-95 transition-all"
+                                                                    style={{ minHeight: 48, background: on ? m.solid : '#fff', color: on ? '#fff' : m.fg, borderColor: on ? m.solid : m.border }}>
+                                                                    {m.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-sm font-bold p-2 min-h-[36px]">
+                                                        {shiftGroupOf(form) === 'NONE'
+                                                            ? <span className="text-gray-400">未分组（考勤按 Group A 时间）</span>
+                                                            : <span style={{ color: SHIFT_GROUP_META[shiftGroupOf(form)].fg }}>{SHIFT_GROUP_META[shiftGroupOf(form)].label}</span>}
+                                                    </div>
+                                                )}
+                                                {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-1">跟考勤、组织图同步；再点一次 = 取消分组</p>}
+                                            </div>
+                                            {/* 🏢 组织架构图设定：BOD → 管理层 → 部门 → 员工（不影响权限职级、薪资部门） */}
+                                            <div className="col-span-2 md:col-span-3 border-t border-gray-100 pt-4 mt-1">
+                                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                                    <span className="text-xs font-black text-gray-700">🏢 组织架构图 (Org Chart)</span>
+                                                    <span className="text-[10px] font-bold text-gray-400">只影响组织图显示，不改权限、不改薪资部门</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                                    {(() => {
+                                                        const autoTier = resolveTier({ ...form, orgChartTier: undefined });
+                                                        const tierNow = resolveTier(form);
+                                                        const others = employees.filter(x => x.id !== form.id && !x.isArchived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                                                        const nameOf = (id?: string) => employees.find(x => x.id === id)?.name;
+                                                        const sel = 'w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#111111] outline-none focus:border-[#FFD200]';
+                                                        const lab = 'text-[10px] font-bold text-gray-400 uppercase mb-1 block';
+                                                        const view = (v?: string, fallback = '-') => <div className="text-sm font-bold text-[#111111] p-2 min-h-[36px] break-words">{v || <span className="text-gray-400">{fallback}</span>}</div>;
+                                                        const tierLabel = (t: string) => ORG_TIER_OPTIONS.find(o => o.value === t)?.short || t;
+                                                        return (
+                                                            <>
+                                                                <div>
+                                                                    <label className={lab}>组织层级 (Organisation Level)</label>
+                                                                    {isEditing ? (
+                                                                        <select value={form.orgChartTier || ''} onChange={e => setForm({ ...form, orgChartTier: (e.target.value || undefined) as any })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
+                                                                            <option value="">自动（按职级：{tierLabel(autoTier)}）</option>
+                                                                            {ORG_TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                        </select>
+                                                                    ) : view(`${tierLabel(tierNow)}${form.orgChartTier ? '' : '（自动）'}`)}
+                                                                </div>
+                                                                <InputField label="组织图职位 (Position)" value={form.orgPosition} onChange={(e: any) => setForm({ ...form, orgPosition: e.target.value || undefined })} placeholder={`留空 = ${(form.role || '').split('(')[0].trim() || '职位'}`} isEditing={isEditing} />
+                                                                {(tierNow === 'MANAGEMENT' || form.orgUnit) && (
+                                                                    <div>
+                                                                        <label className={lab}>负责单位 (Unit)</label>
+                                                                        {isEditing ? (
+                                                                            <>
+                                                                                <input list="org-unit-suggestions" value={form.orgUnit || ''} onChange={e => setForm({ ...form, orgUnit: e.target.value || undefined })} placeholder="留空 = 按工作部门（厨房 / 楼面…）" className={sel} style={{ fontSize: '16px', minHeight: '48px' }} />
+                                                                                <datalist id="org-unit-suggestions">{ORG_UNIT_SUGGESTIONS.map(u => <option key={u} value={u} />)}</datalist>
+                                                                            </>
+                                                                        ) : view(form.orgUnit, '按工作部门')}
+                                                                    </div>
+                                                                )}
+                                                                {tierNow === 'MANAGEMENT' && (
+                                                                    <div className="md:col-span-2 xl:col-span-3">
+                                                                        <label className={lab}>管理部门 (Manages) · 可多选</label>
+                                                                        {isEditing ? (
+                                                                            <div className="flex flex-wrap gap-2">
+                                                                                {OPS_DEPTS.map(d => {
+                                                                                    const list = form.orgManagesDepts || [];
+                                                                                    const on = list.includes(d);
+                                                                                    return (
+                                                                                        <button key={d} type="button"
+                                                                                            onClick={() => {
+                                                                                                const next = on ? list.filter(x => x !== d) : [...list, d];
+                                                                                                setForm({ ...form, orgManagesDepts: next.length ? next : undefined });
+                                                                                            }}
+                                                                                            className={`px-4 rounded-xl border-2 font-black text-sm active:scale-95 transition-all ${on ? 'bg-[#111111] border-[#111111] text-[#FFD200]' : 'bg-white border-gray-200 text-gray-600'}`}
+                                                                                            style={{ minHeight: 44 }}>
+                                                                                            {ORG_DEPT_META[d].emoji} {ORG_DEPT_META[d].zh}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        ) : view((form.orgManagesDepts || []).map(d => ORG_DEPT_META[d]?.zh || d).join('、'), '按工作部门 / 负责单位')}
+                                                                        {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-1">例如楼面主管同时管水吧、洗碗：三个都选，组织图上他的格子会横跨这三个部门。都不选 = 按工作部门。</p>}
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <label className={lab}>直属上司 (Reports To)</label>
+                                                                    {isEditing ? (
+                                                                        <select value={form.reportsTo || ''} onChange={e => setForm({ ...form, reportsTo: e.target.value || undefined })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
+                                                                            <option value="">自动（{tierNow === 'STAFF' ? '同部门的管理层' : tierNow === 'MANAGEMENT' ? 'BOD' : '—'}）</option>
+                                                                            {others.map(x => <option key={x.id} value={x.id}>{x.name}（{(x.role || '').split('(')[0].trim()}）</option>)}
+                                                                        </select>
+                                                                    ) : view(nameOf(form.reportsTo), '自动')}
+                                                                </div>
+                                                                <InputField label="第二身份 (Secondary Role)" value={form.orgSecondaryRole} onChange={(e: any) => setForm({ ...form, orgSecondaryRole: e.target.value || undefined })} placeholder="例如：Personal Assistant" isEditing={isEditing} />
+                                                                <div>
+                                                                    <label className={lab}>第二身份汇报 (Secondary Reports To)</label>
+                                                                    {isEditing ? (
+                                                                        <select value={form.orgSecondaryReportsTo || ''} onChange={e => setForm({ ...form, orgSecondaryReportsTo: e.target.value || undefined })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
+                                                                            <option value="">没有</option>
+                                                                            {others.map(x => <option key={x.id} value={x.id}>{x.name}（{(x.role || '').split('(')[0].trim()}）</option>)}
+                                                                        </select>
+                                                                    ) : view(nameOf(form.orgSecondaryReportsTo), '没有')}
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                                {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-2">「工作部门」决定他排在组织图哪一栏（厨房 / 楼面…）；第二身份在组织图上用虚线 + 徽章表示，例如「PA to BEN」。</p>}
+                                            </div>
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-gray-50"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
                                     </div>
@@ -1375,6 +1791,102 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><InputField label="打针有效 (Typhoid)" value={form.typhoidExpiry} onChange={(e: any) => setForm({...form, typhoidExpiry: e.target.value})} type="date" isEditing={isEditing} /><InputField label="餐馆课程 (Course Date)" value={form.foodHandlingDate} onChange={(e: any) => setForm({...form, foodHandlingDate: e.target.value})} type="date" isEditing={isEditing} /></div>
                                             </div>
                                         </div>
+                                    </div>
+ 
+                                    {/* ⭐ 工作能力 + 🧹 PIC 负责项目 */}
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
+                                        {/* ⭐ 工作能力星级：主职 / 副职 → 工作项目 → ★1–★5 */}
+                                        <SkillStarPanel
+                                            employee={form}
+                                            catalog={skillCatalog}
+                                            canRateHigh={canRateSkillHigh}
+                                            onRate={handleRateSkill}
+                                            onOpenPrint={() => setShowSkillPrint(true)}
+                                            onOpenCatalog={canRateSkillHigh ? () => setShowSkillCatalog(true) : undefined}
+                                            saving={skillSaving}
+                                        />
+
+                                        {/* ---- PIC 负责项目 ---- */}
+                                        <div className="flex items-center justify-between gap-2 mt-6 mb-3 pt-5 border-t border-gray-100 flex-wrap">
+                                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                                <CheckSquare size={14} className="text-[#FFD200]"/> PIC 负责项目
+                                            </h4>
+                                            {(() => {
+                                                const avg = picAverage(form.picAreas);
+                                                return avg === null ? null : (
+                                                    <span className="text-[10px] font-black text-stone-800 bg-[#FFD200]/30 border border-[#FFD200] px-2 py-1 rounded-lg">
+                                                        平均 {avg.toFixed(1)} ★ · {(form.picAreas || []).length} 项
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {(!form.picAreas || form.picAreas.length === 0) ? (
+                                            <div className="bg-gray-50 border border-gray-100 rounded-2xl px-4 py-5 text-center">
+                                                <span className="text-[11px] text-gray-400 font-bold">暂未指派负责项目 (No PIC area)</span>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {(form.picAreas || []).map(area => (
+                                                    <div key={area.id} className="bg-gray-50 rounded-xl border border-gray-100 px-3 py-2.5 min-w-0">
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <span className="text-[11px] font-black text-stone-800 leading-snug break-words min-w-0">{area.name}</span>
+                                                            {isEditing && (
+                                                                <button onClick={() => handleRemovePicArea(area.id)}
+                                                                    className="text-gray-300 hover:text-red-500 shrink-0 active:scale-90 flex items-center justify-center min-h-[28px] min-w-[28px]">
+                                                                    <Trash2 size={12}/>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-0.5 mt-1 flex-wrap">
+                                                            {[1, 2, 3, 4, 5].map(n => {
+                                                                const filled = (area.score || 0) >= n;
+                                                                return isEditing ? (
+                                                                    <button key={n} onClick={() => handleRatePicArea(area.id, n)}
+                                                                        className="p-1 active:scale-90 transition-all flex items-center justify-center">
+                                                                        <Star size={16} className={filled ? 'text-[#FFD200] fill-[#FFD200]' : 'text-gray-300'}/>
+                                                                    </button>
+                                                                ) : (
+                                                                    <Star key={n} size={13} className={`m-0.5 ${filled ? 'text-[#FFD200] fill-[#FFD200]' : 'text-gray-200'}`}/>
+                                                                );
+                                                            })}
+                                                            <span className="text-[10px] font-bold text-gray-500 ml-1.5 whitespace-nowrap">
+                                                                {area.score ? PIC_SCORE_LABELS[area.score] : '未评分'}
+                                                            </span>
+                                                        </div>
+                                                        {area.ratedAt && (
+                                                            <p className="text-[9px] font-bold text-gray-400 mt-0.5 truncate">{area.ratedAt} · {area.ratedBy || '-'}</p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {isEditing && (
+                                            <div className="mt-3 flex flex-col md:flex-row gap-2">
+                                                <select value="" onChange={e => { if (e.target.value) handleAddPicArea(e.target.value); }}
+                                                    className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-2 font-bold text-gray-700 outline-none focus:border-stone-400"
+                                                    style={{ fontSize: '16px', minHeight: '44px' }}>
+                                                    <option value="">+ 从常用项目选</option>
+                                                    {DEFAULT_PIC_AREAS.filter(n => !(form.picAreas || []).some(a => a.name === n)).map(n => (
+                                                        <option key={n} value={n}>{n}</option>
+                                                    ))}
+                                                </select>
+                                                <div className="flex gap-2 flex-1 min-w-0">
+                                                    <input value={newPicName} onChange={e => setNewPicName(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddPicArea(newPicName); } }}
+                                                        placeholder="自己打，例如：鱼缸清洁"
+                                                        className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-3 font-bold text-gray-800 outline-none focus:border-stone-400"
+                                                        style={{ fontSize: '16px', minHeight: '44px' }} />
+                                                    <button onClick={() => handleAddPicArea(newPicName)}
+                                                        className="px-4 rounded-xl bg-stone-900 text-[#FFD200] font-black active:scale-95 shrink-0 flex items-center justify-center"
+                                                        style={{ minHeight: '44px' }}>
+                                                        <Plus size={16}/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-2">💡 点星星打分；再点同一颗星 = 清掉分数</p>}
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
@@ -1401,7 +1913,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             )}
                                         </div>
                                         <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                            <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95">Config</button>}</div>
+                                            <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
                                             <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{form.allowedModules?.map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
                                             
                                             {/* 🟢 新增：通知厨房专属快捷权限配置 */}
@@ -1428,7 +1940,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                             hasKitchenAlertPermission: !hasAlert
                                                         });
                                                     }}
-                                                    className={`h-8 px-3 rounded-xl text-[10px] font-black transition-colors ${
+                                                    className={`min-h-[44px] md:min-h-0 h-8 px-3 rounded-xl text-[10px] font-black transition-colors ${
                                                         (form.allowedModules || []).includes('KITCHEN_ALERT')
                                                             ? 'bg-[#FFD200] text-[#111111]'
                                                             : 'bg-gray-100 text-gray-400'
@@ -1447,7 +1959,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <p className="mt-1 text-[10px] font-bold text-gray-400">控制库存范围与具体操作，不改变员工看到的其他模块</p>
                                             </div>
                                             {isEditing && canConfigureInventoryAccess && (
-                                                <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#111111] px-3 text-[10px] font-black text-[#FFD200] active:scale-95">设置</button>
+                                                <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#111111] px-3 text-[10px] font-black text-[#FFD200] active:scale-95 min-h-[44px] md:min-h-0">设置</button>
                                             )}
                                         </div>
                                         <div className="space-y-3">
@@ -1474,9 +1986,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
-                                        <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> 奖惩记录 (Disciplinary)</h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95">+ Add Warning</button>}</div>
-                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
-                                        <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90"><Trash2 size={16}/></button>}</div>); })}</div>
+                                        <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> 奖惩记录 (Disciplinary)</h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95 min-h-[44px] md:min-h-0">+ Add Warning</button>}</div>
+                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
+                                        <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={16}/></button>}</div>); })}</div>
                                     </div>
 
                                     {isEditing && (
@@ -1499,11 +2011,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             
             {/* Review Modal */}
             {showReviewModal && (
-                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+                <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-black text-xl text-[#111111]">员工表现评语 (Reviews)</h3>
-                            <button onClick={() => setShowReviewModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
+                            <button onClick={() => setShowReviewModal(false)} className="p-2 hover:bg-gray-100 rounded-full min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20}/></button>
                         </div>
                         
                         <div className="flex-grow overflow-y-auto space-y-3 mb-6 pr-2">
@@ -1526,7 +2038,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             </span>
                                             <span className="text-[10px] text-gray-400 font-mono">{review.date}</span>
                                         </div>
-                                        <button onClick={() => handleDeleteReview(review.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleDeleteReview(review.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                                             <Trash2 size={14}/>
                                         </button>
                                     </div>
@@ -1545,9 +2057,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                         <div className="border-t border-gray-100 pt-4 space-y-3">
                             <div className="flex gap-2">
-                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'PRAISE'})} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'PRAISE' ? 'bg-green-100 text-green-700 ring-2 ring-green-500' : 'bg-gray-50 text-gray-500'}`}><ThumbsUp size={14}/> 表扬 (Praise)</button>
-                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'NOTE'})} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'NOTE' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' : 'bg-gray-50 text-gray-500'}`}><StickyNote size={14}/> 备注 (Note)</button>
-                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'CRITICISM'})} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'CRITICISM' ? 'bg-red-100 text-red-700 ring-2 ring-red-500' : 'bg-gray-50 text-gray-500'}`}><ThumbsDown size={14}/> 待改进 (Improve)</button>
+                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'PRAISE'})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'PRAISE' ? 'bg-green-100 text-green-700 ring-2 ring-green-500' : 'bg-gray-50 text-gray-500'}`}><ThumbsUp size={14}/> 表扬 (Praise)</button>
+                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'NOTE'})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'NOTE' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' : 'bg-gray-50 text-gray-500'}`}><StickyNote size={14}/> 备注 (Note)</button>
+                                <button onClick={() => setReviewFormState({...reviewFormState, type: 'CRITICISM'})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${reviewFormState.type === 'CRITICISM' ? 'bg-red-100 text-red-700 ring-2 ring-red-500' : 'bg-gray-50 text-gray-500'}`}><ThumbsDown size={14}/> 待改进 (Improve)</button>
                             </div>
                             <textarea 
                                 value={reviewFormState.content}
@@ -1564,7 +2076,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <img src={reviewFormState.image} className="w-full h-full object-cover"/>
                                             <button 
                                                 onClick={() => setReviewFormState(prev => ({...prev, image: ''}))}
-                                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                             >
                                                 <X size={12} className="text-white"/>
                                             </button>
@@ -1573,7 +2085,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <button 
                                             onClick={() => reviewFileInputRef.current?.click()}
                                             disabled={isUploadingReviewImage}
-                                            className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors"
+                                            className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors min-h-[44px] md:min-h-0"
                                         >
                                             {isUploadingReviewImage ? <Loader2 size={16} className="animate-spin text-gray-400"/> : <Camera size={18} className="text-gray-500"/>}
                                         </button>
@@ -1604,7 +2116,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setViewImage(null); }}
-                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 text-sm font-bold cursor-pointer"
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 text-sm font-bold cursor-pointer min-h-[44px] md:min-h-0"
                         >
                             <ArrowLeft size={20} className="stroke-[2.5]" />
                             <span>返回 (Back)</span>
@@ -1612,7 +2124,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         <button 
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setViewImage(null); }}
-                            className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 flex items-center justify-center cursor-pointer"
+                            className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-xl active:scale-95 flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                         >
                             <X size={22} className="stroke-[2.5]"/>
                         </button>
@@ -1641,6 +2153,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 assessmentTargets={form.assessmentTargets || []}
                 onUpdateTargets={handleUpdateAssessmentTargets}
                 allEmployees={employees}
+                readOnlyAccess={!!form.readOnlyAccess}
+                onToggleReadOnly={(next: boolean) => setForm({ ...form, readOnlyAccess: next })}
             />
 
             {form.id && form.name && (
@@ -1654,8 +2168,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
             {/* Terminate Modal */}
             {showTerminateModal && (
-                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="bg-[#111111] p-5 text-center shrink-0">
                             <div className="w-14 h-14 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-3"><LogOut size={28}/></div>
                             <h3 className="font-black text-xl text-white mb-1">办理离职手续</h3>
@@ -1666,7 +2180,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 <label className="text-[10px] font-bold text-gray-400 uppercase mb-2 block">离职类型 (Type)</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {TERMINATION_TYPES.map(t => (
-                                        <button key={t.id} onClick={() => setTerminationData({...terminationData, type: t.id})} className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border-2 transition-all ${terminationData.type === t.id ? `${t.color} border-current ring-1 ring-current shadow-sm` : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}>
+                                        <button key={t.id} onClick={() => setTerminationData({...terminationData, type: t.id})} className={`min-h-[44px] md:min-h-0 p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border-2 transition-all ${terminationData.type === t.id ? `${t.color} border-current ring-1 ring-current shadow-sm` : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}>
                                             <span className="text-base">{t.icon}</span> {t.label}
                                         </button>
                                     ))}
@@ -1714,8 +2228,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
             {/* Delete Confirm Modal */}
             {showDeleteModal && (
-                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 text-center border-t-8 border-red-600">
+                <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 text-center border-t-8 border-red-600 max-h-[92vh] overflow-y-auto">
                         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><Trash2 size={32} className="text-red-600"/></div>
                         <h3 className="font-black text-2xl text-[#111111] mb-2">确认永久删除?</h3>
                         <p className="text-sm text-gray-500 font-bold mb-6">此操作将永久移除该员工的所有资料、薪资记录且<span className="text-red-600 underline">无法恢复</span>。</p>
@@ -1729,15 +2243,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
             {/* Loan Modal */}
             {showLoanModal && (
-                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0">
                             <h3 className="font-black text-lg flex items-center gap-2"><Wallet size={18} className="text-[#FFD200]"/> 借还款记录 (Loan Tracker)</h3>
-                            <button onClick={() => setShowLoanModal(false)}><X size={20} className="text-white/50 hover:text-white"/></button>
+                            <button onClick={() => setShowLoanModal(false)} className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20} className="text-white/50 hover:text-white"/></button>
                         </div>
                         
                         <div className={`p-4 text-center ${loanBalance > 0 ? 'bg-red-50' : loanBalance < 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase">{form.name} — 当前欠款余额</div>
+                            <div className="text-[10px] font-bold text-gray-400 uppercase">{form.name} — 欠款余额</div>
                             <div className={`text-3xl font-mono font-black mt-1 ${loanBalance > 0 ? 'text-red-600' : loanBalance < 0 ? 'text-green-600' : 'text-gray-400'}`}>RM {Math.abs(loanBalance).toFixed(2)}</div>
                             <div className="text-[10px] mt-1 text-gray-400 font-bold">
                                 总借: RM {(form.loanRecords || []).filter(r => r.type === 'BORROW').reduce((s,r) => s+r.amount, 0).toFixed(2)} | 
@@ -1747,8 +2261,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                         <div className="p-4 border-b bg-gray-50 space-y-3">
                             <div className="flex gap-2">
-                                <button onClick={() => setLoanFormState({...loanFormState, type: 'BORROW'})} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${loanFormState.type === 'BORROW' ? 'bg-red-100 text-red-700 ring-2 ring-red-400' : 'bg-white text-gray-400 border'}`}><span className="text-sm">💰</span> 借款 (Borrow)</button>
-                                <button onClick={() => setLoanFormState({...loanFormState, type: 'REPAY'})} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${loanFormState.type === 'REPAY' ? 'bg-green-100 text-green-700 ring-2 ring-green-400' : 'bg-white text-gray-400 border'}`}><span className="text-sm">💸</span> 还款 (Repay)</button>
+                                <button onClick={() => setLoanFormState({...loanFormState, type: 'BORROW'})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${loanFormState.type === 'BORROW' ? 'bg-red-100 text-red-700 ring-2 ring-red-400' : 'bg-white text-gray-400 border'}`}><span className="text-sm">💰</span> 借款 (Borrow)</button>
+                                <button onClick={() => setLoanFormState({...loanFormState, type: 'REPAY'})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${loanFormState.type === 'REPAY' ? 'bg-green-100 text-green-700 ring-2 ring-green-400' : 'bg-white text-gray-400 border'}`}><span className="text-sm">💸</span> 还款 (Repay)</button>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
@@ -1793,7 +2307,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <div className={`text-sm font-mono font-bold ${rec.type === 'BORROW' ? 'text-red-600' : 'text-green-600'}`}>{rec.type === 'BORROW' ? '+' : '-'}RM {rec.amount.toFixed(2)}</div>
                                                 <div className="text-[9px] font-mono text-gray-400">余额: RM {runningBalance.toFixed(2)}</div>
                                             </div>
-                                            <button onClick={() => handleDeleteLoan(rec.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
+                                            <button onClick={() => handleDeleteLoan(rec.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={12}/></button>
                                         </div>
                                     </div>
                                 );
@@ -1806,46 +2320,123 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             {/* 🟢 HIDDEN PRINT SECTION (ALL LIST) */}
             <div style={{ position: 'absolute', top: 0, left: '-9999px' }}>
                 <div ref={printRef} id="hr-profiles-all-export-root" className="w-[794px] bg-white p-10 font-sans text-black min-h-[1123px] relative">
-                    <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
+                    <div data-pdf-atomic="true" className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
                         <div>
                             <h1 className="text-3xl font-black uppercase tracking-widest mb-1">Kim Lian Kee</h1>
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-[0.3em]">Employee Directory</p>
                         </div>
                         <div className="text-right">
                             <p className="text-xs font-bold text-gray-400">{new Date().toLocaleDateString()}</p>
-                            <p className="text-sm font-black">Total Staff: {filteredEmployees.length}</p>
+                            <p className="text-sm font-black">Total Staff: {exportActiveEmployees.length + exportResignedEmployees.length}</p>
+                            <p className="text-[10px] font-bold text-gray-400">在职 Active: {exportActiveEmployees.length} · 离职 Resigned: {exportResignedEmployees.length}</p>
                         </div>
                     </div>
+
                     <table className="w-full text-left text-xs">
                         <thead>
-                            <tr className="border-b-2 border-black">
+                            <tr data-pdf-atomic="true" className="border-b-2 border-black">
                                 <th className="py-2 uppercase font-black">ID</th>
                                 <th className="py-2 uppercase font-black">Name</th>
                                 <th className="py-2 uppercase font-black">Role</th>
-                                <th className="py-2 uppercase font-black">Phone</th>
                                 <th className="py-2 uppercase font-black">Status</th>
                                 <th className="py-2 uppercase font-black">Join Date</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredEmployees.map((emp) => (
-                                <tr key={emp.id} className="border-b border-gray-100">
+                            {exportActiveEmployees.map((emp) => (
+                                <tr key={emp.id} data-pdf-atomic="true" className="border-b border-gray-100">
                                     <td className="py-3 font-mono font-bold text-gray-500">{emp.id}</td>
                                     <td className="py-3 font-bold">{emp.name}</td>
                                     <td className="py-3 font-medium text-gray-700">{(emp.role || '未分配').split('(')[0]}</td>
-                                    <td className="py-3 font-mono">{emp.phone || '-'}</td>
                                     <td className="py-3"><span className={`px-1 py-0.5 rounded text-[10px] font-bold uppercase ${emp.status === 'CONFIRMED' ? 'bg-green-100' : 'bg-gray-100'}`}>{emp.status}</span></td>
                                     <td className="py-3 font-mono text-gray-500">{emp.joinDate}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    <div className="absolute bottom-10 left-0 w-full text-center">
+
+                    {exportResignedEmployees.length > 0 && (
+                        <div className="mt-8">
+                            <div data-pdf-atomic="true" className="border-b-2 border-[#8B0000] pb-2 mb-2 flex items-end justify-between">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-[#8B0000]">离职员工 Resigned Staff</h2>
+                                <span className="text-[10px] font-bold text-gray-400">{exportResignedEmployees.length} 人</span>
+                            </div>
+                            <table className="w-full text-left text-xs">
+                                <thead>
+                                    <tr data-pdf-atomic="true" className="border-b-2 border-black">
+                                        <th className="py-2 uppercase font-black">ID</th>
+                                        <th className="py-2 uppercase font-black">Name</th>
+                                        <th className="py-2 uppercase font-black">Role</th>
+                                        <th className="py-2 uppercase font-black">Join Date</th>
+                                        <th className="py-2 uppercase font-black">Resigned On</th>
+                                        <th className="py-2 uppercase font-black">Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {exportResignedEmployees.map((emp) => (
+                                        <tr key={emp.id} data-pdf-atomic="true" className="border-b border-gray-100 bg-red-50/40">
+                                            <td className="py-3 font-mono font-bold text-gray-500">{emp.id}</td>
+                                            <td className="py-3 font-bold">{emp.name}</td>
+                                            <td className="py-3 font-medium text-gray-700">{(emp.role || '未分配').split('(')[0]}</td>
+                                            <td className="py-3 font-mono text-gray-500">{emp.joinDate}</td>
+                                            <td className="py-3 font-mono text-gray-500">{emp.terminationDate || '-'}</td>
+                                            <td className="py-3 text-gray-600">{emp.terminationReason || '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <div data-pdf-atomic="true" className="pt-10 pb-2 text-center">
                         <p className="text-[9px] font-bold uppercase tracking-[0.5em] text-gray-300">Confidential • Internal Use Only</p>
                     </div>
                 </div>
             </div>
             
+            {isExportOpen && (
+                <HRExportDialog
+                    isOpen={isExportOpen}
+                    onClose={() => setIsExportOpen(false)}
+                    employees={employees}
+                />
+            )}
+
+            {showSkillPrint && (
+                <SkillPrintDialog
+                    isOpen={showSkillPrint}
+                    onClose={() => setShowSkillPrint(false)}
+                    employees={employees.map(e => (e.id === form.id ? ({ ...e, ...form } as Employee) : e))}
+                    catalog={skillCatalog}
+                    currentEmployee={selectedEmpId ? form : null}
+                />
+            )}
+
+            {showSkillCatalog && (
+                <SkillCatalogEditor
+                    isOpen={showSkillCatalog}
+                    onClose={() => setShowSkillCatalog(false)}
+                    catalog={skillCatalog}
+                    updatedBy={currentEmployee?.name || (isSuperAdminMode ? 'Admin' : undefined)}
+                />
+            )}
+
+            {isSkillMatrixOpen && (
+                <HRSkillMatrix
+                    isOpen={isSkillMatrixOpen}
+                    onClose={() => setIsSkillMatrixOpen(false)}
+                    employees={employees}
+                    onSave={(list) => {
+                        onSave(list);
+                        // 当前打开的档案也要跟着更新，不然画面还是旧等级
+                        if (selectedEmpId) {
+                            const fresh = list.find(e => e.id === selectedEmpId);
+                            if (fresh) setForm(fresh);
+                        }
+                    }}
+                />
+            )}
+
             {/* 🟢 HIDDEN PRINT SECTION (SINGLE PROFILE PDF) */}
             <div style={{ position: 'absolute', top: 0, left: '-9999px' }}>
                 <div ref={singleProfileRef} id="hr-profile-single-export-root" className="w-[794px] h-[1123px] bg-white p-10 font-sans text-black relative flex flex-col justify-between overflow-hidden">
@@ -1868,7 +2459,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         <div className="col-span-2">
                             <h3 className="text-xs font-black uppercase border-b-2 border-gray-200 pb-1.5 mb-2.5 text-[#8B0000]">Personal Information (基本资料)</h3>
                             <div className="grid grid-cols-3 gap-y-3 text-[11px]">
-                                <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">IC / Passport</span><span className="font-mono font-bold text-xs">{form.icNumber || '-'}</span></div>
+                                <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">{isForeignWorker ? 'Passport' : 'IC'}</span><span className="font-mono font-bold text-xs">{(isForeignWorker ? (form.passportNo || form.icNumber) : form.icNumber) || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Phone</span><span className="font-mono font-bold text-xs">{form.phone || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Nationality</span><span className="font-bold text-xs">{form.nationality || '-'}</span></div>
                                 <div><span className="block text-gray-400 font-bold uppercase text-[9px] mb-0.5">Gender</span><span className="font-bold text-xs">{form.gender || '-'}</span></div>
@@ -1884,7 +2475,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <div className="space-y-2 text-[11px] bg-gray-50 p-3 rounded-xl border border-gray-100">
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Basic Salary</span><span className="font-mono font-black text-xs">RM {form.basicSalary?.toLocaleString() || '0'}</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Salary Mode</span><span className="font-bold text-xs">{form.salaryMode}</span></div>
-                                <div className="flex justify-between border-b border-gray-200 pb-1"><span>Rest Days</span><span className="font-bold text-xs">{form.monthlyRestDays || '-'} Days</span></div>
+                                <div className="flex justify-between border-b border-gray-200 pb-1"><span>Rest Days</span><span className="font-bold text-xs">{form.monthlyRestDays ?? 4} Days</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Bank Name</span><span className="font-bold text-xs">{form.bankName || '-'}</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Bank Account</span><span className="font-mono font-bold text-xs">{form.bankAccount || '-'}</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>EPF No</span><span className="font-mono font-bold text-xs">{form.epfNo || '-'}</span></div>

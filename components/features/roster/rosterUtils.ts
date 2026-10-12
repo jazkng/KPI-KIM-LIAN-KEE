@@ -100,7 +100,7 @@ export function getEmployeeDept(employee: any): string {
     if (role.includes('BAR') || role.includes('WATER') || role.includes('茶') || role.includes('水')) return 'BAR';
     if (role.includes('DISH') || role.includes('WASH') || role.includes('洗')) return 'DISHWASH';
     if (role.includes('FLOOR') || role.includes('WAITER') || role.includes('柜') || role.includes('收银') || role.includes('堂') || role.includes('CASHIER') || role.includes('领位') || role.includes('服务')) return 'FLOOR';
-    if (role.includes('HR') || role.includes('FINANCE') || role.includes('OFFICE') || role.includes('人事') || role.includes('财务') || role.includes('店面管理') || role.includes('M_STORE') || role.includes('M_HR')) return 'BACK_OFFICE';
+    if (role.includes('HR') || role.includes('FINANCE') || role.includes('OFFICE') || role.includes('人事') || role.includes('财务') || role.includes('店面管理') || role.includes('M_STORE') || role.includes('M_HR') || role.includes('ACCOUNTING') || role.includes('会计') || role.includes('MARKETING') || role.includes('市场管理')) return 'BACK_OFFICE';
     
     return 'OTHER';
 }

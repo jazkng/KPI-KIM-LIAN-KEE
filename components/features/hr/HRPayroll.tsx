@@ -1,7 +1,6 @@
+import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import * as pdfjsLib from "pdfjs-dist";
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import {
   DollarSign,
   Save,
@@ -30,13 +29,17 @@ import {
   LockOpen,
   Ban,
   History,
+  FileSpreadsheet,
   } from "lucide-react";
 import {
   Employee,
   PayrollRecord,
   ExpenseItem,
   RosterStatus,
+  LoanRecord,
   } from "../../../types";
+import { mergeAttendanceRecords, distributeTimes } from "../../../utils/attendanceHelpers";
+import { LABOR_DEPT_ROLE_FALLBACK } from "../../../constants/classicPnLCostMap";
 import { 
   DataManager,
   DEFAULT_ATTENDANCE_SETTINGS,
@@ -51,9 +54,9 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../../firebaseConfig";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas-pro";
-import { applyResolvedStylesForPdf, waitForPdfFonts } from "../../../utils/pdfStyleResolver";
+import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from "../../../utils/pdfStyleResolver";
+import { PartTimePanel } from "./PartTimePanel";
+import { exportPayrollExcel } from "./payrollExcelExport";
 
 // --- INTERFACES ---
 
@@ -75,11 +78,15 @@ interface DetailedPayrollEntry {
   advanceLoan: number;
   otherDeduction: number;
   otherDeductionNote: string;
+  /** 本月从薪水扣回的欠款（对应人事档案的借还款记录，发放时会写一笔 REPAY） */
+  loanRepay: number;
 
   // Statutory (Auto-calced but overrideable)
   ee_epf: number;
   ee_socso: number;
   ee_eis: number;
+  /** LINDUNG 24 Jam (SKBBK) —— 员工全额承担，雇主 0 */
+  ee_lindung: number;
   ee_pcb: number; // Tax
 
   er_epf: number;
@@ -92,6 +99,8 @@ interface DetailedPayrollEntry {
   autoCalc: boolean;
   hasEPF: boolean;
   hasSOCSO: boolean;
+  /** 有没有参加 LINDUNG 24 Jam（外劳强制；本地自愿，没退出就要扣） */
+  hasLindung: boolean;
   paymentMethod: "BANK" | "CASH";
   proRateMode?: "26_DAYS" | "CALENDAR_DAYS" | "WORKABLE_DAYS";
   workDays?: number;
@@ -101,6 +110,8 @@ interface DetailedPayrollEntry {
 }
 
 interface HRPayrollProps {
+  initialMode?: "CALC" | "PARTTIME";
+  currentEmployee?: Employee | null;
   employees: Employee[];
   onNavigateToProfile?: (empId: string) => void;
 }
@@ -114,6 +125,56 @@ const calculateEPF = (gross: number, isEmployer: boolean) => {
     const rate = gross <= 5000 ? 0.13 : 0.12;
     return Math.ceil(gross * rate);
   }
+};
+
+/**
+ * LINDUNG 24 Jam (Skim Perlindungan Bukan Bencana Kerja, SKBBK)
+ *
+ * PERKESO 2026 年 6 月 1 日开办的新计划，保障「非工作时间」发生的意外。
+ *   · 费率 0.75%（第一阶段：2026-06-01 ~ 2028-05-31）
+ *   · 薪资上限 RM6,000 → 每人每月最多 RM44.65
+ *   · ⚠️ 员工全额承担，雇主不用出（跟 SOCSO / EIS 不一样）
+ *   · 外劳强制；本地员工可退出（现有员工退出期限 2026-08-31，之后「Sekali Layak, Terus Layak」）
+ *
+ * 👑 PERKESO 用的是「薪资级距表」，不是直接 × 0.75%：
+ *    跟 SOCSO 一样按 RM100 一级，取级距上限 × 0.75% − RM0.35
+ *    例：RM2,000 → 14.65 ｜ RM3,000 → 22.15 ｜ RM5,000 → 37.15 ｜ RM6,000 → 44.65
+ *    （旧版直接 × 0.75% 进位，会每人多扣几毛钱）
+ *
+ * 之后阶段费率会调（2028-06 起 1.00%、2031-06 起 1.25%），
+ * 到时候改下面的 LINDUNG_PHASES 就好。
+ */
+const LINDUNG_START_MONTH = "2026-06";
+const LINDUNG_WAGE_CEILING = 6000;
+const LINDUNG_PHASES: { from: string; rate: number }[] = [
+  { from: "2026-06", rate: 0.0075 },
+  { from: "2028-06", rate: 0.01 },
+  { from: "2031-06", rate: 0.0125 },
+];
+
+/** 这个月份有没有 LINDUNG 24 Jam（2026 年 6 月以前没有这个计划） */
+const isLindungMonth = (month: string) => !!month && month >= LINDUNG_START_MONTH;
+
+const getLindungRate = (month?: string) => {
+  const m = month || new Date().toISOString().slice(0, 7);
+  let rate = LINDUNG_PHASES[0].rate;
+  LINDUNG_PHASES.forEach((p) => {
+    if (m >= p.from) rate = p.rate;
+  });
+  return rate;
+};
+
+const calculateLindung = (wage: number, month?: string): number => {
+  if (!wage || wage <= 0) return 0;
+  if (month && !isLindungMonth(month)) return 0;
+  const rate = getLindungRate(month);
+  const cappedWage = Math.min(wage, LINDUNG_WAGE_CEILING);
+  const bracketTop = Math.max(100, Math.ceil(cappedWage / 100) * 100);
+  // 级距中位数 × 费率，四舍五入（遇到 .x25 / .x75 这种刚好一半的往上）到 5 sen
+  const midpoint = bracketTop - 50;
+  const raw = midpoint * rate;
+  const rounded = Math.round(raw * 20 + 1e-6) / 20;
+  return parseFloat(rounded.toFixed(2));
 };
 
 const SOCSO_EMPLOYER_LOOKUP: Record<number, number> = {
@@ -283,24 +344,6 @@ const getDeductedLatePenalty = (rawAmount: number, mode: 'FULL' | 'HALF' | 'WARN
   return rawAmount;
 };
 
-/** 合并考勤记录：若同人同日既有App打卡又有打卡机导入，优先用打卡机数据 */
-const mergeAttendanceRecords = (raw: any[]): any[] => {
-  if (!raw) return [];
-  const mergedMap = new Map<string, any>();
-  raw.forEach((rec) => {
-    const key = `${rec.employeeId}_${rec.date}`;
-    const existing = mergedMap.get(key);
-    if (!existing) {
-      mergedMap.set(key, rec);
-    } else {
-      if (rec.source === "face_machine" && existing.source !== "face_machine") {
-        mergedMap.set(key, rec);
-      }
-    }
-  });
-  return Array.from(mergedMap.values());
-};
-
 // --- HISTORICAL SALARY HELPER ---
 const getHistoricalSalary = (emp: Employee, monthStr: string) => {
   if (!emp.salaryHistory || emp.salaryHistory.length === 0)
@@ -386,7 +429,7 @@ const MoneyInput = ({
         }
       }}
       className={className}
-      style={{ fontSize: "16px" }}
+     
       placeholder={placeholder}
     />
   );
@@ -395,9 +438,11 @@ const MoneyInput = ({
 export const HRPayroll: React.FC<HRPayrollProps> = ({
   employees,
   onNavigateToProfile,
+  initialMode = "CALC",
+  currentEmployee,
 }) => {
   // 👑 Sub-tab mode: CALC (Monthly Settlement Workspace) vs HISTORY (Pristine separate payment logs)
-  const [currentMode, setCurrentMode] = useState<"CALC" | "HISTORY">("CALC");
+  const [currentMode, setCurrentMode] = useState<"CALC" | "HISTORY" | "PARTTIME">(initialMode);
   const [allHistoryRecords, setAllHistoryRecords] = useState<PayrollRecord[]>(
     [],
   );
@@ -517,27 +562,78 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
   // 🚨 已彻底移除把 paymentDate 强行锁死在月底的 useEffect
 
+  /**
+   * 这个员工在这个月要不要算薪。
+   *   true  = 要算（在职，或离职当月要做最后结算）
+   *   false = 不算（离职月已经过了）
+   *   null  = 离职但没填离职日期，无法判断
+   * ⚠️ 「显示离职员工」只是画面开关，不可以影响谁要算薪 ——
+   *    以前这两件事混在一起，开了开关 7 月离职的人 8 月还会被算进去。
+   */
+  const payrollActiveInMonth = (e: Employee, month: string): boolean | null => {
+    const terminated = e.isArchived || e.status === "TERMINATED";
+    if (!terminated) return true;
+    const t = e.terminationDate ? e.terminationDate.substring(0, 7) : "";
+    if (!t) return null;
+    return t >= month;
+  };
+
   const displayEmployees = useMemo(() => {
     return employees.filter((e) => {
       if (e.joinDate && e.joinDate.substring(0, 7) > selectedMonth)
         return false;
-      if (payrollData && payrollData[e.id]) return true; // 👑 Ensure they show up if they have data for this month
-      
+
+      // 硬规则先跑：离职月已经过了就一律不出现，不管有没有旧草稿资料
+      const active = payrollActiveInMonth(e, selectedMonth);
+      if (active === false) {
+        // 已入账的历史记录例外 —— 那是真的发过的钱，不能凭空消失
+        return !!(isPosted && payrollData && payrollData[e.id]);
+      }
+
+      if (payrollData && payrollData[e.id]) return true;
+
       const isEligible = e.isPayrollEligible !== undefined ? e.isPayrollEligible : !e.role.includes("Owner");
       if (!isEligible) return false;
 
-      const isTerminated = e.isArchived || e.status === "TERMINATED";
-      if (isTerminated) {
-        if (
-          e.terminationDate &&
-          e.terminationDate.substring(0, 7) >= selectedMonth
-        )
-          return true;
-        if (!showResigned) return false;
-      }
+      // 离职但没填离职日期 → 无法判断，交给「显示离职员工」开关
+      if (active === null && !showResigned) return false;
       return true;
     });
   }, [employees, showResigned, selectedMonth, payrollData]);
+
+  /**
+   * 🔍 这个月「没有出现在薪资名单」的在职员工 + 原因。
+   * 以前这些人是静悄悄消失的（例如上个月有草稿所以看得到，这个月就不见了），
+   * 现在列在名单最下面，一眼知道为什么、要去哪里改。
+   */
+  const excludedEmployees = useMemo(() => {
+    const out: { emp: Employee; reason: "EXEMPT" | "HOURLY" | "NO_TERM_DATE"; text: string }[] = [];
+    employees.forEach((e) => {
+      if (payrollData && payrollData[e.id]) return; // 已经在名单上
+      if (e.joinDate && e.joinDate.substring(0, 7) > selectedMonth) return; // 还没入职
+      const active = payrollActiveInMonth(e, selectedMonth);
+      if (active === false) return; // 已经离职，本来就不算
+      if (e.salaryMode === "HOURLY") {
+        out.push({ emp: e, reason: "HOURLY", text: "时薪兼职 → 在「兼职」分页按天登记、付现金" });
+        return;
+      }
+      const isEligible = e.isPayrollEligible !== undefined ? e.isPayrollEligible : !(e.role || "").includes("Owner");
+      if (!isEligible) {
+        out.push({
+          emp: e,
+          reason: "EXEMPT",
+          text: e.isPayrollEligible === false
+            ? "员工档案设成「豁免 / 不参与薪资结算」"
+            : "职位含「Owner」，系统预设不算薪",
+        });
+        return;
+      }
+      if (active === null) {
+        out.push({ emp: e, reason: "NO_TERM_DATE", text: "已离职但没填离职日期，无法判断要不要算" });
+      }
+    });
+    return out;
+  }, [employees, payrollData, selectedMonth]);
 
   const managementEmployees = useMemo(() => {
     return displayEmployees.filter(
@@ -568,10 +664,96 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     );
   }, [nonManagementEmployees]);
 
+  // 🟢 借款扣回：saveEmployee 之后 employees(props) 还是旧的，用本地覆盖让欠款余额立刻更新
+  const [loanRecordsOverride, setLoanRecordsOverride] = useState<
+    Record<string, LoanRecord[]>
+  >({});
+  const getLoanRecords = (emp: Employee | null | undefined): LoanRecord[] => {
+    if (!emp) return [];
+    return loanRecordsOverride[emp.id] ?? emp.loanRecords ?? [];
+  };
+  // 同一个员工 + 同一个月份 只会有一笔「薪资扣回」，重复发放/撤销都用这个 id 覆盖或删除
+  const loanRepayRecordId = (empId: string, month: string) =>
+    `payroll_repay_${month}_${empId}`;
+
+  const syncLoanRepayToProfile = async (
+    empId: string,
+    amount: number,
+    month: string,
+    dateStr: string,
+  ) => {
+    const emp = employees.find((e) => e.id === empId);
+    if (!emp) return;
+    const rid = loanRepayRecordId(empId, month);
+    const kept = getLoanRecords(emp).filter((r) => r.id !== rid);
+    const amt = Math.round((Number(amount) || 0) * 100) / 100;
+    const next: LoanRecord[] =
+      amt > 0
+        ? [
+            ...kept,
+            {
+              id: rid,
+              date: dateStr,
+              type: "REPAY" as const,
+              amount: amt,
+              note: `薪资扣除 ${month}`,
+              via: "SALARY_DEDUCT",
+            },
+          ]
+        : kept;
+    if (amt <= 0 && kept.length === getLoanRecords(emp).length) return;
+    await DataManager.saveEmployee({ ...emp, loanRecords: next });
+    setLoanRecordsOverride((prev) => ({ ...prev, [empId]: next }));
+  };
+
+  // 💳 / 🛡️ 写回人事档案的小栏位（付款方式、LINDUNG 退出）
+  //    employees(props) 不一定马上刷新，所以本地也记一份，并带上最新的借还款记录免得被旧资料盖掉
+  const [profilePatch, setProfilePatch] = useState<Record<string, Partial<Employee>>>({});
+  const patchEmployeeProfile = async (empId: string, patch: Partial<Employee>) => {
+    const emp = employees.find((e) => e.id === empId);
+    if (!emp) return;
+    const merged = { ...emp, ...(profilePatch[empId] || {}), ...patch };
+    setProfilePatch((prev) => ({ ...prev, [empId]: { ...(prev[empId] || {}), ...patch } }));
+    try {
+      await DataManager.saveEmployee({ ...merged, loanRecords: getLoanRecords(emp) });
+    } catch (err) {
+      console.warn("Save employee profile patch failed", err);
+    }
+  };
+
+  const removeLoanRepayFromProfile = async (empId: string, month: string) => {
+    const emp = employees.find((e) => e.id === empId);
+    if (!emp) return;
+    const rid = loanRepayRecordId(empId, month);
+    const cur = getLoanRecords(emp);
+    if (!cur.some((r) => r.id === rid)) return;
+    const next = cur.filter((r) => r.id !== rid);
+    await DataManager.saveEmployee({ ...emp, loanRecords: next });
+    setLoanRecordsOverride((prev) => ({ ...prev, [empId]: next }));
+  };
+
   const editingEntry = editingEmpId ? payrollData[editingEmpId] : null;
   const editingEmp = editingEmpId
     ? employees.find((e) => e.id === editingEmpId)
     : null;
+  const [showProRateToolFor, setShowProRateToolFor] = useState<string | null>(null);
+  const showProRateTool =
+    !!editingEmpId &&
+    (showProRateToolFor === editingEmpId ||
+      !!editingEmp?.isArchived ||
+      !!editingEmp?.joinDate?.startsWith(selectedMonth) ||
+      !!editingEmp?.terminationDate?.startsWith(selectedMonth) ||
+      (payrollData[editingEmpId]?.workDays || 0) > 0);
+
+  // 员工欠款余额余额（与人事档案「借还款记录」同一个算法：BORROW 加，REPAY 减）
+  const editingEmpLoanBalance = useMemo(() => {
+    if (!editingEmp) return 0;
+    const bal = getLoanRecords(editingEmp).reduce(
+      (sum, r) => sum + (r.type === "BORROW" ? Number(r.amount) || 0 : -(Number(r.amount) || 0)),
+      0,
+    );
+    return Math.max(0, Math.round(bal * 100) / 100);
+  }, [editingEmp, loanRecordsOverride]);
 
   const currentEmpAdvances = useMemo(() => {
     if (!editingEmp) return [];
@@ -656,6 +838,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         : "";
     const finalNote = [autoNote, lateNote].filter(Boolean).join("\n");
 
+    // 👑 新月份一打开就先把 EPF / SOCSO / EIS / LINDUNG 算好（以前要一个个点开才会算，Govt 一直显示 0）
+    const statBase = Math.max(0, Number(calculatedBasic) || 0);
+    const defHasEPF = isLocal || emp.hasEPF === true;
+    const defHasSOCSO = isLocal;
+    const defHasLindung = isLindungMonth(selectedMonth) && !emp.lindungOptOut; // 本地外劳都可以开关，状态存在人事档案
+
     return {
       basic: Number(calculatedBasic) || 0,
       allowance: 0,
@@ -671,18 +859,24 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       advanceLoan: totalAdv,
       otherDeduction: 0,
       otherDeductionNote: "",
-      ee_epf: 0,
-      ee_socso: 0,
-      ee_eis: 0,
+      loanRepay: 0,
+      ee_epf: defHasEPF ? calculateEPF(statBase, false) : 0,
+      ee_socso: defHasSOCSO ? calculateSOCSO(statBase, false) : 0,
+      ee_eis: defHasSOCSO ? calculateEIS(statBase, false) : 0,
+      ee_lindung: defHasLindung ? calculateLindung(statBase, selectedMonth) : 0,
       ee_pcb: 0,
-      er_epf: 0,
-      er_socso: 0,
-      er_eis: 0,
+      er_epf: defHasEPF ? calculateEPF(statBase, true) : 0,
+      er_socso: defHasSOCSO ? calculateSOCSO(statBase, true) : 0,
+      er_eis: defHasSOCSO ? calculateEIS(statBase, true) : 0,
       note: finalNote,
       autoCalc: true,
-      hasEPF: isLocal || emp.hasEPF === true,
-      hasSOCSO: isLocal,
-      paymentMethod: "BANK",
+      hasEPF: defHasEPF,
+      hasSOCSO: defHasSOCSO,
+      // 看人事档案有没有登记「不扣」→ 开关状态存在档案里，不用每个月重新关
+      // 2026-06 以前没有这个计划
+      hasLindung: defHasLindung,
+      // 💳 付款方式跟着人事档案走，没设定过才默认银行
+      paymentMethod: emp.payrollPaymentMethod || "BANK",
       proRateMode: "26_DAYS",
       workDays: initialWorkDays,
       isPaid: false,
@@ -750,21 +944,27 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         if (e.joinDate && e.joinDate.substring(0, 7) > selectedMonth)
           return false;
 
+        // 硬规则：离职月已经过了就不算薪，不受「显示离职员工」开关影响
+        const active = payrollActiveInMonth(e, selectedMonth);
+        if (active === false) {
+          // 只有已经存进去的历史记录才保留，避免旧资料被抹掉
+          return !!existingRecord?.details?.some((d) => d.employeeId === e.id);
+        }
+
+        // ⏱️ 时薪兼职不进月薪结算 —— 他们在「兼职」分页按天登记、当场付现金
+        //    （以前真的从月薪发过钱的记录照样保留，只排除自动生成、没发过的草稿）
+        if (e.salaryMode === "HOURLY") {
+          const d = existingRecord?.details?.find((x) => x.employeeId === e.id);
+          return !!d && (!!d.isPaid || existingRecord?.status === "POSTED");
+        }
+
         if (existingRecord?.details?.some((d) => d.employeeId === e.id))
           return true; // 👑 Prevent data loss for historical records
 
         const isEligible = e.isPayrollEligible !== undefined ? e.isPayrollEligible : !e.role.includes("Owner");
         if (!isEligible) return false;
 
-        const isTerminated = e.isArchived || e.status === "TERMINATED";
-        if (isTerminated && !showResigned) {
-          if (
-            e.terminationDate &&
-            e.terminationDate.substring(0, 7) >= selectedMonth
-          )
-            return true;
-          return false;
-        }
+        if (active === null && !showResigned) return false;
         return true;
       });
 
@@ -801,9 +1001,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   : Number(sd.advanceLoan) || 0,
               otherDeduction: Number(sd.otherDeduction) || 0,
               otherDeductionNote: sd.otherDeductionNote || "",
+              loanRepay: Number(sd.loanRepay) || 0,
               ee_epf: Number(sd.ee_epf) || 0,
               ee_socso: Number(sd.ee_socso) || 0,
               ee_eis: Number(sd.ee_eis) || 0,
+              ee_lindung: Number(sd.ee_lindung) || 0,
               ee_pcb: Number(sd.ee_pcb) || 0,
               er_epf: Number(sd.er_epf) || 0,
               er_socso: Number(sd.er_socso) || 0,
@@ -814,7 +1016,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 (emp.nationality || "").includes("Malaysian") ||
                 emp.hasEPF === true,
               hasSOCSO: (emp.nationality || "").includes("Malaysian"),
-              paymentMethod: sd.paymentMethod || "BANK",
+              hasLindung: sd.hasLindung !== undefined ? !!sd.hasLindung : true,
+              // 💳 还没发的人：以人事档案的默认付款方式为准（草稿是自动存的，常常只是预设 BANK）
+              paymentMethod: sd.isPaid
+                ? sd.paymentMethod || "BANK"
+                : emp.payrollPaymentMethod || sd.paymentMethod || "BANK",
               proRateMode: sd.proRateMode || "26_DAYS",
               workDays: sd.workDays || 0,
               isPaid: !!sd.isPaid,
@@ -867,9 +1073,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               advanceLoan: entry.advanceLoan,
               otherDeduction: entry.otherDeduction,
               otherDeductionNote: entry.otherDeductionNote,
+              loanRepay: entry.loanRepay || 0,
               ee_epf: entry.ee_epf,
               ee_socso: entry.ee_socso,
               ee_eis: entry.ee_eis,
+              ee_lindung: entry.ee_lindung || 0,
+              hasLindung: !!entry.hasLindung,
               ee_pcb: entry.ee_pcb,
               er_epf: entry.er_epf,
               er_socso: entry.er_socso,
@@ -894,6 +1103,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 d.ee_epf +
                 d.ee_socso +
                 (d.ee_eis || 0) +
+                (d.ee_lindung || 0) +
                 (d.ee_pcb || 0) +
                 d.er_epf +
                 d.er_socso +
@@ -993,13 +1203,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       setEditingAttendance([]);
       return;
     }
-    DataManager.getAttendanceByMonth(selectedMonth)
+    DataManager.getAttendanceByMonth(selectedMonth, editingEmpId)
       .then((records: any[]) =>
-        setEditingAttendance(
-          mergeAttendanceRecords(records).filter(
-            (r) => r.employeeId === editingEmpId,
-          ),
-        ),
+        setEditingAttendance(mergeAttendanceRecords(records)),
       )
       .catch(() => setEditingAttendance([]));
   }, [editingEmpId, selectedMonth]);
@@ -1048,9 +1254,31 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     }
   };
 
+  // 🎯 快速勾选：未发的全部 / 只选银行 / 只选现金（发薪通常分两批：网银一批、现金一批）
+  const selectUnpaidBy = (method?: "BANK" | "CASH") => {
+    const ids = displayEmployees
+      .filter((e) => {
+        const en = payrollData[e.id];
+        if (!en || en.isPaid) return false;
+        if (!method) return true;
+        return (en.paymentMethod || "BANK") === method;
+      })
+      .map((e) => e.id);
+    setSelectedEmpIds(new Set(ids));
+  };
+
+  // 💳 改付款方式：当月这笔 + 人事档案一起改，下个月自动带入
+  const setPaymentMethodFor = (empId: string, method: "BANK" | "CASH") => {
+    const en = payrollData[empId];
+    if (!en || en.isPaid || isPosted) return;
+    if ((en.paymentMethod || "BANK") === method) return;
+    updateEntry(empId, { paymentMethod: method });
+    patchEmployeeProfile(empId, { payrollPaymentMethod: method });
+  };
+
   const handleSaveAdvance = async () => {
     if (!advForm.empId || !advForm.amount)
-      return alert("Select staff and amount");
+      return alert("⚠️ 请选择员工并填写金额");
     const emp = employees.find((e) => e.id === advForm.empId);
     if (!emp) return;
 
@@ -1083,13 +1311,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   const handleUpdateAdvance = async () => {
     if (!editingAdvanceItem) return;
     if (!editAdvForm.company || !editAdvForm.amount) {
-      alert("请选择员工并输入金额");
+      alert("⚠️ 请选择员工并填写金额");
       return;
     }
 
     const emp = employees.find((e) => e.id === editAdvForm.company);
     if (!emp) {
-      alert("未找到选中的员工");
+      alert("⚠️ 未找到选中的员工");
       return;
     }
 
@@ -1111,7 +1339,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       await loadPayrollForMonth();
     } catch (err) {
       console.error("Failed to update advance:", err);
-      alert("修改失败，请重试");
+      alert("❌ 修改失败，请重试");
     } finally {
       setIsLoading(false);
     }
@@ -1137,7 +1365,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       await loadPayrollForMonth();
     } catch (err) {
       console.error("Failed to delete advance:", err);
-      alert("删除失败，请重试");
+      alert("❌ 删除失败，请重试");
     } finally {
       setIsLoading(false);
     }
@@ -1179,6 +1407,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           current.ee_eis = 0;
           current.er_eis = 0;
         }
+
+        // LINDUNG 24 Jam 独立开关：跟 SOCSO 无关，退出的人才关掉
+        current.ee_lindung = current.hasLindung ? calculateLindung(safeGross, selectedMonth) : 0;
       }
       return { ...prev, [id]: current };
     });
@@ -1210,6 +1441,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         current.ee_eis = 0;
         current.er_eis = 0;
       }
+      current.ee_lindung = current.hasLindung ? calculateLindung(safeGross, selectedMonth) : 0;
       return { ...prev, [id]: current };
     });
   };
@@ -1329,14 +1561,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       );
     } catch (err) {
       console.error(err);
-      alert("重算失败: " + (err as Error).message);
+      alert("❌ 重算失败：" + (err as Error).message);
     }
   };
 
   const handleFinalSettlement = () => {
     if (!editingEmpId || !editingEmp) return;
 
-    if (!editingEmp.terminationDate) return alert("此员工未设置离职日期");
+    if (!editingEmp.terminationDate) return alert("⚠️ 此员工未设置离职日期");
     if (!editingEmp.terminationDate.startsWith(selectedMonth)) {
       return alert(
         `离职日期 (${editingEmp.terminationDate}) 不在当前选中的月份`,
@@ -1391,7 +1623,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     const originalBasic = getHistoricalSalary(emp, selectedMonth);
     const days = parseFloat(proRateSettings.days as any);
     if (isNaN(days) || days <= 0)
-      return alert("Please enter valid working days");
+      return alert("⚠️ 请输入有效的工作天数");
 
     let newBasic = 0;
     const [yearStr, monthStr] = selectedMonth.split("-");
@@ -1464,7 +1696,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
     const t = getTotals(entry);
     if (t.netPay < 0)
-      return alert("Net Pay is negative. Please clear debts/advances first.");
+      return alert("⚠️ 实发工资是负数，请先处理预支或欠款");
 
     setIsLoading(true);
     try {
@@ -1502,6 +1734,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       };
 
       await DataManager.saveStandaloneExpense(expense);
+
+      // 🟢 同步「欠款扣回」到人事档案的借还款记录
+      await syncLoanRepayToProfile(
+        editingEmpId,
+        entry.loanRepay || 0,
+        selectedMonth,
+        paymentDate,
+      );
 
       const updatedNote =
         (entry.note || "") +
@@ -1553,12 +1793,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           otherEarningNote: e.otherEarningNote,
           otherDeduction: e.otherDeduction,
           otherDeductionNote: e.otherDeductionNote,
+          loanRepay: e.loanRepay || 0,
           ot: e.ot,
           bonus: e.bonus,
           unpaidLeave: e.unpaidLeave,
           ee_epf: e.ee_epf,
           ee_socso: e.ee_socso,
           ee_eis: e.ee_eis,
+          ee_lindung: e.ee_lindung || 0,
+          hasLindung: !!e.hasLindung,
           ee_pcb: e.ee_pcb,
           er_epf: e.er_epf,
           er_socso: e.er_socso,
@@ -1580,13 +1823,32 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         details: currentDetails as any,
       });
 
+      // 🟢 单人一个个发，发完最后一个也要自动结账，
+      //    不然永远停在 DRAFT、跳不到「缴政府费用」
+      const afterThis = payrollEntriesForMonth.active.every(([id, e]) =>
+        id === editingEmpId ? true : !!e.isPaid,
+      );
+      let postedNow = false;
+      if (afterThis && !isPosted) {
+        await DataManager.savePayrollRecord({
+          ...recordToUpdate,
+          status: "POSTED",
+          details: currentDetails as any,
+        });
+        setIsPosted(true);
+        postedNow = true;
+      }
+
       alert(
-        `✅ 支付成功！\n已从资金管理 (${method === "CASH" ? "现金" : "银行"}) 扣除 RM ${t.netPay.toFixed(2)}。\n记账日期：${paymentDate}`,
+        `✅ 支付成功！\n已从资金管理 (${method === "CASH" ? "现金" : "银行"}) 扣除 RM ${t.netPay.toFixed(2)}。\n记账日期：${paymentDate}` +
+          (postedNow
+            ? "\n\n🎉 全员已付清，本月已自动结账！现在可以缴纳政府费用 (KWSP/SOCSO/EIS)。"
+            : ""),
       );
       setShowPayConfirm(false);
     } catch (err) {
       console.error("Auto-save paid status failed", err);
-      alert("支付记录失败，请检查网络！");
+      alert("❌ 支付记录失败，请检查网络！");
     } finally {
       setIsLoading(false);
     }
@@ -1619,6 +1881,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           doc(db, "standalone_expenses", entry!.paymentExpenseId),
         );
       }
+
+      // 🟢 同步撤销人事档案里这个月的「薪资扣回」
+      await removeLoanRepayFromProfile(editingEmpId, selectedMonth);
 
       const updatedNote = (entry!.note || "")
         .replace(/\[PAID\] RM[\d.]+ via (CASH|BANK_TRANSFER) on [\d-]+/, "")
@@ -1655,12 +1920,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             otherEarningNote: e.otherEarningNote,
             otherDeduction: e.otherDeduction,
             otherDeductionNote: e.otherDeductionNote,
+            loanRepay: e.loanRepay || 0,
             ot: e.ot,
             bonus: e.bonus,
             unpaidLeave: e.unpaidLeave,
             ee_epf: e.ee_epf,
             ee_socso: e.ee_socso,
             ee_eis: e.ee_eis,
+            ee_lindung: e.ee_lindung || 0,
+            hasLindung: !!e.hasLindung,
             ee_pcb: e.ee_pcb,
             er_epf: e.er_epf,
             er_socso: e.er_socso,
@@ -1685,7 +1953,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       alert("✅ 撤销成功！该员工已退回未付款状态，资金流水已消除。");
     } catch (error) {
       console.error("Revoke error", error);
-      alert("撤销失败，请检查网络！");
+      alert("❌ 撤销失败，请检查网络！");
     } finally {
       setIsLoading(false);
     }
@@ -1727,6 +1995,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       });
       await Promise.all(deletePromises);
 
+      // 🟢 同步撤销人事档案里这个月的「薪资扣回」
+      for (const id of paidSelectedIds) {
+        await removeLoanRepayFromProfile(id, selectedMonth);
+      }
+
       // 2. 更新本地状态 (清除备注和支付标记)
       const updatedPayrollData = { ...payrollData };
       paidSelectedIds.forEach((id) => {
@@ -1766,12 +2039,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               otherEarningNote: e.otherEarningNote,
               otherDeduction: e.otherDeduction,
               otherDeductionNote: e.otherDeductionNote,
+              loanRepay: e.loanRepay || 0,
               ot: e.ot,
               bonus: e.bonus,
               unpaidLeave: e.unpaidLeave,
               ee_epf: e.ee_epf,
               ee_socso: e.ee_socso,
               ee_eis: e.ee_eis,
+              ee_lindung: e.ee_lindung || 0,
+              hasLindung: !!e.hasLindung,
               ee_pcb: e.ee_pcb,
               er_epf: e.er_epf,
               er_socso: e.er_socso,
@@ -1802,7 +2078,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       );
     } catch (error) {
       console.error("Batch Revoke error", error);
-      alert("撤销失败，请检查网络！");
+      alert("❌ 撤销失败，请检查网络！");
     } finally {
       setIsLoading(false);
     }
@@ -1822,7 +2098,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         backgroundColor: "#ffffff",
         windowWidth: 2000,
         windowHeight: 2000,
-        onclone: (clonedDoc) => {
+        onclone: async (clonedDoc) => {
+          // 👑 iPhone：等 clone iframe 里的字体真的载入再量字宽，避免数字/连字号叠在一起
+          await prepareClonedDocumentForPdf(clonedDoc);
           const clonedEl = clonedDoc.getElementById('hr-payroll-print-slip');
           if (printSlipRef.current && clonedEl) {
             applyResolvedStylesForPdf(printSlipRef.current as HTMLElement, clonedEl as HTMLElement);
@@ -1839,7 +2117,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         backgroundColor: "#ffffff",
         windowWidth: 2000,
         windowHeight: 2000,
-        onclone: (clonedDoc) => {
+        onclone: async (clonedDoc) => {
+          // 👑 iPhone：等 clone iframe 里的字体真的载入再量字宽，避免数字/连字号叠在一起
+          await prepareClonedDocumentForPdf(clonedDoc);
           const clonedEl = clonedDoc.getElementById('hr-payroll-attendance-print');
           if (attendancePrintRef.current && clonedEl) {
             applyResolvedStylesForPdf(attendancePrintRef.current as HTMLElement, clonedEl as HTMLElement);
@@ -1848,7 +2128,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       });
       const imgData2 = canvas2.toDataURL("image/jpeg", 1.0);
 
-      const pdf = new jsPDF("p", "mm", "a4");
+      const pdf = new (await loadJsPDF())("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
@@ -1876,14 +2156,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       pdf.save(`Payslip_&_Attendance_${selectedMonth}_${editingEmp?.name || editingEmpId}.pdf`);
     } catch (e) {
       console.error(e);
-      alert("Print Failed");
+      alert("❌ 打印失败");
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
   const handlePrintSummary = async () => {
-    if (selectedEmpIds.size === 0) return alert("请先勾选需要打印的员工");
+    if (selectedEmpIds.size === 0) return alert("⚠️ 请先勾选需要打印的员工");
     if (!printSummaryRef.current) return;
     setIsGeneratingPdf(true);
     try {
@@ -1894,7 +2174,9 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         useCORS: true,
         backgroundColor: "#ffffff",
         windowWidth: 2000,
-        onclone: (clonedDoc) => {
+        onclone: async (clonedDoc) => {
+          // 👑 iPhone：等 clone iframe 里的字体真的载入再量字宽，避免数字/连字号叠在一起
+          await prepareClonedDocumentForPdf(clonedDoc);
           const clonedEl = clonedDoc.getElementById('hr-payroll-summary-print');
           if (printSummaryRef.current && clonedEl) {
             applyResolvedStylesForPdf(printSummaryRef.current as HTMLElement, clonedEl as HTMLElement);
@@ -1902,7 +2184,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         }
       });
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
-      const pdf = new jsPDF("l", "mm", "a4");
+      const pdf = new (await loadJsPDF())("l", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth(); // 297mm
       const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm
       
@@ -1925,7 +2207,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       pdf.save(`Payroll_Summary_${selectedMonth}.pdf`);
     } catch (e) {
       console.error(e);
-      alert("Summary Print Failed");
+      alert("❌ 汇总打印失败");
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -1953,9 +2235,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         entry.hostelFee +
         entry.advanceLoan +
         entry.otherDeduction +
+        (entry.loanRepay || 0) +
         entry.ee_epf +
         entry.ee_socso +
         entry.ee_eis +
+        (entry.ee_lindung || 0) +
         entry.ee_pcb
       ).toFixed(2),
     );
@@ -1973,6 +2257,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         entry.er_socso +
         entry.ee_eis +
         entry.er_eis +
+        (entry.ee_lindung || 0) +   // LINDUNG 24 Jam：员工全额，雇主 0
         entry.ee_pcb
       ).toFixed(2),
     );
@@ -2006,9 +2291,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         entry.hostelFee +
         entry.advanceLoan +
         entry.otherDeduction +
+        (entry.loanRepay || 0) +
         entry.ee_epf +
         entry.ee_socso +
         entry.ee_eis +
+        (entry.ee_lindung || 0) +
         entry.ee_pcb
       ).toFixed(2),
     );
@@ -2020,33 +2307,95 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     };
   };
 
-  const getDepartment = (emp: Employee): string => {
-    const r = (emp.role || "").toUpperCase();
-    // 厨房: Chef, Cook, Commis, Cutter, Kitchen
-    if (
-      r.includes("CHEF") ||
-      r.includes("COOK") ||
-      r.includes("COMMIS") ||
-      r.includes("CUTTER") ||
-      r.includes("KITCHEN") ||
-      r.includes("头手") ||
-      r.includes("厨房")
-    )
-      return "🔥 厨房 (Kitchen)";
-    // 水吧: Water Bar, Bar, Barista
-    if (r.includes("BAR") || r.includes("BARISTA") || r.includes("水吧"))
-      return "🧋 水吧 (Bar)";
-    // 后勤: Cleaner, Dishwasher
-    if (
-      r.includes("CLEANER") ||
-      r.includes("DISH") ||
-      r.includes("洗碗") ||
-      r.includes("清洁")
-    )
-      return "🧹 后勤 (Support)";
-    // 楼面: Supervisor, Cashier, Waiter, Captain, Runner, Operations
-    return "🍽️ 楼面 (Floor)";
+  /**
+   * 部门判定 —— 跟传统账目 (LABOUR CHARGES 的部门明细) 用同一套规则，
+   * 两边才不会一个说「楼面 22,248」、另一个说「FLOOR 16,301 + ADMIN 5,947」。
+   *
+   * 顺序：员工档案的 department 栏位 → 没填就用职位名称关键字推 → 还是猜不到算「未分部门」
+   * 管理职 (Manager / Supervisor / HR / Admin / Owner) 现在独立成「管理 (Admin)」，
+   * 以前没对到任何关键字的人全部 fallthrough 进楼面，所以楼面会比传统账目大一截。
+   */
+  const DEPT_LABEL: Record<string, string> = {
+    KITCHEN: "🔥 厨房 (Kitchen)",
+    BAR: "🧋 水吧 (Bar)",
+    FLOOR: "🍽️ 楼面 (Floor)",
+    DISHWASH: "🧹 清洁 (Cleaning)",
+    BACK_OFFICE: "📋 管理 (Admin)",
+    UNASSIGNED: "❓ 未分部门",
   };
+  /** 部门卡的排序，跟传统账目那五行同一个顺序 */
+  const DEPT_ORDER = ["KITCHEN", "BAR", "FLOOR", "DISHWASH", "BACK_OFFICE", "UNASSIGNED"];
+
+  const getDepartmentKey = (emp: Employee): string => {
+    let dept = emp.department ? String(emp.department).toUpperCase() : "";
+    if (!dept || dept === "OTHER") {
+      const role = String(emp.role || "").toUpperCase();
+      const hit = LABOR_DEPT_ROLE_FALLBACK.find((rule) =>
+        rule.keywords.some((k) => role.includes(k.toUpperCase())),
+      );
+      dept = hit ? hit.department : "UNASSIGNED";
+    }
+    if (dept === "OWNER") dept = "BACK_OFFICE";   // 传统账目把 OWNER 并进 ADMIN
+    return DEPT_LABEL[dept] ? dept : "UNASSIGNED";
+  };
+
+  const getDepartment = (emp: Employee): string =>
+    DEPT_LABEL[getDepartmentKey(emp)] || DEPT_LABEL.UNASSIGNED;
+
+  /**
+   * 👻 幽灵草稿过滤
+   *
+   * payrollData 里可能留着「已经离职、但草稿还在」的员工。
+   * 画面上的员工列表 (displayEmployees) 会把他们藏起来，
+   * 但底部大盘和部门明细以前是直接跑整包 payrollData —— 结果就是
+   * 「待发 RM 3,500，可是列表里找不到是谁」。
+   *
+   * 规则：
+   *   · 已经发过的 (isPaid) 一律算 —— 那是真的付出去的钱，不能凭空消失
+   *   · 没发、而且这个月本来就不该算薪的 → 排除，并记下来给老板看是谁
+   */
+  const payrollEntriesForMonth = useMemo(() => {
+    const active: [string, DetailedPayrollEntry][] = [];
+    const ghosts: { id: string; name: string; dept: string; netPay: number; terminationDate: string }[] = [];
+
+    Object.entries(payrollData).forEach(([id, e]) => {
+      const emp = employees.find((x) => x.id === id);
+      if (!emp) return;
+      const isActive = payrollActiveInMonth(emp, selectedMonth);
+      if (!e.isPaid && isActive === false) {
+        ghosts.push({
+          id,
+          name: emp.name,
+          dept: getDepartment(emp),
+          netPay: getTotals(e).netPay,
+          terminationDate: emp.terminationDate || "",
+        });
+        return;
+      }
+      active.push([id, e]);
+    });
+
+    return {
+      active,
+      ghosts: ghosts.sort((a, b) => b.netPay - a.netPay),
+      ghostTotal: ghosts.reduce((sum, g) => sum + g.netPay, 0),
+    };
+  }, [payrollData, employees, selectedMonth]);
+
+  /**
+   * 这个月「该算薪的人」是不是都已经发完了。
+   *
+   * ⚠️ 一定要排除离职残留的旧草稿，否则那几笔永远 isPaid=false，
+   *    月份就永远卡在 DRAFT、永远跳不到「缴政府费用 (KWSP/SOCSO/EIS)」那一步。
+   */
+  const isAllPaidForMonth = useMemo(() => {
+    const list = payrollEntriesForMonth.active;
+    if (list.length === 0) return false;
+    return list.every(([, e]) => !!e.isPaid);
+  }, [payrollEntriesForMonth]);
+
+  /** 存档写的是 DRAFT，但实际上该发的都发完了 —— 画面上提示老板补一个结账动作 */
+  const needsPostCatchUp = !isPosted && isAllPaidForMonth;
 
   const grandTotals = useMemo(() => {
     let net = 0,
@@ -2056,8 +2405,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       unpaid = 0,
       totalAdvance = 0,
       allAdvances = 0;
-    Object.entries(payrollData).forEach(
-      ([id, e]: [string, DetailedPayrollEntry]) => {
+    payrollEntriesForMonth.active.forEach(
+      ([, e]: [string, DetailedPayrollEntry]) => {
         const t = getTotals(e);
         const adv = e.advanceLoan || 0;
         net += t.netPay;
@@ -2065,20 +2414,29 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         govt += t.totalGovtPay;
         allAdvances += adv; // 全员预支总额（用于显示）
 
-        // 👑 核心修复：预支金额【无论员工本月是否已发薪】，都已通过 STAFF_ADVANCE 作为现金流出。
-        // 所以 "已付现金" 必须包含所有预支；"待付金额" 是剩余净工资扣掉预支（= t.netPay - adv 的部分已经不用再付了）。
+        // 👑 预支【无论员工本月是否已发薪】都已经作为 STAFF_ADVANCE 现金付出去了 → 算「已发」。
+        // ⚠️ t.netPay 本身「已经扣掉预支」（getTotals 的 employeeDeductions 含 advanceLoan），
+        //    所以待发 = 还没发的人的 netPay，不能再减一次预支 ——
+        //    以前多减一次，待发少了一整笔预支，桌面版「总薪资」也跟着少，跟手机版、部门卡片、财报都对不上。
+        //    现在：总薪资 = 净发 + 预支 + 兼职 = 已发 + 待发。
         paid += adv;
         if (e.isPaid) {
           paid += t.netPay;
         } else {
           unpaid += t.netPay;
           totalAdvance += adv; // 供底部【未付员工待收预支】提示使用
-          unpaid -= adv; // 待付 = 净工资 - 已预支 = 实际还欠员工的
         }
       },
     );
 
-    // Include Part-Time & Ad-Hoc payments from standalone expenses
+    // 👑 存档用的净发：只含正式员工，不含兼职
+    //    兼职本身就是 standalone_expenses 的独立记录，财务报表会另外抓一次；
+    //    如果把它也写进薪资单的 totalNetPay，传统账目就会算两遍
+    //    （PAYROLL 里一次 + 薪资SALARY 那行一次）。
+    const netStaffOnly = net;
+    const costStaffOnly = cost;
+
+    // 以下把兼职加进来，是给画面上的 TOTAL SALARY 用的（当月实际付出去的现金）
     partTimeExpenses.forEach((exp) => {
       const amount = exp.amount || 0;
       net += amount;
@@ -2086,8 +2444,93 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       paid += amount;
     });
 
-    return { net, cost, govt, paid, unpaid, totalAdvance, allAdvances };
-  }, [payrollData, partTimeExpenses]);
+    return {
+      net, cost, govt, paid, unpaid, totalAdvance, allAdvances,
+      netStaffOnly, costStaffOnly,
+      partTimeTotal: net - netStaffOnly,
+    };
+  }, [payrollEntriesForMonth, partTimeExpenses]);
+
+  // 💳 勾选中、还没发的人，按付款方式分组 —— 批量发放前给老板看清楚
+  const selectedBreakdown = useMemo(() => {
+    const r = { bankCount: 0, bankAmt: 0, cashCount: 0, cashAmt: 0 };
+    selectedEmpIds.forEach((id) => {
+      const en = payrollData[id];
+      if (!en || en.isPaid) return;
+      const net = getTotals(en).netPay;
+      if ((en.paymentMethod || "BANK") === "CASH") {
+        r.cashCount++;
+        r.cashAmt += net;
+      } else {
+        r.bankCount++;
+        r.bankAmt += net;
+      }
+    });
+    return r;
+  }, [selectedEmpIds, payrollData]);
+
+  // 📊 导出 Excel（薪资总表 / 银行转账 / 现金签收 / 政府缴纳 / 兼职）—— 用画面上已载入的资料，不多读资料库
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+    try {
+      const penaltyCounts = enableAttendanceDeduction && latePenaltyMode !== "WARN_ONLY";
+      const rows = payrollEntriesForMonth.active
+        .map(([id, e]) => {
+          const emp = employees.find((x) => x.id === id);
+          if (!emp) return null;
+          const t = getTotals(e);
+          return {
+            emp: { ...emp, ...(profilePatch[id] || {}) },
+            department: getDepartment(emp),
+            isLocal:
+              (emp.nationality || "").includes("Malaysian") ||
+              (emp.nationality || "").includes("🇲🇾"),
+            entry: {
+              basic: e.basic,
+              allowance: e.allowance,
+              extraSubsidy: e.extraSubsidy,
+              ot: e.ot,
+              bonus: e.bonus,
+              otherEarning: e.otherEarning,
+              latePenaltyDeducted: penaltyCounts ? e.latePenalty || 0 : 0,
+              unpaidLeave: e.unpaidLeave,
+              hostelFee: e.hostelFee,
+              advanceLoan: e.advanceLoan,
+              loanRepay: e.loanRepay || 0,
+              otherDeduction: e.otherDeduction,
+              ee_epf: e.ee_epf,
+              ee_socso: e.ee_socso,
+              ee_eis: e.ee_eis,
+              ee_lindung: e.ee_lindung || 0,
+              ee_pcb: e.ee_pcb,
+              er_epf: e.er_epf,
+              er_socso: e.er_socso,
+              er_eis: e.er_eis,
+              paymentMethod: (e.paymentMethod === "CASH" ? "CASH" : "BANK") as "BANK" | "CASH",
+              isPaid: !!e.isPaid,
+              paidAt: e.paidAt,
+              workDays: e.workDays,
+              note: e.note,
+            },
+            totals: t,
+          };
+        })
+        .filter(Boolean) as any[];
+      await exportPayrollExcel({
+        month: selectedMonth,
+        paymentDate,
+        rows,
+        partTime: partTimeExpenses,
+      });
+    } catch (err) {
+      console.error("Excel export failed", err);
+      alert("❌ 导出 Excel 失败，请再试一次");
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const deptBreakdown = useMemo(() => {
     const breakdown: Record<
@@ -2099,9 +2542,16 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         govt: number;
         count: number;
         cost: number;
+        /** 从薪水扣下来、但不是缴给政府的（预支 / 宿舍费 / 罚款 / 其他扣除 / 借款扣回） */
+        deduct: number;
+        /** 👑 点进去要看的：这个部门每一个人拿多少 */
+        members: {
+          id: string; name: string; role: string;
+          net: number; govt: number; deduct: number; cost: number; isPaid: boolean;
+        }[];
       }
     > = {};
-    Object.entries(payrollData).forEach(([id, e]) => {
+    payrollEntriesForMonth.active.forEach(([id, e]) => {
       const emp = employees.find((x) => x.id === id);
       if (!emp) return;
       const dept = getDepartment(emp);
@@ -2113,17 +2563,102 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           govt: 0,
           count: 0,
           cost: 0,
+          deduct: 0,
+          members: [],
         };
       const t = getTotals(e);
       breakdown[dept].net += t.netPay;
       breakdown[dept].cost += t.totalCompanyCost;
       breakdown[dept].govt += t.totalGovtPay;
+      // 总成本 = 净发 + 政府缴款 + 这一块。拆出来才看得懂三个数字的关系
+      breakdown[dept].deduct += t.totalCompanyCost - t.netPay - t.totalGovtPay;
       breakdown[dept].count++;
+      breakdown[dept].members.push({
+        id,
+        name: emp.name || id,
+        role: emp.role || '',
+        net: t.netPay,
+        govt: t.totalGovtPay,
+        deduct: t.totalCompanyCost - t.netPay - t.totalGovtPay,
+        cost: t.totalCompanyCost,
+        isPaid: !!e.isPaid,
+      });
+      // 预支已经付出去了 → 算进「已发」，跟底部总数同口径（已发 + 待发 = 净发 + 预支）
+      breakdown[dept].paid += e.advanceLoan || 0;
       if (e.isPaid) breakdown[dept].paid += t.netPay;
       else breakdown[dept].unpaid += t.netPay;
     });
+    Object.values(breakdown).forEach(b => b.members.sort((x, y) => y.net - x.net));
     return breakdown;
-  }, [payrollData, employees]);
+  }, [payrollEntriesForMonth, employees]);
+
+  /**
+   * 👷 非部门薪资（兼职 / 临时工 / 其他走 standalone_expenses 的人事支出）
+   *
+   * 这些钱有算进底部的 TOTAL SALARY，但没有员工档案、没有部门，
+   * 所以进不了上面任何一张部门卡 —— 以前四张卡加起来永远对不上总数，
+   * 老板只能自己猜差额是什么。现在独立成一张卡，而且可以点开看每一笔。
+   */
+  const nonDeptPayroll = useMemo(() => {
+    const items = (partTimeExpenses || [])
+      .map((e) => ({
+        id: e.id,
+        name: e.company || e.note || "未命名",
+        date: (e.time || "").split("T")[0],
+        amount: Number(e.amount) || 0,
+        method: e.paymentMethod || "",
+      }))
+      .sort((a, b) => b.amount - a.amount);
+    return { items, total: items.reduce((sum, x) => sum + x.amount, 0) };
+  }, [partTimeExpenses]);
+
+  const [showNonDeptDetail, setShowNonDeptDetail] = useState(false);
+  /** 👑 点开某个部门看每个人拿多少；null = 没展开 */
+  const [openDept, setOpenDept] = useState<string | null>(null);
+
+  /** 把离职员工残留的旧草稿从本月薪资里移除（要老板确认，不会自动跑） */
+  const handleClearGhostDrafts = async () => {
+    const ghosts = payrollEntriesForMonth.ghosts;
+    if (ghosts.length === 0) return;
+    if (isPosted) {
+      return alert("⚠️ 这个月已经入账，请先撤销结账再清理草稿。");
+    }
+    const list = ghosts.map((g) => `· ${g.name} (${g.id})  RM ${g.netPay.toFixed(2)}`).join("\n");
+    if (
+      !confirm(
+        `⚠️ 确定要清除这 ${ghosts.length} 笔离职员工的旧草稿吗？\n\n${list}\n\n合计 RM ${payrollEntriesForMonth.ghostTotal.toFixed(2)}\n\n` +
+          "这些人离职月已经过了，本月不该算薪。\n" +
+          "清除后会从本月薪资资料里移除，并覆盖存档。\n" +
+          "⚠️ 这个动作不能复原。",
+      )
+    )
+      return;
+
+    setIsLoading(true);
+    try {
+      const ghostIds = new Set(ghosts.map((g) => g.id));
+      const cleaned: Record<string, DetailedPayrollEntry> = {};
+      Object.entries(payrollData).forEach(([id, e]) => {
+        if (!ghostIds.has(id)) cleaned[id] = e;
+      });
+      setPayrollData(cleaned);
+
+      const records = await DataManager.getPayrollRecords();
+      const record = records.find((r) => r.id === selectedMonth);
+      if (record) {
+        const details = (record.details || []).filter(
+          (d: any) => !ghostIds.has(d.employeeId),
+        );
+        await DataManager.savePayrollRecord({ ...record, details: details as any });
+      }
+      alert(`✅ 已清除 ${ghosts.length} 笔旧草稿，合计 RM ${payrollEntriesForMonth.ghostTotal.toFixed(2)}`);
+    } catch (err) {
+      console.error("清除旧草稿失败", err);
+      alert("❌ 清除失败，请检查网络");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSaveSingleDraft = async () => {
     setIsLoading(true);
@@ -2145,12 +2680,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             otherEarningNote: entry.otherEarningNote,
             otherDeduction: entry.otherDeduction,
             otherDeductionNote: entry.otherDeductionNote,
+            loanRepay: entry.loanRepay || 0,
             ot: entry.ot,
             bonus: entry.bonus,
             unpaidLeave: entry.unpaidLeave,
             ee_epf: entry.ee_epf,
             ee_socso: entry.ee_socso,
             ee_eis: entry.ee_eis,
+            ee_lindung: entry.ee_lindung || 0,
+            hasLindung: !!entry.hasLindung,
             ee_pcb: entry.ee_pcb,
             er_epf: entry.er_epf,
             er_socso: entry.er_socso,
@@ -2170,8 +2708,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       const record: PayrollRecord = {
         id: selectedMonth,
         month: selectedMonth,
-        totalAmount: grandTotals.cost,
-        totalNetPay: grandTotals.net,
+        totalAmount: grandTotals.costStaffOnly,  // 同上
+        totalNetPay: grandTotals.netStaffOnly,   // 不含兼职，免得传统账目重复计算
         totalGovtPay: grandTotals.govt,
         staffCount: details.length,
         status: isPosted ? "POSTED" : "DRAFT",
@@ -2182,7 +2720,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       setEditingEmpId(null);
     } catch (e) {
       console.error(e);
-      alert("保存失败 (Save Failed)");
+      alert("❌ 保存失败");
     } finally {
       setIsLoading(false);
     }
@@ -2251,7 +2789,136 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       alert("✅ 已撤销大盘结账 (Reverted to Draft)");
     } catch (e) {
       console.error(e);
-      alert("撤销失败");
+      alert("❌ 撤销失败");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * 补一个结账动作。
+   * 用在「该发的都发完了，但存档还写着 DRAFT」的月份 ——
+   * 以前离职残留的旧草稿会让 allPaidNow 永远是 false，月份卡在草稿，
+   * 就跳不到「缴政府费用」。演算法已经修好，这颗按钮是用来补救已经存下的旧记录。
+   */
+  const handleMarkPosted = async () => {
+    if (!isAllPaidForMonth) {
+      return alert("⚠️ 还有员工没发薪，不能标记为已结账。");
+    }
+    if (
+      !confirm(
+        `确认把 ${selectedMonth} 标记为「已结账 (POSTED)」？\n\n` +
+          `本月该发的 ${payrollEntriesForMonth.active.length} 位员工都已付清。\n` +
+          `结账后就可以缴纳政府费用 (KWSP / SOCSO / EIS)。\n\n` +
+          `之后还是可以按「撤销结账」退回来。`,
+      )
+    )
+      return;
+
+    setIsLoading(true);
+    try {
+      const records = await DataManager.getPayrollRecords();
+      const record = records.find((r) => r.id === selectedMonth);
+      if (!record) {
+        return alert("❌ 找不到本月的薪资存档，请先按「保存」再试。");
+      }
+      await DataManager.savePayrollRecord({ ...record, status: "POSTED" });
+      setIsPosted(true);
+      alert("✅ 已标记为结账，现在可以缴纳政府费用 (KWSP / SOCSO / EIS)。");
+    } catch (err) {
+      console.error("标记结账失败", err);
+      alert("❌ 标记失败，请检查网络");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * 🔄 用现在的资料重算本月存档的数字
+   *
+   * 给「存档是旧代码写的、数字已经不对」的月份用。例如 8 月：
+   *   · 存档时幽灵草稿还没修掉 → totalNetPay 多了那几笔
+   *   · 存档时兼职被算进 totalNetPay → 传统账目的 PAYROLL 与 SALARY 重复计算
+   *
+   * ⚠️ 只覆盖金额与 details，不动月份状态 (POSTED/DRAFT)、
+   *    也完全不碰资金管理里的任何一笔支出流水。
+   */
+  const handleRefreshRecord = async () => {
+    const detail = payrollEntriesForMonth.active.map(([id, entry]) => {
+      const emp = employees.find((e) => e.id === id);
+      const t = getTotals(entry);
+      return {
+        employeeId: id,
+        employeeName: emp?.name || "Unknown",
+        basicSalary: entry.basic,
+        allowance: entry.allowance,
+        extraSubsidy: entry.extraSubsidy,
+        penalty: entry.latePenalty,
+        hostelFee: entry.hostelFee,
+        advanceLoan: entry.advanceLoan,
+        otherEarning: entry.otherEarning,
+        otherEarningNote: entry.otherEarningNote,
+        otherDeduction: entry.otherDeduction,
+        otherDeductionNote: entry.otherDeductionNote,
+        loanRepay: entry.loanRepay || 0,
+        ot: entry.ot,
+        bonus: entry.bonus,
+        unpaidLeave: entry.unpaidLeave,
+        ee_epf: entry.ee_epf,
+        ee_socso: entry.ee_socso,
+        ee_eis: entry.ee_eis,
+        ee_lindung: entry.ee_lindung || 0,
+        hasLindung: !!entry.hasLindung,
+        ee_pcb: entry.ee_pcb,
+        er_epf: entry.er_epf,
+        er_socso: entry.er_socso,
+        er_eis: entry.er_eis,
+        netPay: t.netPay,
+        totalCost: t.totalCompanyCost,
+        note: entry.note,
+        paymentMethod: entry.paymentMethod || "BANK",
+        proRateMode: entry.proRateMode || "26_DAYS",
+        workDays: entry.workDays || 0,
+        isPaid: entry.isPaid,
+        paidAt: entry.paidAt,
+        paymentExpenseId: entry.paymentExpenseId,
+      };
+    });
+
+    if (
+      !confirm(
+        `用现在的资料重算 ${selectedMonth} 的存档数字？\n\n` +
+          `员工数：${detail.length} 人\n` +
+          `实发净额：RM ${grandTotals.netStaffOnly.toFixed(2)}（不含兼职）\n` +
+          `兼职另计：RM ${grandTotals.partTimeTotal.toFixed(2)}\n` +
+          `政府缴款：RM ${grandTotals.govt.toFixed(2)}\n\n` +
+          `只会覆盖存档里的金额，不动结账状态，也不碰任何一笔支出流水。`,
+      )
+    )
+      return;
+
+    setIsLoading(true);
+    try {
+      const records = await DataManager.getPayrollRecords();
+      const record = records.find((r) => r.id === selectedMonth);
+      if (!record) return alert("❌ 找不到本月的薪资存档");
+
+      await DataManager.savePayrollRecord({
+        ...record,
+        totalAmount: grandTotals.costStaffOnly,
+        totalNetPay: grandTotals.netStaffOnly,
+        totalGovtPay: grandTotals.govt,
+        staffCount: detail.length,
+        details: detail as any,
+      });
+      alert(
+        `✅ 已重算 ${selectedMonth} 的存档\n\n` +
+          `实发净额 RM ${grandTotals.netStaffOnly.toFixed(2)}\n` +
+          `现在回去看传统账目的 LABOUR CHARGES，数字应该就对了。`,
+      );
+    } catch (err) {
+      console.error("重算存档失败", err);
+      alert("❌ 重算失败，请检查网络");
     } finally {
       setIsLoading(false);
     }
@@ -2260,7 +2927,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   const handlePayStatutory = async () => {
     if (
       !confirm(
-        `确认缴纳政府费用 (KWSP/SOCSO/EIS/PCB)?\n总额: RM ${grandTotals.govt.toLocaleString()}`,
+        `确认缴纳政府费用 (KWSP / SOCSO / EIS / LINDUNG 24 Jam / PCB)?\n总额: RM ${grandTotals.govt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
       )
     )
       return;
@@ -2272,7 +2939,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         id: `payroll_stat_${selectedMonth}`,
         category: "SALARY",
         expenseType: "SALARY",
-        company: `Govt Bodies (KWSP/SOCSO/LHDN) - ${selectedMonth}`,
+        company: `Govt Bodies (KWSP/SOCSO/EIS/LINDUNG/LHDN) - ${selectedMonth}`,
         amount: grandTotals.govt,
         paymentStatus: "PAID",
         paymentMethod: "BANK_TRANSFER",
@@ -2297,25 +2964,21 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       alert("✅ 法定缴纳已记录 (Statutory Paid)!");
     } catch (e) {
       console.error("Pay Stat Error", e);
-      alert("支付记录失败");
+      alert("❌ 支付记录失败");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSavePayroll = async (batchMethod: "CASH" | "BANK_TRANSFER") => {
+  // 👑 批量发放：每个人按自己的付款方式（银行/现金）分别入账，不再问一次「银行还是现金」
+  const handleSavePayroll = async () => {
     if (selectedEmpIds.size === 0) return alert("⚠️ 请先勾选需要结算的员工！");
     const selectedCount = Array.from(selectedEmpIds).filter(
       (id) => payrollData[id] && !payrollData[id].isPaid,
     ).length;
     if (selectedCount === 0)
       return alert("⚠️ 选中的员工已全部付款，无需重复结算。");
-    if (
-      !confirm(
-        `确认批量结算 ${selectedCount} 位员工的 ${selectedMonth} 薪资？\n\n付款方式：${batchMethod === "CASH" ? "现金" : "银行转账"}\n\n注意：仅结算勾选的员工，已单独支付的将自动跳过。`,
-      )
-    )
-      return;
+    // 👑 不再弹第二次确认 —— 按「确认发放」之前画面已经列出银行/现金各几人、多少钱
 
     setIsLoading(true);
     try {
@@ -2354,12 +3017,15 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             otherEarningNote: entry.otherEarningNote,
             otherDeduction: entry.otherDeduction,
             otherDeductionNote: entry.otherDeductionNote,
+            loanRepay: entry.loanRepay || 0,
             ot: entry.ot,
             bonus: entry.bonus,
             unpaidLeave: entry.unpaidLeave,
             ee_epf: entry.ee_epf,
             ee_socso: entry.ee_socso,
             ee_eis: entry.ee_eis,
+            ee_lindung: entry.ee_lindung || 0,
+            hasLindung: !!entry.hasLindung,
             ee_pcb: entry.ee_pcb,
             er_epf: entry.er_epf,
             er_socso: entry.er_socso,
@@ -2380,12 +3046,18 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           };
         },
       );
-      const allPaidNow = details.every((d: any) => d.isPaid);
+      // 只看「本月该算薪的人」，离职残留的旧草稿不算，否则永远结不了账
+      const ghostIdSet = new Set(payrollEntriesForMonth.ghosts.map((g) => g.id));
+      const countableDetails = details.filter(
+        (d: any) => d.isPaid || !ghostIdSet.has(d.employeeId),
+      );
+      const allPaidNow =
+        countableDetails.length > 0 && countableDetails.every((d: any) => d.isPaid);
       const record: PayrollRecord = {
         id: selectedMonth,
         month: selectedMonth,
-        totalAmount: grandTotals.cost,
-        totalNetPay: grandTotals.net,
+        totalAmount: grandTotals.costStaffOnly,  // 同上
+        totalNetPay: grandTotals.netStaffOnly,   // 不含兼职，免得传统账目重复计算
         totalGovtPay: grandTotals.govt,
         staffCount: details.length,
         status: allPaidNow ? "POSTED" : "DRAFT",
@@ -2471,6 +3143,19 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         await DataManager.saveStandaloneExpense(bankExp);
       }
 
+      // 🟢 同步「欠款扣回」到人事档案（只处理本次新发放的）
+      for (const id of Array.from(selectedEmpIds)) {
+        const en = payrollData[id];
+        if (!en || en.isPaid) continue;
+        if (!(Number(en.loanRepay) || 0)) continue;
+        await syncLoanRepayToProfile(
+          id,
+          en.loanRepay || 0,
+          selectedMonth,
+          paymentDate,
+        );
+      }
+
       // 只更新勾选的员工为 Paid
       setPayrollData((prev) => {
         const updated = { ...prev };
@@ -2488,11 +3173,11 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       setShowBatchPayConfirm(false);
       setSelectedEmpIds(new Set());
       alert(
-        `✅ 批量结算成功！已发放 ${selectedCount} 人\n付款方式: ${batchMethod === "CASH" ? "现金" : "银行转账"}\n记账日期: ${paymentDate}${allPaidNow ? "\n\n🎉 全员已付清，状态已标记为 POSTED！" : "\n\n⚠️ 仍有员工未付款，状态保持 DRAFT。"}`,
+        `✅ 批量结算成功！已发放 ${selectedCount} 人\n银行 ${selectedBreakdown.bankCount} 人 / 现金 ${selectedBreakdown.cashCount} 人\n记账日期: ${paymentDate}${allPaidNow ? "\n\n🎉 全员已付清，状态已标记为 POSTED！" : "\n\n⚠️ 仍有员工未付款，状态保持 DRAFT。"}`,
       );
     } catch (e) {
       console.error("Payroll Save Error", e);
-      alert("保存失败");
+      alert("❌ 保存失败");
     } finally {
       setIsLoading(false);
     }
@@ -2515,8 +3200,10 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       entry.ee_epf > 0 ||
       entry.ee_socso > 0 ||
       entry.ee_eis > 0 ||
+      (entry.ee_lindung || 0) > 0 ||
       entry.ee_pcb > 0;
-    const showStatutoryPending = isLocal && hasStatutory && !isStatutoryPaid;
+    // 外劳也有 LINDUNG 24 Jam 要缴，所以不再只看本地
+    const showStatutoryPending = hasStatutory && !isStatutoryPaid;
 
     return (
       <div
@@ -2605,6 +3292,31 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           </div>
         </div>
         <div className="w-full md:w-2/3 flex flex-row justify-end items-center gap-3 md:gap-6 text-right mt-1 md:mt-0">
+          {/* 💳 付款方式 —— 直接在列表点一下切换，会记在人事档案，下个月自动带入 */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPaymentMethodFor(emp.id, entry.paymentMethod === "CASH" ? "BANK" : "CASH");
+            }}
+            disabled={entry.isPaid || isPosted}
+            className={`mr-auto md:mr-0 shrink-0 px-2.5 rounded-lg border text-[11px] font-black flex items-center gap-1 min-h-[36px] active:scale-95 transition-all disabled:opacity-70 ${
+              entry.paymentMethod === "CASH"
+                ? "bg-green-50 text-green-700 border-green-200"
+                : "bg-blue-50 text-blue-700 border-blue-200"
+            }`}
+            aria-label="切换付款方式"
+          >
+            {entry.paymentMethod === "CASH" ? (
+              <>
+                <Banknote size={13} /> 现金
+              </>
+            ) : (
+              <>
+                <Building2 size={13} /> 银行
+              </>
+            )}
+          </button>
           {entry.advanceLoan > 0 && (
             <div className="hidden md:block">
               <div className="text-[9px] text-red-400 uppercase font-bold mb-0.5">
@@ -2616,8 +3328,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           )}
 
-          {isLocal && (
-            <div className="shrink-0">
+          {(isLocal || totals.totalGovtPay > 0) && (
+            <div className="shrink-0 hidden sm:block">
               <div className="text-[8px] md:text-[9px] text-blue-600 uppercase font-bold mb-0.5">
                 Govt
               </div>
@@ -2662,10 +3374,10 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#F6F7FB]">
+    <div className="h-full min-h-0 overflow-y-auto bg-[#F6F7FB]">
       {/* Header */}
       <div
-        className="bg-[#111111] text-white shadow-lg z-20"
+        className="bg-white text-[#111111] border-b border-gray-200"
         style={{
           paddingTop: "8px",
           paddingBottom: "10px",
@@ -2680,7 +3392,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               <DollarSign size={18} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm md:text-xl font-black text-white tracking-wide truncate">
+              <h2 className="text-sm md:text-xl font-black text-[#111111] tracking-wide truncate">
                 薪资管理
               </h2>
               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
@@ -2701,27 +3413,27 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center bg-white/10 rounded-lg border border-white/10 p-0.5 shrink-0">
+          <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 p-0.5 shrink-0">
             <button
               onClick={() => handleMonthChange(-1)}
-              className="p-2 hover:bg-white/10 rounded text-white/70 hover:text-white transition-colors active:scale-90"
+              className="p-2 hover:bg-gray-100 rounded text-gray-600 hover:text-black transition-colors active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
               aria-label="Previous Month"
             >
               <ChevronLeft size={18} />
             </button>
-            <div className="flex items-center gap-1.5 px-2 border-x border-white/10 mx-0.5">
+            <div className="flex items-center gap-1.5 px-2 border-x border-gray-200 mx-0.5">
               <Calendar size={14} className="text-[#FFD200] hidden md:block" />
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-white font-bold outline-none w-32 md:w-36 text-center appearance-none cursor-pointer"
-                style={{ fontSize: "16px", minHeight: "36px" }}
+                className="bg-transparent text-[#111111] font-bold outline-none w-32 md:w-36 text-center appearance-none cursor-pointer text-[16px] md:text-sm"
+                style={{ minHeight: "36px" }}
               />
             </div>
             <button
               onClick={() => handleMonthChange(1)}
-              className="p-2 hover:bg-white/10 rounded text-white/70 hover:text-white transition-colors active:scale-90"
+              className="p-2 hover:bg-gray-100 rounded text-gray-600 hover:text-black transition-colors active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
               aria-label="Next Month"
             >
               <ChevronRight size={18} />
@@ -2730,28 +3442,46 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         </div>
 
         {/* 👑 iOS High contrast Segmented control to separate HR settlement calculation and payout list */}
-        <div className="flex bg-white/10 rounded-xl p-1 mt-2.5 max-w-sm border border-white/5 shadow-inner">
+        <div className="flex bg-gray-100 rounded-xl p-1 mt-2.5 md:max-w-md border border-gray-200 shadow-inner">
           <button
             onClick={() => setCurrentMode("CALC")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "CALC" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-600 hover:text-black hover:bg-gray-100"}`}
           >
-            🧮 薪酬核算 (Calc)
+            🧮 月薪核算
           </button>
           <button
             onClick={() => setCurrentMode("HISTORY")}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-300 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "HISTORY" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-600 hover:text-black hover:bg-gray-100"}`}
           >
-            📜 支薪历史 (History)
+            📜 历史
+          </button>
+          <button
+            onClick={() => setCurrentMode("PARTTIME")}
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] select-none active:scale-[0.98] ${currentMode === "PARTTIME" ? "bg-[#FFD200] text-black shadow-md" : "text-gray-600 hover:text-black hover:bg-gray-100"}`}
+          >
+            ⏱️ 兼职
           </button>
         </div>
 
         {/* Row 2: Action buttons - compact horizontal scroll on mobile (Only visible in CALC mode) */}
         {currentMode === "CALC" && (
-          <div className="flex items-center gap-1.5 mt-2 overflow-x-auto scrollbar-hide -mx-3 px-3 animate-in fade-in duration-150">
+          <details className="mt-3"><summary className="cursor-pointer text-sm font-bold py-2">更多操作 · 导出、预支、考勤设置</summary><div className="flex flex-wrap items-center gap-2 mt-2">
+            <button
+              onClick={handleExportExcel}
+              disabled={isExportingExcel || isLoading}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0 active:scale-95 min-h-[44px]"
+            >
+              {isExportingExcel ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileSpreadsheet size={14} />
+              )}{" "}
+              Excel
+            </button>
             <button
               onClick={handlePrintSummary}
               disabled={isGeneratingPdf || selectedEmpIds.size === 0}
-              className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0 active:scale-95 min-h-[44px]"
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0 active:scale-95 min-h-[44px]"
             >
               {isGeneratingPdf ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -2762,7 +3492,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </button>
             <button
               onClick={() => setShowResigned(!showResigned)}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 active:scale-95 min-h-[44px] ${showResigned ? "bg-red-900 text-red-100 border-red-700" : "bg-white/10 text-gray-400 border-white/10 hover:bg-white/20"}`}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 active:scale-95 min-h-[44px] ${showResigned ? "bg-red-900 text-red-100 border-red-700" : "bg-gray-100 text-gray-400 border-gray-200 hover:bg-white/20"}`}
             >
               <UserX size={14} /> {showResigned ? "隐藏离职" : "离职"}
             </button>
@@ -2785,14 +3515,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </button>
 
             {/* ⏰ 考勤自动扣款开关 */}
-            <div className="flex items-center gap-2 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/10 shrink-0 min-h-[44px]">
+            <div className="flex items-center gap-2 bg-gray-100 px-2.5 py-1.5 rounded-lg border border-gray-200 shrink-0 min-h-[44px]">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-black text-gray-200">
+                <span className="text-[10px] font-black text-gray-600">
                   ⏰ 自动扣薪
                 </span>
                 <button
                   onClick={handleToggleDeduction}
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-200 focus:outline-none ${enableAttendanceDeduction ? "bg-amber-500" : "bg-gray-600"}`}
+                  className={`min-h-[44px] md:min-h-0 w-9 h-5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-200 focus:outline-none ${enableAttendanceDeduction ? "bg-amber-500" : "bg-gray-600"}`}
                   aria-label="Toggle Late Deduction"
                 >
                   <div
@@ -2807,8 +3537,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   <select
                     value={latePenaltyMode}
                     onChange={(e) => handleSetLatePenaltyMode(e.target.value as any)}
-                    className="bg-zinc-800 text-white text-[10px] font-black rounded px-1.5 py-0.5 outline-none border border-zinc-700 focus:border-[#FFD200] cursor-pointer"
-                  >
+                    className="bg-zinc-800 text-white text-[10px] font-black rounded px-1.5 py-0.5 outline-none border border-zinc-700 focus:border-[#FFD200] cursor-pointer text-[16px] md:text-sm" >
                     <option value="FULL">实扣 100% (Deduct 100%)</option>
                     <option value="HALF">减半 50% (Deduct 50%)</option>
                     <option value="WARN_ONLY">仅警告 0% (Deduct 0% / Warn)</option>
@@ -2816,19 +3545,27 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 </div>
               )}
             </div>
-          </div>
+          </div></details>
         )}
       </div>
 
       {/* Main List */}
       <div
-        className="flex-grow overflow-y-auto p-4 md:p-6 touch-pan-y"
+        className="p-4 md:p-6"
         style={{
           paddingBottom:
-            "max(140px, calc(140px + env(safe-area-inset-bottom)))",
+            "max(24px, env(safe-area-inset-bottom))",
         }}
       >
-        {currentMode === "HISTORY" ? (
+        {currentMode === "PARTTIME" ? (
+          <PartTimePanel
+            employees={employees}
+            currentEmployee={currentEmployee}
+            selectedMonth={selectedMonth}
+            expenses={partTimeExpenses}
+            setExpenses={setPartTimeExpenses}
+          />
+        ) : currentMode === "HISTORY" ? (
           <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm flex justify-between items-center">
               <div>
@@ -2976,7 +3713,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                                         handlePrintSingleSlip();
                                       }, 250);
                                     }}
-                                    className="bg-gray-100 hover:bg-[#111111] hover:text-[#FFD200] p-2.5 rounded-xl text-gray-600 transition-all active:scale-90 min-h-[38px] select-none"
+                                    className="bg-gray-100 hover:bg-[#111111] hover:text-[#FFD200] p-2.5 rounded-xl text-gray-600 transition-all active:scale-90 min-h-[38px] select-none min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                     title="打印 A4 Payslip 薪资单"
                                   >
                                     <Printer size={14} />
@@ -3020,23 +3757,49 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           </div>
         ) : (
           <>
-            <div className="max-w-5xl mx-auto mb-2 flex items-center gap-2">
+            {/* 🎯 快速勾选 —— 手机横向滑动，一次选好一批再发 */}
+            <div className="max-w-5xl mx-auto mb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-auto md:px-0">
               <button
                 onClick={handleSelectAll}
-                className="bg-white px-3 py-1.5 rounded-lg text-xs font-bold text-gray-500 border border-gray-200 hover:bg-gray-50 flex items-center gap-2 active:scale-95 transition-transform"
+                className="bg-white px-3 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 flex items-center gap-1.5 active:scale-95 transition-transform min-h-[44px] shrink-0"
               >
                 {selectedEmpIds.size === displayEmployees.length &&
                 displayEmployees.length > 0 ? (
-                  <CheckSquare size={14} className="text-[#111111]" />
+                  <CheckSquare size={16} className="text-[#111111]" />
                 ) : (
-                  <Square size={14} />
+                  <Square size={16} />
                 )}
-                Select All
+                全选
               </button>
+              {!isPosted && (
+                <>
+                  <button
+                    onClick={() => selectUnpaidBy()}
+                    className="bg-white px-3 rounded-xl text-xs font-bold text-orange-700 border border-orange-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
+                  >
+                    ⏳ 未发
+                  </button>
+                  <button
+                    onClick={() => selectUnpaidBy("BANK")}
+                    className="bg-white px-3 rounded-xl text-xs font-bold text-blue-700 border border-blue-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
+                  >
+                    <Building2 size={14} /> 未发·银行
+                  </button>
+                  <button
+                    onClick={() => selectUnpaidBy("CASH")}
+                    className="bg-white px-3 rounded-xl text-xs font-bold text-green-700 border border-green-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
+                  >
+                    <Banknote size={14} /> 未发·现金
+                  </button>
+                </>
+              )}
               {selectedEmpIds.size > 0 && (
-                <span className="text-xs font-bold text-[#111111]">
-                  {selectedEmpIds.size} Selected
-                </span>
+                <button
+                  onClick={() => setSelectedEmpIds(new Set())}
+                  className="bg-[#111111] text-white px-3 rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
+                >
+                  已选 {selectedEmpIds.size} <X size={14} />
+                </button>
               )}
 
               {/* 🟢 新增：批量撤销按钮 (仅在选中了至少1个已付款人员时显示) */}
@@ -3048,7 +3811,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   <button
                     onClick={handleBatchRevokePayment}
                     disabled={isLoading}
-                    className="ml-auto bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-200 hover:bg-red-100 flex items-center gap-1 active:scale-95 transition-transform disabled:opacity-50"
+                    className="ml-auto shrink-0 bg-red-50 text-red-600 px-3 rounded-xl text-xs font-bold border border-red-200 hover:bg-red-100 flex items-center gap-1 active:scale-95 transition-transform disabled:opacity-50 min-h-[44px]"
                   >
                     {isLoading ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -3097,52 +3860,73 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 </div>
               )}
 
-              {/* Part Time / Ad-Hoc Group */}
-              {partTimeExpenses.length > 0 && (
-                <div className="animate-in fade-in slide-in-from-bottom-6">
-                  <h3 className="font-black text-sm text-gray-500 uppercase tracking-widest mb-4 ml-2 flex items-center gap-2">
-                    <span className="text-xl">⏳</span> 兼职/临时工资 (Part Time
-                    / Ad-Hoc)
-                  </h3>
-                  <div className="space-y-4">
-                    {partTimeExpenses.map((exp) => (
-                      <div
-                        key={exp.id}
-                        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center shrink-0 border border-gray-100">
-                            <span className="text-xl">🏃</span>
+              {/* 🔍 这个月没列入薪资的员工 —— 不再静悄悄消失 */}
+              {excludedEmployees.length > 0 && (
+                <details className="bg-white rounded-2xl border border-dashed border-gray-300 p-4 shadow-sm">
+                  <summary className="cursor-pointer select-none flex items-center justify-between gap-2 min-h-[44px] list-none">
+                    <span className="font-black text-sm text-gray-600 flex items-center gap-2">
+                      🔍 这个月没列入薪资的员工
+                      <span className="text-[11px] font-black bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{excludedEmployees.length} 人</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-gray-400">点开看原因 ▾</span>
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {excludedEmployees.map(({ emp, reason, text }) => (
+                      <div key={emp.id} className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-3 py-2.5 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="font-black text-sm text-[#111111]">
+                            {emp.name} <span className="text-[10px] font-mono text-gray-400">#{emp.id}</span>
                           </div>
-                          <div>
-                            <h4 className="font-black text-gray-800 text-lg uppercase">
-                              {exp.company || exp.note || "Part Time Employee"}
-                            </h4>
-                            <div className="flex items-center gap-2 text-xs font-bold mt-1">
-                              <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md">
-                                AP Expense
-                              </span>
-                              <span className="text-gray-400">
-                                {exp.time?.split("T")[0]}
-                              </span>
-                            </div>
-                          </div>
+                          <div className="text-[11px] font-bold text-gray-500 mt-0.5">{text}</div>
                         </div>
-
-                        <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-gray-100 pt-3 md:pt-0">
-                          <div className="text-right">
-                            <span className="block text-[10px] text-gray-400 font-bold uppercase mb-0.5">
-                              已付工资 (Paid)
-                            </span>
-                            <span className="font-mono text-xl font-black text-[#111111]">
-                              {exp.amount.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
+                        {reason === "HOURLY" ? (
+                          <button
+                            onClick={() => setCurrentMode("PARTTIME")}
+                            className="shrink-0 px-3 min-h-[40px] rounded-xl bg-white border border-gray-200 text-xs font-black text-gray-700 active:scale-95"
+                          >
+                            去兼职分页
+                          </button>
+                        ) : onNavigateToProfile ? (
+                          <button
+                            onClick={() => onNavigateToProfile(emp.id)}
+                            className="shrink-0 px-3 min-h-[40px] rounded-xl bg-white border border-gray-200 text-xs font-black text-gray-700 active:scale-95"
+                          >
+                            打开档案修改
+                          </button>
+                        ) : null}
                       </div>
                     ))}
+                    <p className="text-[10px] font-bold text-gray-400 leading-relaxed pt-1">
+                      要算薪的话：员工档案 → 薪资法定 → 打开「参与月度薪资结算」，或把计薪方式改回月薪；改好后回来重新整理这个月份。
+                    </p>
                   </div>
-                </div>
+                </details>
+              )}
+
+              {/* ⏱️ 兼职：改到「兼职」分页按天登记，这里只放一张摘要卡 */}
+              {partTimeExpenses.length > 0 && (
+                <button
+                  onClick={() => setCurrentMode("PARTTIME")}
+                  className="w-full bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between gap-3 shadow-sm active:scale-[0.99] text-left"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-2xl">⏱️</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-black text-[#111111]">兼职 / 临时工资</div>
+                      <div className="text-[11px] font-bold text-gray-400">
+                        本月 {partTimeExpenses.length} 笔 · 已付现金，有算进总薪资
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-mono font-black text-[#111111]">
+                      {partTimeExpenses
+                        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+                        .toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] font-black text-blue-600">查看 ›</div>
+                  </div>
+                </button>
               )}
             </div>
           </>
@@ -3165,18 +3949,28 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   </h4>
                   <button
                     onClick={() => setShowDeptBreakdown(false)}
-                    className="p-1 text-gray-400 hover:text-gray-600"
+                    className="p-1 text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                   >
                     <X size={14} />
                   </button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                   {Object.entries(deptBreakdown)
-                    .sort(([a], [b]) => a.localeCompare(b))
+                    .sort(([a], [b]) => {
+                      const ia = DEPT_ORDER.findIndex((k) => DEPT_LABEL[k] === a);
+                      const ib = DEPT_ORDER.findIndex((k) => DEPT_LABEL[k] === b);
+                      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+                    })
                     .map(([dept, data]) => (
                       <div
                         key={dept}
-                        className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm"
+                        onClick={() => setOpenDept(openDept === dept ? null : dept)}
+                        title="点一下看这个部门每个人拿多少"
+                        className={`bg-white rounded-xl p-3 border shadow-sm cursor-pointer transition-all active:scale-[0.99] ${
+                          openDept === dept
+                            ? 'border-[#FFD200] ring-2 ring-[#FFD200]/40'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
                       >
                         <div className="flex justify-between items-start mb-2">
                           <div>
@@ -3200,8 +3994,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                           </div>
                         </div>
                         <div className="flex justify-between text-[10px] pt-2 border-t border-gray-100">
-                          <span className="text-emerald-600 font-bold">
-                            已发: RM{" "}
+                          <span className="text-emerald-600 font-bold" title="含已经发出去的预支">
+                            已发(含预支): RM{" "}
                             {data.paid.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
                             })}
@@ -3220,22 +4014,266 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                               minimumFractionDigits: 2,
                             })}
                           </span>
-                          <span className="text-gray-400 font-bold">
-                            总成本: RM{" "}
+                          <span className="text-purple-500 font-bold" title="从薪水扣下来、但不是缴给政府的：预支 / 宿舍费 / 罚款 / 其他扣除 / 借款扣回">
+                            扣款: RM{" "}
+                            {data.deduct.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[10px] mt-1 pt-1 border-t border-dashed border-gray-200">
+                          <span className="text-gray-400 font-bold">总成本</span>
+                          <span className="text-gray-600 font-black font-mono">
+                            RM{" "}
                             {data.cost.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
                             })}
                           </span>
                         </div>
+                        <p className="text-[8px] text-gray-400 font-bold mt-1 leading-tight">
+                          净发 + 政府 + 扣款 = 总成本
+                        </p>
+                        <p className="text-[9px] font-black text-indigo-500 mt-1.5 leading-tight">
+                          {openDept === dept ? '▲ 收起人员明细' : `▼ 看这 ${data.count} 个人拿多少`}
+                        </p>
                       </div>
                     ))}
+
+                  {/* 👷 兼职 / 无部门 —— 有算进 TOTAL SALARY，但不属于任何部门 */}
+                  {nonDeptPayroll.total > 0 && (
+                    <div className="bg-white rounded-xl p-3 border-2 border-dashed border-indigo-300 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-black text-indigo-900">
+                            👷 兼职 / 无部门
+                          </div>
+                          <div className="text-[9px] text-gray-400 font-bold">
+                            {nonDeptPayroll.items.length} 笔
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-[9px] text-gray-400 uppercase font-bold">
+                            Net Pay
+                          </div>
+                          <div className="text-sm font-mono font-black text-indigo-900">
+                            RM{" "}
+                            {nonDeptPayroll.total.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowNonDeptDetail((v) => !v)}
+                        className="w-full text-[10px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg py-1.5 border border-indigo-100 active:scale-95 min-h-[44px] md:min-h-0"
+                      >
+                        {showNonDeptDetail ? "收起明细" : "看是哪几笔 →"}
+                      </button>
+                      <p className="text-[9px] text-gray-400 font-bold mt-1.5 leading-relaxed">
+                        这些走的是「独立支出」不是薪资单，没有员工档案也没有部门。
+                        金额已算进下面的 TOTAL SALARY。
+                      </p>
+                    </div>
+                  )}
                 </div>
+
+                {/* 🔄 存档数字对不上时，用现在的资料重算 */}
+                <div className="mt-2 md:mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-black text-slate-700">
+                      🔄 传统账目的人事成本对不上？
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-500 mt-0.5 leading-relaxed">
+                      旧版本存档时会把兼职和离职旧草稿一起写进去，让传统账目重复计算。
+                      按这里用现在的资料重算 —— <b>只改存档金额，不动结账状态，也不碰任何支出流水。</b>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleRefreshRecord}
+                    disabled={isLoading}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95 disabled:opacity-40 shrink-0 min-h-[44px] md:min-h-0"
+                  >
+                    重算本月存档
+                  </button>
+                </div>
+
+                {/* 👑 某个部门的人员明细 —— 点部门卡片展开 */}
+                {openDept && deptBreakdown[openDept] && (
+                  <div className="mt-2 md:mt-3 bg-white border-2 border-[#FFD200] rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                      <div className="text-[11px] font-black text-[#111111]">
+                        {openDept} —— 共 {deptBreakdown[openDept].count} 人，净发合计 RM{" "}
+                        {deptBreakdown[openDept].net.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                      <button
+                        onClick={() => setOpenDept(null)}
+                        className="text-[10px] font-black text-gray-400 hover:text-gray-700 min-h-[44px] md:min-h-0 px-2"
+                      >
+                        收起
+                      </button>
+                    </div>
+
+                    {/* 表头（手机不显示，卡片式排版自己有标签） */}
+                    <div className="hidden md:grid grid-cols-[minmax(0,1fr)_repeat(4,88px)] gap-2 px-2.5 pb-1 border-b border-gray-200">
+                      <span className="text-[9px] font-black text-gray-400 uppercase">员工</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase text-right">净发</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase text-right">政府</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase text-right">扣款</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase text-right">总成本</span>
+                    </div>
+
+                    <div className="space-y-1 mt-1 max-h-[260px] overflow-y-auto">
+                      {deptBreakdown[openDept].members.map((m) => (
+                        <div
+                          key={m.id}
+                          className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_repeat(4,88px)] gap-x-2 gap-y-1 bg-gray-50 rounded-lg px-2.5 py-2 items-center"
+                        >
+                          <div className="col-span-2 md:col-span-1 min-w-0 flex items-center gap-1.5">
+                            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-black bg-white text-gray-500 border border-gray-200">{m.id}</span>
+                            <span className="text-[11px] font-black text-gray-900 truncate">{m.name}</span>
+                            {m.role && <span className="text-[9px] font-bold text-gray-400 truncate hidden md:inline">{m.role}</span>}
+                            {!m.isPaid && <span className="text-[9px] font-black text-orange-600 bg-orange-50 border border-orange-200 px-1 rounded shrink-0">待发</span>}
+                          </div>
+                          <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">净发</span><span className="text-[11px] font-mono font-black text-gray-900">{m.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                          <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">政府</span><span className="text-[11px] font-mono font-bold text-blue-600">{m.govt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                          <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">扣款</span><span className="text-[11px] font-mono font-bold text-purple-600">{m.deduct.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                          <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">总成本</span><span className="text-[11px] font-mono font-black text-gray-600">{m.cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 合计列，跟上面卡片对得上 */}
+                    <div className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_repeat(4,88px)] gap-x-2 gap-y-1 px-2.5 py-2 mt-1 border-t-2 border-gray-300 items-center">
+                      <span className="col-span-2 md:col-span-1 text-[10px] font-black text-gray-500 uppercase">合计</span>
+                      <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">净发</span><span className="text-[11px] font-mono font-black text-gray-900">{deptBreakdown[openDept].net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                      <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">政府</span><span className="text-[11px] font-mono font-black text-blue-600">{deptBreakdown[openDept].govt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                      <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">扣款</span><span className="text-[11px] font-mono font-black text-purple-600">{deptBreakdown[openDept].deduct.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                      <div className="text-right"><span className="md:hidden text-[9px] font-bold text-gray-400 mr-1">总成本</span><span className="text-[11px] font-mono font-black text-gray-700">{deptBreakdown[openDept].cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                    </div>
+                    <p className="text-[9px] font-bold text-gray-400 mt-1.5">
+                      净发 + 政府 + 扣款 = 总成本。扣款是预支 / 宿舍费 / 罚款 / 借款扣回这些从薪水扣下来、但没缴给政府的钱。
+                    </p>
+                  </div>
+                )}
+
+                {/* 兼职 / 无部门 —— 逐笔明细 */}
+                {showNonDeptDetail && nonDeptPayroll.items.length > 0 && (
+                  <div className="mt-2 md:mt-3 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                      <div className="text-[11px] font-black text-indigo-900">
+                        👷 兼职 / 无部门 —— 共 {nonDeptPayroll.items.length} 笔，合计 RM{" "}
+                        {nonDeptPayroll.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                      <button
+                        onClick={() => setShowNonDeptDetail(false)}
+                        className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 min-h-[44px] md:min-h-0 px-2"
+                      >
+                        收起
+                      </button>
+                    </div>
+                    <p className="text-[10px] font-bold text-indigo-700 mb-2 leading-relaxed bg-white/70 rounded-lg p-2">
+                      ⚠️ 这里抓的是「资金管理里 category = 薪资、而且 id 不是 salary_ / payroll_ 开头」的支出。
+                      如果看到<b>不该算成兼职</b>的东西（员工餐、津贴、奖金、重复入账…），
+                      代表那笔支出的科目选错了 —— 去资金管理改掉科目，这个数字就会对。
+                    </p>
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {nonDeptPayroll.items.map((it) => (
+                        <div
+                          key={it.id}
+                          className="flex justify-between items-center gap-2 bg-white/70 rounded-lg px-2.5 py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-black text-gray-800">{it.name}</span>
+                            <span className="text-[9px] font-mono text-gray-400 ml-1.5">{it.date}</span>
+                            {it.method && (
+                              <span className="text-[9px] font-bold text-gray-400 ml-1.5">{it.method}</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-mono font-black text-indigo-800 shrink-0">
+                            RM {it.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 👻 离职后残留的旧草稿 —— 就是「待发对不上、又找不到人」的那几笔 */}
+                {payrollEntriesForMonth.ghosts.length > 0 && (
+                  <div className="mt-2 md:mt-3 bg-amber-50 border-2 border-amber-300 rounded-xl p-3">
+                    <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-black text-amber-900 flex items-center gap-1.5">
+                          👻 已排除 {payrollEntriesForMonth.ghosts.length} 笔离职员工的旧草稿
+                          <span className="font-mono">
+                            (RM {payrollEntriesForMonth.ghostTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-bold text-amber-700 mt-0.5 leading-relaxed">
+                          这些人离职月已经过了，本月不该算薪，所以<b>没有</b>计入上面的待发。
+                          草稿资料还留着，没有被删除。
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleClearGhostDrafts}
+                        disabled={isLoading || isPosted}
+                        className="px-3 py-2 rounded-lg bg-white border border-amber-300 text-[10px] font-black text-amber-800 active:scale-95 disabled:opacity-40 shrink-0 min-h-[44px] md:min-h-0"
+                      >
+                        清除这些草稿
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {payrollEntriesForMonth.ghosts.map((g) => (
+                        <div
+                          key={g.id}
+                          className="flex justify-between items-center gap-2 bg-white/70 rounded-lg px-2.5 py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-black text-gray-800">{g.name}</span>
+                            <span className="text-[9px] font-mono text-gray-400 ml-1.5">{g.id}</span>
+                            <span className="text-[9px] font-bold text-gray-500 ml-1.5">{g.dept}</span>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-[11px] font-mono font-black text-amber-800">
+                              RM {g.netPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-[9px] font-bold text-gray-400">
+                              {g.terminationDate ? `${g.terminationDate} 离职` : "未填离职日期"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           <div className="px-3 md:px-4 pt-2 pb-1">
             <div className="max-w-5xl mx-auto flex flex-col gap-2">
+              {/* 🔔 该发的都发完了，但月份还停在 DRAFT —— 提醒老板补一个结账动作 */}
+              {needsPostCatchUp && (
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-black text-emerald-900">
+                      ✅ 本月该发的薪资都已经发完了，但月份状态还是「草稿」
+                    </div>
+                    <div className="text-[10px] font-bold text-emerald-700 mt-0.5 leading-relaxed">
+                      结账之后才会出现「缴政府费用 (KWSP / SOCSO / EIS)」的按钮。
+                      按右边补一个结账动作就可以了。
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleMarkPosted}
+                    disabled={isLoading}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-[11px] font-black active:scale-95 disabled:opacity-40 shrink-0 min-h-[44px] md:min-h-0"
+                  >
+                    标记为已结账
+                  </button>
+                </div>
+              )}
+
               {/* 💰 薪资总览 — 移动端用紧凑2x2网格 */}
               <div
                 onClick={() => setShowDeptBreakdown(!showDeptBreakdown)}
@@ -3292,8 +4330,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 {/* 桌面端: 保持原有横排 */}
                 <div className="hidden md:flex items-center gap-6 overflow-x-auto flex-nowrap min-w-0 flex-1">
                   <div className="shrink-0">
-                    <span className="block text-[9px] text-gray-400 uppercase font-bold leading-none mb-0.5">
-                      Total Salary (总薪资)
+                    <span className="block text-[9px] text-gray-400 uppercase font-bold leading-none mb-0.5" title="总薪资 = 净发 + 已预支 + 兼职 = 已发 + 待发（不含雇主公积金，那在 To Govt）">
+                      Total Salary (总薪资) · 净发+预支+兼职
                     </span>
                     <span className="text-xl font-mono text-[#111111] font-black leading-tight">
                       RM{" "}
@@ -3357,8 +4395,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       type="date"
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
-                      className="bg-transparent font-black text-[#111111] outline-none w-full md:w-36 p-0 text-center md:text-left"
-                      style={{ fontSize: "16px", minHeight: "36px" }}
+                      className="bg-transparent font-black text-[#111111] outline-none w-full md:w-36 p-0 text-center md:text-left text-[16px] md:text-sm"
+                      style={{ minHeight: "36px" }}
                     />
                   </div>
                   <span className="text-[8px] text-gray-500 mt-0.5 ml-0.5 block scale-90 origin-left max-w-full leading-tight font-medium">
@@ -3397,49 +4435,67 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     </>
                   ) : !showBatchPayConfirm ? (
                     <button
-                      onClick={() => setShowBatchPayConfirm(true)}
+                      onClick={() => {
+                        if (selectedBreakdown.bankCount + selectedBreakdown.cashCount === 0) {
+                          selectUnpaidBy();
+                        }
+                        setShowBatchPayConfirm(true);
+                      }}
                       disabled={isLoading}
-                      className="flex-1 bg-[#111111] text-[#FFD200] px-3 py-2.5 md:py-3 rounded-xl font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs disabled:opacity-50"
+                      className="flex-1 bg-[#111111] text-[#FFD200] px-3 py-3 rounded-xl font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all text-sm disabled:opacity-50 min-h-[48px]"
                     >
                       {isLoading ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
                         <Save size={16} />
                       )}{" "}
-                      一键入账
+                      {selectedBreakdown.bankCount + selectedBreakdown.cashCount > 0
+                        ? `发放已勾选 ${selectedBreakdown.bankCount + selectedBreakdown.cashCount} 人`
+                        : "一键发放（全部未发）"}
                     </button>
                   ) : (
-                    <div className="flex-1 flex gap-1.5 animate-in fade-in slide-in-from-bottom-2">
-                      <button
-                        onClick={() => handleSavePayroll("BANK_TRANSFER")}
-                        disabled={isLoading}
-                        className="flex-1 bg-blue-600 text-white py-2.5 md:py-3 rounded-xl font-bold text-[11px] shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
-                      >
-                        {isLoading ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Building2 size={14} />
-                        )}{" "}
-                        银行转账
-                      </button>
-                      <button
-                        onClick={() => handleSavePayroll("CASH")}
-                        disabled={isLoading}
-                        className="flex-1 bg-green-600 text-white py-2.5 md:py-3 rounded-xl font-bold text-[11px] shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
-                      >
-                        {isLoading ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Banknote size={14} />
-                        )}{" "}
-                        现金
-                      </button>
-                      <button
-                        onClick={() => setShowBatchPayConfirm(false)}
-                        className="px-2 bg-white text-gray-500 rounded-xl border border-gray-200 active:scale-95"
-                      >
-                        <X size={14} />
-                      </button>
+                    <div className="flex-1 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
+                      {/* 👑 不再问「银行还是现金」—— 每个人按自己设定的方式入账，这里只给老板看分组 */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                          <div className="text-[10px] font-black text-blue-700 flex items-center gap-1">
+                            <Building2 size={12} /> 银行转账 · {selectedBreakdown.bankCount} 人
+                          </div>
+                          <div className="text-sm font-mono font-black text-blue-900">
+                            RM {selectedBreakdown.bankAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                          <div className="text-[10px] font-black text-green-700 flex items-center gap-1">
+                            <Banknote size={12} /> 现金 · {selectedBreakdown.cashCount} 人
+                          </div>
+                          <div className="text-sm font-mono font-black text-green-900">
+                            RM {selectedBreakdown.cashAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSavePayroll()}
+                          disabled={isLoading || selectedBreakdown.bankCount + selectedBreakdown.cashCount === 0}
+                          className="flex-1 bg-[#111111] text-[#FFD200] py-3 rounded-xl font-black text-sm shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 min-h-[48px]"
+                        >
+                          {isLoading ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            <CheckCircle2 size={16} />
+                          )}
+                          确认发放 RM{" "}
+                          {(selectedBreakdown.bankAmt + selectedBreakdown.cashAmt).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </button>
+                        <button
+                          onClick={() => setShowBatchPayConfirm(false)}
+                          className="px-3 bg-white text-gray-500 rounded-xl border border-gray-200 active:scale-95 min-h-[48px] min-w-[48px] flex justify-center items-center"
+                          aria-label="取消"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3450,14 +4506,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       )}
 
       {/* === ADVANCE MODAL === */}
-      {isAdvanceModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+      {isAdvanceModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-black text-xl text-[#111111]">
                 发放预支薪水 (Advance)
               </h3>
-              <button onClick={() => setIsAdvanceModalOpen(false)}>
+              <button onClick={() => setIsAdvanceModalOpen(false)} className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                 <X size={20} />
               </button>
             </div>
@@ -3471,8 +4527,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setAdvForm({ ...advForm, empId: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                 >
                   <option value="">Select Staff...</option>
                   {displayEmployees.map((e) => (
@@ -3529,8 +4585,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setAdvForm({ ...advForm, date: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                 />
               </div>
               <div>
@@ -3543,8 +4599,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setAdvForm({ ...advForm, note: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                   placeholder="Reason..."
                 />
               </div>
@@ -3557,12 +4613,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* === CALCULATOR MODAL === */}
-      {editingEmpId && editingEntry && editingEmp && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#F6F7FB] w-full h-[100dvh] md:max-w-3xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 border border-gray-200 relative">
+      {editingEmpId && editingEntry && editingEmp && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[310] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#F6F7FB] w-full h-[100dvh] md:max-w-3xl md:h-[95vh] md:rounded-2xl flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 border border-gray-200 relative">
             {/* iOS-style drag handle (仅手机显示) */}
             <div
               className="md:hidden flex justify-center pt-3 pb-1.5 bg-white shrink-0"
@@ -3599,7 +4655,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         setEditingEmpId(null);
                         onNavigateToProfile(editingEmp.id);
                       }}
-                      className="inline-flex items-center gap-1 bg-[#8B0000]/10 hover:bg-[#8B0000]/25 text-[#8B0000] text-[10px] font-black px-2 py-0.5 rounded-full transition-all active:scale-95 ml-1 border border-[#8B0000]/15"
+                      className="inline-flex items-center gap-1 bg-[#8B0000]/10 hover:bg-[#8B0000]/25 text-[#8B0000] text-[10px] font-black px-2 py-0.5 rounded-full transition-all active:scale-95 ml-1 border border-[#8B0000]/15 min-h-[44px] md:min-h-0"
                       title="直接跳转查看该员工的详细档案资料"
                     >
                       👤 详细档案 Employee File ➔
@@ -3612,14 +4668,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   setEditingEmpId(null);
                   setShowAdvanceHistory(false);
                 }}
-                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors active:scale-95"
+                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors active:scale-95 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* 👑 Mobile High-contrast Segmented Control for Calculator Tabs */}
-            <div className="md:hidden shrink-0 bg-white border-b border-gray-200 px-4 py-2.5 flex justify-center">
+            <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-2.5 flex justify-center">
               <div className="flex bg-gray-100 rounded-xl p-1 w-full max-w-md border border-gray-200/50 shadow-inner">
                 <button
                   type="button"
@@ -3646,10 +4702,20 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
 
             {/* Content - SCROLLABLE AREA WITH EXTRA PADDING */}
-            <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-6 pb-40 touch-pan-y overscroll-contain">
-              {/* PRO-RATE TOOL */}
-              {!isPosted && (
-                <div className={`bg-blue-50 p-4 rounded-xl border border-blue-200 animate-in slide-in-from-top-2 ${mobileModalTab === 'EARNINGS' ? 'block' : 'hidden md:block'}`}>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4 touch-pan-y overscroll-contain">
+              {/* PRO-RATE TOOL —— 只有入职/离职月或已经算过天数才展开，其他人收起来，手机第一眼就看到底薪 */}
+              {!isPosted && !showProRateTool && (
+                <button
+                  type="button"
+                  onClick={() => setShowProRateToolFor(editingEmpId)}
+                  className={`w-full bg-blue-50 border border-blue-200 rounded-xl px-4 text-left text-xs font-black text-blue-700 flex items-center gap-2 min-h-[44px] active:scale-[0.99] ${mobileModalTab === 'EARNINGS' ? 'flex' : 'hidden'}`}
+                >
+                  <CalendarDays size={14} /> 按天数计薪（入职 / 离职 / 请假）
+                  <ChevronRight size={14} className="ml-auto" />
+                </button>
+              )}
+              {!isPosted && showProRateTool && (
+                <div className={`bg-blue-50 p-4 rounded-xl border border-blue-200 animate-in slide-in-from-top-2 ${mobileModalTab === 'EARNINGS' ? 'block' : 'hidden'}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <CalendarDays size={14} className="text-blue-600" />
                     <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest">
@@ -3666,7 +4732,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         </label>
                         <button
                           onClick={syncWorkDaysFromRoster}
-                          className="text-[9px] font-black text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md flex items-center gap-1 active:scale-95 shadow-sm transition-transform"
+                          className="text-[9px] font-black text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md flex items-center gap-1 active:scale-95 shadow-sm transition-transform min-h-[44px] md:min-h-0"
                           title="从当月 Roster 重新计算 WORK 天数"
                         >
                           <RefreshCw size={10} /> 同步 Roster
@@ -3682,8 +4748,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             days: parseFloat(e.target.value),
                           })
                         }
-                        className="w-full p-3 bg-white border border-blue-200 rounded-lg font-bold outline-none focus:border-blue-400"
-                        style={{ fontSize: "16px" }}
+                        className="w-full p-3 bg-white border border-blue-200 rounded-lg font-bold outline-none focus:border-blue-400 text-[16px] md:text-sm"
+                       
                         placeholder="e.g. 15"
                       />
                     </div>
@@ -3699,8 +4765,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             mode: e.target.value as any,
                           })
                         }
-                        className="w-full p-3 bg-white border border-blue-200 rounded-lg font-bold outline-none"
-                        style={{ fontSize: "16px" }}
+                        className="w-full p-3 bg-white border border-blue-200 rounded-lg font-bold outline-none text-[16px] md:text-sm"
+                       
                       >
                         <option value="26_DAYS">Fixed 26 Days</option>
                         <option value="WORKABLE_DAYS">Month − Off Days</option>
@@ -3741,7 +4807,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               )}
 
               {/* 🟢 EARNINGS */}
-              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'EARNINGS' ? 'block' : 'hidden md:block'}`}>
+              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'EARNINGS' ? 'block' : 'hidden'}`}>
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500"></div>
                 <h4 className="text-xs font-black text-green-700 uppercase mb-4 flex items-center gap-2 tracking-widest pl-2">
                   <Plus size={14} /> 收入 (Earnings)
@@ -3768,7 +4834,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         </label>
                         <button
                           onClick={() => syncBasicSalary(editingEmpId)}
-                          className="text-blue-500 hover:text-blue-700"
+                          className="text-blue-500 hover:text-blue-700 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                           title="Reset to Original"
                         >
                           <RotateCcw size={12} />
@@ -3867,8 +4933,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             otherEarningNote: e.target.value,
                           })
                         }
-                        className="w-2/3 p-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-black outline-none focus:border-green-500 transition-all shadow-sm disabled:bg-gray-50"
-                        style={{ fontSize: "16px" }}
+                        className="w-2/3 p-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-black outline-none focus:border-green-500 transition-all shadow-sm disabled:bg-gray-50 text-[16px] md:text-sm"
+                       
                         placeholder="备注 (例如：同事代还抵消)"
                       />
                     </div>
@@ -3877,7 +4943,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
 
               {/* 🟢 DEDUCTIONS */}
-              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'DEDUCTIONS' ? 'block' : 'hidden md:block'}`}>
+              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'DEDUCTIONS' ? 'block' : 'hidden'}`}>
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
                 <h4 className="text-xs font-black text-red-700 uppercase mb-4 flex items-center gap-2 tracking-widest pl-2">
                   <MinusCircle size={14} /> 扣除 (Deductions)
@@ -3891,7 +4957,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       {!isPosted && !editingEntry.isPaid && (
                         <button
                           onClick={() => handleRecalcLatePenalty(editingEmpId)}
-                          className="text-[9px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-lg border border-red-100 flex items-center gap-1 transition-colors"
+                          className="text-[9px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-lg border border-red-100 flex items-center gap-1 transition-colors min-h-[44px] md:min-h-0"
                           title="从当月考勤重新计算"
                         >
                           <RefreshCw size={10} /> 重算
@@ -3922,7 +4988,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   </div>
                   <div>
                     <label className="input-label text-[10px] font-bold text-gray-400 uppercase mb-1 block">
-                      Hostel Fee (住宿费扣除)
+                      Hostel Fee (宿舍费)
                     </label>
                     <MoneyInput
                       disabled={isPosted || editingEntry.isPaid}
@@ -3945,15 +5011,73 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     />
                   </div>
 
+                  {/* 🟢 LINDUNG 24 Jam (SKBBK) — 员工全额承担，雇主 0 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1 gap-1">
+                      <label className="input-label text-[10px] font-bold text-gray-400 uppercase block leading-tight">
+                        LINDUNG 24 Jam
+                      </label>
+                      {/* 🔘 开关：本地、外劳都可以开关；状态写回人事档案，下个月自动带入 */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!editingEntry.hasLindung}
+                        disabled={isPosted || editingEntry.isPaid}
+                        onClick={() => {
+                          const next = !editingEntry.hasLindung;
+                          updateEntry(editingEmpId, {
+                            hasLindung: next,
+                            ee_lindung: next
+                              ? calculateLindung(
+                                  Math.max(0, editingEntry.basic - editingEntry.unpaidLeave),
+                                  selectedMonth,
+                                )
+                              : 0,
+                          });
+                          if (editingEmp) {
+                            patchEmployeeProfile(editingEmp.id, { lindungOptOut: !next });
+                          }
+                        }}
+                        className="flex items-center gap-2 min-h-[36px] px-1 disabled:opacity-50"
+                      >
+                        <span className={`text-[11px] font-black ${editingEntry.hasLindung ? "text-blue-700" : "text-gray-400"}`}>
+                          {editingEntry.hasLindung ? "扣" : "不扣"}
+                        </span>
+                        <span
+                          className={`relative inline-flex w-11 h-6 rounded-full transition-colors ${
+                            editingEntry.hasLindung ? "bg-blue-600" : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                              editingEntry.hasLindung ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </span>
+                      </button>
+                    </div>
+                    <MoneyInput
+                      disabled={isPosted || editingEntry.isPaid || !editingEntry.hasLindung}
+                      value={editingEntry.ee_lindung || 0}
+                      onChange={(v) => updateEntry(editingEmpId, { ee_lindung: v })}
+                      className={`${inputClassName} text-red-600`}
+                    />
+                    <p className="text-[9px] text-gray-400 font-bold mt-1 leading-tight">
+                      {isLindungMonth(selectedMonth)
+                        ? `${(getLindungRate(selectedMonth) * 100).toFixed(2)}% 级距表 · 上限 RM6,000（最多 RM${calculateLindung(6000, selectedMonth).toFixed(2)}）· 员工全额，公司不用出`
+                        : "2026 年 6 月才开始，这个月份不用扣"}
+                    </p>
+                  </div>
+
  <div className="relative md:col-span-1">
                     <div className="flex justify-between items-center mb-1">
                       <label className="input-label text-[10px] font-bold text-gray-400 uppercase block">
-                        Advance/Loan (预支)
+                        Advance (预支)
                       </label>
                       {currentEmpAdvances.length > 0 && (
                         <button
                           onClick={() => setShowAdvanceHistory(true)}
-                          className="text-[9px] bg-red-50 text-red-600 px-2 py-0.5 rounded-lg border border-red-100 hover:bg-red-100 flex items-center gap-1 font-bold"
+                          className="text-[9px] bg-red-50 text-red-600 px-2 py-0.5 rounded-lg border border-red-100 hover:bg-red-100 flex items-center gap-1 font-bold min-h-[44px] md:min-h-0"
                         >
                           <History size={10} /> {currentEmpAdvances.length}{" "}
                           records
@@ -3969,6 +5093,84 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       className={`${inputClassName} text-red-600`}
                     />
                   </div>
+
+                  {/* 欠款扣回 —— 只有真的有欠款才出现 */}
+                  {(editingEmpLoanBalance > 0 ||
+                    (editingEntry.loanRepay || 0) > 0) && (
+                    <div className="col-span-full bg-red-50 border-2 border-red-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                        <label className="input-label text-[10px] font-black text-red-700 uppercase block">
+                          欠款扣回 (Loan Repayment)
+                        </label>
+                        <span className="text-[11px] font-bold text-red-700">
+                          {editingEntry.isPaid ? (
+                            <>
+                              本月已扣回{" "}
+                              <b className="font-mono">
+                                RM {(editingEntry.loanRepay || 0).toFixed(2)}
+                              </b>
+                              {" "}→ 余额{" "}
+                              <b className="font-mono text-red-900">
+                                RM {editingEmpLoanBalance.toFixed(2)}
+                              </b>
+                            </>
+                          ) : (
+                            <>
+                              欠款余额{" "}
+                              <b className="font-mono">
+                                RM {editingEmpLoanBalance.toFixed(2)}
+                              </b>
+                              {(editingEntry.loanRepay || 0) > 0 && (
+                                <>
+                                  {" "}→ 扣后余额{" "}
+                                  <b className="font-mono text-red-900">
+                                    RM{" "}
+                                    {Math.max(
+                                      0,
+                                      editingEmpLoanBalance -
+                                        (editingEntry.loanRepay || 0),
+                                    ).toFixed(2)}
+                                  </b>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <MoneyInput
+                          disabled={isPosted || editingEntry.isPaid}
+                          value={editingEntry.loanRepay || 0}
+                          onChange={(v) =>
+                            updateEntry(editingEmpId, {
+                              loanRepay: Math.min(Math.max(0, v), editingEmpLoanBalance),
+                            })
+                          }
+                          className={`${inputClassName} w-1/3 text-red-600`}
+                        />
+                        <button
+                          type="button"
+                          disabled={isPosted || editingEntry.isPaid}
+                          onClick={() => updateEntry(editingEmpId, { loanRepay: editingEmpLoanBalance })}
+                          className="px-3 h-10 rounded-lg bg-white border border-red-200 text-[11px] font-black text-red-700 disabled:opacity-40 min-h-[44px] md:min-h-0"
+                        >
+                          全额扣清
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isPosted || editingEntry.isPaid}
+                          onClick={() => updateEntry(editingEmpId, { loanRepay: 0 })}
+                          className="px-3 h-10 rounded-lg bg-white border border-gray-200 text-[11px] font-black text-gray-500 disabled:opacity-40 min-h-[44px] md:min-h-0"
+                        >
+                          这个月不扣
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-red-700 font-bold mt-2 leading-relaxed">
+                        ⚠️ 按「发放」之后才会写进人事档案的借还款记录（记一笔「薪资扣回」），
+                        在这里改数字不会马上改到欠款余额。
+                      </p>
+                    </div>
+                  )}
 
                   {/* 🟢 新增: 其他扣除 (带备注) */}
                   <div className="col-span-full">
@@ -3993,8 +5195,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             otherDeductionNote: e.target.value,
                           })
                         }
-                        className="w-2/3 p-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-black outline-none focus:border-red-500 transition-all shadow-sm disabled:bg-gray-50"
-                        style={{ fontSize: "16px" }}
+                        className="w-2/3 p-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-black outline-none focus:border-red-500 transition-all shadow-sm disabled:bg-gray-50 text-[16px] md:text-sm"
+                       
                         placeholder="备注 (例如：帮某某还预支)"
                       />
                     </div>
@@ -4003,7 +5205,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
 
               {/* STATUTORY (EPF/SOCSO/EIS) */}
-              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'STATUTORY' ? 'block' : 'hidden md:block'}`}>
+              <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden ${mobileModalTab === 'STATUTORY' ? 'block' : 'hidden'}`}>
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
                 <h4 className="text-xs font-black text-blue-700 uppercase mb-4 flex items-center gap-2 tracking-widest pl-2">
                   <Building2 size={14} /> 法定缴纳 (Statutory)
@@ -4016,7 +5218,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   <div className="mb-4">
                     <button
                       onClick={() => triggerRecalculateStatutory(editingEmpId)}
-                      className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg flex items-center gap-2 transition-colors w-full justify-center"
+                      className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg flex items-center gap-2 transition-colors w-full justify-center min-h-[44px] md:min-h-0"
                       title="Recalculate based on Current Basic Salary"
                     >
                       <RefreshCw size={12} /> 重置为自动计算 (Reset to Auto)
@@ -4033,7 +5235,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       <button
                         onClick={() => toggleStatutory(editingEmpId, "EPF")}
                         disabled={isPosted || editingEntry.isPaid}
-                        className={`transition-colors ${editingEntry.hasEPF ? "text-green-600" : "text-gray-400"}`}
+                        className={`min-h-[44px] md:min-h-0 transition-colors ${editingEntry.hasEPF ? "text-green-600" : "text-gray-400"}`}
                       >
                         {editingEntry.hasEPF ? (
                           <ToggleRight size={32} fill="currentColor" />
@@ -4089,7 +5291,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       <button
                         onClick={() => toggleStatutory(editingEmpId, "SOCSO")}
                         disabled={isPosted || editingEntry.isPaid}
-                        className={`transition-colors ${editingEntry.hasSOCSO ? "text-green-600" : "text-gray-400"}`}
+                        className={`min-h-[44px] md:min-h-0 transition-colors ${editingEntry.hasSOCSO ? "text-green-600" : "text-gray-400"}`}
                       >
                         {editingEntry.hasSOCSO ? (
                           <ToggleRight size={32} fill="currentColor" />
@@ -4188,13 +5390,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </div>
 
               {/* NOTE */}
-              <div className={mobileModalTab === 'STATUTORY' ? 'block' : 'hidden md:block'}>
+              <div className={mobileModalTab === 'STATUTORY' ? 'block' : 'hidden'}>
                 <label className="input-label text-[10px] font-bold text-gray-400 uppercase mb-1 block">
                   备注 (Note)
                 </label>
                 <textarea
-                  className="w-full p-4 bg-[#FFFFFF] border border-gray-200 rounded-xl outline-none resize-none h-24 focus:border-[#111111] transition-colors"
-                  style={{ fontSize: "16px" }}
+                  className="w-full p-4 bg-[#FFFFFF] border border-gray-200 rounded-xl outline-none resize-none h-24 focus:border-[#111111] transition-colors text-[16px] md:text-sm"
+                 
                   placeholder="Optional..."
                   value={editingEntry.note}
                   onChange={(e) =>
@@ -4204,42 +5406,40 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 ></textarea>
               </div>
 
-              {/* PAYMENT METHOD SELECTOR */}
-              <div className={`bg-[#FFFFFF] p-4 rounded-xl border border-gray-200 shadow-sm ${mobileModalTab === 'STATUTORY' ? 'block' : 'hidden md:block'}`}>
-                <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">
-                  付款方式 (Payment Method)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
+              {/* 📄 PDF Export Options Select/Checkboxes */}
+              <div className={`bg-yellow-50/50 rounded-2xl border border-yellow-100/65 p-3.5 ${mobileModalTab === 'STATUTORY' ? 'block' : 'hidden'}`}>
+                <span className="text-[11px] font-black text-yellow-800 flex items-center gap-1.5 uppercase tracking-wider">
+                  📄 PDF 迟到罚款导出选项 (PDF EXPORT PENALTY MODE)
+                </span>
+                <div className="grid grid-cols-3 gap-2 mt-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      updateEntry(editingEmpId, { paymentMethod: "BANK" })
-                    }
-                    disabled={isPosted || editingEntry.isPaid}
-                    className={`py-3.5 rounded-xl font-bold text-sm border-2 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] ${
-                      editingEntry.paymentMethod === "BANK"
-                        ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-blue-300"
-                    }`}
+                    onClick={() => handleSetPdfPenaltyMode('SHOW_AND_DEDUCT')}
+                    className={`min-h-[44px] md:min-h-0 py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_AND_DEDUCT' ? 'bg-[#FFD200] text-black border-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                   >
-                    <Building2 size={16} /> 银行转账
+                    实发也扣除
+                    <span className="block font-normal text-[8px] text-gray-400 mt-0.5">Deduct 100%</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      updateEntry(editingEmpId, { paymentMethod: "CASH" })
-                    }
-                    disabled={isPosted || editingEntry.isPaid}
-                    className={`py-3.5 rounded-xl font-bold text-sm border-2 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] ${
-                      editingEntry.paymentMethod === "CASH"
-                        ? "bg-green-600 text-white border-green-600 shadow-md"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-green-300"
-                    }`}
+                    onClick={() => handleSetPdfPenaltyMode('SHOW_BUT_NO_DEDUCT')}
+                    className={`min-h-[44px] md:min-h-0 py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_BUT_NO_DEDUCT' ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    title="明面上打印扣除罚款，但是实际Net Pay总数里【不扣除】，只算警告"
                   >
-                    <Banknote size={16} /> 现金
+                    明显实不扣 ⚠️
+                    <span className="block font-normal text-[8px] text-amber-700 mt-0.5">Warning Only</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPdfPenaltyMode('HIDE')}
+                    className={`min-h-[44px] md:min-h-0 py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'HIDE' ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    不显示罚款
+                    <span className="block font-normal text-[8px] text-gray-400 mt-0.5">Hide Completely</span>
                   </button>
                 </div>
               </div>
+
             </div>
 
             {/* Footer (Fixed) */}
@@ -4249,49 +5449,44 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 paddingBottom: "max(16px, env(safe-area-inset-bottom))",
               }}
             >
-              {/* 📄 PDF Export Options Select/Checkboxes */}
-              <div className="bg-yellow-50/50 rounded-2xl border border-yellow-100/65 p-3.5 mb-4 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                <span className="text-[11px] font-black text-yellow-800 flex items-center gap-1.5 uppercase tracking-wider">
-                  📄 PDF 迟到罚款导出选项 (PDF EXPORT PENALTY MODE)
-                </span>
-                <div className="grid grid-cols-3 gap-2 mt-2">
+              {/* 💰 实发 + 付款方式（点一下切换，记在人事档案） */}
+              <div className="flex items-end justify-between gap-3 mb-3">
+                <div className="flex bg-gray-100 rounded-xl p-1 shrink-0">
                   <button
                     type="button"
-                    onClick={() => handleSetPdfPenaltyMode('SHOW_AND_DEDUCT')}
-                    className={`py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_AND_DEDUCT' ? 'bg-[#FFD200] text-black border-[#FFD200] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setPaymentMethodFor(editingEmpId, "BANK")}
+                    disabled={isPosted || editingEntry.isPaid}
+                    className={`px-3 rounded-lg text-xs font-black flex items-center gap-1 min-h-[40px] transition-all disabled:opacity-60 ${
+                      editingEntry.paymentMethod !== "CASH"
+                        ? "bg-blue-600 text-white shadow"
+                        : "text-gray-500"
+                    }`}
                   >
-                    实发也扣除
-                    <span className="block font-normal text-[8px] text-gray-400 mt-0.5">Deduct 100%</span>
+                    <Building2 size={14} /> 银行
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSetPdfPenaltyMode('SHOW_BUT_NO_DEDUCT')}
-                    className={`py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'SHOW_BUT_NO_DEDUCT' ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                    title="明面上打印扣除罚款，但是实际Net Pay总数里【不扣除】，只算警告"
+                    onClick={() => setPaymentMethodFor(editingEmpId, "CASH")}
+                    disabled={isPosted || editingEntry.isPaid}
+                    className={`px-3 rounded-lg text-xs font-black flex items-center gap-1 min-h-[40px] transition-all disabled:opacity-60 ${
+                      editingEntry.paymentMethod === "CASH"
+                        ? "bg-green-600 text-white shadow"
+                        : "text-gray-500"
+                    }`}
                   >
-                    明显实不扣 ⚠️
-                    <span className="block font-normal text-[8px] text-amber-700 mt-0.5">Warning Only</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetPdfPenaltyMode('HIDE')}
-                    className={`py-2 px-2.5 rounded-xl text-[10px] font-black border transition-all text-center leading-tight active:scale-95 ${pdfPenaltyMode === 'HIDE' ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                  >
-                    不显示罚款
-                    <span className="block font-normal text-[8px] text-gray-400 mt-0.5">Hide Completely</span>
+                    <Banknote size={14} /> 现金
                   </button>
                 </div>
-              </div>
-
-              <div className="text-right mb-4">
-                <div className="text-[10px] text-gray-400 uppercase font-bold">
-                  NET PAY (实发)
-                </div>
-                <div className="text-2xl md:text-4xl font-mono font-black text-[#111111] drop-shadow-sm tabular-nums tracking-tight">
-                  RM{" "}
-                  {getTotals(editingEntry).netPay.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
+                <div className="text-right min-w-0">
+                  <div className="text-[10px] text-gray-400 uppercase font-bold">
+                    NET PAY (实发)
+                  </div>
+                  <div className="text-2xl md:text-4xl font-mono font-black text-[#111111] tabular-nums tracking-tight truncate">
+                    RM{" "}
+                    {getTotals(editingEntry).netPay.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                    })}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-1.5 flex-wrap md:flex-nowrap">
@@ -4302,7 +5497,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         setEditingEmpId(null);
                         setShowAdvanceHistory(false);
                       }}
-                      className="flex-1 md:flex-initial bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-1 active:scale-95 transition-transform min-h-[44px]"
+                      className="hidden md:flex flex-1 md:flex-initial bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-1 active:scale-95 transition-transform min-h-[44px]"
                     >
                       <X size={15} /> 关闭
                     </button>
@@ -4310,14 +5505,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                     <button
                       onClick={handlePrintSingleSlip}
                       disabled={isGeneratingPdf}
-                      className="flex-1 md:flex-initial bg-white border border-gray-200 text-gray-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm hover:bg-gray-50 flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
+                      className="shrink-0 md:flex-initial bg-white border border-gray-200 text-gray-600 py-3 px-3 rounded-xl font-bold text-xs md:text-sm hover:bg-gray-50 flex items-center justify-center gap-2 active:scale-95 transition-transform min-h-[44px]"
                     >
                       {isGeneratingPdf ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
                         <Printer size={16} />
-                      )}{" "}
-                      打印
+                      )}
+                      <span className="hidden md:inline">打印</span>
                     </button>
 
                     {!isPosted &&
@@ -4356,29 +5551,41 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         type="date"
                         value={paymentDate}
                         onChange={(e) => setPaymentDate(e.target.value)}
-                        className="p-3 border border-gray-300 rounded-lg font-bold text-[#111111] outline-none w-full"
-                        style={{ fontSize: "16px", minHeight: "48px" }}
+                        className="p-3 border border-gray-300 rounded-lg font-bold text-[#111111] outline-none w-full text-[16px] md:text-sm"
+                        style={{ minHeight: "48px" }}
                       />
                       <span className="text-[9px] text-gray-500 mt-1 ml-1 block leading-tight font-medium">
                         💡 付款日默认为当月最后一天
                       </span>
                     </div>
                     <div className="flex gap-2 w-full">
+                      {/* 👑 按这位员工设定的方式发（上面可以切换），不再重复问 */}
                       <button
-                        onClick={() => handleSettlePayment("BANK_TRANSFER")}
-                        className="flex-1 bg-blue-600 text-white py-3.5 rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center justify-center gap-1.5 shadow-sm active:scale-95 min-h-[48px]"
+                        onClick={() =>
+                          handleSettlePayment(
+                            editingEntry.paymentMethod === "CASH" ? "CASH" : "BANK_TRANSFER",
+                          )
+                        }
+                        disabled={isLoading}
+                        className={`flex-1 text-white py-3.5 rounded-lg font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95 min-h-[48px] disabled:opacity-50 ${
+                          editingEntry.paymentMethod === "CASH"
+                            ? "bg-green-600 hover:bg-green-700"
+                            : "bg-blue-600 hover:bg-blue-700"
+                        }`}
                       >
-                        <Building2 size={16} /> 银行
-                      </button>
-                      <button
-                        onClick={() => handleSettlePayment("CASH")}
-                        className="flex-1 bg-green-600 text-white py-3.5 rounded-lg font-bold text-sm hover:bg-green-700 flex items-center justify-center gap-1.5 shadow-sm active:scale-95 min-h-[48px]"
-                      >
-                        <Banknote size={16} /> 现金
+                        {isLoading ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : editingEntry.paymentMethod === "CASH" ? (
+                          <Banknote size={16} />
+                        ) : (
+                          <Building2 size={16} />
+                        )}
+                        确认发放 · {editingEntry.paymentMethod === "CASH" ? "现金" : "银行转账"}
                       </button>
                       <button
                         onClick={() => setShowPayConfirm(false)}
                         className="px-4 bg-white text-gray-500 rounded-lg border border-gray-300 font-bold hover:bg-gray-100 active:scale-95 min-w-[48px] min-h-[48px] flex items-center justify-center"
+                        aria-label="取消"
                       >
                         <X size={18} />
                       </button>
@@ -4389,13 +5596,13 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* === EDIT INDIVIDUAL ADVANCE MODAL === */}
-      {editingAdvanceItem && (
-        <div className="fixed inset-0 bg-black/60 z-[320] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+      {editingAdvanceItem && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[340] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
           <div
-            className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 relative"
+            className="bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 relative max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-6">
@@ -4404,7 +5611,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </h3>
               <button
                 onClick={() => setEditingAdvanceItem(null)}
-                className="p-1 hover:bg-gray-100 rounded-full"
+                className="p-1 hover:bg-gray-100 rounded-full min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
               >
                 <X size={20} />
               </button>
@@ -4419,8 +5626,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setEditAdvForm({ ...editAdvForm, company: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500 text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                 >
                   <option value="">Select Staff...</option>
                   {displayEmployees.map((e) => (
@@ -4484,8 +5691,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setEditAdvForm({ ...editAdvForm, date: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500 text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                 />
               </div>
               <div>
@@ -4498,8 +5705,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   onChange={(e) =>
                     setEditAdvForm({ ...editAdvForm, note: e.target.value })
                   }
-                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500"
-                  style={{ fontSize: "16px", minHeight: "48px" }}
+                  className="w-full p-3 bg-gray-50 rounded-xl font-bold outline-none border border-gray-200 focus:border-purple-500 text-[16px] md:text-sm"
+                  style={{ minHeight: "48px" }}
                   placeholder="Reason..."
                 />
               </div>
@@ -4523,18 +5730,18 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* === ADVANCE HISTORY GLOBAL MODAL === */}
-      {showAdvanceHistory && (
+      {showAdvanceHistory && createPortal(
         <div
-          className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-[330] flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in"
           onClick={() => setShowAdvanceHistory(false)}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"></div>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
 
           <div
-            className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 animate-in zoom-in-95 relative z-10 overflow-hidden"
+            className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl shadow-2xl border border-gray-200 animate-in zoom-in-95 relative z-10 overflow-hidden max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
@@ -4546,7 +5753,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
               </h3>
               <button
                 onClick={() => setShowAdvanceHistory(false)}
-                className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                className="p-1 hover:bg-gray-200 rounded-full transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
               >
                 <X size={16} />
               </button>
@@ -4647,7 +5854,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* 🟢 HIDDEN PRINT SLIP (A4 Layout - Large + Perfect spacing) */}
       {createPortal(
@@ -4860,6 +6067,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                           </span>
                         </div>
                       )}
+                      {(editingEntry.ee_lindung || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span>LINDUNG 24 Jam</span>
+                          <span className="font-mono">
+                            {(editingEntry.ee_lindung || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                       {editingEntry.ee_pcb > 0 && (
                         <div className="flex justify-between">
                           <span>PCB (Tax)</span>
@@ -4870,7 +6085,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                       )}
                       {editingEntry.advanceLoan > 0 && (
                         <div className="flex justify-between">
-                          <span>Advance / Loan (预支)</span>
+                          <span>Advance (预支)</span>
                           <span className="font-mono">
                             {editingEntry.advanceLoan.toFixed(2)}
                           </span>
@@ -4931,9 +6146,17 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
                             {editingEntry.hostelFee > 0 && (
                               <div className="flex justify-between">
-                                <span>Hostel Fee (住宿)</span>
+                                <span>Hostel Fee (宿舍费)</span>
                                 <span className="font-mono">
                                   {editingEntry.hostelFee.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {(editingEntry.loanRepay || 0) > 0 && (
+                              <div className="flex justify-between">
+                                <span>Loan Repayment (欠款扣回)</span>
+                                <span className="font-mono">
+                                  {(editingEntry.loanRepay || 0).toFixed(2)}
                                 </span>
                               </div>
                             )}
@@ -5398,7 +6621,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                   Hostel+Adv
                 </th>
                 <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap">
-                  EPF/SOCSO
+                  EPF/SOCSO/EIS/LINDUNG
                 </th>
                 <th className="p-2 text-right border-r border-gray-300 whitespace-nowrap font-black">
                   NET PAY
@@ -5446,8 +6669,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         : "-"}
                     </td>
                     <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums text-red-600">
-                      {entry.ee_epf + entry.ee_socso + entry.ee_eis > 0
-                        ? `(${(entry.ee_epf + entry.ee_socso + entry.ee_eis).toFixed(2)})`
+                      {entry.ee_epf + entry.ee_socso + entry.ee_eis + (entry.ee_lindung || 0) > 0
+                        ? `(${(entry.ee_epf + entry.ee_socso + entry.ee_eis + (entry.ee_lindung || 0)).toFixed(2)})`
                         : "-"}
                     </td>
                     <td className="p-2 text-right border-r border-gray-100 font-mono tabular-nums font-black">
@@ -5500,51 +6723,3 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
   );
 };
 
-// ============================================================
-// MULTI-PUNCH DISTRIBUTOR HELPER
-// ============================================================
-const distributeTimes = (times: string[]) => {
-    const res = { amIn: '—', amOut: '—', pmIn: '—', pmOut: '—', otIn: '—', otOut: '—' };
-    if (!times || times.length === 0) return res;
-    
-    const toMins = (t: string) => {
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-    };
-    
-    if (times.length === 4) {
-        res.amIn = times[0];
-        res.amOut = times[1];
-        res.pmIn = times[2];
-        res.pmOut = times[3];
-    } else if (times.length === 2) {
-        const m0 = toMins(times[0]);
-        const m1 = toMins(times[1]);
-        if (m0 < 720) { // before 12:00
-            res.amIn = times[0];
-            if (m1 < 900) { // before 15:00
-                res.amOut = times[1];
-            } else {
-                res.pmOut = times[1];
-            }
-        } else {
-            res.pmIn = times[0];
-            res.pmOut = times[1];
-        }
-    } else if (times.length === 1) {
-        const m0 = toMins(times[0]);
-        if (m0 < 720) {
-            res.amIn = times[0];
-        } else {
-            res.pmIn = times[0];
-        }
-    } else {
-        const slots = ['amIn', 'amOut', 'pmIn', 'pmOut', 'otIn', 'otOut'];
-        times.forEach((t, i) => {
-            if (i < slots.length) {
-                (res as any)[slots[i]] = t;
-            }
-        });
-    }
-    return res;
-};

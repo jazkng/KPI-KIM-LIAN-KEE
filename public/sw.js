@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yz-erp-v5';
+const CACHE_NAME = 'yz-erp-v6';
 const FONT_CACHE = 'yz-fonts-v1';
 
 const CRITICAL_LOCAL_ASSETS = [
@@ -75,19 +75,25 @@ self.addEventListener('fetch', (event) => {
 
   // Network-First strategy for root navigation and HTML to ensure online updates are instant
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    // 📱 iPhone 网络卡的时候 fetch 可能拖一分钟才失败 → 画面一直白。
+    //    最多等 5 秒；超时就先用缓存里的版本开起来（有缓存的话），网络回来下次再更新。
+    const networkFetch = fetch(event.request);
+    // 背景照样更新缓存（就算这次先用了旧版本）
+    networkFetch
+      .then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+      })
+      .catch(() => {});
+    const timeout = new Promise((resolve) => setTimeout(resolve, 5000));
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
+      Promise.race([networkFetch, timeout.then(() => caches.match(event.request).then((c) => c || caches.match('/')))])
+        .then((first) => first || networkFetch)
+        .then((response) => response)
         .catch(() => {
-          return caches.match(event.request).then((cached) => cached || caches.match('/'));
+          return caches.match(event.request).then((cached) => cached || caches.match('/')).then((r) => r || new Response('<h3 style="font-family:sans-serif;padding:24px">没有网络，请连线后再打开</h3>', { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
         })
     );
     return;
@@ -138,7 +144,8 @@ self.addEventListener('fetch', (event) => {
             }
             return networkResponse;
           })
-          .catch(() => cachedResponse);
+          // ⚠️ 以前这里网络失败又没缓存时回传 undefined → iPhone 上 JS 档载不到，整个 App 卡在载入中
+          .catch(() => cachedResponse || Response.error());
 
         return cachedResponse || fetchPromise;
       })

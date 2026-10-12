@@ -1,20 +1,22 @@
 // @ts-nocheck
+import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import * as React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle, Archive, Sparkles } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas-pro';
+import { CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle, Archive, Sparkles, Scissors, Settings } from 'lucide-react';
+import type { jsPDF } from 'jspdf';
 
 
 // UI & Constants
 import { ModuleGuideButton } from '../../ui/ModuleGuide';
+import { isReadOnlyMode, guardWrite } from '../../../utils/readOnlyMode';
 import { PaymentVoucherTemplate } from '../PaymentVoucherTemplate';
 import { PaymentVoucherHistory } from '../PaymentVoucherHistory';
 import { BackdatePVModule } from '../BackdatePVModule';
 
 import {
     PaymentVoucher,
+    PVParticular,
     buildPaymentVoucher,
     resolveParticulars,
     resolveInvoiceRef,
@@ -36,6 +38,7 @@ import { db } from '../../../firebaseConfig';
 
 // AP Constants & Sub-components
 import { getCached, TABS, FLAT_CATEGORIES, getQuickDateRange, getParticularsOptions } from './apConstants';
+import { PayablesOverview } from './PayablesOverview';
 import { BillFormDrawer } from './BillFormDrawer';
 import { QuickPayModal } from './QuickPayModal';
 import { BatchPayModal } from './BatchPayModal';
@@ -104,6 +107,8 @@ const getApiErrorMessage = (payload: any, fallback: string): string => {
     return msg;
 };
 
+import { VendorConfigModal } from './VendorConfigModal';
+
 const AI_REVIEW_REASON_LABELS: Record<string, string> = {
     INVALID_OR_MISSING_DATE: '账单日期无法确认',
     UNCLEAR_AMOUNT: '最终金额无法确认',
@@ -111,6 +116,7 @@ const AI_REVIEW_REASON_LABELS: Record<string, string> = {
     UNSUPPORTED_CURRENCY: '账单不是 MYR／RM，请先换算',
     UNKNOWN_CURRENCY: '币种无法确认',
     MANUAL_REVIEW_REQUIRED: '需要人工复核',
+    LINE_ITEMS_MISMATCH: '明细各行加起来跟总额对不上，可能漏读一行',
 };
 
 const getAiReviewReasons = (scanData: any): string[] => {
@@ -128,6 +134,23 @@ const getHoldReasonForScan = (scanData: any): 'MANUAL_REVIEW_REQUIRED' | 'NO_AP_
     if (reasons.includes('UNKNOWN_VENDOR')) return 'UNKNOWN_VENDOR';
     if (reasons.length > 0) return 'MANUAL_REVIEW_REQUIRED';
     return 'NO_AP_MATCH';
+};
+
+/**
+ * 把云端回来的英文错误翻成看得懂的话。
+ * ⚠️ 认不出的一律原样显示，绝对不吞掉 —— 吞掉就变回「没有新账单」那种假消息。
+ */
+const explainScanError = (raw: any): string => {
+    const text = String(raw || '').trim();
+    if (!text) return '未知错误';
+    if (/monthly spending cap|spend limit/i.test(text)) {
+        return 'Gemini 项目本月消费上限已用完。请到 https://ai.studio/spend 调高上限，或等下个月自动重置。（换模型没用，上限是整个项目的）';
+    }
+    if (/RESOURCE_EXHAUSTED|quota/i.test(text)) return 'Gemini 配额已用完（quota exceeded），请检查 AI Studio 的配额设定。';
+    if (/high demand|\b503\b/i.test(text)) return 'Gemini 模型访问高峰（503），请稍后再试。';
+    if (/\b429\b/.test(text)) return 'Gemini 请求被限流（429），请稍后再试。';
+    if (/\b401\b|\b403\b|API key|API_KEY/i.test(text)) return 'Gemini 金钥无效或权限不足，请检查 GEMINI_API_KEY。';
+    return text.length > 300 ? `${text.slice(0, 300)}…` : text;
 };
 
 const requestApAi = async (path: string, init?: RequestInit) => {
@@ -165,6 +188,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [viewMode, setViewMode] = useState<'LIST' | 'SUPPLIER_DETAIL'>('LIST');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'>('UNPAID');
+    const [isOverviewOpen, setIsOverviewOpen] = useState(false); // 📊 应付总览
     const [searchId, setSearchId] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [dateRange, setDateRange] = useState<{start: string, end: string}>({ start: '', end: '' });
@@ -231,6 +255,15 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const [isAiScanning, setIsAiScanning] = useState(false);
     const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
     const [aiScannedData, setAiScannedData] = useState<any>(null); // 暂存 AI 从暂存区盲抽出来的票据数据
+    // 批次扫描：一次扫回多张，处理完一张自动换下一张
+    const [aiScanQueue, setAiScanQueue] = useState<any[]>([]);
+    const [aiScanIndex, setAiScanIndex] = useState(0);
+    const [aiScanRemaining, setAiScanRemaining] = useState(0);
+    // AI 修正学习：key = 压平后的 AI 供应商名 → 你改成的正式名
+    const [aiCorrections, setAiCorrections] = useState<Record<string, any>>({});
+    const [isVendorConfigOpen, setIsVendorConfigOpen] = useState(false);
+    // 供应商归档设定（存 Firestore）；归档时带给 AI 服务，扫描后在前端套别名
+    const [apVendorConfig, setApVendorConfig] = useState<any>(null);
     const [reconSearch, setReconSearch] = useState('');
     const [reconShowAll, setReconShowAll] = useState(false);
     const [isDeletingFile, setIsDeletingFile] = useState(false);
@@ -313,6 +346,99 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         return '';
     }, [dateRange]);
 
+    /** 处理完一张 → 换下一张；没有了就关掉弹窗 */
+    const advanceScanQueue = () => {
+        const next = aiScanIndex + 1;
+        if (next < aiScanQueue.length) {
+            setAiScanIndex(next);
+            setAiScannedData(aiScanQueue[next]);
+            setReconSearch('');
+            setReconShowAll(false);
+        } else {
+            setIsMatchModalOpen(false);
+            setAiScannedData(null);
+            setAiScanQueue([]);
+            setAiScanIndex(0);
+            if (aiScanQueue.length > 0) {
+                alert(aiScanRemaining > 0
+                    ? `这批 ${aiScanQueue.length} 张处理完了，暂存区还有 ${aiScanRemaining} 张，再按一次扫描。`
+                    : `这批 ${aiScanQueue.length} 张全部处理完了。`);
+            }
+        }
+    };
+
+    const squashName = (v: any) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    /**
+     * 跟 AI 服务同一套规则：短关键字（S&T、TCM…）必须是完整的字，
+     * 避免 RESTAURANT / STATIONERY / PLASTIC 里的「ST」被当成 S&T。
+     */
+    const vendorMatchesKeyword = (vendor: any, keyword: any) => {
+        const sq = (v: any) => String(v || '').toUpperCase().replace(/&/g, ' AND ').replace(/[^A-Z0-9]/g, '');
+        const k = sq(keyword);
+        if (!k) return false;
+        if (k.length >= 6) return sq(vendor).includes(k);
+        const t = String(vendor || '').toUpperCase().replace(/&/g, ' AND ').split(/[^A-Z0-9]+/).filter(Boolean);
+        for (let i = 0; i < t.length; i++) {
+            let acc = '';
+            for (let j = i; j < t.length && acc.length < k.length; j++) {
+                acc += t[j];
+                if (acc === k) return true;
+            }
+        }
+        return false;
+    };
+
+    useEffect(() => {
+        DataManager.getApVendorConfig()
+            .then(cfg => setApVendorConfig(cfg))
+            .catch(() => { /* 读不到就用后端内建表 */ });
+    }, []);
+
+    /** 套用自订别名表（AI 读出来的写法统一成正式名称） */
+    const applyVendorAliases = (item: any) => {
+        const aliases = apVendorConfig?.aliases;
+        if (!item || !Array.isArray(aliases) || aliases.length === 0) return item;
+        const squashed = squashName(item.vendor);
+        if (!squashed) return item;
+        for (const a of aliases) {
+            const keys = Array.isArray(a?.match) ? a.match : [];
+            if (!a?.name) continue;
+            if (keys.some((k: any) => vendorMatchesKeyword(item.vendor, k))) {
+                if (a.name === item.vendor) return item;
+                return { ...item, vendor: a.name, aiOriginalVendor: item.aiOriginalVendor || item.vendor, aliasApplied: true };
+            }
+        }
+        return item;
+    };
+
+    useEffect(() => {
+        DataManager.getApAiCorrections()
+            .then(list => {
+                const map: Record<string, any> = {};
+                list.forEach(r => { if (r.id) map[r.id] = r; });
+                setAiCorrections(map);
+            })
+            .catch(() => { /* 读不到就当没有，不影响扫描 */ });
+    }, []);
+
+    /**
+     * 套用以前学到的修正。
+     * ⚠️ 只改供应商名称，金额日期一律不动 —— 那两个每张单都不一样，套用等于造假。
+     */
+    const applyLearnedCorrection = (item: any) => {
+        if (!item) return item;
+        const key = squashName(item.vendor);
+        const hit = key ? aiCorrections[key] : null;
+        if (!hit || !hit.correctedVendor || hit.correctedVendor === item.vendor) return item;
+        return {
+            ...item,
+            vendor: hit.correctedVendor,
+            aiOriginalVendor: item.vendor,
+            learnedApplied: true,
+            learnedCount: hit.count || 1,
+        };
+    };
+
     const handleAiScanPending = async () => {
         if (isAiScanning) return;
         if (!AP_AI_API_URL) {
@@ -325,13 +451,36 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             console.info('[AP AI] Request URL:', `${AP_AI_API_URL}/api/scan-pending`);
             const { payload } = await requestApAi('/api/scan-pending');
             if (!Array.isArray(payload.data) || payload.data.length === 0) {
-                alert('暂存区目前没有可扫描的新账单。');
+                // 后端有三种情况都会回「空」：暂存区真的没档案 / 这批全部扫描失败 / 其他。
+                // 以前一律弹「没有新账单」，把真正的错误盖掉了，所以这里要分开讲。
+                const failures = Array.isArray(payload.failures) ? payload.failures : [];
+                const total = Number(payload.total) || 0;
+                if (failures.length > 0) {
+                    console.warn('[AP AI] 整批扫描失败:', failures);
+                    const lines = failures.map((f: any) =>
+                        `· ${f.originalName || f.fileId}：${explainScanError(f.error)}`
+                        + (f.attempts ? `（第 ${f.attempts} 次失败）` : '')
+                        + (f.quarantined ? '（已移入 _HOLDING_AREA）' : '')
+                    );
+                    alert(`❌ 扫描失败：这批 ${failures.length} 张全部没成功。\n暂存区共 ${total} 张待扫。\n\n${lines.join('\n')}`);
+                } else if (total === 0) {
+                    alert(payload.message || '暂存区目前没有可扫描的新账单（只认 PDF 和图片）。');
+                } else {
+                    alert(`⚠️ 暂存区有 ${total} 张，但这次没有取回任何结果。\n${payload.message || '请稍后再试，或查看云端日志。'}`);
+                }
                 return;
             }
-            setAiScannedData(payload.data[0]);
+            const learned = payload.data.map((d: any) => applyLearnedCorrection(applyVendorAliases(d)));
+            setAiScanQueue(learned);
+            setAiScanIndex(0);
+            setAiScanRemaining(Number(payload.remaining) || 0);
+            setAiScannedData(learned[0]);
             setReconSearch('');
             setReconShowAll(false);
             setIsMatchModalOpen(true);
+            if (Array.isArray(payload.failures) && payload.failures.length > 0) {
+                console.warn('[AP AI] 部分档案扫描失败:', payload.failures);
+            }
         } catch (error: any) {
             console.error('[AP AI] Scan failed:', error);
             
@@ -356,6 +505,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleDeletePendingFile = async (fileId: string) => {
+        if (!guardWrite('删除待处理文件')) return;
         if (!fileId || isDeletingFile || isHoldingFile) return;
         if (!await (window as any).systemDialog.confirm('确定要废弃此文件并移入 _REJECTED_TRASH_BIN 吗？\n此操作不会建立任何财务账目。', '应付账款')) return;
         setIsDeletingFile(true);
@@ -364,8 +514,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 method: 'POST', body: JSON.stringify({ fileId })
             });
             alert(payload.message || '账单已移入废单隔离区。');
-            setIsMatchModalOpen(false);
-            setAiScannedData(null);
+            advanceScanQueue();
         } catch (error: any) {
             console.error('[AP AI] Delete pending failed:', error);
             alert(`废弃账单失败：${error?.message || '未知错误'}`);
@@ -384,8 +533,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 method: 'POST', body: JSON.stringify({ fileId, reason })
             });
             alert(payload.message || '账单已移入待确认保留区。');
-            setIsMatchModalOpen(false);
-            setAiScannedData(null);
+            advanceScanQueue();
         } catch (error: any) {
             console.error('[AP AI] Hold pending failed:', error);
             alert(`移入保留区失败：${error?.message || '未知错误'}`);
@@ -398,6 +546,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     );
 
     const handleMigrationSave = async () => {
+        if (!guardWrite('保存迁移资料')) return;
         const entries = Object.entries(migrationData).filter(([, d]) => d && d.subCat);
         if (entries.length === 0) return alert('请至少补一条类目');
 
@@ -509,6 +658,27 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         void fetchDateRange();
     }, [debouncedDateRange.start, debouncedDateRange.end]);
 
+    const fetchActivePVs = async () => {
+        try {
+            const qPV = query(collection(db, 'payment_vouchers'), limit(500));
+            const pvSnap = await getDocs(qPV);
+            const pvIds = new Set<string>();
+            pvSnap.docs.forEach(docSnap => {
+                const pv = docSnap.data() as PaymentVoucher;
+                if (pv.status !== 'VOID' && Array.isArray(pv.relatedExpenseIds)) {
+                    pv.relatedExpenseIds.forEach(id => pvIds.add(id));
+                }
+            });
+            setExpensesWithPV(prev => {
+                const next = new Set(prev);
+                pvIds.forEach(id => next.add(id));
+                return next;
+            });
+        } catch (e) {
+            console.warn('Failed to load PV index for badge status:', e);
+        }
+    };
+
     const loadData = async (focusBillId?: string | null) => {
         setLoading(true);
         setIsBillingCapped(false);
@@ -528,6 +698,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             ]);
             setSuppliers(sups);
             setExpensesWithPV(new Set());
+            void fetchActivePVs();
 
             const expenses = openBillsSnap.docs.map(item => item.data() as ExpenseItem);
             if (openBillsSnap.size >= 100) setIsBillingCapped(true);
@@ -587,6 +758,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 mergeBillsIntoState(paidBills);
                 if (recentSnap.size >= 150) setIsBillingCapped(true);
                 setHasLoadedPaidHistory(true);
+                void fetchActivePVs();
             } catch (error) {
                 console.error('Paid AP history load failed:', error);
             } finally {
@@ -842,6 +1014,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     // 💡 升级核心：处理保存逻辑，特别增加了 options?.forceCommit 重名覆盖控制
     const handleSave = async (options?: { forceCommit?: boolean; reviewConfirmed?: boolean }) => {
+        if (!guardWrite('保存账单')) return;
         if (!editingBill.company || editingBill.totalBillAmount === undefined) return alert("Please fill required fields (Payee & Amount)");
         if (!editingBill.time) return alert("请填写正确的账单日期后再保存。");
         if ((editingBill as any).pendingFileId && Number(editingBill.totalBillAmount) <= 0) return alert("AI 扫描账单金额必须大于 RM0.00，请人工核对。");
@@ -863,11 +1036,51 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             if (!editingBill.marketingSubCategory) return alert("⚠️ 营销类账单必须选择「营销类型」！");
             if (editingBill.marketingSubCategory === 'AD_OUTPUT' && !editingBill.adChannel) return alert("⚠️ 广告输出必须选择「广告渠道」！");
         }
-        if (editingBill.category === 'BEVERAGE') {
-            if (!editingBill.beverageSubCategory) return alert("⚠️ 水吧类账单必须选择「水吧细分」！");
-        }
-        if (editingBill.category === 'INGREDIENT_SEAFOOD') {
-            if (!editingBill.seafoodSubCategory) return alert("⚠️ 海鲜类账单必须选择「海鲜细分」！");
+        // 水吧不再需要子分类 —— 茶 / 罐装水 / 酒 已经各自独立成会计科目
+        // 海鲜不再需要子分类 —— 鱼 / 虾 / Sotong / Lala / 加工品 已经各自独立成会计科目
+        // 👑 成本科目拆分校验
+        // 结构：使用者只填「例外科目」，主科目 (isMain) 由系统自动吃剩余金额。
+        // 校验结果放在 finalCategorySplits，稍后写进 rawBill（不直接 mutate state）。
+        let finalCategorySplits: typeof editingBill.categorySplits = editingBill.categorySplits;
+        if (Array.isArray(editingBill.categorySplits) && editingBill.categorySplits.length > 0) {
+            const splits = editingBill.categorySplits;
+            const extras = splits.filter(s => !s.isMain);
+            const total = Number(editingBill.totalBillAmount || editingBill.amount || 0);
+
+            if (extras.length === 0) {
+                // 只有主科目 = 等于没拆，清掉免得存无意义的资料
+                finalCategorySplits = undefined;
+            } else {
+                if (extras.some(s => !s.category)) {
+                    return alert("⚠️ 例外科目里有一行没选科目，请补上或删掉该行。");
+                }
+                if (extras.some(s => Number(s.amount) <= 0)) {
+                    return alert("⚠️ 例外科目金额必须大于 0，请修正或删掉金额为 0 的行。");
+                }
+                if (extras.some(s => s.category === editingBill.category)) {
+                    return alert("⚠️ 例外科目不能跟主科目一样。主科目会自动吃剩余金额，不用再填一次。");
+                }
+                const dupes = extras.map(s => s.category).filter((c, i, arr) => arr.indexOf(c) !== i);
+                if (dupes.length > 0) {
+                    return alert(`⚠️ 同一个例外科目重复出现：${Array.from(new Set(dupes)).join('、')}。请合并成一行。`);
+                }
+                const extrasSum = extras.reduce((s, x) => s + Number(x.amount || 0), 0);
+                const mainAmount = Number((total - extrasSum).toFixed(2));
+                if (mainAmount < -0.001) {
+                    return alert(
+                        `⚠️ 例外科目加起来超过账单总额了。\n\n` +
+                        `账单总额：RM ${total.toFixed(2)}\n` +
+                        `例外合计：RM ${extrasSum.toFixed(2)}\n` +
+                        `主科目会变成：RM ${mainAmount.toFixed(2)}\n\n` +
+                        `请修正后再保存。`
+                    );
+                }
+                // 保存前重算一次主科目行，确保存进去的一定对平
+                finalCategorySplits = [
+                    ...extras,
+                    { category: editingBill.category || '', amount: mainAmount, isMain: true },
+                ];
+            }
         }
         setIsSaving(true);
         try {
@@ -887,9 +1100,27 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 verifiedAmount: editingBill.totalBillAmount,
                                 verifiedInvoiceNo: editingBill.invoiceRef || '',
                                 forceCommit: options?.forceCommit || false,
+                                vendorConfig: apVendorConfig || undefined,
                             }),
                         });
                         finalLinkUrl = commitData.finalDriveLink || finalLinkUrl;
+
+                        // 学习：AI 读的名字跟你最后用的不一样 → 记下来，下次自动预填
+                        const aiRaw = (editingBill as any).aiOriginalVendor || (editingBill as any).aiScanVendor;
+                        const finalVendor = String(editingBill.company || '').trim();
+                        const key = squashName(aiRaw);
+                        if (key && finalVendor && squashName(finalVendor) !== key) {
+                            const prev = aiCorrections[key];
+                            const rec = {
+                                aiVendor: String(aiRaw),
+                                correctedVendor: finalVendor,
+                                count: (prev?.count || 0) + 1,
+                                lastAt: new Date().toISOString(),
+                            };
+                            DataManager.saveApAiCorrection(key, rec)
+                                .then(() => setAiCorrections(p => ({ ...p, [key]: { id: key, ...rec } })))
+                                .catch(err => console.warn('[AP AI] 修正记录保存失败', err));
+                        }
                     } catch (commitError: any) {
                         if (commitError?.status === 409 && commitError?.payload?.code === 'DUPLICATE_ARCHIVE_DETECTED') {
                             setIsSaving(false);
@@ -952,6 +1183,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 linkUrl: finalLinkUrl,
                 paymentMethod: editingBill.paymentMethod || 'BANK_TRANSFER',
                 paidBy: editingBill.paidBy || 'COMPANY',
+                categorySplits: finalCategorySplits,
                 isAdvancePayment: editingBill.isAdvancePayment || false,
                 tags: finalTags,
                 paymentDate: payDate
@@ -1018,6 +1250,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleDeleteBill = async (billId: string) => {
+        if (!guardWrite('删除账单')) return;
         setIsSaving(true);
         try {
             await deleteDoc(doc(db, 'standalone_expenses', billId));
@@ -1045,6 +1278,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleQuickPay = async (options?: { generatePV?: boolean; paymentDate?: string }) => {
+        if (!guardWrite('快速付款')) return;
         if (!payModalData) return;
         if (!payMethod) return alert("Select Payment Method");
 
@@ -1154,6 +1388,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleUndoPayment = async (bill: ExpenseItem) => {
+        if (!guardWrite('撤销付款')) return;
         if (!await (window as any).systemDialog.confirm(`您确定要撤销 ${bill.company} 的已付状态并重新标记为未付吗？`, '应付账款')) return;
         setIsSaving(true);
         try {
@@ -1220,6 +1455,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     }, [selectedBillIds, allBills]);
 
     const handleBatchPay = async (options?: { bankRef?: string; bankReceiptUrl?: string; soaUrl?: string; paymentDate?: string; generatePV?: boolean }) => {
+        if (!guardWrite('批量付款')) return;
         if (!payMethod) return alert("Select Payment Method");
         setIsSaving(true);
         try {
@@ -1228,6 +1464,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             const generatedPVBillIds: string[] = [];
             const paymentDateIso = options?.paymentDate ? `${options.paymentDate}T12:00:00.000Z` : new Date().toISOString();
             
+            const paidItems: { bill: ExpenseItem; paidAmount: number }[] = [];
+
             for (const bill of selectedBills) {
                 const outstanding = bill.outstandingAmount || 0;
                 if (outstanding <= 0) continue;
@@ -1236,7 +1474,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     ...bill,
                     amount: (bill.amount || 0) + outstanding,
                     outstandingAmount: 0,
-                    paymentStatus: 'PAID',
+                    paymentStatus: 'PAID' as const,
                     paymentMethod: payMethod,
                     paymentDate: paymentDateIso,
                     documentLink: bill.documentLink || options?.bankReceiptUrl || options?.soaUrl || '',
@@ -1246,31 +1484,53 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 await DataManager.saveStandaloneExpense(updatedBill);
                 if (updatedBill.settlementId) await DataManager.updateExpenseInSettlement(updatedBill.settlementId, updatedBill);
                 updatedBills.push(updatedBill);
+                paidItems.push({ bill: updatedBill, paidAmount: outstanding });
+            }
 
-                if (options?.generatePV) {
+            // 💡 批量 PV 凭单：按【商家/供应商名称】归类合并生成，多张账单打入同一张 PV（多行明细）
+            if (options?.generatePV && paidItems.length > 0) {
+                const billsByCompany = new Map<string, { bill: ExpenseItem; paidAmount: number }[]>();
+                for (const item of paidItems) {
+                    const companyName = item.bill.company || '未知商家';
+                    if (!billsByCompany.has(companyName)) {
+                        billsByCompany.set(companyName, []);
+                    }
+                    billsByCompany.get(companyName)!.push(item);
+                }
+
+                for (const [companyName, items] of Array.from(billsByCompany.entries())) {
                     try {
                         const pvNumber = await DataManager.generatePVNumber(paymentDateIso);
+                        const payeeId = suppliers.find(s => s.name === companyName)?.id;
+                        
+                        const particulars: PVParticular[] = items.map(item => ({
+                            description: resolveParticulars(item.bill) || `Payment for invoice ${resolveInvoiceRef(item.bill)}`,
+                            category: item.bill.category,
+                            invoiceRef: resolveInvoiceRef(item.bill),
+                            amount: item.paidAmount
+                        }));
+
+                        const relatedExpenseIds = items.map(item => item.bill.id);
+                        const firstSettlementId = items[0].bill.settlementId;
+                        const sameSettlement = items.every(i => i.bill.settlementId === firstSettlementId);
+
                         const pv = buildPaymentVoucher({
                             pvNumber,
                             date: paymentDateIso,
-                            payeeName: bill.company,
-                            payeeId: suppliers.find(s => s.name === bill.company)?.id,
+                            payeeName: companyName,
+                            payeeId,
                             paymentMethod: (payMethod === 'CASH' ? 'CASH' : 'BANK_TRANSFER'),
-                            relatedExpenseIds: [bill.id],
-                            settlementId: bill.settlementId,
+                            relatedExpenseIds,
+                            settlementId: sameSettlement ? firstSettlementId : undefined,
                             bankRef: options?.bankRef || '',
                             supportingDocLink: options?.bankReceiptUrl || options?.soaUrl || '',
-                            particulars: [{
-                                description: `Batch Payment on invoice - ${bill.company} (${paymentDateIso.split('T')[0]})` + (options?.bankRef ? ` [Ref: ${options.bankRef}]` : ''),
-                                category: bill.category,
-                                invoiceRef: resolveInvoiceRef(bill),
-                                amount: outstanding
-                            }]
+                            particulars
                         });
+
                         await DataManager.savePaymentVoucher(pv);
-                        generatedPVBillIds.push(bill.id);
+                        items.forEach(item => generatedPVBillIds.push(item.bill.id));
                     } catch (pvErr) {
-                        console.error("Batch single PV gen error (bill saved)", pvErr);
+                        console.error("Batch PV generation failed for company " + companyName, pvErr);
                     }
                 }
             }
@@ -1282,7 +1542,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 console.error("Treasury adjust ledger failed", trErr);
             }
 
-            alert(`✅ Batch paid ${selectedBills.length} bills successfully!`);
+            alert(`✅ 批量支付成功！共 ${selectedBills.length} 笔账单` + (options?.generatePV ? `，已按商家合并生成 PV 凭单。` : '。'));
             mergeBillsIntoState(updatedBills);
             if (generatedPVBillIds.length > 0) {
                 setExpensesWithPV(prev => {
@@ -1297,6 +1557,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleBatchDelete = async () => {
+        if (!guardWrite('批量删除')) return;
         setIsSaving(true);
         try {
             const ids = Array.from(selectedBillIds);
@@ -1375,7 +1636,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     },
                 });
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 const imgWidth = 210;
                 const pageHeight = 297;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -1445,7 +1706,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     },
                 });
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 const imgWidth = 210;
                 const pageHeight = 297;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -1541,6 +1802,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleConfirmAutoBackdate = async () => {
+        if (!guardWrite('批量回填日期')) return;
         if (!batchPVMissingDialog) return;
         const { bills, existingPVs } = batchPVMissingDialog;
         setBatchPVMissingDialog(null);
@@ -1692,6 +1954,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     };
 
     const handleConfirmMergePettyCash = async () => {
+        if (!guardWrite('合并零用金')) return;
         if (!batchPVMissingDialog) return;
         const { bills, existingPVs } = batchPVMissingDialog;
         setBatchPVMissingDialog(null);
@@ -1757,7 +2020,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     const generateCombinedPV_PDF = async (vouchers: PaymentVoucher[]) => {
         if (vouchers.length === 0) return;
-        const docPDF = new jsPDF('p', 'mm', 'a4');
+        const docPDF = new (await loadJsPDF())('p', 'mm', 'a4');
 
         try {
             for (let i = 0; i < vouchers.length; i++) {
@@ -1883,7 +2146,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 }
                 
                 const totalPages = Math.max(1, Math.ceil(voucher.particulars.length / 8));
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 
                 for (let j = 0; j < totalPages; j++) {
                     const pageElement = document.getElementById(`payment-voucher-export-page-${j}`);
@@ -2034,6 +2297,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
     return (
         <div className="absolute inset-0 bg-[#F6F7FB] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
+            <PayablesOverview isOpen={isOverviewOpen} onClose={() => setIsOverviewOpen(false)} />
             {/* === MOBILE STICKY HEADER === */}
             <div className="md:hidden bg-[#111111] border-b-[3px] border-[#FFD200] px-4 flex justify-between items-center shrink-0 shadow-lg sticky top-0 z-40 safe-area-top h-[56px]">
                 <div className="flex items-center gap-3 min-w-0">
@@ -2048,6 +2312,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 </div>
                 
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setIsOverviewOpen(true)} className="bg-[#FFD200] text-black text-xs font-black px-3 rounded-xl min-h-[40px] shrink-0 active:scale-95">📊 总览</button>
                     <span className="bg-[#22C55E]/10 text-[#22C55E] text-[10px] px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 border border-[#22C55E]/20">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse"></span>
                         ONLINE
@@ -2329,6 +2594,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <span>AP Ledger &amp; Cash Flow</span>
                         </div>
                     </div>
+                    <button onClick={() => setIsOverviewOpen(true)} className="hidden md:inline-flex items-center gap-1.5 ml-3 bg-[#FFD200] text-black text-xs font-black px-4 py-2 rounded-xl shrink-0 hover:bg-white active:scale-95 transition-all">📊 应付总览</button>
                 </div>
                 
                 {/* Desktop Header Actions */}
@@ -2342,6 +2608,14 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     >
                         {isAiScanning ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>}
                         <span className="hidden md:inline">AI 扫描</span>
+                    </button>
+
+                    <button
+                        onClick={() => setIsVendorConfigOpen(true)}
+                        className="h-11 w-11 flex items-center justify-center bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 rounded-[14px] transition-all shrink-0"
+                        title="供应商归档设定（改完立即生效，不用重新部署）"
+                    >
+                        <Settings size={16}/>
                     </button>
 
                     {/* 🔧 营销账单批量细分补目工具 */}
@@ -2702,8 +2976,21 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             const isOverdue = !isPaid && Boolean(effectiveDueDate) && new Date() > new Date(`${effectiveDueDate}T23:59:59`);
                             const sup = supplierByName.get(bill.company);
                             const isSelected = selectedBillIds.has(bill.id);
+                            const hasPV = expensesWithPV.has(bill.id);
+                            const isSystemFee = bill.id.startsWith('recon_fee_') || ['BANK_FEE', 'MARKETING_FEE', 'PLATFORM_FEE_SHOPEE', 'PLATFORM_FEE_OTHER'].includes(bill.category);
+
+                            const cardStyleClass = isPaid
+                                ? (hasPV 
+                                    ? 'border-l-emerald-600 bg-emerald-50/20 hover:bg-emerald-50/30' 
+                                    : isSystemFee 
+                                        ? 'border-l-gray-400 bg-gray-50/40' 
+                                        : 'border-l-amber-500 bg-amber-50/20 hover:bg-amber-50/30')
+                                : (isOverdue 
+                                    ? 'border-l-red-500 bg-white' 
+                                    : 'border-l-orange-400 bg-white');
+
                             return (
-                                <div key={bill.id} className={`bg-white rounded-2xl p-3 md:p-5 shadow-sm border-l-4 md:border-l-[6px] transition-all hover:shadow-lg group relative ${isPaid ? 'border-l-green-500' : isOverdue ? 'border-l-red-500' : 'border-l-orange-400'} ${isSelected ? 'ring-2 ring-offset-1 ring-[#FFD200]' : ''}`}>
+                                <div key={bill.id} className={`rounded-2xl p-3 md:p-5 shadow-sm border-l-4 md:border-l-[6px] transition-all hover:shadow-lg group relative ${cardStyleClass} ${isSelected ? 'ring-2 ring-offset-1 ring-[#FFD200]' : ''}`}>
                                     {/* Top: checkbox + date + link */}
                                     <div className="flex justify-between items-center mb-2">
                                         <div className="flex items-center gap-2">
@@ -2711,25 +2998,31 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                             <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1"><Calendar size={9}/> {bill.time.split('T')[0]}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            {isPaid && !(bill.id.startsWith('recon_fee_') || ['BANK_FEE', 'MARKETING_FEE', 'PLATFORM_FEE_SHOPEE', 'PLATFORM_FEE_OTHER'].includes(bill.category)) && (
+                                            {isPaid && !isSystemFee && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleCardPVClick(bill); }}
                                                     disabled={isCardPVLoading === bill.id}
-                                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border transition-all active:scale-95 shrink-0 disabled:opacity-50 ${
-                                                        expensesWithPV.has(bill.id)
-                                                            ? 'text-[#E65100] bg-[#FFF3E0] border-[#FFB74D] hover:bg-[#FFE0B2]'
-                                                            : 'text-gray-500 bg-gray-100 border-gray-300 hover:bg-gray-200'
+                                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition-all active:scale-95 shrink-0 disabled:opacity-50 ${
+                                                        hasPV
+                                                            ? 'text-emerald-800 bg-emerald-100 border-emerald-300 hover:bg-emerald-200 font-bold'
+                                                            : 'text-amber-900 bg-amber-100 border-amber-300 hover:bg-amber-200 font-black'
                                                     }`}
-                                                    title={expensesWithPV.has(bill.id) ? "下载或打印已生成的付款凭单 (PV)" : "生成此账单的付款凭单 (PV)"}
+                                                    title={hasPV ? "已生成付款凭单 (PV) — 点击查看或下载" : "此账单尚未生成 PV — 点击补开付款凭单"}
                                                 >
-                                                    {isCardPVLoading === bill.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
-                                                    <span className="text-[10px] font-bold">PV</span>
+                                                    {isCardPVLoading === bill.id ? (
+                                                        <Loader2 size={11} className="animate-spin"/>
+                                                    ) : hasPV ? (
+                                                        <CheckCircle2 size={11} className="text-emerald-700"/>
+                                                    ) : (
+                                                        <AlertTriangle size={11} className="text-amber-700"/>
+                                                    )}
+                                                    <span className="text-[10px] font-bold">{hasPV ? 'PV 已开具' : '未开 PV'}</span>
                                                 </button>
                                             )}
-                                            {isPaid && (bill.id.startsWith('recon_fee_') || ['BANK_FEE', 'MARKETING_FEE', 'PLATFORM_FEE_SHOPEE', 'PLATFORM_FEE_OTHER'].includes(bill.category)) && (
+                                            {isPaid && isSystemFee && (
                                                 <span className="text-[8px] font-bold text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-lg shrink-0 select-none cursor-help" title="系统核销手续费/抽佣费用，无需补开纸质 PV (System Auto Fee, No PV Required)">
                                                     无需凭单 (No PV)
-                                                 </span>
+                                                </span>
                                             )}
                                             {bill.linkUrl && <a href={bill.linkUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 transition-all active:scale-95 shrink-0"><ExternalLink size={11}/><span className="text-[9px] font-bold">单据</span></a>}
                                         </div>
@@ -2743,6 +3036,17 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                         {bill.paidBy && bill.paidBy !== 'COMPANY' && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold inline-flex items-center gap-1 ${bill.isAdvancePayment ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}><User size={9}/> {bill.paidBy} {bill.isAdvancePayment ? '垫付' : ''}</span>}
                                         <div className="flex flex-wrap gap-1 mt-1 items-center">
                                             {bill.category && <span className="text-[8px] md:text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-100">{FLAT_CATEGORIES.find(c => c.id === bill.category)?.label.split('(')[0] || bill.category}</span>}
+                                            {/* 👑 成本科目拆分标记 — 让你一眼看出哪些单已经拆过 */}
+                                            {Array.isArray(bill.categorySplits) && bill.categorySplits.length > 0 && (
+                                                <span
+                                                    className="text-[8px] md:text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-black border border-indigo-200 inline-flex items-center gap-0.5"
+                                                    title={bill.categorySplits
+                                                        .map(s => `${FLAT_CATEGORIES.find(c => c.id === s.category)?.label.split('(')[0]?.trim() || s.category} RM${Number(s.amount).toFixed(2)}`)
+                                                        .join('\n')}
+                                                >
+                                                    <Scissors size={8}/> 已拆 {bill.categorySplits.length} 项
+                                                </span>
+                                            )}
                                             {bill.category === 'BEVERAGE' && bill.beverageSubCategory && (
                                                 <span className="text-[8px] md:text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-100">{BEVERAGE_SUBCAT_EMOJIS[bill.beverageSubCategory]} {BEVERAGE_SUBCAT_LABELS[bill.beverageSubCategory]}</span>
                                             )}
@@ -3496,7 +3800,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 const scannedAmountCents = toMoneyCents(aiScannedData.amount);
                 const scannedInvoiceNo = String(aiScannedData.invoice_no || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
                 const allPendingBills = allBills.filter(b => b.paymentStatus !== 'PAID');
-                const matchedExistingBills = allPendingBills
+                const matchedScored = allPendingBills
                     .map(bill => {
                         const billVendorKey = normalizeVendorForMatch(bill.company);
                         const billAmountCents = getBillMatchAmount(bill);
@@ -3508,12 +3812,26 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             ? Math.abs(scannedAmountCents - billAmountCents) : Number.POSITIVE_INFINITY;
                         const amountMatches = amountDifferenceCents <= 2;
                         const invoiceMatches = Boolean(scannedInvoiceNo && billInvoiceNo && scannedInvoiceNo === billInvoiceNo);
-                        const score = (vendorMatches ? 50 : 0) + (amountMatches ? 40 : 0) + (invoiceMatches ? 70 : 0);
-                        return { bill, score, vendorMatches, amountMatches, invoiceMatches, amountDifferenceCents };
+                        // 日期越接近分数越高（同一天 +20，一周内 +10）
+                        let dayGap = Number.POSITIVE_INFINITY;
+                        if (aiScannedData.date?.length === 8 && bill.time) {
+                            const aiD = new Date(`${aiScannedData.date.slice(0,4)}-${aiScannedData.date.slice(4,6)}-${aiScannedData.date.slice(6,8)}`);
+                            const bD = new Date(String(bill.time).split('T')[0]);
+                            if (!isNaN(aiD.getTime()) && !isNaN(bD.getTime())) {
+                                dayGap = Math.abs(aiD.getTime() - bD.getTime()) / 86400000;
+                            }
+                        }
+                        const dateScore = dayGap === 0 ? 20 : dayGap <= 7 ? 10 : 0;
+                        const score = (vendorMatches ? 50 : 0) + (amountMatches ? 40 : 0) + (invoiceMatches ? 70 : 0) + dateScore;
+                        return { bill, score, vendorMatches, amountMatches, invoiceMatches, amountDifferenceCents, dayGap };
                     })
                     .filter(match => match.vendorMatches && (match.amountMatches || match.invoiceMatches))
-                    .sort((a, b) => b.score - a.score || a.amountDifferenceCents - b.amountDifferenceCents)
-                    .map(match => match.bill);
+                    .sort((a, b) => b.score - a.score || a.amountDifferenceCents - b.amountDifferenceCents);
+
+                // 分数够高才敢标「建议」—— 供应商 + 金额都对，或单号直接命中
+                const bestMatch = matchedScored[0];
+                const suggestedBillId = bestMatch && bestMatch.score >= 90 ? bestMatch.bill.id : null;
+                const matchedExistingBills = matchedScored.map(m => m.bill);
                 const searchedPendingBills = allPendingBills.filter(b => {
                     if (!reconSearch.trim()) return true;
                     const query = reconSearch.toLowerCase();
@@ -3529,7 +3847,17 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <div className="bg-[#111111] text-white px-5 py-4 flex justify-between items-center shrink-0 border-b-[3px] border-[#FFD200]">
                                 <div>
                                     <h3 className="font-serif font-black text-sm md:text-lg flex items-center gap-2">🤖 AP 智能对账中转站</h3>
-                                    <p className="text-[10px] text-gray-400 font-mono">AI 提取预览：{aiScannedData.vendor} · {aiScannedData.currency || 'MYR'} {Number(aiScannedData.amount).toFixed(2)}</p>
+                                    <p className="text-[10px] text-gray-400 font-mono">
+                                        {aiScanQueue.length > 1 && <span className="text-[#FFD200] font-black mr-1">[{aiScanIndex + 1}/{aiScanQueue.length}]</span>}
+                                        AI 提取预览：{aiScannedData.vendor} · {aiScannedData.currency || 'MYR'} {Number(aiScannedData.amount).toFixed(2)}
+                                        {aiScannedData.learnedApplied && (
+                                            <span className="text-emerald-400 ml-1" title={`AI 原本读成「${aiScannedData.aiOriginalVendor}」，已套用你改过 ${aiScannedData.learnedCount} 次的名称`}>
+                                                · 已套用你之前的修正
+                                            </span>
+                                        )}
+                                        {aiScannedData.fromCache && <span className="text-gray-500 ml-1">· 快取</span>}
+                                        {aiScanRemaining > 0 && <span className="text-gray-500 ml-1">· 暂存区还有 {aiScanRemaining} 张</span>}
+                                    </p>
                                     <p className="text-[9px] text-[#FFD200]/90 font-bold mt-0.5">智能配对条件：供应商名称 + 金额（允许 ±RM0.02）或供应商名称 + Invoice No.</p>
                                 </div>
                                 <button onClick={() => setIsMatchModalOpen(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white"><X size={18}/></button>
@@ -3560,6 +3888,52 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* AI 抓到的明细行 —— 进货数量、单价的来源 */}
+                            {Array.isArray(aiScannedData.line_items) && aiScannedData.line_items.length > 0 && (
+                                <div className="border-b border-gray-200 bg-white px-4 py-2.5 shrink-0 max-h-[180px] overflow-auto">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">
+                                            单据明细 ({aiScannedData.line_items.length} 行)
+                                        </span>
+                                        {aiScannedData.lineItemsMatchTotal === false ? (
+                                            <span className="text-[9px] font-black text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                                ⚠ 明细合计 {Number(aiScannedData.lineItemsTotal || 0).toFixed(2)} ≠ 总额 {Number(aiScannedData.amount || 0).toFixed(2)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                ✓ 明细合计与总额一致
+                                            </span>
+                                        )}
+                                    </div>
+                                    <table className="w-full text-[10px]">
+                                        <thead>
+                                            <tr className="text-gray-400 border-b border-gray-100">
+                                                <th className="text-left font-black uppercase py-1">品项</th>
+                                                <th className="text-right font-black uppercase py-1 w-20">数量</th>
+                                                <th className="text-right font-black uppercase py-1 w-20">单价</th>
+                                                <th className="text-right font-black uppercase py-1 w-24">金额</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {aiScannedData.line_items.map((it: any, i: number) => (
+                                                <tr key={i} className={`border-b border-gray-50 ${it.isFeeRow ? 'text-gray-400 italic' : 'text-gray-800'}`}>
+                                                    <td className="py-1 pr-2">
+                                                        {it.description}
+                                                        {it.item_code && <span className="ml-1 font-mono text-[9px] text-gray-400">{it.item_code}</span>}
+                                                        {it.isFeeRow && <span className="ml-1 text-[8px] font-black text-gray-400">费用</span>}
+                                                    </td>
+                                                    <td className="py-1 text-right font-mono whitespace-nowrap">
+                                                        {it.qty ? `${it.qty} ${it.unit || ''}` : '-'}
+                                                    </td>
+                                                    <td className="py-1 text-right font-mono">{it.unit_price ? Number(it.unit_price).toFixed(2) : '-'}</td>
+                                                    <td className="py-1 text-right font-mono font-bold">{Number(it.amount || 0).toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
 
@@ -3625,10 +3999,20 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
 
                                             {displayedBills.length > 0 ? (
                                                 displayedBills.map(bill => (
-                                                    <div key={bill.id} className="flex justify-between items-center p-3 bg-gray-50 hover:bg-[#FFF9D9] rounded-xl border border-gray-200/60 transition-colors">
+                                                    <div key={bill.id} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${
+                                                        bill.id === suggestedBillId
+                                                            ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100'
+                                                            : 'bg-gray-50 hover:bg-[#FFF9D9] border-gray-200/60'
+                                                    }`}>
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className="text-xs font-black text-[#111111] truncate">{bill.company}</span>
+                                                                {bill.id === suggestedBillId && (
+                                                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded font-black shrink-0"
+                                                                        title={`供应商、金额${bestMatch?.invoiceMatches ? '、单号' : ''}${bestMatch?.dayGap === 0 ? '、日期' : ''}都对得上`}>
+                                                                        ✨ 建议
+                                                                    </span>
+                                                                )}
                                                                 {bill.invoiceRef && <span className="text-[9px] bg-gray-200/70 text-gray-600 px-1 py-0.5 rounded font-mono font-black">#{bill.invoiceRef}</span>}
                                                             </div>
                                                             <p className="text-[10px] text-gray-400 font-bold mt-0.5">时间: {bill.time?.split('T')[0]} · 待付欠额: <span className="text-red-600 font-mono font-black">RM {Number(bill.outstandingAmount).toFixed(2)}</span></p>
@@ -3665,7 +4049,9 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                                     pendingOriginalName: aiScannedData.originalName,
                                                                     pendingMimeType: aiScannedData.mimeType,
                                                                     pendingReviewReasons: getAiReviewReasons(aiScannedData),
-                                                                    pendingCurrency: aiScannedData.currency
+                                                                    pendingCurrency: aiScannedData.currency,
+                                                                    aiOriginalVendor: aiScannedData.aiOriginalVendor || aiScannedData.vendor,
+                                                                    aiLineItems: aiScannedData.line_items || []
                                                                 } as any);
                                                                 setIsFormOpen(true);
                                                             }}
@@ -3720,7 +4106,9 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                         pendingOriginalName: aiScannedData.originalName,
                                                         pendingMimeType: aiScannedData.mimeType,
                                                         pendingReviewReasons: getAiReviewReasons(aiScannedData),
-                                                        pendingCurrency: aiScannedData.currency
+                                                        pendingCurrency: aiScannedData.currency,
+                                                        aiOriginalVendor: aiScannedData.aiOriginalVendor || aiScannedData.vendor,
+                                                        aiLineItems: aiScannedData.line_items || []
                                                     } as any);
                                                     setIsFormOpen(true); 
                                                 }}
@@ -3738,6 +4126,19 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
             })()}
 
             {/* 📱 手机端底栏固定操作栏 (Sticky Bottom Actions Bar) - 适配 iOS、PWA & Apple HIG */}
+            {isVendorConfigOpen && (
+                <VendorConfigModal
+                    isOpen={isVendorConfigOpen}
+                    onClose={() => setIsVendorConfigOpen(false)}
+                    request={requestApAi}
+                    onSaved={() => {
+                        DataManager.getApVendorConfig()
+                            .then(cfg => setApVendorConfig(cfg))
+                            .catch(() => {});
+                    }}
+                />
+            )}
+
             {!isFormOpen && !showBackdate && !showPVHistory && !showMigrationTool && !isBatchPayModalOpen && !isBatchDeleteModalOpen && !payModalData && (
                 <div id="ap-sticky-bottom-actions-bar" className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 right-4 z-40 bg-[#111111]/95 backdrop-blur-lg border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-2xl p-3 flex items-center justify-between gap-2.5 font-sans transition-colors duration-200">
                     {/* Main List Mode */}

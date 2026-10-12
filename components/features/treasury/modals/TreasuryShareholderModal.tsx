@@ -24,15 +24,34 @@ export const TreasuryShareholderModal: React.FC<TreasuryShareholderModalProps> =
   return (
     <TreasuryBottomSheet
       open={open}
-      title="股东资料 (Shareholder)"
+      title="股东资料"
       subtitle="Shareholder Profile"
       onClose={onClose}
       icon={<UserPlus size={20} />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant="primary"
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                保存资料
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
         {/* Name Field */}
         <TreasuryFormField
-          label="股东姓名 (Name)"
+          label="股东姓名"
           id="sh-name"
           type="text"
           value={form.name || ""}
@@ -43,7 +62,7 @@ export const TreasuryShareholderModal: React.FC<TreasuryShareholderModalProps> =
 
         {/* Role Field */}
         <TreasuryFormField
-          label="职责头衔 (Role/Title)"
+          label="职责头衔"
           id="sh-role"
           type="text"
           value={form.role || ""}
@@ -54,7 +73,7 @@ export const TreasuryShareholderModal: React.FC<TreasuryShareholderModalProps> =
         {/* Capital & Equity Row */}
         <div className="grid grid-cols-2 gap-3">
           <TreasuryFormField
-            label="注资额 (Capital)"
+            label="注资额"
             id="sh-capital"
             type="number"
             step="any"
@@ -70,7 +89,7 @@ export const TreasuryShareholderModal: React.FC<TreasuryShareholderModalProps> =
           />
 
           <TreasuryFormField
-            label="股权比例 (Equity)"
+            label="股权比例"
             id="sh-equity"
             type="number"
             step="any"
@@ -84,25 +103,6 @@ export const TreasuryShareholderModal: React.FC<TreasuryShareholderModalProps> =
             }
             suffix="%"
           />
-        </div>
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-2">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant="primary"
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            保存资料
-          </TreasuryButton>
         </div>
       </div>
     </TreasuryBottomSheet>

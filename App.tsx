@@ -15,6 +15,7 @@ import { WhatsNewModal } from './components/ui/WhatsNewModal';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
+import { syncReadOnlyMode } from './utils/readOnlyMode';
 import { NotificationCenter } from './components/ui/NotificationCenter';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
@@ -153,6 +154,11 @@ export default function App() {
     }, []);
 
     // Stable logout callback
+    // 🔒 只读模式：登入／登出／云端同步员工资料时都要跟着更新
+    useEffect(() => {
+        syncReadOnlyMode(currentEmployee);
+    }, [currentEmployee]);
+
     const handleLogout = useCallback(() => {
         console.log('🔄 User logged out. Clearing sessions.');
         setCurrentUser(null);
@@ -182,7 +188,8 @@ export default function App() {
                     return;
                 }
 
-                const modulesChanged = JSON.stringify(fresh.allowedModules) !== JSON.stringify(currentEmpLocal.allowedModules);
+                const modulesChanged = JSON.stringify(fresh.allowedModules) !== JSON.stringify(currentEmpLocal.allowedModules)
+                    || !!fresh.readOnlyAccess !== !!currentEmpLocal.readOnlyAccess;
                 const roleChanged    = fresh.role !== currentEmpLocal.role || fresh.orgLevel !== currentEmpLocal.orgLevel || fresh.portalRoleOverride !== currentEmpLocal.portalRoleOverride;
                 const nameChanged    = fresh.name !== currentEmpLocal.name || fresh.avatar !== currentEmpLocal.avatar;
                 

@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
-import { getAuth, Auth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence, Auth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
 /**
  * 御膳智控 - 安全加固版配置
@@ -49,7 +49,10 @@ export const db: Firestore = createAuthProxy<Firestore>(
 
 // 导出具备类型保护的 Auth 实例
 export const auth: Auth = createAuthProxy<Auth>(
-  app ? getAuth(app) : null,
+  // 📱 iPhone：Safari / 主画面 PWA 的 IndexedDB 偶尔会「打不开也不报错」，
+  //    getAuth() 预设先用 IndexedDB，一卡住整个 App 就停在载入画面。
+  //    改成 localStorage 优先，IndexedDB 备用；旧的身份如果在 IndexedDB 里会自动搬过来。
+  app ? initializeAuth(app, { persistence: [browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence] }) : null,
   "Firebase Auth 未能成功初始化。请检查您的 .env 环境变量配置。"
 );
 

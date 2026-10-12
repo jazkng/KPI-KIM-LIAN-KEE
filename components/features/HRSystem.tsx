@@ -27,6 +27,7 @@ interface HRSystemProps {
 export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) => {
     const isSuperAdminMode = isSystemAdminAccount(currentEmployee);
     const [activeTab, setActiveTab] = useState<'PROFILES' | 'DEVICES' | 'PAYROLL' | 'ROLES'>('PROFILES');
+    const [payrollMode, setPayrollMode] = useState<'CALC' | 'PARTTIME'>('CALC');
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinition[]>(DEFAULT_ROLES);
     const [roleGuides, setRoleGuides] = useState<Record<string, RoleGuide>>(DEFAULT_ROLE_GUIDES);
@@ -120,7 +121,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                         <button
                             key={tab.id}
                             style={noTap}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => { setPayrollMode('CALC'); setActiveTab(tab.id); }}
                             className={`flex-1 py-3 md:py-4 min-h-[48px] px-2 text-xs md:text-sm font-black flex items-center justify-center gap-2 transition-all whitespace-nowrap select-none active:bg-gray-200 ${activeTab === tab.id ? 'bg-white text-black border-b-4 border-[#8B0000]' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             <tab.Icon size={16} /> {tab.label}
@@ -128,8 +129,9 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                     ))}
                 </div>
 
+                {activeTab === 'PROFILES' && <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-2 flex justify-end"><button className="min-h-[44px] px-4 rounded-xl bg-[#FFD200] text-[#111111] text-sm font-bold" onClick={() => { setPayrollMode('PARTTIME'); setActiveTab('PAYROLL'); }}>兼职账目与收据 →</button></div>}
                 {/* 内容区 */}
-                <div className="flex-grow overflow-hidden relative bg-[#F6F7FB]">
+                <div className="flex-grow min-h-0 overflow-hidden relative bg-[#F6F7FB]">
                     {activeTab === 'PROFILES' && (
                         <HRProfiles
                             employees={employees}
@@ -143,6 +145,8 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                     )}
                     {activeTab === 'PAYROLL' && (
                         <HRPayroll 
+                            initialMode={payrollMode}
+                            currentEmployee={currentEmployee}
                             employees={employees} 
                             onNavigateToProfile={(empId) => {
                                 setFocusedEmployeeId(empId);

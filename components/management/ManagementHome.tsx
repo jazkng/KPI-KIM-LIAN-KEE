@@ -72,6 +72,11 @@ const ORG_LEVEL_LABELS: Record<OrgLevel, Record<'zh_en' | 'en' | 'my', string>> 
         en: 'L2 Branch Manager',
         my: 'L2 ဆိုင်ခွဲမန်နေဂျာ'
     },
+    STAFF_SUPPORT: {
+        zh_en: 'L2S 幕僚',
+        en: 'L2S Staff Support',
+        my: 'L2S ပံ့ပိုးရေး'
+    },
     DEPARTMENT_HEAD: {
         zh_en: 'L3 部门负责人',
         en: 'L3 Department Head',
@@ -289,6 +294,9 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
         }
         if (allowedModules.includes('SELF_INVOICE')) {
             list.push({ module: 'SELF_INVOICE', label: mt('module_self_invoice', lang), icon: '📄', bg: 'bg-violet-50 border-violet-200/80', text: 'text-violet-600 font-extrabold' });
+        }
+        if (allowedModules.includes('STAFF_CASH')) {
+            list.push({ module: 'STAFF_CASH', label: lang === 'my' ? 'အချိန်ပိုင်း / ကြိုတင်ငွေ' : '兼职与预支', icon: '💵', bg: 'bg-emerald-50 border-emerald-200/80', text: 'text-emerald-700 font-extrabold' });
         }
         if (allowedModules.includes('KITCHEN_ALERT')) {
             list.push({ module: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: '🔔', bg: 'bg-red-50 border-red-200/80', text: 'text-red-600 font-extrabold' });

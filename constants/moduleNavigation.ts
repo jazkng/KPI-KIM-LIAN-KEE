@@ -41,6 +41,7 @@ export const MODULE_CATEGORIES: ModuleCategoryDefinition[] = [
 export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     // 今日营运
     SETTLEMENT: { category: 'OPERATIONS', order: 10 },
+    DAILY_REPORT: { category: 'OPERATIONS', order: 15 },
     KITCHEN_ALERT: { category: 'OPERATIONS', order: 20 },
     QUEUE_MANAGER: { category: 'OPERATIONS', order: 30 },
     QUEUE: { category: 'OPERATIONS', order: 30 },
@@ -80,6 +81,7 @@ export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     ROSTER_KITCHEN: { category: 'PEOPLE', order: 31 },
     ROSTER_FLOOR: { category: 'PEOPLE', order: 32 },
     ASSESSMENT: { category: 'PEOPLE', order: 40 },
+    STAFF_CASH: { category: 'PEOPLE', order: 25 },
     ORG: { category: 'PEOPLE', order: 50 },
 
     // 计划与发展

@@ -1,6 +1,7 @@
 import React from "react";
 
-interface TreasuryFormFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface TreasuryFormFieldProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   helperText?: string;
   suffix?: React.ReactNode;
@@ -16,14 +17,18 @@ export const TreasuryFormField: React.FC<TreasuryFormFieldProps> = ({
   required,
   ...props
 }) => {
+  const isNumeric = type === "number";
+
   return (
-    <div className="flex flex-col gap-1.5 w-full">
-      <div className="flex items-center justify-between">
-        <label htmlFor={id} className="text-xs font-bold text-[#111111] flex items-center gap-1">
+    <div className="flex w-full flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-xs font-bold text-[#111111]">
           {label}
-          {required && <span className="text-red-500 font-extrabold">*</span>}
+          {required && <span className="ml-0.5 text-[#8B0000]">*</span>}
         </label>
-        {helperText && <span className="text-[11px] text-gray-400 font-medium">{helperText}</span>}
+        {helperText && (
+          <span className="text-[11px] text-stone-400">{helperText}</span>
+        )}
       </div>
 
       <div className="relative flex items-center">
@@ -31,35 +36,15 @@ export const TreasuryFormField: React.FC<TreasuryFormFieldProps> = ({
           id={id}
           type={type}
           required={required}
-          className={`
-            min-h-12
-            w-full
-            rounded-xl
-            border
-            border-[#E5E7EB]
-            bg-white
-            px-3
-            text-sm
-            text-[#111111]
-            font-bold
-            placeholder:text-gray-400
-            placeholder:font-normal
-            outline-none
-            transition
-            focus:border-[#FFD200]
-            focus:ring-2
-            focus:ring-[#FFD200]/30
-            disabled:bg-gray-50
-            disabled:text-gray-400
-            ${suffix ? "pr-10" : ""}
-            ${className}
-          `}
+          className={`h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm font-bold text-[#111111] outline-none transition-colors placeholder:font-normal placeholder:text-stone-400 focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/25 disabled:bg-[#F6F7FB] disabled:text-stone-400 ${
+            isNumeric ? "font-mono tabular-nums" : ""
+          } ${suffix ? "pr-12" : ""} ${className}`}
           {...props}
         />
         {suffix && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none select-none">
+          <span className="pointer-events-none absolute right-3 select-none text-xs font-bold text-stone-400">
             {suffix}
-          </div>
+          </span>
         )}
       </div>
     </div>

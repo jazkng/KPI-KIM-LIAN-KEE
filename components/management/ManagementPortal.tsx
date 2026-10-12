@@ -83,6 +83,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         'ASSESSMENT',
         'AP',
         'SELF_INVOICE',
+        'STAFF_CASH',
         'KITCHEN_ALERT'
     ], []);
 

@@ -36,16 +36,35 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
   return (
     <TreasuryBottomSheet
       open={open}
-      title={isEditing ? "✏️ 编辑收入记录" : "代收/杂项收入 (Extra Income)"}
-      subtitle="Extra Income Form"
+      title={isEditing ? "编辑收入记录" : "代收收入"}
+      subtitle="Extra Income"
       onClose={onClose}
       icon={<DollarSign size={20} />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant={isEditing ? "primary" : "success"}
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                {isEditing ? "确认更新" : "确认收入"}
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
         {/* Source Field with datalist */}
         <div className="flex flex-col gap-1.5 w-full">
           <label htmlFor="income-source" className="text-xs font-bold text-[#111111]">
-            Source (来源) <span className="text-red-500 font-extrabold">*</span>
+            Source (来源) <span className="text-rose-600 font-extrabold">*</span>
           </label>
           <input
             id="income-source"
@@ -63,7 +82,7 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
               text-sm
               text-[#111111]
               font-bold
-              placeholder:text-gray-400
+              placeholder:text-stone-400
               placeholder:font-normal
               outline-none
               transition
@@ -84,7 +103,7 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
 
         {/* Category Field */}
         <TreasurySelect
-          label="Category (类别)"
+          label="类别"
           id="income-category"
           value={form.category || "OTHER"}
           onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -94,7 +113,7 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
 
         {/* Amount Field */}
         <TreasuryFormField
-          label="Amount (金额)"
+          label="金额"
           id="income-amount"
           type="number"
           step="any"
@@ -109,7 +128,7 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
         {/* Account Selection */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-bold text-[#111111]">
-            Into Account (存入账户) <span className="text-red-500 font-extrabold">*</span>
+            Into Account (存入账户) <span className="text-rose-600 font-extrabold">*</span>
           </span>
           <div className="flex gap-2">
             <button
@@ -117,8 +136,8 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
               onClick={() => setForm({ ...form, toAccount: "CASH" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.toAccount === "CASH"
-                  ? "bg-green-50 border-[#22C55E] text-[#22C55E]"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-emerald-50 border-[#22C55E] text-[#22C55E]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               CASH
@@ -128,8 +147,8 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
               onClick={() => setForm({ ...form, toAccount: "BANK" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.toAccount === "BANK"
-                  ? "bg-blue-50 border-blue-500 text-blue-600"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-[#F6F7FB] border-blue-500 text-[#111111]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               BANK
@@ -139,7 +158,7 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
 
         {/* Date Field */}
         <TreasuryFormField
-          label="Date (日期)"
+          label="日期"
           id="income-date"
           type="date"
           value={form.date || ""}
@@ -149,32 +168,13 @@ export const TreasuryIncomeModal: React.FC<TreasuryIncomeModalProps> = ({
 
         {/* Note Field */}
         <TreasuryFormField
-          label="Note (备注)"
+          label="备注"
           id="income-note"
           type="text"
           value={form.note || ""}
           onChange={(e) => setForm({ ...form, note: e.target.value })}
           placeholder="选填备注..."
         />
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-2">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant={isEditing ? "primary" : "success"}
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            {isEditing ? "确认更新" : "确认收入"}
-          </TreasuryButton>
-        </div>
       </div>
     </TreasuryBottomSheet>
   );

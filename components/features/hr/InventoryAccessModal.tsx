@@ -165,7 +165,7 @@ export const InventoryAccessModal: React.FC<InventoryAccessModalProps> = ({
     );
 
     return (
-        <div className="fixed inset-0 z-[220] flex items-end bg-black/70 backdrop-blur-sm md:items-center md:justify-center md:p-4">
+        <div className="fixed inset-0 z-[220] flex items-end bg-black/60 backdrop-blur-sm md:items-center md:justify-center md:p-4">
             <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F6F7FB] shadow-2xl md:h-auto md:max-h-[92vh] md:max-w-2xl md:rounded-3xl">
                 <header className="safe-area-top shrink-0 border-b border-white/10 bg-[#111111] px-4 pb-4 text-white md:pt-4">
                     <div className="flex min-h-[48px] items-center gap-3">

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Building, Zap, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Banknote, Droplets, Wifi, CalendarDays, ArrowRight, Edit3, Layers, ShieldCheck, Copy, Link as LinkIcon, PiggyBank, Archive, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Search, ArrowLeft } from 'lucide-react';
-import { RecurringBill, BillPaymentRecord, RecurringBillCategory, ExpenseItem } from '../../types';
+import { Building, Zap, Gauge, Wrench, Users, Trash2, Plus, DollarSign, X, CheckCircle2, History, AlertTriangle, FileCheck, Banknote, Droplets, Wifi, CalendarDays, ArrowRight, Edit3, Layers, ShieldCheck, Copy, Link as LinkIcon, PiggyBank, Archive, Loader2, Clipboard, ExternalLink, ChevronLeft, ChevronRight, Search, ArrowLeft , MoreVertical } from 'lucide-react';
+import { RecurringBill, BillPaymentRecord, RecurringBillCategory, ExpenseItem, BillCostShare } from '../../types';
+import { MeterBackfillModal, METER_CATEGORIES } from './recurring/MeterBackfillModal';
+import { BillDataFixModal, VENDOR_OPTIONS, CATEGORY_VENDOR, looksLikeAccountNo } from './recurring/BillDataFixModal';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { numberToWords, COMPANY_INFO } from '../../utils/paymentVoucherUtils';
+import { guardWrite } from '../../utils/readOnlyMode';
 
 interface RecurringBillsModuleProps {
     onClose: () => void;
@@ -12,8 +15,11 @@ interface RecurringBillsModuleProps {
 // === CATEGORY MAP: RecurringBill → AP ExpenseItem ===
 const BILL_TO_AP_CATEGORY: Record<RecurringBillCategory, string> = {
     'RENT': 'RENT',
+    'RENT_STAFF': 'RENT_STAFF',
     'ELECTRICITY': 'UTILITIES_ELECTRIC',
     'WATER': 'UTILITIES_WATER',
+    'ELECTRICITY_STAFF': 'UTILITIES_ELECTRIC_STAFF',
+    'WATER_STAFF': 'UTILITIES_WATER_STAFF',
     'INTERNET': 'INTERNET',
     'WASTE': 'WASTE',
     'LICENSE': 'LICENSE',
@@ -23,8 +29,11 @@ const BILL_TO_AP_CATEGORY: Record<RecurringBillCategory, string> = {
 
 const CATEGORY_CONFIG: Record<RecurringBillCategory, { label: string, icon: any, color: string, unit?: string, text: string }> = {
     'RENT': { label: '租金', text: 'RENT', icon: Building, color: 'bg-blue-50 text-blue-600 border-blue-200' },
+    'RENT_STAFF': { label: '宿舍租金', text: 'RENT-STAFF', icon: Building, color: 'bg-violet-50 text-violet-700 border-violet-200' },
     'ELECTRICITY': { label: '电费', text: 'ELECTRIC', icon: Zap, color: 'bg-yellow-50 text-yellow-600 border-yellow-200', unit: 'kWh' },
     'WATER': { label: '水费', text: 'WATER', icon: Droplets, color: 'bg-cyan-50 text-cyan-600 border-cyan-200', unit: 'm³' },
+    'ELECTRICITY_STAFF': { label: '宿舍电费', text: 'ELEC-STAFF', icon: Zap, color: 'bg-amber-50 text-amber-700 border-amber-200', unit: 'kWh' },
+    'WATER_STAFF': { label: '宿舍水费', text: 'WATER-STAFF', icon: Droplets, color: 'bg-sky-50 text-sky-700 border-sky-200', unit: 'm³' },
     'INTERNET': { label: '网络', text: 'WIFI', icon: Wifi, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
     'WASTE': { label: '垃圾费', text: 'WASTE', icon: Trash2, color: 'bg-gray-50 text-gray-600 border-gray-200' },
     'LICENSE': { label: '执照/SST', text: 'LICENSE', icon: ShieldCheck, color: 'bg-orange-50 text-orange-600 border-orange-200' },
@@ -54,10 +63,20 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     const [payLink, setPayLink] = useState(''); // NEW: Link URL State
     const [meterReadings, setMeterReadings] = useState<{ prev: string, curr: string }>({ prev: '', curr: '' });
     const [payUsage, setPayUsage] = useState<string>('');
+    /** 他人分摊（代收代付）明细 */
+    const [payShares, setPayShares] = useState<BillCostShare[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // EDIT MODE: editing an existing payment record
+    /** 哪张卡片的「⋯」菜单是打开的。卡片太窄塞不下 5 个按钮，次要操作全收进菜单里 */
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+    /**
+     * 这一笔支付记录要记在哪个会计科目。
+     * 预设跟账单主档一样，但可以单独改 —— 以前是写死 payingBill.category，
+     * 历史记录记错科目就只能去改主档，一改就连以后的都跟着变。
+     */
+    const [payCategory, setPayCategory] = useState<RecurringBillCategory | ''>('');
     
     // HISTORY FILTER: month filter + search + pagination
     const [historyMonth, setHistoryMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -77,6 +96,17 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
 
     // === BATCH PAYMENT SELECTION STATES ===
     const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+
+    // === 补录仪表读数 ===
+    const [isMeterBackfillOpen, setIsMeterBackfillOpen] = useState(false);
+
+    // === 账单资料修正（收款商/账号填错格、名称统一） ===
+    const [isBillFixOpen, setIsBillFixOpen] = useState(false);
+
+    // === 补记以前的账单（已缴的账单还要再补记一期） ===
+    const [isBackdateMode, setIsBackdateMode] = useState(false);
+    /** 使用者手动改过「上次读数」就不再自动覆盖 */
+    const [meterPrevTouched, setMeterPrevTouched] = useState(false);
 
     // === BATCH VOUCHER GENERATION STATES ===
     const [isBatchVoucherModalOpen, setIsBatchVoucherModalOpen] = useState(false);
@@ -130,6 +160,19 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
             }
         }
     }, [meterReadings]);
+
+    // 改了交易日期 → 重新带出「那个日期之前」的上次读数（使用者手动填过就不动）
+    useEffect(() => {
+        if (!isPayModalOpen || !payingBill) return;
+        if (meterPrevTouched) return;
+        if (!METER_CATEGORIES.includes(String(payingBill.category))) return;
+        const carried = getLastMeterCurr(payingBill.id, editingPaymentId || undefined, payDate);
+        setMeterReadings(prev => {
+            const next = carried !== undefined ? String(carried) : '';
+            return prev.prev === next ? prev : { ...prev, prev: next };
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [payDate, isPayModalOpen, payingBill?.id, meterPrevTouched, editingPaymentId]);
 
     const ensureAllPaymentsSynced = async (billsList: RecurringBill[], paymentsList: BillPaymentRecord[]) => {
         try {
@@ -207,12 +250,32 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
         setIsAddMode(true);
     };
 
+    /**
+     * 换分类时自动带出收款商。
+     * 只在「收款商还空着」或「原本就是上一个分类自动带的那个公司」时覆盖 ——
+     * 使用者自己打过的名字不会被冲掉。
+     */
+    const handleCategoryChange = (nextCategory: RecurringBillCategory) => {
+        setBillForm(prev => {
+            const current = (prev.payableTo || '').trim();
+            const prevAuto = CATEGORY_VENDOR[(prev.category || 'OTHER') as RecurringBillCategory] || '';
+            const nextAuto = CATEGORY_VENDOR[nextCategory] || '';
+            const canOverwrite = current === '' || current === prevAuto;
+            return {
+                ...prev,
+                category: nextCategory,
+                payableTo: canOverwrite && nextAuto ? nextAuto : prev.payableTo,
+            };
+        });
+    };
+
     const startEdit = (bill: RecurringBill) => {
         setBillForm({ ...bill });
         setIsAddMode(true);
     };
 
     const handleSaveBill = async () => {
+    if (!guardWrite('保存账单')) return;
         if (!billForm.name) return alert("Please enter a name");
         
         const rawBill: RecurringBill = {
@@ -248,21 +311,44 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     };
 
     const handleDeleteBill = async (id: string) => {
+    if (!guardWrite('删除账单')) return;
         if (!confirm("Confirm delete?")) return;
         await DataManager.deleteRecurringBill(id);
         loadData();
     };
 
     // --- PAYMENT LOGIC ---
-    const openPayModal = (bill: RecurringBill) => {
+    /**
+     * 同一张账单「这个日期之前」最近一期的本次读数 —— 用来自动带出这期的「上次」。
+     * 补记以前的账单时，带出来的是那个时间点之前的读数，不是最新那一期。
+     */
+    const getLastMeterCurr = (billId: string, excludePaymentId?: string, beforeDate?: string): number | undefined => {
+        const prevRecords = payments
+            .filter(p => p.billId === billId && p.id !== excludePaymentId && typeof p.meterCurr === 'number')
+            .filter(p => !beforeDate || p.date <= beforeDate)
+            .sort((a, b) => b.date.localeCompare(a.date));
+        return prevRecords.length > 0 ? prevRecords[0].meterCurr : undefined;
+    };
+
+    /** backdate = true：这张账单这个月已经缴过了，但还要补记以前那一期 */
+    const openPayModal = (bill: RecurringBill, backdate: boolean = false) => {
         setPayingBill(bill);
-        setPayAmount(bill.amount || 0);
-        setPayDate(new Date().toISOString().split('T')[0]);
+        setPayAmount(backdate ? 0 : (bill.amount || 0));
+        const today = new Date().toISOString().split('T')[0];
+        setPayDate(today);
         setPayRef('');
         setPayLink(''); // Reset Link
-        setMeterReadings({ prev: '', curr: '' });
+        // 水电类：把上一期的「本次读数」自动带进「上次」，省一次手抄
+        const carried = METER_CATEGORIES.includes(String(bill.category))
+            ? getLastMeterCurr(bill.id, undefined, today)
+            : undefined;
+        setMeterReadings({ prev: carried !== undefined ? String(carried) : '', curr: '' });
+        setMeterPrevTouched(false);
         setPayUsage('');
+        setPayShares([]);
+        setPayCategory(bill.category);
         setEditingPaymentId(null); // New payment mode
+        setIsBackdateMode(backdate);
         setIsPayModalOpen(true);
     };
 
@@ -276,8 +362,22 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
         setPayRef(payment.referenceNo || '');
         setPayLink(payment.linkUrl || '');
         setPayUsage(payment.usage?.toString() || '');
-        setMeterReadings({ prev: '', curr: '' }); // Can't restore meter readings
+        // 回填仪表读数；旧记录没存过 prev 的，用同账单上一期的「本次」补上
+        const fallbackPrev = payment.meterPrev === undefined || payment.meterPrev === null
+            ? getLastMeterCurr(payment.billId, payment.id, payment.date)
+            : undefined;
+        setMeterReadings({
+            prev: payment.meterPrev !== undefined && payment.meterPrev !== null
+                ? String(payment.meterPrev)
+                : (fallbackPrev !== undefined ? String(fallbackPrev) : ''),
+            curr: payment.meterCurr !== undefined && payment.meterCurr !== null ? String(payment.meterCurr) : '',
+        });
+        setPayShares(Array.isArray(payment.costShares) ? payment.costShares.map(x => ({ ...x })) : []);
+        // 原本就存过上次读数的，不让日期变动去覆盖它
+        setMeterPrevTouched(payment.meterPrev !== undefined && payment.meterPrev !== null);
+        setPayCategory((payment.category as RecurringBillCategory) || payment.billId && bills.find(b => b.id === payment.billId)?.category || 'OTHER');
         setEditingPaymentId(payment.id); // Edit mode
+        setIsBackdateMode(false);
         setIsPayModalOpen(true);
     };
 
@@ -290,12 +390,43 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
         }
     };
 
+    /** 分摊合计（只算填了金额的） */
+    const shareTotal = payShares.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
+    /** 净成本 = 我实际承担的部分 */
+    const netCost = (payAmount || 0) - shareTotal;
+
+    /** 以前填过的分摊方，拿来做下拉建议 */
+    const payerSuggestions = useMemo(() => {
+        const set = new Set<string>();
+        payments.forEach(p => (p.costShares || []).forEach(cs => { if (cs.payer?.trim()) set.add(cs.payer.trim()); }));
+        return Array.from(set).sort();
+    }, [payments]);
+
+    const addShareRow = () => setPayShares(prev => [...prev, { id: `cs_${Date.now()}_${prev.length}`, payer: '', amount: 0, received: false }]);
+    const updateShareRow = (id: string, patch: Partial<BillCostShare>) =>
+        setPayShares(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x)));
+    const removeShareRow = (id: string) => setPayShares(prev => prev.filter(x => x.id !== id));
+
     const confirmPayment = async () => {
         if (!payingBill) return;
         
         setIsSubmitting(true);
         try {
             const paymentId = editingPaymentId || `pay_${Date.now()}`;
+            // 这一笔要记在哪个科目：有选就用选的，没选才跟账单主档
+            const effectiveCategory: RecurringBillCategory =
+                (payCategory as RecurringBillCategory) || payingBill.category;
+            // 分摊：丢掉没填名字也没填金额的空行
+            const cleanShares: BillCostShare[] = payShares
+                .filter(x => (x.payer || '').trim() !== '' || Number(x.amount) > 0)
+                .map(x => ({
+                    id: x.id,
+                    payer: (x.payer || '').trim() || '未填名称',
+                    amount: Number(x.amount) || 0,
+                    received: !!x.received,
+                    ...(x.received && x.receivedDate ? { receivedDate: x.receivedDate } : {}),
+                }));
+            const cleanShareTotal = cleanShares.reduce((sum, x) => sum + x.amount, 0);
             
             const rawRecord: BillPaymentRecord = {
                 id: paymentId,
@@ -303,11 +434,14 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 name: payingBill.name,
                 amount: payAmount || 0,
                 date: payDate,
-                category: payingBill.category,
+                category: effectiveCategory,
                 method: payMethod,
                 referenceNo: payRef,
                 usage: payUsage ? parseFloat(payUsage) : undefined,
-                usageUnit: CATEGORY_CONFIG[payingBill.category]?.unit,
+                usageUnit: CATEGORY_CONFIG[effectiveCategory]?.unit,
+                meterPrev: meterReadings.prev !== '' && !isNaN(parseFloat(meterReadings.prev)) ? parseFloat(meterReadings.prev) : undefined,
+                meterCurr: meterReadings.curr !== '' && !isNaN(parseFloat(meterReadings.curr)) ? parseFloat(meterReadings.curr) : undefined,
+                costShares: cleanShares.length > 0 ? cleanShares : undefined,
                 linkUrl: payLink
             };
 
@@ -316,7 +450,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
             
             // === AP SYNC: Create/Update matching ExpenseItem in standalone_expenses ===
             const apId = `bill_sync_${paymentId}`;
-            const apCategory = BILL_TO_AP_CATEGORY[payingBill.category] || 'SUPPLIES';
+            const apCategory = BILL_TO_AP_CATEGORY[effectiveCategory] || 'SUPPLIES';
             const rawExpense: ExpenseItem = {
                 id: apId,
                 category: apCategory,
@@ -326,7 +460,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 paymentStatus: 'PAID',
                 paymentMethod: payMethod as any,
                 time: payDate,
-                note: `[经常性支出] ${payingBill.name}${payRef ? ` | Ref: ${payRef}` : ''}${payUsage ? ` | Usage: ${payUsage} ${CATEGORY_CONFIG[payingBill.category]?.unit || ''}` : ''}`,
+                note: `[经常性支出] ${payingBill.name}${payRef ? ` | Ref: ${payRef}` : ''}${payUsage ? ` | Usage: ${payUsage} ${CATEGORY_CONFIG[effectiveCategory]?.unit || ''}` : ''}${cleanShareTotal > 0 ? ` | 他人分摊: ${cleanShareTotal.toFixed(2)}（本店净负担 ${((payAmount || 0) - cleanShareTotal).toFixed(2)}）` : ''}`,
                 paidBy: payMethod === 'CASH' ? 'SHOP_CASH' : 'COMPANY',
                 linkUrl: payLink || undefined,
                 tags: ['RECURRING_BILL'],
@@ -335,10 +469,14 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
             await DataManager.saveStandaloneExpense(expense);
             
             // Update last paid date on the bill itself
+            // 补记以前那一期时，不可以把 lastPaidDate 往回拉（会让账单又变成 UNPAID）
             if (!editingPaymentId) {
-                const rawUpdatedBill = { ...payingBill, lastPaidDate: payDate };
-                const updatedBill = JSON.parse(JSON.stringify(rawUpdatedBill));
-                await DataManager.saveRecurringBill(updatedBill);
+                const existingLast = payingBill.lastPaidDate || '';
+                if (!existingLast || payDate >= existingLast) {
+                    const rawUpdatedBill = { ...payingBill, lastPaidDate: payDate };
+                    const updatedBill = JSON.parse(JSON.stringify(rawUpdatedBill));
+                    await DataManager.saveRecurringBill(updatedBill);
+                }
             }
             
             setIsPayModalOpen(false);
@@ -355,6 +493,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     };
 
     const handleDeletePayment = async (id: string) => {
+    if (!guardWrite('删除付款记录')) return;
         if(!confirm("确认删除此支付记录？\n(AP同步记录也会一并删除)")) return;
         
         // Delete the payment record
@@ -371,6 +510,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     };
 
     const handleBulkDeletePayments = async () => {
+    if (!guardWrite('批量删除付款')) return;
         if (selectedPaymentIds.length === 0) return alert("请先选择要删除的记录");
         if (!confirm(`⚠️ 确认批量删除这 ${selectedPaymentIds.length} 条支付记录吗？\n此操作不可撤销，且会一并删除 A/P 模块中对应的同步支出记账。`)) return;
 
@@ -396,6 +536,57 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
         } finally {
             setLoading(false);
         }
+    };
+
+    /**
+     * 账单资料修正：只改「名称 / 收款商 / 收款账户」三栏。
+     * syncPaymentNames = true 时，连带把旧支付记录的 name 改掉（金额一概不动）。
+     */
+    const handleSaveBillFix = async (
+        rows: Array<{ id: string; name: string; payableTo: string; accountNumber: string }>,
+        syncPaymentNames: boolean,
+    ) => {
+        if (rows.length === 0) return;
+        const renamed: Record<string, string> = {};
+        for (const row of rows) {
+            const bill = bills.find(b => b.id === row.id);
+            if (!bill) continue;
+            if ((bill.name || '') !== row.name) renamed[row.id] = row.name;
+            const merged = JSON.parse(JSON.stringify({
+                ...bill,
+                name: row.name,
+                payableTo: row.payableTo,
+                accountNumber: row.accountNumber,
+            }));
+            await DataManager.saveRecurringBill(merged);
+        }
+
+        let touchedPayments = 0;
+        if (syncPaymentNames && Object.keys(renamed).length > 0) {
+            const targets = payments.filter(p => renamed[p.billId] && p.name !== renamed[p.billId]);
+            for (const pay of targets) {
+                const merged = JSON.parse(JSON.stringify({ ...pay, name: renamed[pay.billId] }));
+                await DataManager.saveBillPayment(merged);
+                touchedPayments++;
+            }
+        }
+
+        alert(`✅ 已修正 ${rows.length} 张账单${touchedPayments > 0 ? `，并更新 ${touchedPayments} 条支付记录的名称` : ''}`);
+        loadData();
+    };
+
+    /** 补录仪表读数：只写 meterPrev / meterCurr，其他栏位原样保留 */
+    const handleSaveMeterBackfill = async (readingMap: Record<string, { meterPrev?: number; meterCurr?: number }>) => {
+        const ids = Object.keys(readingMap);
+        if (ids.length === 0) return;
+        for (const id of ids) {
+            const original = payments.find(p => p.id === id);
+            if (!original) continue;
+            const merged = JSON.parse(JSON.stringify({ ...original, ...readingMap[id] }));
+            await DataManager.saveBillPayment(merged);
+        }
+        alert(`✅ 已补录 ${ids.length} 条记录的仪表读数`);
+        loadData();
     };
 
     const openVoucherModal = (payment: BillPaymentRecord) => {
@@ -537,6 +728,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
     };
 
     const handleBulkPaySubmit = async () => {
+    if (!guardWrite('批量付款')) return;
         setIsSubmitting(true);
         try {
             for (const item of bulkBillsData) {
@@ -883,6 +1075,15 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         </button>
                                     )}
                                 </div>
+                                <button
+                                    onClick={() => setIsBillFixOpen(true)}
+                                    className="h-10 px-3 bg-white hover:bg-gray-50 text-stone-700 border border-gray-200 rounded-xl text-[11px] font-extrabold flex items-center gap-1.5 shrink-0 active:scale-95 transition-all shadow-xs"
+                                    title="账单资料修正（收款商/账号填错格、名称统一）"
+                                    style={{ minHeight: '40px' }}
+                                >
+                                    <Wrench size={14} className="text-orange-500"/>
+                                    <span className="hidden md:inline">修正资料</span>
+                                </button>
                                 <button 
                                     onClick={() => startAdd(activeTab)} 
                                     className="w-10 h-10 bg-[#FFD200] hover:bg-[#EEC600] text-black active:scale-95 transition-all rounded-xl flex items-center justify-center shadow-xs shrink-0"
@@ -921,7 +1122,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         );
                                                     }
                                                 }}
-                                                className={`bg-white border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 relative shadow-xs hover:shadow-sm cursor-pointer select-none h-[165px] min-h-[165px] ${
+                                                className={`bg-white border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 relative shadow-xs hover:shadow-sm cursor-pointer select-none min-h-[190px] h-full ${
                                                     isSelected
                                                         ? 'border-[#FFD200] ring-2 ring-[#FFD200]/20 bg-[#FFD200]/5'
                                                         : status === 'PAID' 
@@ -976,7 +1177,10 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         {bill.name}
                                                     </h4>
                                                     <div className="flex items-center justify-between gap-2 mt-0.5">
-                                                        <p className="text-[11px] text-gray-500 font-medium truncate">
+                                                        <p
+                                                            className={`text-[11px] font-medium truncate ${looksLikeAccountNo(bill.payableTo) ? 'text-orange-600 font-bold' : 'text-gray-500'}`}
+                                                            title={looksLikeAccountNo(bill.payableTo) ? '这格是「收款商公司名」，现在填的像是账号 —— 点编辑改一下' : (bill.payableTo || '')}
+                                                        >
                                                             {bill.payableTo || '-'}
                                                         </p>
                                                         {/* Mini advanced tags aligned right next to subtext to save space */}
@@ -996,100 +1200,134 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                 </div>
 
                                                 {/* Divider */}
-                                                <div className="border-t border-gray-100 my-1.5"></div>
+                                                <div className="border-t border-gray-100 my-2"></div>
 
-                                                {/* Bottom Row: Amount / Account & Buttons */}
-                                                <div className="flex items-end justify-between mt-auto select-none">
-                                                    {/* Left: Amount & Account */}
-                                                    <div className="min-w-0 flex-grow pr-1.5">
-                                                        <span className="text-[8px] uppercase font-bold text-gray-400 tracking-wider block">
-                                                            Amount
-                                                        </span>
-                                                        <span className="text-base font-mono font-black text-stone-900 leading-none mt-0.5 block">
-                                                            RM {(bill.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                        </span>
-                                                        
-                                                        {bill.accountNumber ? (
-                                                            <div className="flex items-center gap-1 text-gray-500 font-mono text-[9px] mt-1 leading-none">
-                                                                <span className="truncate max-w-[90px]" title={bill.accountNumber}>{bill.accountNumber}</span>
-                                                                <button 
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleCopyText(bill.accountNumber || '', bill.id);
-                                                                    }} 
-                                                                    className="text-gray-400 hover:text-stone-800 p-0.5 bg-gray-50 border border-gray-200 rounded active:scale-90 shrink-0"
-                                                                    title="Copy Account"
-                                                                >
-                                                                    {copiedId === bill.id ? (
-                                                                        <span className="text-[7px] text-green-600 font-black px-0.5">Copied</span>
-                                                                    ) : (
-                                                                        <Copy size={8}/>
-                                                                    )}
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[9px] text-gray-400 italic block mt-1 leading-none">No Account</span>
-                                                        )}
-                                                    </div>
- 
-                                                    {/* Right: Actions */}
-                                                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                                                        {bill.paymentLink && (
-                                                            <a 
-                                                                href={bill.paymentLink} 
-                                                                target="_blank" 
-                                                                rel="noreferrer" 
-                                                                className="w-8 h-8 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 rounded-xl flex items-center justify-center transition-all shadow-xs" 
-                                                                title="Official Link"
-                                                            >
-                                                                <LinkIcon size={12}/>
-                                                            </a>
-                                                        )}
-                                                        
-                                                        <button 
-                                                            onClick={() => startEdit(bill)} 
-                                                            className="w-8 h-8 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 rounded-xl flex items-center justify-center active:scale-95 transition-all shadow-xs"
-                                                            title="Edit"
-                                                        >
-                                                            <Edit3 size={12}/>
-                                                        </button>
+                                                {/* ─────────────────────────────────────────────
+                                                    金额区：独占整行，永远不会被按钮挤到
+                                                   ───────────────────────────────────────────── */}
+                                                <div className="min-w-0 mt-auto select-none">
+                                                    <span className="text-[8px] uppercase font-bold text-gray-400 tracking-wider block">
+                                                        Amount
+                                                    </span>
+                                                    <span className="text-lg font-mono font-black text-stone-900 leading-none mt-0.5 block truncate">
+                                                        RM {(bill.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </span>
 
-                                                        <button 
-                                                            onClick={() => handleDeleteBill(bill.id)} 
-                                                            className="w-8 h-8 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl flex items-center justify-center active:scale-95 transition-all shadow-xs"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 size={12}/>
-                                                        </button>
-                                                        
-                                                        {status === 'UNPAID' ? (
-                                                            <button 
-                                                                onClick={() => openPayModal(bill)} 
-                                                                className="h-8 bg-[#FFD200] hover:bg-[#EEC600] text-black active:scale-95 font-extrabold text-[10px] px-3.5 rounded-xl transition-all shadow-xs flex items-center gap-0.5"
+                                                    {bill.accountNumber ? (
+                                                        <div className="flex items-center gap-1 text-gray-500 font-mono text-[9px] mt-1 leading-none">
+                                                            <span className="truncate" title={bill.accountNumber}>{bill.accountNumber}</span>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleCopyText(bill.accountNumber || '', bill.id);
+                                                                }}
+                                                                className="text-gray-400 hover:text-stone-800 p-0.5 bg-gray-50 border border-gray-200 rounded active:scale-90 shrink-0"
+                                                                title="Copy Account"
                                                             >
-                                                                <DollarSign size={10} strokeWidth={3}/> Pay
-                                                            </button>
-                                                        ) : (
-                                                            <div className="flex items-center gap-1">
-                                                                {latestPay?.linkUrl && (
-                                                                    <a 
-                                                                        href={latestPay.linkUrl} 
-                                                                        target="_blank" 
-                                                                        rel="noreferrer" 
-                                                                        className="w-8 h-8 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center" 
-                                                                        title="Receipt"
-                                                                    >
-                                                                        <Clipboard size={12}/>
-                                                                    </a>
+                                                                {copiedId === bill.id ? (
+                                                                    <span className="text-[7px] text-green-600 font-black px-0.5">Copied</span>
+                                                                ) : (
+                                                                    <Copy size={8}/>
                                                                 )}
-                                                                <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 h-8 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-0.5">
-                                                                    Paid 🧾
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[9px] text-gray-400 italic block mt-1 leading-none">No Account</span>
+                                                    )}
+                                                </div>
+
+                                                {/* ─────────────────────────────────────────────
+                                                    操作区：一个主按钮 + 一个「⋯」菜单，永远只有两个元素
+                                                    （以前并排 5 个按钮，窄卡片塞不下会溢出到卡片外面）
+                                                   ───────────────────────────────────────────── */}
+                                                <div className="flex items-center gap-1.5 mt-2.5" onClick={e => e.stopPropagation()}>
+                                                    {status === 'UNPAID' ? (
+                                                        <button
+                                                            onClick={() => openPayModal(bill)}
+                                                            className="flex-1 min-w-0 h-9 bg-[#FFD200] hover:bg-[#E5C100] text-black active:scale-95 font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm"
+                                                        >
+                                                            <DollarSign size={12} strokeWidth={3}/> 付款 Pay
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex-1 min-w-0 h-9 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1">
+                                                            <CheckCircle2 size={12} strokeWidth={3}/> 已付款
+                                                        </div>
+                                                    )}
+
+                                                    {/* 「⋯」更多操作 */}
+                                                    <div className="relative shrink-0">
+                                                        <button
+                                                            onClick={() => setOpenMenuId(openMenuId === bill.id ? null : bill.id)}
+                                                            className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all active:scale-95 ${
+                                                                openMenuId === bill.id
+                                                                    ? 'bg-stone-900 border-stone-900 text-white'
+                                                                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                                            }`}
+                                                            title="更多操作"
+                                                        >
+                                                            <MoreVertical size={14}/>
+                                                        </button>
+
+                                                        {openMenuId === bill.id && (
+                                                            <>
+                                                                {/* 点空白处关掉菜单 */}
+                                                                <div
+                                                                    className="fixed inset-0 z-30"
+                                                                    onClick={() => setOpenMenuId(null)}
+                                                                />
+                                                                <div className="absolute bottom-full right-0 mb-1.5 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-40 overflow-hidden py-1">
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); startEdit(bill); }}
+                                                                        className="w-full px-3 py-2.5 flex items-center gap-2 text-[11px] font-bold text-gray-700 hover:bg-gray-50 active:bg-gray-100 text-left min-h-[44px] md:min-h-0"
+                                                                    >
+                                                                        <Edit3 size={13} className="text-gray-400 shrink-0"/> 编辑账单
+                                                                    </button>
+
+                                                                    {bill.paymentLink && (
+                                                                        <a
+                                                                            href={bill.paymentLink}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            onClick={() => setOpenMenuId(null)}
+                                                                            className="w-full px-3 py-2.5 flex items-center gap-2 text-[11px] font-bold text-gray-700 hover:bg-gray-50 active:bg-gray-100 min-h-[44px] md:min-h-0"
+                                                                        >
+                                                                            <LinkIcon size={13} className="text-gray-400 shrink-0"/> 官方缴费网站
+                                                                        </a>
+                                                                    )}
+
+                                                                    {status === 'PAID' && latestPay?.linkUrl && (
+                                                                        <a
+                                                                            href={latestPay.linkUrl}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            onClick={() => setOpenMenuId(null)}
+                                                                            className="w-full px-3 py-2.5 flex items-center gap-2 text-[11px] font-bold text-blue-700 hover:bg-blue-50 active:bg-blue-100 min-h-[44px] md:min-h-0"
+                                                                        >
+                                                                            <Clipboard size={13} className="text-blue-400 shrink-0"/> 查看单据
+                                                                        </a>
+                                                                    )}
+
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); openPayModal(bill, true); }}
+                                                                        className="w-full px-3 py-2.5 flex items-center gap-2 text-[11px] font-bold text-amber-700 hover:bg-amber-50 active:bg-amber-100 text-left min-h-[44px] md:min-h-0"
+                                                                    >
+                                                                        <History size={13} className="text-amber-500 shrink-0"/> 补记以前的账单
+                                                                    </button>
+
+                                                                    <div className="border-t border-gray-100 my-1" />
+
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); handleDeleteBill(bill.id); }}
+                                                                        className="w-full px-3 py-2.5 flex items-center gap-2 text-[11px] font-bold text-red-600 hover:bg-red-50 active:bg-red-100 text-left min-h-[44px] md:min-h-0"
+                                                                    >
+                                                                        <Trash2 size={13} className="text-red-400 shrink-0"/> 删除账单
+                                                                    </button>
                                                                 </div>
-                                                            </div>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </div>
-                                                
+
                                                 {bill.lastPaidDate && (
                                                     <div className="mt-1.5 text-[8px] text-gray-400 font-medium flex items-center gap-1 select-all">
                                                         <History size={8} className="shrink-0"/>
@@ -1158,6 +1396,15 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         />
                                     </div>
                                     
+                                    <button
+                                        onClick={() => setIsMeterBackfillOpen(true)}
+                                        className="h-9 px-3 bg-white hover:bg-gray-50 text-stone-700 border border-gray-200 rounded-xl text-[11px] font-extrabold flex items-center gap-1.5 shrink-0 active:scale-95 transition-all shadow-2xs"
+                                        title="补录仪表读数"
+                                    >
+                                        <Gauge size={13} className="text-indigo-500"/>
+                                        <span className="hidden md:inline">补录读数</span>
+                                    </button>
+
                                     {selectedPaymentIds.length > 0 ? (
                                         <button 
                                             onClick={handleBulkDeletePayments} 
@@ -1230,6 +1477,11 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                     <div className="text-[9px] text-gray-400 font-mono font-bold leading-none">{p.date} • {p.method?.replace('_', ' ')}</div>
                                                     {p.referenceNo && <div className="text-[9px] text-gray-500 font-semibold mt-1 leading-none">Ref: {p.referenceNo}</div>}
                                                     {p.usage && <div className="text-[9px] text-indigo-600 font-black mt-1 bg-indigo-50 px-1.5 py-0.5 rounded inline-block leading-none">Usage: {p.usage} {p.usageUnit}</div>}
+                                                    {typeof p.meterPrev === 'number' && typeof p.meterCurr === 'number' && (
+                                                        <div className="text-[9px] font-mono font-black text-stone-600 mt-1 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded inline-block leading-none ml-1">
+                                                            {p.meterPrev} &rarr; {p.meterCurr}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 
                                                 <div className="flex flex-col items-end gap-1.5 shrink-0" onClick={(e) => { e.stopPropagation(); }}>
@@ -1313,10 +1565,26 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                                         </td>
                                                         <td className="p-3 font-mono text-[11px] text-gray-400 font-medium">{p.date}</td>
                                                         <td className="p-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-extrabold text-stone-900">{p.name}</span>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-extrabold text-stone-900 whitespace-nowrap">{p.name}</span>
                                                                 <span className="text-[8px] text-gray-500 bg-gray-100 border border-gray-200 px-1 py-0.5 rounded font-black uppercase tracking-wider">{p.category}</span>
                                                                 {p.usage && <span className="text-[8px] text-indigo-600 font-black bg-indigo-50 px-1.5 py-0.5 rounded">Usage: {p.usage} {p.usageUnit}</span>}
+                                                                {typeof p.meterPrev === 'number' && typeof p.meterCurr === 'number' && (
+                                                                    <span className="text-[8px] font-mono font-black text-stone-600 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                                        {p.meterPrev} &rarr; {p.meterCurr}
+                                                                    </span>
+                                                                )}
+                                                                {(() => {
+                                                                    const st = (p.costShares || []).reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
+                                                                    if (st <= 0) return null;
+                                                                    const unpaid = (p.costShares || []).filter(x => !x.received).reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
+                                                                    return (
+                                                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border whitespace-nowrap ${unpaid > 0 ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}
+                                                                            title={(p.costShares || []).map(x => `${x.payer} ${Number(x.amount).toFixed(2)}${x.received ? ' 已收' : ' 未收'}`).join('\n')}>
+                                                                            分摊 -{st.toFixed(2)} · 净 {(Number(p.amount || 0) - st).toFixed(2)}{unpaid > 0 ? ` · 未收 ${unpaid.toFixed(2)}` : ''}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         </td>
                                                         <td className="p-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wide">{p.method?.replace('_', ' ')}</td>
@@ -1400,8 +1668,11 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none focus:border-[#FFD200]" 
                                         value={billForm.name || ''} 
                                         onChange={e => setBillForm({...billForm, name: e.target.value})} 
-                                        placeholder="例如：TNB 电费账单、水费、员工宿舍租金..." 
+                                        placeholder="例如：店内TNB、宿舍TNB、店内水费、宿舍水费..." 
                                     />
+                                    <p className="text-[10px] text-gray-400 font-bold mt-1 leading-relaxed">
+                                        名称用来分「哪个单位」——「店内TNB / 宿舍TNB」；公司名（TNB）填在下面的收款商栏。
+                                    </p>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-3.5">
@@ -1410,7 +1681,7 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         <select 
                                             className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold text-xs md:text-sm outline-none" 
                                             value={billForm.category || 'OTHER'} 
-                                            onChange={e => setBillForm({...billForm, category: e.target.value as any})}
+                                            onChange={e => handleCategoryChange(e.target.value as RecurringBillCategory)}
                                         >
                                             {Object.entries(CATEGORY_CONFIG).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
                                         </select>
@@ -1471,7 +1742,19 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                             value={billForm.payableTo || ''} 
                                             onChange={e => setBillForm({...billForm, payableTo: e.target.value})} 
                                             placeholder="例如: TNB, Air Selangor, Maxis..." 
+                                            list="vendor-options-form"
                                         />
+                                        <datalist id="vendor-options-form">
+                                            {VENDOR_OPTIONS.map(v => <option key={v} value={v} />)}
+                                        </datalist>
+                                        {looksLikeAccountNo(billForm.payableTo) ? (
+                                            <p className="text-[10px] text-orange-600 font-black mt-1 flex items-start gap-1 leading-relaxed">
+                                                <AlertTriangle size={11} className="shrink-0 mt-0.5"/>
+                                                这看起来是账号。这格填<b>公司名</b>（TNB / Air Selangor），账号请填右边那格。
+                                            </p>
+                                        ) : (
+                                            <p className="text-[10px] text-gray-400 font-bold mt-1">填公司名，不是账号。</p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-extrabold text-stone-500 mb-1 block">收款账户 (Account Number)</label>
@@ -1553,18 +1836,26 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                 {isPayModalOpen && payingBill && (
                     <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-white w-full max-w-sm rounded-2xl p-6 md:p-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-                            <h3 className="font-extrabold text-xl text-stone-900 mb-1">{editingPaymentId ? '编辑支付记录 (Edit Payment)' : '支付账单 (Pay Bill)'}</h3>
-                            <p className="text-xs font-bold text-stone-500 mb-5">{payingBill.name}</p>
+                            <h3 className="font-extrabold text-xl text-stone-900 mb-1">
+                                {editingPaymentId ? '编辑支付记录 (Edit Payment)' : isBackdateMode ? '补记以前的账单 (Back-record)' : '支付账单 (Pay Bill)'}
+                            </h3>
+                            <p className="text-xs font-bold text-stone-500 mb-3">{payingBill.name}</p>
+                            {isBackdateMode && (
+                                <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-900 font-bold leading-relaxed">
+                                    这张账单本期已经缴过了。这里是<b>另外补记一笔</b> —— 请把日期改成那一期的实际付款日，金额照那张账单填。
+                                    补记比较旧的日期不会影响账单现在的「已缴」状态。
+                                </div>
+                            )}
                             
                             <div className="space-y-4">
                                 {/* Auto Meter Calc for Utilities */}
-                                {['ELECTRICITY', 'WATER'].includes(payingBill.category) && (
+                                {METER_CATEGORIES.includes(String(payingBill.category)) && (
                                     <div className="bg-stone-50 p-4 rounded-xl border border-stone-200/60 shadow-xs mb-3">
                                         <p className="text-[10px] font-extrabold text-stone-600 uppercase mb-2 flex items-center gap-1">仪表读数 Meter Reading ({CATEGORY_CONFIG[payingBill.category].unit})</p>
                                         <div className="flex gap-3.5 items-center">
                                             <div className="w-full">
                                                 <span className="text-[9px] font-bold text-stone-400 block mb-0.5">上次 Prev</span>
-                                                <input type="number" placeholder="Prev" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD200]" value={meterReadings.prev} onChange={e => setMeterReadings({...meterReadings, prev: e.target.value})} />
+                                                <input type="number" placeholder="Prev" className="w-full p-2.5 bg-white border border-stone-200 rounded text-xs font-bold text-center outline-none focus:border-[#FFD200]" value={meterReadings.prev} onChange={e => { setMeterPrevTouched(true); setMeterReadings({...meterReadings, prev: e.target.value}); }} />
                                             </div>
                                             <ArrowRight size={14} className="text-stone-400 shrink-0 mt-3"/>
                                             <div className="w-full">
@@ -1576,6 +1867,33 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                     </div>
                                 )}
 
+                                {/* 🟢 这一笔记在哪个科目 —— 可以跟账单主档不一样 */}
+                                <div>
+                                    <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">
+                                        对应分类 (Category)
+                                    </label>
+                                    <select
+                                        value={payCategory || payingBill.category}
+                                        onChange={e => setPayCategory(e.target.value as RecurringBillCategory)}
+                                        className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl font-bold outline-none focus:border-[#FFD200] text-[16px] md:text-sm"
+                                        style={{ minHeight: '48px' }}
+                                    >
+                                        {(Object.keys(CATEGORY_CONFIG) as RecurringBillCategory[]).map(key => (
+                                            <option key={key} value={key}>
+                                                {CATEGORY_CONFIG[key].label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-gray-400 font-bold mt-1 leading-relaxed">
+                                        只改这一笔的记账科目，不会动到账单主档
+                                        {payCategory && payCategory !== payingBill.category && (
+                                            <span className="text-amber-600">
+                                                {" "}· 目前跟主档「{CATEGORY_CONFIG[payingBill.category]?.label}」不一样
+                                            </span>
+                                        )}
+                                    </p>
+                                </div>
+
                                 <div>
                                     <label className="text-[10px] font-extrabold text-stone-500 uppercase mb-1.5 block">Amount (支付款额 - RM)</label>
                                     <input 
@@ -1584,6 +1902,87 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                                         value={payAmount || ''} 
                                         onChange={e => setPayAmount(parseFloat(e.target.value) || 0)} 
                                     />
+                                    <p className="text-[10px] text-gray-400 font-bold mt-1">整张账单的实付金额（含其他商家分摊的部分）。</p>
+                                </div>
+
+                                {/* 他人分摊（代收代付）：整张先付，之后跟其他商家收回来 */}
+                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-extrabold text-stone-600 uppercase flex items-center gap-1.5">
+                                            <Users size={12} className="text-indigo-500"/> 他人分摊 (代收代付)
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={addShareRow}
+                                            className="h-7 px-2.5 bg-white border border-stone-200 hover:bg-stone-100 rounded-lg text-[10px] font-black text-stone-700 flex items-center gap-1"
+                                        >
+                                            <Plus size={11}/> 加一行
+                                        </button>
+                                    </div>
+
+                                    {payShares.length === 0 ? (
+                                        <p className="text-[10px] text-gray-400 font-bold leading-relaxed">
+                                            整张账单都是本店的就不用填。若有其他商家分摊（例如电费 7000 里有 3000 是别家的），按「加一行」填进去 —— 财报的成本只会算本店那部分。
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            {payShares.map(row => (
+                                                <div key={row.id} className="flex items-center gap-1.5">
+                                                    <input
+                                                        list="share-payer-options"
+                                                        value={row.payer}
+                                                        onChange={e => updateShareRow(row.id, { payer: e.target.value })}
+                                                        placeholder="谁分摊"
+                                                        className="flex-grow min-w-0 px-2 h-9 bg-white border border-stone-200 rounded-lg text-xs font-bold outline-none focus:border-[#FFD200]"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        value={row.amount || ''}
+                                                        onChange={e => updateShareRow(row.id, { amount: parseFloat(e.target.value) || 0 })}
+                                                        placeholder="RM"
+                                                        className="w-24 shrink-0 px-2 h-9 bg-white border border-stone-200 rounded-lg text-xs font-mono font-bold text-right outline-none focus:border-[#FFD200]"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateShareRow(row.id, { received: !row.received, receivedDate: !row.received ? payDate : undefined })}
+                                                        className={`h-9 px-2 shrink-0 rounded-lg text-[10px] font-black border transition-all ${
+                                                            row.received
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                : 'bg-white text-gray-400 border-stone-200'
+                                                        }`}
+                                                        title={row.received ? '已收到这笔钱' : '还没收到'}
+                                                    >
+                                                        {row.received ? '已收' : '未收'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeShareRow(row.id)}
+                                                        className="w-9 h-9 shrink-0 bg-white text-red-500 border border-red-100 rounded-lg flex items-center justify-center"
+                                                    >
+                                                        <Trash2 size={12}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <datalist id="share-payer-options">
+                                                {payerSuggestions.map(v => <option key={v} value={v} />)}
+                                            </datalist>
+
+                                            <div className="pt-2 mt-1 border-t border-stone-200 flex items-center justify-between">
+                                                <span className="text-[10px] font-extrabold text-stone-500 uppercase">本店净负担 (计入成本)</span>
+                                                <span className={`font-mono font-black text-sm ${netCost < 0 ? 'text-red-600' : 'text-stone-900'}`}>
+                                                    RM {netCost.toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-400 font-mono text-right">
+                                                {(payAmount || 0).toFixed(2)} − 分摊 {shareTotal.toFixed(2)}
+                                            </div>
+                                            {netCost < 0 && (
+                                                <div className="text-[10px] text-red-600 font-black flex items-center gap-1">
+                                                    <AlertTriangle size={11}/> 分摊比实付金额还多，请检查
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 <div>
@@ -2354,6 +2753,27 @@ export const RecurringBillsModule: React.FC<RecurringBillsModuleProps> = ({ onCl
                             </div>
                         </div>
                     </div>
+                )}
+
+                {/* 账单资料修正 */}
+                {isBillFixOpen && (
+                    <BillDataFixModal
+                        isOpen={isBillFixOpen}
+                        onClose={() => setIsBillFixOpen(false)}
+                        bills={bills}
+                        payments={payments}
+                        onSave={handleSaveBillFix}
+                    />
+                )}
+
+                {/* 补录仪表读数 */}
+                {isMeterBackfillOpen && (
+                    <MeterBackfillModal
+                        isOpen={isMeterBackfillOpen}
+                        onClose={() => setIsMeterBackfillOpen(false)}
+                        payments={payments}
+                        onSave={handleSaveMeterBackfill}
+                    />
                 )}
 
             </div>

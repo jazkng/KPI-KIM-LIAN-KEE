@@ -1,22 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Utensils, Plus, Search, Edit3, Trash2, X, Save, Box,
-    Truck, RefreshCw, Loader2, Copy, Layers, AlertTriangle, Wrench,
+    Truck, RefreshCw, Loader2, Copy, Layers, AlertTriangle,
     ArrowLeft, ArrowRight, Move, ChevronLeft, ChevronDown, ChevronUp,
     BookOpen, Clock, Youtube, Hash, Film,
-    StickyNote, ListOrdered, Sparkles, Info, Check, ExternalLink, Scale
+    StickyNote, ListOrdered, Sparkles, Info, Check, ExternalLink, Scale, Upload
 } from 'lucide-react';
 import { MenuItem, MenuCategory, MenuVariant, StockItem, MenuIngredient } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { useIsMobile } from '../../utils/useIsMobile';
 import {
     getBaseUnit,
-    getCostPerBaseUnit,
-    getCurrentQtyBase,
-    getDisplayToBaseRatio,
-    normalizeUnitName,
-    roundQuantity,
-    toPositiveNumber
+    getCostPerBaseUnit
 } from '../../utils/unitConversion';
 import { MENU_CATEGORIES, INITIAL_MENU_ITEMS } from '../../constants/menu';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -65,36 +60,6 @@ const STOCK_CATEGORIES: Record<string, string> = {
     'FRUIT': '水果 (Fruit)', 'RTD': '罐装 (Drinks)', 'OTHER': '其他 (Other)'
 };
 
-const convertStockQuantityToBase = (item: StockItem, quantity: number, unit?: string): number => {
-    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
-    const requestedUnit = normalizeUnitName(unit);
-    const baseUnit = normalizeUnitName(getBaseUnit(item));
-
-    if (!requestedUnit || requestedUnit === baseUnit) return roundQuantity(safeQuantity);
-
-    if (item.displayUnit && requestedUnit === normalizeUnitName(item.displayUnit)) {
-        return roundQuantity(safeQuantity * getDisplayToBaseRatio(item));
-    }
-
-    const purchaseUnit = item.purchaseUnits?.find(rule =>
-        [rule.unitName, (rule as any).name, (rule as any).unit]
-            .some(name => normalizeUnitName(name) === requestedUnit)
-    );
-    if (purchaseUnit) {
-        return roundQuantity(safeQuantity * toPositiveNumber(purchaseUnit.toBaseRatio, 1));
-    }
-
-    const legacyUnit = item.uomOptions?.find(option =>
-        [option.value, option.label].some(name => normalizeUnitName(name) === requestedUnit)
-    );
-    if (legacyUnit) {
-        return roundQuantity(safeQuantity * toPositiveNumber(legacyUnit.ratio, 1));
-    }
-
-    // 历史模板的 bulkUnit 通常就是旧版 item.unit；无法匹配时按基础单位处理，避免重复换算。
-    return roundQuantity(safeQuantity);
-};
-
 // 👑 提取 YouTube ID，用于缩略图预览 (兼容 youtu.be / youtube.com/watch / shorts / embed 等格式)
 const extractYouTubeId = (url?: string): string | null => {
     if (!url) return null;
@@ -117,6 +82,41 @@ const sortRecipeByOrder = (recipe?: MenuIngredient[]): MenuIngredient[] => {
 };
 
 // 👑 重新计算规格成本 (recipe 任何变更后必须调用)
+// 👑 公制单位换算表 (factor = 折成该族最小单位的倍数)
+const METRIC_UNITS: Record<string, { family: 'mass' | 'vol'; factor: number }> = {
+    'g': { family: 'mass', factor: 1 },
+    'gram': { family: 'mass', factor: 1 },
+    'grams': { family: 'mass', factor: 1 },
+    '克': { family: 'mass', factor: 1 },
+    'kg': { family: 'mass', factor: 1000 },
+    'kgs': { family: 'mass', factor: 1000 },
+    '公斤': { family: 'mass', factor: 1000 },
+    'ml': { family: 'vol', factor: 1 },
+    '毫升': { family: 'vol', factor: 1 },
+    'l': { family: 'vol', factor: 1000 },
+    'ltr': { family: 'vol', factor: 1000 },
+    'litre': { family: 'vol', factor: 1000 },
+    '升': { family: 'vol', factor: 1000 },
+};
+
+// 👑 单位切换环：基础单位 → 公制孪生 (g/kg) → 展示单位 (Pack/CTN)
+// toBase = 1 个该单位 等于多少个基础单位
+const getUnitCycle = (ing: MenuIngredient, stockItems: StockItem[]): { unit: string; toBase: number }[] => {
+    const stockItem = stockItems.find(s => s.id === ing.stockId);
+    const base = (stockItem ? getBaseUnit(stockItem) : (ing.unit || '')).trim();
+    if (!base) return [];
+    const cycle: { unit: string; toBase: number }[] = [{ unit: base, toBase: 1 }];
+    const m = METRIC_UNITS[base.toLowerCase()];
+    if (m?.family === 'mass') cycle.push(m.factor === 1000 ? { unit: 'g', toBase: 0.001 } : { unit: 'kg', toBase: 1000 });
+    if (m?.family === 'vol') cycle.push(m.factor === 1000 ? { unit: 'ml', toBase: 0.001 } : { unit: 'L', toBase: 1000 });
+    const disp = (stockItem?.displayUnit || '').trim();
+    const dispRatio = Number(stockItem?.displayToBaseRatio) || 0;
+    if (disp && dispRatio > 0 && !cycle.some(c => c.unit.toLowerCase() === disp.toLowerCase())) {
+        cycle.push({ unit: disp, toBase: dispRatio });
+    }
+    return cycle;
+};
+
 const getIngredientCostDetail = (
     ingredient: MenuIngredient,
     stockItems: StockItem[]
@@ -127,7 +127,7 @@ const getIngredientCostDetail = (
     baseCost: number;
     yieldPercent: number;
     effectiveCost: number;
-    conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'fallback';
+    conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'metric' | 'fallback';
 } => {
     const stockItem = stockItems.find(s => s.id === ingredient.stockId);
     
@@ -145,11 +145,18 @@ const getIngredientCostDetail = (
     const normDisplayUnit = (stockItem?.displayUnit || '').trim().toLowerCase();
     
     let baseQty = recipeQty;
-    let conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'fallback' = 'direct';
+    let conversionPath: 'direct' | 'base' | 'display' | 'purchase' | 'metric' | 'fallback' = 'direct';
+    
+    // 👑 同族公制换算 (g↔kg / ml↔L)，防止切到 g 后掉进 fallback 放大 1000 倍
+    const mRecipe = METRIC_UNITS[normRecipeUnit];
+    const mBase = METRIC_UNITS[normBaseUnit];
     
     if (normRecipeUnit === normBaseUnit) {
         baseQty = recipeQty;
         conversionPath = 'base';
+    } else if (mRecipe && mBase && mRecipe.family === mBase.family) {
+        baseQty = recipeQty * (mRecipe.factor / mBase.factor);
+        conversionPath = 'metric';
     } else if (normDisplayUnit && normRecipeUnit === normDisplayUnit) {
         const displayRatio = stockItem?.displayToBaseRatio ?? 1;
         baseQty = recipeQty * displayRatio;
@@ -213,6 +220,246 @@ const recalcVariantCost = (recipe?: MenuIngredient[], overheadMarginPercent?: nu
     return baseCost * (1 + (overheadMarginPercent || 0) / 100);
 };
 
+
+// ============================================================
+// Excel 配方一键导入（只认「配方填写_App同步」同步页）
+// ============================================================
+type RecipeImportSize = 'S' | 'M' | 'L';
+
+type RecipeImportRow = {
+    menuCode: string;
+    menuName: string;
+    stockId: string;
+    stockChoice: string;
+    stockName: string;
+    declaredUnit: string;
+    excelBaseUnit: string;
+    conversionRatio: number;
+    order: number;
+    qty: Record<RecipeImportSize, unknown>;
+    note: string;
+    status: string;
+};
+
+type MaterialMasterImport = {
+    stockId: string;
+    stockName: string;
+    appUnit: string;
+    recipeUnit: string;
+    ratio: number;
+};
+
+type ParsedImportQty = {
+    qty: number;
+    unit: string;
+    original: string;
+    explicitUnit: boolean;
+    rangeUsed: boolean;
+};
+
+const normalizeExcelKey = (value: unknown): string => String(value ?? '')
+    .trim()
+    .replace(/[\s_＿]/g, '')
+    .replace(/[（）()\/]/g, '')
+    .toLowerCase();
+
+const getExcelCell = (row: Record<string, unknown>, aliases: string[]): unknown => {
+    for (const alias of aliases) {
+        if (Object.prototype.hasOwnProperty.call(row, alias)) return row[alias];
+    }
+    const aliasKeys = new Set(aliases.map(normalizeExcelKey));
+    const entry = Object.entries(row).find(([key]) => aliasKeys.has(normalizeExcelKey(key)));
+    return entry?.[1];
+};
+
+const normalizeSheetName = (name: string): string => name
+    .replace(/[①❶]/g, '')
+    .replace(/[\s_＿]/g, '')
+    .toLowerCase();
+
+const cleanExcelText = (value: unknown): string => {
+    const text = String(value ?? '').trim();
+    // 某些 Excel/浏览器组合会把公式本身读出来；公式文字绝不能当成 ID / 单位。
+    return text.startsWith('=') ? '' : text;
+};
+
+const normalizeImportCode = (value: unknown): string => cleanExcelText(value)
+    .replace(/\s+/g, '')
+    .toUpperCase();
+
+const extractCodeFromText = (value: unknown): string => {
+    const text = cleanExcelText(value);
+    if (!text) return '';
+
+    const beforePipe = text.split('|')[0].trim();
+    if (beforePipe && !/\s/.test(beforePipe) && /[A-Za-z]/.test(beforePipe) && /\d/.test(beforePipe)) {
+        return normalizeImportCode(beforePipe);
+    }
+
+    const match = text.toUpperCase().match(/[A-Z][A-Z0-9_-]*\d[A-Z0-9_-]*/);
+    return match ? normalizeImportCode(match[0]) : '';
+};
+
+const extractNameFromChoice = (value: unknown): string => {
+    const text = cleanExcelText(value);
+    if (!text) return '';
+    const parts = text.split('|');
+    return (parts.length > 1 ? parts.slice(1).join('|') : text).trim();
+};
+
+const normalizeImportName = (value: unknown): string => cleanExcelText(value)
+    .toLowerCase()
+    .replace(/[\s（）()\-_/|,.，。:：'"]/g, '');
+
+const canonicalMetricUnit = (raw: string): string => {
+    const unit = raw.trim();
+    const lower = unit.toLowerCase();
+    if (['g', 'gram', 'grams', '克'].includes(lower)) return 'g';
+    if (['kg', 'kgs', '公斤'].includes(lower)) return 'kg';
+    if (['ml', '毫升'].includes(lower)) return 'ml';
+    if (['l', 'ltr', 'litre', 'liter', '升'].includes(lower)) return 'L';
+    return unit;
+};
+
+const isGenericCountUnit = (raw: string): boolean => {
+    const unit = raw.trim().toLowerCase();
+    return ['pc', 'pcs', 'piece', 'pieces', '粒', '个', '只', '支', '片', '条', '块', '份', '枚'].includes(unit);
+};
+
+const sameUnit = (a: string, b: string): boolean => {
+    const left = canonicalMetricUnit(a).trim().toLowerCase();
+    const right = canonicalMetricUnit(b).trim().toLowerCase();
+    return !!left && left === right;
+};
+
+const resolveRecipeUnitForStock = (requestedUnit: string, stockItem: StockItem): string => {
+    const requested = canonicalMetricUnit(requestedUnit || getBaseUnit(stockItem));
+    const candidates = [
+        getBaseUnit(stockItem),
+        stockItem.displayUnit || '',
+        ...(stockItem.purchaseUnits || []).map(pu => pu.unitName || '')
+    ].filter(Boolean);
+
+    const exact = candidates.find(candidate => sameUnit(candidate, requested));
+    if (exact) return exact;
+
+    if (isGenericCountUnit(requested)) {
+        const countCandidate = candidates.find(candidate => isGenericCountUnit(candidate));
+        if (countCandidate) return countCandidate;
+    }
+
+    return requested;
+};
+
+const parseRecipeQuantity = (rawValue: unknown, declaredUnit: string): ParsedImportQty | null => {
+    if (rawValue === null || rawValue === undefined || rawValue === '') return null;
+
+    if (typeof rawValue === 'number') {
+        if (!Number.isFinite(rawValue) || rawValue <= 0) return null;
+        return {
+            qty: rawValue,
+            unit: canonicalMetricUnit(declaredUnit),
+            original: String(rawValue),
+            explicitUnit: false,
+            rangeUsed: false
+        };
+    }
+
+    const original = String(rawValue).trim();
+    if (!original) return null;
+    const compact = original.replace(/,/g, '').replace(/\s+/g, '');
+
+    // 80-100G / 4-5粒：成本只能是单一数值，取中间值并在预览中提示。
+    const rangeMatch = compact.match(/^(\d+(?:\.\d+)?)[\-~～–—至到](\d+(?:\.\d+)?)([^\d]*)$/i);
+    if (rangeMatch) {
+        const low = Number(rangeMatch[1]);
+        const high = Number(rangeMatch[2]);
+        if (!Number.isFinite(low) || !Number.isFinite(high) || low <= 0 || high <= 0) return null;
+        let suffix = (rangeMatch[3] || '').trim();
+        let qty = (low + high) / 2;
+
+        if (suffix === '对') {
+            qty *= 2;
+            suffix = declaredUnit || 'pcs';
+        }
+
+        return {
+            qty,
+            unit: canonicalMetricUnit(suffix || declaredUnit),
+            original,
+            explicitUnit: !!suffix,
+            rangeUsed: true
+        };
+    }
+
+    const singleMatch = compact.match(/^(\d+(?:\.\d+)?)([^\d]*)$/i);
+    if (!singleMatch) return null;
+
+    let qty = Number(singleMatch[1]);
+    if (!Number.isFinite(qty) || qty <= 0) return null;
+    let suffix = (singleMatch[2] || '').trim();
+
+    if (suffix === '对') {
+        qty *= 2;
+        suffix = declaredUnit || 'pcs';
+    }
+
+    return {
+        qty,
+        unit: canonicalMetricUnit(suffix || declaredUnit),
+        original,
+        explicitUnit: !!suffix,
+        rangeUsed: false
+    };
+};
+
+const getVariantImportSize = (variant: MenuVariant, index: number, _total: number): RecipeImportSize | null => {
+    const label = String(variant.label || '').trim();
+    const normalized = label.toLowerCase();
+
+    if (/(^|[\s(/_-])s($|[\s)/_-])/.test(normalized) || /小|small/.test(normalized)) return 'S';
+    if (/(^|[\s(/_-])m($|[\s)/_-])/.test(normalized) || /中|medium|regular/.test(normalized)) return 'M';
+    if (/(^|[\s(/_-])l($|[\s)/_-])/.test(normalized) || /大|large/.test(normalized)) return 'L';
+
+    // 旧资料的规格名称未必标准；只要是前三个规格，仍按 S / M / L 顺序处理。
+    if (index <= 2) return (['S', 'M', 'L'] as RecipeImportSize[])[index];
+    return null;
+};
+
+const getMenuImportCandidates = (item: MenuItem): string[] => {
+    const anyItem = item as any;
+    const candidates = [
+        item.id,
+        anyItem.code,
+        anyItem.menuCode,
+        anyItem.menuId,
+        anyItem.sku,
+        anyItem.storeHubCode,
+        extractCodeFromText(item.name)
+    ]
+        .map(normalizeImportCode)
+        .filter(Boolean);
+
+    return [...new Set(candidates)];
+};
+
+const getStockImportCandidates = (item: StockItem): string[] => {
+    const anyItem = item as any;
+    const candidates = [
+        item.id,
+        anyItem.code,
+        anyItem.stockId,
+        anyItem.stockCode,
+        anyItem.inventoryId,
+        anyItem.itemCode,
+        anyItem.sku
+    ]
+        .map(normalizeImportCode)
+        .filter(Boolean);
+
+    return [...new Set(candidates)];
+};
+
 // ============================================================
 // 弹窗类型 (统一替换 native confirm/alert，iOS 兼容)
 // ============================================================
@@ -236,56 +483,18 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<MenuCategory[]>(MENU_CATEGORIES);
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
-    const [hasLegacyData, setHasLegacyData] = useState(false);
 
     // ---- View State ----
     const [activeCategory, setActiveCategory] = useState<string>('ALL');
     const [searchTerm, setSearchTerm] = useState('');
     const [priceMode, setPriceMode] = useState<'LOCAL' | 'DELIVERY'>('LOCAL');
     const [deliveryCommission, setDeliveryCommission] = useState<number>(27);
-    const [viewMode, setViewMode] = useState<'LIST' | 'EDIT' | 'YIELD_AUDIT'>('LIST');
+    const [viewMode, setViewMode] = useState<'LIST' | 'EDIT'>('LIST');
     const [loading, setLoading] = useState(true);
 
     const [isReorderMode, setIsReorderMode] = useState(false);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
     const isMobile = useIsMobile();
-
-    // ---- 👑 V2.2 食材出成损耗换算与物料审计 ----
-    const [conversionProfiles, setConversionProfiles] = useState<any[]>([]);
-    const [auditLogs, setAuditLogs] = useState<any[]>([]);
-
-    // - Model state (编辑/创建换算规则) -
-    const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
-    const [profileName, setProfileName] = useState('');
-    const [bulkCost, setBulkCost] = useState(0);
-    const [bulkUnit, setBulkUnit] = useState('kg');
-    const [capacityCount, setCapacityCount] = useState(1);
-    const [capacityUnit, setCapacityUnit] = useState('只');
-    const [dishQty, setDishQty] = useState(1);
-    const [dishUnit, ] = useState('只');
-    
-    // - 👑 新增: 多规格 (小/中/大碟) 支持 -
-    const [isMultiSize, setIsMultiSize] = useState(true);
-    const [dishQtyS, setDishQtyS] = useState<number | ''>(2);
-    const [dishQtyM, setDishQtyM] = useState<number | ''>(3);
-    const [dishQtyL, setDishQtyL] = useState<number | ''>(5);
-
-    // - 👑 智能菜谱规格配方实时联动状态 -
-    const [useFormulaSync, setUseFormulaSync] = useState(false);
-    const [linkedMenuItemId, setLinkedMenuItemId] = useState('');
-    const [linkedStockItemId, setLinkedStockItemId] = useState('');
-    const [syncValueType, setSyncValueType] = useState<'PIECE' | 'WEIGHT'>('PIECE');
-
-    // - Audit/Reconciliation state -
-    const [shouldDeductStock, setShouldDeductStock] = useState(true);
-    const [selectedProfileId, setSelectedProfileId] = useState('');
-    const [actualBulkConsumed, setActualBulkConsumed] = useState<number | ''>('');
-    const [actualDishesSold, setActualDishesSold] = useState<number | ''>('');
-    
-    // - 👑 多规格销售件数输入 -
-    const [soldS, setSoldS] = useState<number | ''>('');
-    const [soldM, setSoldM] = useState<number | ''>('');
-    const [soldL, setSoldL] = useState<number | ''>('');
 
     // ---- Form State ----
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -314,10 +523,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
     // 👑 新增: 食材展开 / 拖拽 / 统一弹窗 (替换所有 native confirm/alert)
     const [expandedIngIdx, setExpandedIngIdx] = useState<number | null>(null);
+    const [ingSection, setIngSection] = useState<'USE' | 'KITCHEN' | 'ADV'>('USE');
     const [draggedIngIdx, setDraggedIngIdx] = useState<number | null>(null);
     const [confirmModal, setConfirmModal] = useState<ConfirmState>(null);
     const [infoModal, setInfoModal] = useState<InfoState>(null);
     const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+    const [isImportingRecipe, setIsImportingRecipe] = useState(false);
+    const recipeImportInputRef = useRef<HTMLInputElement | null>(null);
 
     // ============================================================
     // 👑 统一弹窗工具函数 (替换所有 native confirm/alert, iOS 兼容)
@@ -341,134 +553,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
 
     // 👑 编辑模式以及物料审计模式下锁定 body 滚动 (iOS Safari 防止 modal 背景滚穿)
     useEffect(() => {
-        if (viewMode === 'EDIT' || viewMode === 'YIELD_AUDIT' || deleteId || showStockSelector || showCopyModal || showCategoryManager || confirmModal || infoModal) {
+        if (viewMode === 'EDIT' || deleteId || showStockSelector || showCopyModal || showCategoryManager || confirmModal || infoModal) {
             const originalOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
             return () => { document.body.style.overflow = originalOverflow; };
         }
     }, [viewMode, deleteId, showStockSelector, showCopyModal, showCategoryManager, confirmModal, infoModal]);
-
-    // 👑 智能计算当前配方实时联动数值 (穿透最新菜谱改动)
-    const getLiveQuantities = (p: any) => {
-        if (!p) return { dishQty: 1, dishQtyS: 0, dishQtyM: 0, dishQtyL: 0, capacityUnit: '只', isLiveSynced: false, menuName: '' };
-
-        if (p.useFormulaSync && p.linkedMenuItemId && p.linkedStockItemId) {
-            const liveMenu = menuItems.find(m => m.id === p.linkedMenuItemId);
-            if (liveMenu) {
-                const isPiece = p.syncValueType === 'PIECE';
-                let sQty = p.dishQtyS;
-                let mQty = p.dishQtyM;
-                let lQty = p.dishQtyL;
-                let baseQty = p.dishQty;
-                let foundUnit = p.capacityUnit;
-
-                liveMenu.variants.forEach(variant => {
-                    const label = variant.label.toLowerCase();
-                    const ing = variant.recipe?.find(r => r.stockId === p.linkedStockItemId);
-                    if (ing) {
-                        const val = isPiece ? (ing.pieceQty ?? ing.qty) : ing.qty;
-                        const unit = isPiece ? (ing.pieceUnit ?? ing.unit) : ing.unit;
-                        if (unit) foundUnit = unit;
-
-                        if (label.includes('s') || label.includes('小')) {
-                            sQty = val;
-                        } else if (label.includes('m') || label.includes('中')) {
-                            mQty = val;
-                        } else if (label.includes('l') || label.includes('大')) {
-                            lQty = val;
-                        } else {
-                            baseQty = val;
-                        }
-                    }
-                });
-
-                return {
-                    dishQty: baseQty || p.dishQty,
-                    dishQtyS: sQty || p.dishQtyS,
-                    dishQtyM: mQty || p.dishQtyM,
-                    dishQtyL: lQty || p.dishQtyL,
-                    capacityUnit: foundUnit || p.capacityUnit,
-                    isLiveSynced: true,
-                    menuName: liveMenu.name.split(' (')[0]
-                };
-            }
-        }
-
-        return {
-            dishQty: p.dishQty,
-            dishQtyS: p.dishQtyS,
-            dishQtyM: p.dishQtyM,
-            dishQtyL: p.dishQtyL,
-            capacityUnit: p.capacityUnit,
-            isLiveSynced: false,
-            menuName: ''
-        };
-    };
-
-    // 👑 当绑定的菜品、配料或同步模式发生变化时，自动拉取配方数据填充到左侧建模表单
-    useEffect(() => {
-        if (!useFormulaSync || !linkedMenuItemId || !linkedStockItemId) return;
-        
-        const selectedMenu = menuItems.find(m => m.id === linkedMenuItemId);
-        if (!selectedMenu) return;
-
-        const isPiece = syncValueType === 'PIECE';
-        let sQty: number | '' = '';
-        let mQty: number | '' = '';
-        let lQty: number | '' = '';
-        let baseQty: number | '' = '';
-        let foundUnit = '';
-
-        selectedMenu.variants.forEach(variant => {
-            const label = variant.label.toLowerCase();
-            const ing = variant.recipe?.find(r => r.stockId === linkedStockItemId);
-            if (!ing) return;
-
-            const val = isPiece ? (ing.pieceQty ?? ing.qty) : ing.qty;
-            const unit = isPiece ? (ing.pieceUnit ?? ing.unit) : ing.unit;
-            if (unit) foundUnit = unit;
-
-            if (label.includes('s') || label.includes('小')) {
-                sQty = val;
-            } else if (label.includes('m') || label.includes('中')) {
-                mQty = val;
-            } else if (label.includes('l') || label.includes('大')) {
-                lQty = val;
-            } else {
-                baseQty = val;
-            }
-        });
-
-        if (sQty !== '') setDishQtyS(sQty);
-        if (mQty !== '') setDishQtyM(mQty);
-        if (lQty !== '') setDishQtyL(lQty);
-        if (baseQty !== '') setDishQty(baseQty);
-        if (foundUnit) setCapacityUnit(foundUnit);
-
-        const stockInfo = stockItems.find(s => s.id === linkedStockItemId);
-        if (stockInfo) {
-            setProfileName(`[配方同步] ${selectedMenu.name.split(' (')[0].trim()} - ${stockInfo.name.split(' (')[0].trim()}`);
-            setBulkCost(getCostPerBaseUnit(stockInfo));
-            setBulkUnit(getBaseUnit(stockInfo));
-        }
-    }, [useFormulaSync, linkedMenuItemId, linkedStockItemId, syncValueType, menuItems, stockItems]);
-
-    // 👑 找出当前选定关联菜品所有 variant 下涉及的配料食材
-    const recipeIngredients = useMemo(() => {
-        if (!linkedMenuItemId) return [];
-        const currentLinkedMenuItem = menuItems.find(item => item.id === linkedMenuItemId);
-        if (!currentLinkedMenuItem) return [];
-        
-        const map = new Map<string, string>(); // stockId -> stockName
-        currentLinkedMenuItem.variants.forEach(v => {
-            v.recipe?.forEach(ing => {
-                if (ing.stockId) {
-                    map.set(ing.stockId, ing.stockName || `${ing.stockId}`);
-                }
-            });
-        });
-        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-    }, [linkedMenuItemId, menuItems]);
 
     const loadMenuCategories = async () => {
         let localCategories: MenuCategory[] | null = null;
@@ -670,80 +760,20 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         try {
             await loadMenuCategories();
 
-            // 加载物料出成模型配置与损耗对账记录
-            const savedProfiles = localStorage.getItem('menu_yield_profiles');
-            if (savedProfiles) {
-                setConversionProfiles(JSON.parse(savedProfiles));
-            } else {
-                // 预置符合金莲记经典食材背景的推荐换算规则 (如：41/50 大只明虾，1L 经典蚝油)
-                const defaultProfiles = [
-                    {
-                        id: 'shrimp_41_50',
-                        stockId: 'stock_shrimp_41_50',
-                        stockName: '大只海虾 Tiger Prawn (41/50)',
-                        profileName: '大只珍宝海虾 (41/50规格) - 1kg大包装折算',
-                        bulkCost: 45.00,
-                        bulkUnit: 'kg',
-                        capacityCount: 45,
-                        capacityUnit: '只',
-                        dishQty: 2,
-                        isMultiSize: true,
-                        dishQtyS: 2,
-                        dishQtyM: 3,
-                        dishQtyL: 5,
-                        dishUnit: '只',
-                        
-                        // 👑 自动绑定 A01 (招牌福建面) 配料
-                        useFormulaSync: true,
-                        linkedMenuItemId: 'A01',
-                        linkedStockItemId: 'stock_shrimp_41_50',
-                        syncValueType: 'PIECE'
-                    },
-                    {
-                        id: 'oyster_sauce_btl',
-                        stockId: 'stock_oyster_sauce_premium',
-                        stockName: '特级蚝油 Premium Oyster Sauce',
-                        profileName: '金莲记秘制蚝油 (Oyster Sauce) - 1L / 1.2kg 瓶装折算',
-                        bulkCost: 18.00,
-                        bulkUnit: 'bottle',
-                        capacityCount: 1200,
-                        capacityUnit: 'g',
-                        dishQty: 15,
-                        isMultiSize: true,
-                        dishQtyS: 15,
-                        dishQtyM: 25,
-                        dishQtyL: 40,
-                        dishUnit: 'g',
-                        
-                        // 👑 自动绑定 A01 (招牌福建面) 配配蚝油
-                        useFormulaSync: true,
-                        linkedMenuItemId: 'A01',
-                        linkedStockItemId: 'stock_oyster_sauce_premium',
-                        syncValueType: 'WEIGHT'
-                    }
-                ];
-                setConversionProfiles(defaultProfiles);
-                localStorage.setItem('menu_yield_profiles', JSON.stringify(defaultProfiles));
-            }
-
-            const savedLogs = localStorage.getItem('menu_yield_audit_logs');
-            if (savedLogs) {
-                setAuditLogs(JSON.parse(savedLogs));
-            }
-
-            Promise.all([
+            const stockResults = await Promise.all([
                 DataManager.getStock('KITCHEN'),
                 DataManager.getStock('BAR'),
                 DataManager.getStock('GENERAL'),
                 DataManager.getStock('FUEL')
-            ]).then(results => setStockItems(results.flat()))
-                .catch(err => console.error("Stock load error", err));
+            ]).catch(err => {
+                console.error("Stock load error", err);
+                return [] as StockItem[][];
+            });
+            setStockItems(stockResults.flat());
 
             const items = await DataManager.getMenu();
             if (items && items.length > 0) {
                 setMenuItems(items);
-                const legacy = items.some(i => ['c2', 'c3', 'c4'].includes(i.id.toLowerCase()));
-                setHasLegacyData(legacy);
             } else {
                 setMenuItems(INITIAL_MENU_ITEMS);
             }
@@ -753,146 +783,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         } finally {
             setLoading(false);
         }
-    };
-
-    // ---- 👑 V2.2 食材换算与损耗对账事件处理器 ----
-    const handleSaveProfile = () => {
-        if (!profileName) return showInfo("缺少模板名称", "请填入物料换算模板名称", "error");
-        
-        const newProfile = {
-            id: `profile_${Date.now()}`,
-            stockId: selectedStockItem?.id || 'manual',
-            stockName: selectedStockItem?.name || '手动录入原料',
-            profileName,
-            bulkCost: Number(bulkCost) || 0,
-            bulkUnit,
-            capacityCount: Number(capacityCount) || 1,
-            capacityUnit,
-            dishQty: Number(dishQty) || 1,
-            isMultiSize,
-            dishQtyS: Number(dishQtyS) || 0,
-            dishQtyM: Number(dishQtyM) || 0,
-            dishQtyL: Number(dishQtyL) || 0,
-            dishUnit,
-            
-            // 👑 保存配方绑定参数
-            useFormulaSync,
-            linkedMenuItemId: useFormulaSync ? linkedMenuItemId : '',
-            linkedStockItemId: useFormulaSync ? linkedStockItemId : '',
-            syncValueType
-        };
-
-        const updated = [newProfile, ...conversionProfiles];
-        setConversionProfiles(updated);
-        localStorage.setItem('menu_yield_profiles', JSON.stringify(updated));
-        
-        // 保存后自动选中并清空输入
-        setSelectedProfileId(newProfile.id);
-        setActualBulkConsumed('');
-        setActualDishesSold('');
-        setSoldS('');
-        setSoldM('');
-        setSoldL('');
-        
-        // 👑 重置绑定参数
-        setUseFormulaSync(false);
-        setLinkedMenuItemId('');
-        setLinkedStockItemId('');
-        setSyncValueType('PIECE');
-        
-        showInfo("✅ 保存成功", `规格模板「${profileName}」已成功保存并同步到对账面板中。`, "success");
-    };
-
-    const handleDeleteProfile = (id: string) => {
-        askConfirm(
-            "⚠️ 确认删除模板?",
-            "删除该模板后，您将无法直接在右侧损耗面板选择该物料，历史对账记录将保持不变。",
-            () => {
-                const updated = conversionProfiles.filter(p => p.id !== id);
-                setConversionProfiles(updated);
-                localStorage.setItem('menu_yield_profiles', JSON.stringify(updated));
-                if (selectedProfileId === id) setSelectedProfileId('');
-                showInfo("🗑️ 模板已删除", "模板已从您的常用库中清除", "success");
-            },
-            { danger: true, confirmText: "是的，删除" }
-        );
-    };
-
-    const handleSaveAuditLog = async (logData: any, stockId?: string, actualConsumed?: number) => {
-        const newLog = {
-            id: `log_${Date.now()}`,
-            date: new Date().toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-            ...logData
-        };
-        const updated = [newLog, ...auditLogs];
-        setAuditLogs(updated);
-        localStorage.setItem('menu_yield_audit_logs', JSON.stringify(updated));
-
-        let deductMsg = "";
-        if (shouldDeductStock && stockId && stockId !== 'manual' && actualConsumed && actualConsumed > 0) {
-            try {
-                const types: ('KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL')[] = ['KITCHEN', 'BAR', 'GENERAL', 'FUEL'];
-                let deductedItem: StockItem | null = null;
-                let deductedQtyBase = 0;
-                for (const t of types) {
-                    const list = await DataManager.getStock(t);
-                    const item = list.find(s => s.id === stockId);
-                    if (item) {
-                        deductedQtyBase = convertStockQuantityToBase(item, actualConsumed, logData.bulkUnit);
-                        const currentQtyBase = getCurrentQtyBase(item);
-                        const updatedItem: StockItem & { diff: number } = {
-                            ...item,
-                            currentQtyBase,
-                            currentQty: currentQtyBase,
-                            diff: -deductedQtyBase
-                        };
-                        await DataManager.batchUpdateStock(t, [updatedItem]);
-                        const refreshedList = await DataManager.getStock(t);
-                        deductedItem = refreshedList.find(s => s.id === stockId) || {
-                            ...item,
-                            currentQtyBase: Math.max(0, currentQtyBase - deductedQtyBase),
-                            currentQty: Math.max(0, currentQtyBase - deductedQtyBase)
-                        };
-                        break;
-                    }
-                }
-                if (deductedItem) {
-                    const baseUnit = getBaseUnit(deductedItem);
-                    const remainingQtyBase = getCurrentQtyBase(deductedItem);
-                    const conversionText = normalizeUnitName(logData.bulkUnit) === normalizeUnitName(baseUnit)
-                        ? ''
-                        : `（折合 ${deductedQtyBase.toFixed(2)} ${baseUnit}）`;
-                    deductMsg = `，并已自动在【库存总览】中扣减 ${actualConsumed} ${logData.bulkUnit}${conversionText}（当前剩余: ${remainingQtyBase.toFixed(2)} ${baseUnit}）`;
-                    
-                    // Background reload
-                    Promise.all([
-                        DataManager.getStock('KITCHEN'),
-                        DataManager.getStock('BAR'),
-                        DataManager.getStock('GENERAL'),
-                        DataManager.getStock('FUEL')
-                    ]).then(results => setStockItems(results.flat()))
-                        .catch(err => console.error("Stock reload error", err));
-                }
-            } catch (err) {
-                console.error("Failed to deduct stock automatically", err);
-            }
-        }
-
-        showInfo("📈 成功归档", `物料损耗对账记录已保存至下方的历史审计稽账单中${deductMsg}。`, "success");
-    };
-
-    const handleDeleteAuditLog = (id: string) => {
-        askConfirm(
-            "⚠️ 确认删除审计记录?",
-            "删除后该条稽账历史记录将无法恢复。",
-            () => {
-                const updated = auditLogs.filter(l => l.id !== id);
-                setAuditLogs(updated);
-                localStorage.setItem('menu_yield_audit_logs', JSON.stringify(updated));
-                showInfo("🗑️ 已删除", "审计记录已删除", "success");
-            },
-            { danger: true, confirmText: "是的，删除" }
-        );
     };
 
     // ============================================================
@@ -978,6 +868,474 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     const saveMenu = async (items: MenuItem[]) => {
         setMenuItems(items);
         await DataManager.saveMenu(items);
+    };
+
+
+    // ============================================================
+    // Excel 一键导入：以「①配方填写_App同步」为真源
+    // - 菜单：优先 Code / ID，兼容从菜名提取 Code
+    // - 材料：优先库存 ID，兼容从「KF09 | 材料名」直接提取
+    // - 公式栏失效时，自动回退读取「材料主档_App」
+    // - Excel 空白/未完成行不删除 App 旧配方
+    // ============================================================
+    const handleRecipeExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        if (stockItems.length === 0) {
+            return showInfo('库存资料尚未载入', '请等库存资料载入完成后再导入配方。', 'error');
+        }
+
+        setIsImportingRecipe(true);
+        try {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array' });
+
+            const targetSheetName = workbook.SheetNames.find(name => {
+                const normalized = normalizeSheetName(name);
+                return normalized === '配方填写app同步' || normalized.includes('配方填写app同步');
+            });
+
+            if (!targetSheetName) {
+                return showInfo(
+                    '找不到同步工作表',
+                    '此功能只读取「①配方填写_App同步 / 配方填写_APP同步」工作表。请确认上传的是员工填写后的正确 Excel。',
+                    'error'
+                );
+            }
+
+            // 先读取材料主档。同步页 H-K 有公式；部分浏览器/Excel 组合可能读到公式文字，
+            // 所以材料 ID / 单位必须有第二条可靠来源。
+            const materialMasterMap = new Map<string, MaterialMasterImport>();
+            const materialSheetName = workbook.SheetNames.find(name => normalizeSheetName(name).includes('材料主档app'));
+            if (materialSheetName) {
+                const materialRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[materialSheetName], {
+                    defval: null,
+                    raw: true
+                });
+
+                materialRows.forEach(row => {
+                    const stockId = normalizeImportCode(getExcelCell(row, ['库存 ID', '库存ID']));
+                    if (!stockId) return;
+
+                    const ratioRaw = getExcelCell(row, ['1 App单位 = ? 配方单位', '1App单位=?配方单位']);
+                    const ratio = Number(ratioRaw) || 0;
+                    materialMasterMap.set(stockId, {
+                        stockId,
+                        stockName: cleanExcelText(getExcelCell(row, ['材料名称 / Ingredient', '材料名称', 'Ingredient'])),
+                        appUnit: cleanExcelText(getExcelCell(row, ['App 库存单位（参考）', 'App库存单位（参考）', 'App 库存单位'])),
+                        recipeUnit: cleanExcelText(getExcelCell(row, ['配方使用单位（可改）', '配方使用单位'])),
+                        ratio
+                    });
+                });
+            }
+
+            const worksheet = workbook.Sheets[targetSheetName];
+            const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+                defval: null,
+                raw: true
+            });
+
+            if (rawRows.length === 0) {
+                return showInfo('同步表没有资料', `「${targetSheetName}」没有可读取的数据。`, 'error');
+            }
+
+            const importRows: RecipeImportRow[] = rawRows.map((row, index) => {
+                const stockChoice = cleanExcelText(getExcelCell(row, [
+                    '库存材料（从App选择）',
+                    '库存材料(从App选择)',
+                    '库存材料'
+                ]));
+
+                const formulaStockId = normalizeImportCode(getExcelCell(row, [
+                    '库存 ID（自动）',
+                    '库存ID（自动）',
+                    '库存 ID',
+                    '库存ID'
+                ]));
+
+                // 如果 H 列公式没有被浏览器正确计算，直接从 G 列「KF09 | 肉片」提取 KF09。
+                const stockId = formulaStockId || extractCodeFromText(stockChoice);
+                const master = materialMasterMap.get(stockId);
+
+                const formulaStockName = cleanExcelText(getExcelCell(row, [
+                    '材料名称（自动）',
+                    '材料名称',
+                    'Ingredient'
+                ]));
+
+                const formulaBaseUnit = cleanExcelText(getExcelCell(row, [
+                    'App 库存单位（自动）',
+                    'App库存单位（自动）',
+                    'App 库存单位'
+                ]));
+
+                const formulaRecipeUnit = cleanExcelText(getExcelCell(row, [
+                    '配方使用单位（自动）',
+                    '配方使用单位（可改）',
+                    '配方使用单位'
+                ]));
+
+                return {
+                    menuCode: normalizeImportCode(getExcelCell(row, ['菜单 Code', '菜单Code', 'Menu Code'])),
+                    menuName: cleanExcelText(getExcelCell(row, ['菜名 / Menu', '菜名', 'Menu'])),
+                    stockId,
+                    stockChoice,
+                    stockName: formulaStockName || master?.stockName || extractNameFromChoice(stockChoice),
+                    declaredUnit: formulaRecipeUnit || master?.recipeUnit || '',
+                    excelBaseUnit: formulaBaseUnit || master?.appUnit || '',
+                    conversionRatio: master?.ratio || 0,
+                    order: Number(getExcelCell(row, ['配料序号', '序号']) ?? index + 1) || index + 1,
+                    qty: {
+                        S: getExcelCell(row, ['小 S 用量', '小S用量', 'S 用量', 'S用量']),
+                        M: getExcelCell(row, ['中 M 用量', '中M用量', 'M 用量', 'M用量']),
+                        L: getExcelCell(row, ['大 L 用量', '大L用量', 'L 用量', 'L用量'])
+                    },
+                    note: cleanExcelText(getExcelCell(row, ['备注 / Notes', '备注', 'Notes'])),
+                    status: cleanExcelText(getExcelCell(row, ['状态', 'Status']))
+                };
+            }).filter(row => row.menuCode);
+
+            const rowsByMenu = new Map<string, RecipeImportRow[]>();
+            const warnings: string[] = [];
+            let incompleteRows = 0;
+            let invalidRows = 0;
+            let rangeApproxCount = 0;
+            let unitOverrideCount = 0;
+            let masterConversionCount = 0;
+
+            importRows.forEach(row => {
+                const hasAnyQty = (['S', 'M', 'L'] as RecipeImportSize[])
+                    .some(size => row.qty[size] !== null && row.qty[size] !== undefined && row.qty[size] !== '');
+
+                if (!hasAnyQty) {
+                    if (row.stockId || row.stockChoice) incompleteRows += 1;
+                    return;
+                }
+
+                if (!row.stockId) {
+                    invalidRows += 1;
+                    warnings.push(`${row.menuCode}: 有用量但无法取得库存 ID（G/H 列），已跳过。`);
+                    return;
+                }
+
+                const list = rowsByMenu.get(row.menuCode) || [];
+                list.push(row);
+                rowsByMenu.set(row.menuCode, list);
+            });
+
+            // App 菜单 Code 兼容：item.id / code / menuCode / 菜名开头 A01
+            const menuMatchCodeByIndex = new Map<number, string>();
+            const matchedMenuCodes = new Set<string>();
+            menuItems.forEach((item, index) => {
+                const matched = getMenuImportCandidates(item).find(code => rowsByMenu.has(code));
+                if (matched) {
+                    menuMatchCodeByIndex.set(index, matched);
+                    matchedMenuCodes.add(matched);
+                }
+            });
+
+            rowsByMenu.forEach((_rows, code) => {
+                if (!matchedMenuCodes.has(code)) {
+                    warnings.push(`${code}: App 菜单找不到相同 Code。`);
+                }
+            });
+
+            // App 库存兼容：除了 id，也检查常见 code/sku 字段；最后才按材料名回退。
+            const stockByCode = new Map<string, StockItem>();
+            const stockByName = new Map<string, StockItem>();
+            stockItems.forEach(stock => {
+                getStockImportCandidates(stock).forEach(code => {
+                    if (!stockByCode.has(code)) stockByCode.set(code, stock);
+                });
+                const nameKey = normalizeImportName(stock.name);
+                if (nameKey && !stockByName.has(nameKey)) stockByName.set(nameKey, stock);
+            });
+
+            const resolveStockItem = (row: RecipeImportRow): StockItem | undefined => {
+                const byCode = stockByCode.get(normalizeImportCode(row.stockId));
+                if (byCode) return byCode;
+
+                const nameCandidates = [
+                    row.stockName,
+                    extractNameFromChoice(row.stockChoice)
+                ].map(normalizeImportName).filter(Boolean);
+
+                for (const key of nameCandidates) {
+                    const byName = stockByName.get(key);
+                    if (byName) return byName;
+                }
+                return undefined;
+            };
+
+            let updatedVariants = 0;
+            let importedIngredients = 0;
+            let skippedIngredients = 0;
+            let matchedStockRows = 0;
+            let recognizedVariantCount = 0;
+            const updatedMenuCodes = new Set<string>();
+
+            const nextMenuItems = menuItems.map((item, itemIndex) => {
+                const code = menuMatchCodeByIndex.get(itemIndex);
+                if (!code) return item;
+
+                const sourceRows = rowsByMenu.get(code);
+                if (!sourceRows || sourceRows.length === 0 || !item.variants?.length) return item;
+
+                let itemChanged = false;
+                const nextVariants = item.variants.map((variant, variantIndex) => {
+                    const size = getVariantImportSize(variant, variantIndex, item.variants.length);
+                    if (!size) return variant;
+                    recognizedVariantCount += 1;
+
+                    const rowsForSize = sourceRows.filter(row => {
+                        const value = row.qty[size];
+                        return value !== null && value !== undefined && value !== '';
+                    });
+                    if (rowsForSize.length === 0) return variant;
+
+                    const existingRecipe = variant.recipe || [];
+                    const existingByStockId = new Map(
+                        existingRecipe.map(ingredient => [normalizeImportCode(ingredient.stockId), ingredient])
+                    );
+                    const seenActualStockIds = new Set<string>();
+                    const touchedActualStockIds = new Set<string>();
+                    const importedRecipe: MenuIngredient[] = [];
+
+                    [...rowsForSize]
+                        .sort((a, b) => a.order - b.order)
+                        .forEach(sourceRow => {
+                            const rawQty = sourceRow.qty[size];
+                            const stockItem = resolveStockItem(sourceRow);
+                            if (!stockItem) {
+                                skippedIngredients += 1;
+                                warnings.push(
+                                    `${code}/${size}: 库存 ${sourceRow.stockId || sourceRow.stockName} 在 App 找不到，已跳过。`
+                                );
+                                return;
+                            }
+
+                            matchedStockRows += 1;
+                            const actualStockKey = normalizeImportCode(stockItem.id);
+                            touchedActualStockIds.add(actualStockKey);
+
+                            if (seenActualStockIds.has(actualStockKey)) {
+                                skippedIngredients += 1;
+                                warnings.push(`${code}/${size}: ${stockItem.id} 重复出现，保留第一行。`);
+                                return;
+                            }
+                            seenActualStockIds.add(actualStockKey);
+
+                            const baseUnit = getBaseUnit(stockItem);
+                            const declaredUnit = sourceRow.declaredUnit || sourceRow.excelBaseUnit || baseUnit;
+                            const parsed = parseRecipeQuantity(rawQty, declaredUnit);
+                            if (!parsed) {
+                                skippedIngredients += 1;
+                                warnings.push(`${code}/${size} ${stockItem.id}: 无法识别用量「${String(rawQty)}」，已跳过。`);
+                                return;
+                            }
+
+                            if (parsed.rangeUsed) rangeApproxCount += 1;
+                            let resolvedUnit = resolveRecipeUnitForStock(parsed.unit, stockItem);
+                            let resolvedQty = parsed.qty;
+                            let pieceQty = existingByStockId.get(actualStockKey)?.pieceQty || 0;
+                            let pieceUnit = existingByStockId.get(actualStockKey)?.pieceUnit || '';
+
+                            if (
+                                parsed.explicitUnit &&
+                                sourceRow.declaredUnit &&
+                                !sameUnit(parsed.unit, sourceRow.declaredUnit)
+                            ) {
+                                unitOverrideCount += 1;
+                                warnings.push(
+                                    `${code}/${size} ${stockItem.id}: 「${parsed.original}」明确写了 ${parsed.unit}，因此不采用表内 ${sourceRow.declaredUnit}。`
+                                );
+                            }
+
+                            let ingredient: MenuIngredient = {
+                                ...(existingByStockId.get(actualStockKey) || {}),
+                                stockId: stockItem.id,
+                                stockName: stockItem.name || sourceRow.stockName,
+                                qty: resolvedQty,
+                                unit: resolvedUnit,
+                                costPerUnit: getCostPerBaseUnit(stockItem),
+                                order: importedRecipe.length + 1,
+                                spec: existingByStockId.get(actualStockKey)?.spec || '',
+                                time: existingByStockId.get(actualStockKey)?.time || 0,
+                                note: sourceRow.note || existingByStockId.get(actualStockKey)?.note || '',
+                                step: existingByStockId.get(actualStockKey)?.step || '',
+                                youtubeUrl: existingByStockId.get(actualStockKey)?.youtubeUrl || '',
+                                pieceQty,
+                                pieceUnit
+                            };
+
+                            let detail = getIngredientCostDetail(ingredient, stockItems);
+
+                            // 如果 App 本身没有这条换算，但 Excel「材料主档_App」已经有：
+                            // 1 App单位 = N 配方单位，则先换回 App 基础单位再写入，成本仍然正确。
+                            if (detail.conversionPath === 'fallback' && !sameUnit(resolvedUnit, baseUnit)) {
+                                const canUseMasterRatio =
+                                    sourceRow.conversionRatio > 0 &&
+                                    sourceRow.excelBaseUnit &&
+                                    sameUnit(sourceRow.excelBaseUnit, baseUnit) &&
+                                    sourceRow.declaredUnit &&
+                                    sameUnit(parsed.unit, sourceRow.declaredUnit);
+
+                                if (canUseMasterRatio) {
+                                    resolvedQty = parsed.qty / sourceRow.conversionRatio;
+                                    resolvedUnit = baseUnit;
+
+                                    if (isGenericCountUnit(parsed.unit)) {
+                                        pieceQty = parsed.qty;
+                                        pieceUnit = parsed.unit;
+                                    }
+
+                                    ingredient = {
+                                        ...ingredient,
+                                        qty: resolvedQty,
+                                        unit: resolvedUnit,
+                                        pieceQty,
+                                        pieceUnit
+                                    };
+                                    detail = getIngredientCostDetail(ingredient, stockItems);
+                                    masterConversionCount += 1;
+                                }
+                            }
+
+                            // 最后保险：仍然无法换算时，只跳过这一项，不阻断整份 Excel。
+                            if (detail.conversionPath === 'fallback' && !sameUnit(ingredient.unit || '', baseUnit)) {
+                                skippedIngredients += 1;
+                                warnings.push(
+                                    `${code}/${size} ${stockItem.id}: 「${parsed.original}」无法安全换算成库存基础单位 ${baseUnit}，仅此材料跳过。`
+                                );
+                                return;
+                            }
+
+                            importedRecipe.push(ingredient);
+                        });
+
+                    if (importedRecipe.length === 0) {
+                        warnings.push(`${code}/${size}: 本规格没有通过验证的新配料，原配方保持不变。`);
+                        return variant;
+                    }
+
+                    // Excel 空白/未完成的材料不代表删除：保留 App 里没有被本次 Excel 明确覆盖的旧材料。
+                    const preservedExisting = existingRecipe.filter(existing =>
+                        !touchedActualStockIds.has(normalizeImportCode(existing.stockId))
+                    );
+
+                    const mergedRecipe = renumberRecipe([
+                        ...importedRecipe,
+                        ...preservedExisting
+                    ]);
+
+                    itemChanged = true;
+                    updatedVariants += 1;
+                    importedIngredients += importedRecipe.length;
+                    return {
+                        ...variant,
+                        recipe: mergedRecipe,
+                        cost: recalcVariantCost(mergedRecipe, variant.overheadMarginPercent, stockItems)
+                    };
+                });
+
+                if (!itemChanged) return item;
+                updatedMenuCodes.add(code);
+                return { ...item, variants: nextVariants };
+            });
+
+            if (updatedVariants === 0) {
+                console.warn('[Recipe Excel Import] diagnostics:', {
+                    excelMenuCodes: rowsByMenu.size,
+                    matchedMenuCodes: matchedMenuCodes.size,
+                    matchedStockRows,
+                    recognizedVariantCount,
+                    warnings
+                });
+
+                const warningPreview = warnings.slice(0, 6);
+                return showInfo(
+                    '暂时没有导入到配方',
+                    [
+                        `Excel 有用量的菜单：${rowsByMenu.size}`,
+                        `成功对上 App 菜单：${matchedMenuCodes.size}`,
+                        `成功对上库存材料：${matchedStockRows}`,
+                        `识别到的 S/M/L 规格：${recognizedVariantCount}`,
+                        '',
+                        warningPreview.length ? `原因：\n• ${warningPreview.join('\n• ')}` : '目前没有找到可写入项目。'
+                    ].join('\n'),
+                    'error'
+                );
+            }
+
+            console.info('[Recipe Excel Import] preview', {
+                file: file.name,
+                sheet: targetSheetName,
+                updatedMenus: updatedMenuCodes.size,
+                updatedVariants,
+                importedIngredients,
+                skippedIngredients,
+                incompleteRows,
+                invalidRows,
+                rangeApproxCount,
+                unitOverrideCount,
+                masterConversionCount,
+                warnings
+            });
+
+            const warningPreview = warnings.slice(0, 5);
+            const previewText = [
+                `文件：${file.name}`,
+                `工作表：${targetSheetName}`,
+                '',
+                `将更新：${updatedMenuCodes.size} 道菜 / ${updatedVariants} 个规格 / ${importedIngredients} 项配料`,
+                `未完成/空白材料：${incompleteRows}（保留 App 原资料）`,
+                `跳过/无效：${skippedIngredients + invalidRows}`,
+                masterConversionCount > 0 ? `Excel 主档换算：${masterConversionCount} 项` : '',
+                rangeApproxCount > 0 ? `范围用量：${rangeApproxCount} 项（例如 4-5粒，取中间值）` : '',
+                unitOverrideCount > 0 ? `单位自动纠正：${unitOverrideCount} 项（例如表内写“支”，实际填写“15G”时按 g）` : '',
+                warningPreview.length > 0 ? `\n前 ${warningPreview.length} 个提示：\n• ${warningPreview.join('\n• ')}` : '',
+                warnings.length > warningPreview.length ? `\n另有 ${warnings.length - warningPreview.length} 个提示，完整内容在浏览器 Console。` : '',
+                '',
+                '确认后才会写入。Excel 有填写的材料会更新；Excel 空白/未完成材料不会删除 App 现有配方。'
+            ].filter(Boolean).join('\n');
+
+            askConfirm(
+                '导入 Excel 配方?',
+                previewText,
+                async () => {
+                    setIsImportingRecipe(true);
+                    try {
+                        await saveMenu(nextMenuItems);
+                        showInfo(
+                            '✅ 配方导入完成',
+                            `已同步 ${updatedMenuCodes.size} 道菜、${updatedVariants} 个规格、${importedIngredients} 项配料。\n` +
+                            (skippedIngredients + invalidRows > 0
+                                ? `另有 ${skippedIngredients + invalidRows} 项因资料/换算不足被跳过，其他正确资料已经写入。`
+                                : '所有通过验证的资料已成功写入。'),
+                            'success'
+                        );
+                    } catch (error) {
+                        console.error('[Recipe Excel Import] save failed:', error);
+                        showInfo('导入保存失败', 'Excel 已读取，但保存到后端失败。请检查网络后重试。', 'error');
+                    } finally {
+                        setIsImportingRecipe(false);
+                    }
+                },
+                { confirmText: '确认导入', cancelText: '取消' }
+            );
+        } catch (error) {
+            console.error('[Recipe Excel Import] parse failed:', error);
+            showInfo(
+                'Excel 读取失败',
+                '无法读取这个 Excel。请使用 .xlsx / .xls 文件，并确认项目已安装 xlsx 套件。',
+                'error'
+            );
+        } finally {
+            setIsImportingRecipe(false);
+        }
     };
 
     const handleSaveItem = async () => {
@@ -1109,34 +1467,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 setLoading(true);
                 await DataManager.saveMenu(INITIAL_MENU_ITEMS);
                 setMenuItems(INITIAL_MENU_ITEMS);
-                setHasLegacyData(false);
                 setLoading(false);
                 showInfo("✅ 菜谱已恢复", "Menu Restored", 'success');
             },
             { danger: true, confirmText: '重置' }
-        );
-    };
-
-    const handleFixLegacyData = () => {
-        askConfirm(
-            "⚠️ 修复旧数据?",
-            "发现旧数据 (C2, C3...)。这将删除错误的 ID 并恢复 A13/A14 等正确 ID。",
-            async () => {
-                setLoading(true);
-                try {
-                    await DataManager.deleteMenuItem('c2'); await DataManager.deleteMenuItem('C2');
-                    await DataManager.deleteMenuItem('c3'); await DataManager.deleteMenuItem('C3');
-                    await DataManager.deleteMenuItem('c4'); await DataManager.deleteMenuItem('C4');
-                    await DataManager.saveMenu(INITIAL_MENU_ITEMS);
-                    await loadData();
-                    showInfo("✅ 数据已修复", "Data Fixed", 'success');
-                } catch (e) {
-                    showInfo("修复失败", String(e), 'error');
-                } finally {
-                    setLoading(false);
-                }
-            },
-            { danger: true, confirmText: '修复' }
         );
     };
 
@@ -1156,8 +1490,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             stockId: stockItem.id,
             stockName: stockItem.name,
             qty: 0,
-            unit: stockItem.baseUnit ?? stockItem.unit,
-            costPerUnit: stockItem.costPerBaseUnit ?? stockItem.cost ?? 0,
+            unit: getBaseUnit(stockItem),
+            costPerUnit: getCostPerBaseUnit(stockItem),
             order: newOrder,
             spec: '',
             time: 0,
@@ -1198,8 +1532,35 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         setNewVariants(updatedVariants);
     };
 
-    // 👑 智能 Kg 与 Gram 数量和单位一键互转
-    const toggleIngredientKgGram = (idx: number) => {
+    // 👑 通用单位循环切换 (基础 ↔ g/kg ↔ Pack/CTN)，实际用量恒定不变
+    const toggleIngredientUnit = (idx: number) => {
+        const updatedVariants = [...newVariants];
+        const currentVariant = updatedVariants[activeVariantTab];
+        const ing = currentVariant?.recipe?.[idx];
+        if (!ing) return;
+        const cycle = getUnitCycle(ing, stockItems);
+        if (cycle.length < 2) return;
+        const curIdx = cycle.findIndex(c => c.unit.trim().toLowerCase() === (ing.unit || '').trim().toLowerCase());
+        const cur = curIdx >= 0 ? cycle[curIdx] : { unit: ing.unit || '', toBase: 1 };
+        const next = cycle[(curIdx + 1) % cycle.length]; // curIdx = -1 时回到基础单位
+        // 先折成基础量，再换去下一个单位 —— 分量不会跑掉
+        const baseQty = (ing.qty || 0) * cur.toBase;
+        ing.qty = parseFloat((baseQty / next.toBase).toFixed(4));
+        ing.unit = next.unit;
+        const stockItem = stockItems.find(s => s.id === ing.stockId);
+        const perBase = stockItem ? getCostPerBaseUnit(stockItem) : (ing.costPerUnit || 0);
+        ing.costPerUnit = perBase * next.toBase;
+        if (ing.piecesPerKg && ing.piecesPerKg > 0) {
+            const mn = METRIC_UNITS[next.unit.toLowerCase()];
+            if (mn?.family === 'mass') {
+                ing.pieceQty = parseFloat((ing.qty * mn.factor / 1000 * ing.piecesPerKg).toFixed(2));
+            }
+        }
+        currentVariant.cost = recalcVariantCost(currentVariant.recipe, currentVariant.overheadMarginPercent, stockItems);
+        setNewVariants(updatedVariants);
+    };
+
+    const _deprecated_toggleIngredientKgGram = (idx: number) => {
         const updatedVariants = [...newVariants];
         const currentVariant = updatedVariants[activeVariantTab];
         if (currentVariant.recipe && currentVariant.recipe[idx]) {
@@ -1226,6 +1587,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         }
         setNewVariants(updatedVariants);
     };
+    void _deprecated_toggleIngredientKgGram;
 
     const removeIngredient = (idx: number) => {
         const updatedVariants = [...newVariants];
@@ -1459,7 +1821,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     // ============================================================
     // 渲染食材卡片 V2.1 (紧凑纵向卡 / 2 列网格 / 份数双轨)
     // ============================================================
-    const renderIngredientCard = (ing: MenuIngredient, i: number) => {
+    const renderIngredientRow = (ing: MenuIngredient, i: number) => {
         const detail = getIngredientCostDetail(ing, stockItems);
         const yieldPercentVal = detail.yieldPercent;
         const totalCost = detail.effectiveCost;
@@ -1471,6 +1833,108 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
         const stockItemMatch = stockItems.find(s => s.id === ing.stockId);
         const ingredientPhoto = stockItemMatch?.image;
 
+        const unitLower = (ing.unit || '').toLowerCase();
+        const unitCycle = getUnitCycle(ing, stockItems);
+        const canToggleUnit = unitCycle.length > 1;
+        const needConvert = detail.conversionPath !== 'base' && detail.conversionPath !== 'direct';
+
+        const sectionBtn = (key: 'USE' | 'KITCHEN' | 'ADV', label: string) => (
+            <button
+                type="button"
+                onClick={() => setIngSection(key)}
+                className={`px-3 py-2 min-h-[40px] rounded-lg text-[11px] font-bold transition-all active:scale-95
+                    ${ingSection === key ? 'bg-[#111111] text-[#FFD200]' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            >
+                {label}
+            </button>
+        );
+
+        // ---- 共用控件 (手机 / 电脑 共用同一套逻辑) ----
+        const qtyControl = (
+            <div className="flex items-stretch bg-white rounded-lg border border-gray-300 overflow-hidden h-11 md:h-9">
+                <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={ing.qty || ''}
+                    onChange={e => {
+                        const qtyVal = parseFloat(e.target.value) || 0;
+                        updateIngredientQty(i, qtyVal);
+                        if (ing.piecesPerKg && ing.piecesPerKg > 0) {
+                            const isKg = ['kg', '公斤'].includes(unitLower);
+                            const pieceQtyVal = isKg ? (qtyVal * ing.piecesPerKg) : (qtyVal * ing.piecesPerKg / 1000);
+                            updateIngredientField(i, 'pieceQty', parseFloat(pieceQtyVal.toFixed(2)));
+                        }
+                    }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                    className="w-full px-2 text-right font-black text-base md:text-sm outline-none min-w-0 font-mono tabular-nums"
+                    placeholder="0"
+                />
+                <button
+                    type="button"
+                    disabled={!canToggleUnit}
+                    onClick={() => { if (canToggleUnit) toggleIngredientUnit(i); }}
+                    className={`text-[11px] md:text-[10px] font-bold px-2.5 border-l flex items-center gap-0.5 shrink-0 select-none
+                        ${canToggleUnit ? 'bg-amber-50 active:bg-amber-100 text-amber-700 cursor-pointer' : 'bg-gray-50 text-gray-500 cursor-default'}`}
+                    title={canToggleUnit ? `点击切换：${unitCycle.map(c => c.unit).join(' / ')}` : undefined}
+                >
+                    {ing.unit}{canToggleUnit && <RefreshCw size={10} />}
+                </button>
+            </div>
+        );
+
+        const costBlock = (
+            <div className="text-right">
+                <div className="font-mono tabular-nums font-black text-base md:text-[13px] text-[#111111] leading-none">
+                    {totalCost > 0 ? totalCost.toFixed(2) : <span className="text-gray-300">0.00</span>}
+                </div>
+                <div className="text-[9px] text-gray-400 font-mono mt-0.5">
+                    {detail.unitCost.toFixed(2)}/{detail.unit}
+                    {yieldPercentVal < 100 && (
+                        <span className="ml-1 text-orange-600 font-black" title={`出成率 ${yieldPercentVal}%`}>{yieldPercentVal}%</span>
+                    )}
+                </div>
+            </div>
+        );
+
+        const metaTags = (
+            <div className="flex items-center gap-1 mt-0.5">
+                {ing.spec && <span className="text-[9px] bg-yellow-100 text-yellow-800 px-1.5 rounded font-bold truncate max-w-[110px]">{ing.spec}</span>}
+                {hasPieces && <span className="text-[9px] text-amber-700 font-bold">≈{ing.pieceQty}{ing.pieceUnit}</span>}
+                {ing.time && ing.time > 0 ? <Clock size={9} className="text-gray-400" /> : null}
+                {ytId && <Youtube size={10} className="text-red-500" />}
+                {ing.step && <ListOrdered size={10} className="text-blue-500" />}
+                {ing.note && <StickyNote size={10} className="text-gray-400" />}
+            </div>
+        );
+
+        const expandBtn = (
+            <button
+                onClick={() => { setExpandedIngIdx(isExpanded ? null : i); setIngSection('USE'); }}
+                className={`w-10 h-10 md:w-8 md:h-8 rounded-lg flex items-center justify-center shrink-0 active:scale-90 transition-all
+                    ${isExpanded ? 'bg-[#111111] text-[#FFD200]' : 'bg-gray-50 text-gray-500 md:hover:bg-gray-200'}`}
+                title={isExpanded ? '收起' : '详情'}
+            >
+                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+        );
+
+        const deleteBtn = (
+            <button
+                onClick={() => removeIngredient(i)}
+                className="w-10 h-10 md:w-8 md:h-8 rounded-lg bg-red-50 text-red-500 md:hover:bg-red-500 md:hover:text-white flex items-center justify-center active:scale-90 transition-all shrink-0"
+                title="删除食材"
+            >
+                <X size={15} />
+            </button>
+        );
+
+        const seqBadge = (
+            <div className="bg-[#111111] text-[#FFD200] text-[10px] font-mono font-black w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
+                {ing.order ?? i + 1}
+            </div>
+        );
+
         return (
             <div
                 key={`${ing.stockId}_${i}`}
@@ -1478,454 +1942,311 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 onDragStart={(e) => handleIngDragStart(e, i)}
                 onDragOver={(e) => handleIngDragOver(e, i)}
                 onDragEnd={handleIngDragEnd}
-                className={`bg-white rounded-2xl border-2 transition-all overflow-hidden shadow-sm flex flex-col
-                    ${draggedIngIdx === i ? 'border-[#FFD200] shadow-lg scale-[0.99]' : isExpanded ? 'border-[#FFD200] shadow-md col-span-2 lg:col-span-2 xl:col-span-2' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`bg-white rounded-xl border transition-colors overflow-hidden
+                    ${draggedIngIdx === i ? 'border-[#FFD200]' : isExpanded ? 'border-[#FFD200]' : 'border-gray-200 md:hover:border-gray-300'}`}
             >
-                {/* ---------- 顶栏: #序号 + 名称 + 删除 ---------- */}
-                <div className="p-2.5 pb-1.5 flex items-start gap-2">
-                    <div className="flex flex-col gap-1.5 items-center justify-start shrink-0">
-                        <div className="bg-[#111111] text-[#FFD200] text-[10px] font-mono font-black min-w-[28px] h-7 px-1.5 rounded-lg flex items-center justify-center">
-                            #{ing.order ?? i + 1}
-                        </div>
-                        {ingredientPhoto && (
-                            <div 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewImage({ url: ingredientPhoto, name: ing.stockName });
-                                }}
-                                className="w-16 h-12 rounded-xl overflow-hidden border-2 border-white shadow-md bg-cover bg-center cursor-zoom-in hover:scale-105 active:scale-95 transition-all shrink-0" 
-                                style={{ backgroundImage: `url(${ingredientPhoto})` }} 
+                {/* ============ 主行 · 手机版 (两行) ============ */}
+                <div className="md:hidden px-2.5 py-2">
+                    {/* 上行: 序号 + 名称 + 详情 + 删除 */}
+                    <div className="flex items-center gap-2">
+                        {seqBadge}
+                        {ingredientPhoto ? (
+                            <div
+                                onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: ingredientPhoto, name: ing.stockName }); }}
+                                className="w-9 h-9 rounded-lg overflow-hidden bg-cover bg-center shrink-0 border border-gray-200"
+                                style={{ backgroundImage: `url(${ingredientPhoto})` }}
                             />
-                        )}
+                        ) : null}
+                        <div className="flex-grow min-w-0">
+                            <div className="font-bold text-[14px] text-[#111111] leading-tight truncate">{ing.stockName}</div>
+                            {metaTags}
+                        </div>
+                        {expandBtn}
+                        {deleteBtn}
                     </div>
-                    <div className="flex-grow min-w-0">
-                        <div className="font-bold text-sm text-[#111111] leading-tight line-clamp-2">{ing.stockName}</div>
-                        {ing.spec && (
-                            <span className="inline-block mt-1 text-[9px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold">
-                                {ing.spec}
-                            </span>
-                        )}
+                    {/* 下行: 用量 + 成本 */}
+                    <div className="flex items-center gap-2 mt-2 pl-9">
+                        <div className="flex-grow min-w-0">
+                            {qtyControl}
+                            {needConvert && (
+                                <div className="text-[9px] text-indigo-600 font-mono mt-0.5 pl-1">
+                                    = {detail.baseQty.toFixed(2)} {detail.unit}
+                                </div>
+                            )}
+                        </div>
+                        <div className="shrink-0 w-[92px]">{costBlock}</div>
                     </div>
-                    <button
-                        onClick={() => removeIngredient(i)}
-                        className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center active:scale-90 transition-all shrink-0"
-                        title="删除食材"
-                    >
-                        <X size={14} />
-                    </button>
                 </div>
 
-                {/* ---------- 用量输入: qty + unit ---------- */}
-                <div className="px-2.5">
-                    <div className="flex items-stretch bg-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                        <input
-                            type="number"
-                            step="0.01"
-                            value={ing.qty || ''}
-                            onChange={e => {
-                                const qtyVal = parseFloat(e.target.value) || 0;
-                                updateIngredientQty(i, qtyVal);
-                                if (ing.piecesPerKg && ing.piecesPerKg > 0) {
-                                    const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                    const pieceQtyVal = isKg ? (qtyVal * ing.piecesPerKg) : (qtyVal * ing.piecesPerKg / 1000);
-                                    updateIngredientField(i, 'pieceQty', parseFloat(pieceQtyVal.toFixed(2)));
-                                }
-                            }}
-                            onClick={e => (e.target as HTMLInputElement).select()}
-                            className="flex-grow p-2 text-center font-black text-base outline-none bg-white text-black min-w-0"
-                            placeholder="0"
+                {/* ============ 主行 · 电脑版 (单行) ============ */}
+                <div className="hidden md:flex items-center gap-2 px-2 py-2">
+                    {seqBadge}
+                    {ingredientPhoto ? (
+                        <div
+                            onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: ingredientPhoto, name: ing.stockName }); }}
+                            className="w-9 h-9 rounded-lg overflow-hidden bg-cover bg-center cursor-zoom-in shrink-0 border border-gray-200"
+                            style={{ backgroundImage: `url(${ingredientPhoto})` }}
                         />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const u = (ing.unit || '').toLowerCase();
-                                if (['kg', 'g', '克', '公斤', 'gram'].includes(u)) {
-                                    toggleIngredientKgGram(i);
-                                }
-                            }}
-                            className={`text-[10px] font-bold px-2.5 border-l flex items-center shrink-0 transition-all select-none
-                                ${['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase())
-                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 font-extrabold cursor-pointer'
-                                    : 'text-gray-500 bg-gray-50'}`}
-                            title={['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) ? '点击一键互转公斤(Kg)和克(G)' : undefined}
-                        >
-                            {ing.unit} {['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) && '🔄'}
+                    ) : <div className="w-9 shrink-0" />}
+                    <div className="flex-grow min-w-0">
+                        <div className="font-bold text-[13px] text-[#111111] leading-tight truncate">{ing.stockName}</div>
+                        {metaTags}
+                    </div>
+                    <div className="shrink-0 w-[150px]">
+                        {qtyControl}
+                        {needConvert && (
+                            <div className="text-[9px] text-indigo-600 font-mono text-right mt-0.5 pr-1">
+                                = {detail.baseQty.toFixed(2)} {detail.unit}
+                            </div>
+                        )}
+                    </div>
+                    <div className="shrink-0 w-[92px]">{costBlock}</div>
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                        <button onClick={() => moveIngredient(i, 'UP')} disabled={i === 0}
+                            className="w-6 h-4 rounded bg-gray-50 hover:bg-gray-200 disabled:opacity-25 flex items-center justify-center" title="上移">
+                            <ChevronUp size={11} className="text-gray-600" />
+                        </button>
+                        <button onClick={() => moveIngredient(i, 'DOWN')} disabled={i === recipeLen - 1}
+                            className="w-6 h-4 rounded bg-gray-50 hover:bg-gray-200 disabled:opacity-25 flex items-center justify-center" title="下移">
+                            <ChevronDown size={11} className="text-gray-600" />
                         </button>
                     </div>
+                    {expandBtn}
+                    {deleteBtn}
                 </div>
 
-                {/* ---------- Recipe Costing Display Panel (最小增强) ---------- */}
-                <div className="px-2.5 mt-2 bg-gray-50 rounded-xl p-2.5 border border-gray-200 space-y-1 mx-2.5">
-                    <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
-                        <span>使用数量 (Qty):</span>
-                        <span className="font-bold text-[#111111]">{ing.qty} {ing.unit}</span>
-                    </div>
-                    {detail.conversionPath !== 'base' && detail.conversionPath !== 'direct' && (
-                        <div className="flex items-center justify-between text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg font-bold">
-                            <span>换算基础用量 (Base Qty):</span>
-                            <span>= {detail.baseQty.toFixed(2)} {detail.unit}</span>
-                        </div>
-                    )}
-                    <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
-                        <span>基础单价 (Cost/{detail.unit}):</span>
-                        <span className="font-mono font-bold text-gray-700">RM {detail.unitCost.toFixed(2)} / {detail.unit}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-1.5 text-[11px] font-bold">
-                        <span className="text-gray-600">食材成本 (Cost):</span>
-                        <span className="text-emerald-700 font-mono">RM {detail.effectiveCost.toFixed(2)}</span>
-                    </div>
-                </div>
-
-                {/* ---------- 份数显示 (如果有 pieceQty + pieceUnit) ---------- */}
-                {hasPieces && (
-                    <div className="px-2.5 mt-1.5">
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-center">
-                            <span className="text-[10px] text-amber-700 font-bold">
-                                ≈ {ing.pieceQty} {ing.pieceUnit}
-                            </span>
-                        </div>
-                    </div>
-                )}
-
-                {/* ---------- 小计 + Meta 标签 ---------- */}
-                <div className="px-2.5 mt-1.5 flex items-center justify-between gap-1 flex-wrap">
-                    <div className="flex items-center gap-1 text-[9px] text-gray-400">
-                        {ing.time && ing.time > 0 ? (
-                            <span className="flex items-center gap-0.5"><Clock size={9} /> {ing.time}分</span>
-                        ) : null}
-                        {ytId && <Youtube size={10} className="text-red-500" />}
-                        {ing.step && <ListOrdered size={10} className="text-blue-500" />}
-                        {ing.note && <StickyNote size={10} className="text-gray-500" />}
-                    </div>
-                    <div className="font-mono font-black text-xs text-[#111111] bg-gray-100 px-2 py-0.5 rounded flex items-center gap-1">
-                        RM {totalCost.toFixed(2)}
-                        {yieldPercentVal < 100 && (
-                            <span className="text-[8px] bg-orange-100 text-orange-700 px-1 rounded font-black" title={`含备料损耗折算 (出成率 ${yieldPercentVal}%)`}>
-                                {yieldPercentVal}%
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                {/* ---------- 底部控制条: 上 / 下 / 展开 ---------- */}
-                <div className="mt-2 p-1.5 bg-gray-50 border-t border-gray-100 flex items-center gap-1">
-                    <button
-                        onClick={() => moveIngredient(i, 'UP')}
-                        disabled={i === 0}
-                        className="flex-1 h-9 rounded-lg bg-white border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center active:scale-90 transition-all"
-                        title="上移"
-                    >
-                        <ChevronUp size={14} className="text-gray-600" />
-                    </button>
-                    <button
-                        onClick={() => moveIngredient(i, 'DOWN')}
-                        disabled={i === recipeLen - 1}
-                        className="flex-1 h-9 rounded-lg bg-white border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center active:scale-90 transition-all"
-                        title="下移"
-                    >
-                        <ChevronDown size={14} className="text-gray-600" />
-                    </button>
-                    <button
-                        onClick={() => setExpandedIngIdx(isExpanded ? null : i)}
-                        className={`flex-[2] h-9 rounded-lg flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px] font-bold
-                            ${isExpanded ? 'bg-[#111111] text-[#FFD200]' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-                    >
-                        {isExpanded ? (
-                            <><ChevronUp size={14} /> 收起</>
-                        ) : (
-                            <><ChevronDown size={14} /> 详情</>
-                        )}
-                    </button>
-                </div>
-
-                {/* ============================================ */}
-                {/* 展开区 (跨 2 列宽度) */}
-                {/* ============================================ */}
+                {/* ============ 展开区 (三组分页) ============ */}
                 {isExpanded && (
-                    <div className="bg-gradient-to-br from-yellow-50/50 to-white border-t-2 border-dashed border-yellow-200 p-4 space-y-4">
+                    <div className="border-t border-dashed border-gray-200 bg-[#F6F7FB] p-3 space-y-3">
 
-                        {/* 👑 V2.1 份数 + 实际用量 双轨 */}
-                        <div className="bg-amber-50/50 border-2 border-amber-100 rounded-xl p-3">
-                            <div className="flex items-center gap-1 mb-2">
-                                <Scale size={12} className="text-amber-600" />
-                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider">份数 & 用量</span>
-                            </div>
-                            <p className="text-[9px] text-gray-500 mb-3">💡 份数描述给厨房看 (如「5 只虾」)，实际用量用于成本计算</p>
-
-                            <div className="grid grid-cols-2 gap-2.5">
-                                {/* 份数 pieceQty */}
-                                <div>
-                                    <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">份数</label>
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min="0"
-                                        value={ing.pieceQty || ''}
-                                        onChange={e => {
-                                            const pieceQtyVal = parseFloat(e.target.value) || 0;
-                                            updateIngredientField(i, 'pieceQty', pieceQtyVal);
-                                            // Auto-convert pieces to weight if piecesPerKg is set
-                                            if (ing.piecesPerKg && ing.piecesPerKg > 0) {
-                                                const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                                const qtyVal = isKg ? (pieceQtyVal / ing.piecesPerKg) : (pieceQtyVal / ing.piecesPerKg * 1000);
-                                                updateIngredientQty(i, parseFloat(qtyVal.toFixed(4)));
-                                            }
-                                        }}
-                                        placeholder="5"
-                                        className="w-full p-2.5 bg-white rounded-lg text-base border border-amber-200 outline-none focus:border-amber-400 font-bold text-center"
-                                    />
-                                </div>
-                                {/* 份数单位 pieceUnit */}
-                                <div>
-                                    <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">单位</label>
-                                    <input
-                                        type="text"
-                                        list="piece-units-suggestions"
-                                        value={ing.pieceUnit || ''}
-                                        onChange={e => updateIngredientField(i, 'pieceUnit', e.target.value)}
-                                        placeholder="只/片/段"
-                                        className="w-full p-2.5 bg-white rounded-lg text-base border border-amber-200 outline-none focus:border-amber-400 font-bold text-center"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-2 gap-2.5">
-                                {/* 实际用量 qty (重复显示，强调用于成本) */}
-                                <div>
-                                    <label className="text-[9px] font-bold text-emerald-700 uppercase mb-1 block">实际用量 *</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={ing.qty || ''}
-                                        onChange={e => {
-                                            const qtyVal = parseFloat(e.target.value) || 0;
-                                            updateIngredientQty(i, qtyVal);
-                                            // Auto-convert weight to pieces if piecesPerKg is set
-                                            if (ing.piecesPerKg && ing.piecesPerKg > 0) {
-                                                const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                                const pieceQtyVal = isKg ? (qtyVal * ing.piecesPerKg) : (qtyVal * ing.piecesPerKg / 1000);
-                                                updateIngredientField(i, 'pieceQty', parseFloat(pieceQtyVal.toFixed(2)));
-                                            }
-                                        }}
-                                        onClick={e => (e.target as HTMLInputElement).select()}
-                                        placeholder="0"
-                                        className="w-full p-2.5 bg-emerald-50 rounded-lg text-base border-2 border-emerald-200 outline-none focus:border-emerald-400 font-bold text-center"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] font-bold text-emerald-700 uppercase mb-1 block">单位 (可切换 🔄)</label>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const u = (ing.unit || '').toLowerCase();
-                                            if (['kg', 'g', '克', '公斤', 'gram'].includes(u)) {
-                                                toggleIngredientKgGram(i);
-                                            }
-                                        }}
-                                        className={`w-full p-2.5 rounded-lg text-base border-2 font-black text-center min-h-[44px] transition-all select-none
-                                            ${['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase())
-                                                ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100 cursor-pointer'
-                                                : 'bg-gray-100 border-gray-200 text-gray-600'}`}
-                                    >
-                                        {ing.unit} {['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) && '🔄'}
-                                    </button>
-                                </div>
-                            </div>
-                            <p className="text-[9px] text-emerald-700 mt-2 flex items-center gap-1">
-                                <span className="font-black">小计: RM {totalCost.toFixed(2)}</span>
-                                <span className="text-gray-400">
-                                    ({detail.conversionPath !== 'base' && detail.conversionPath !== 'direct' ? `${detail.baseQty.toFixed(2)} ${detail.unit}` : `${ing.qty || 0} ${ing.unit}`} × RM {detail.unitCost.toFixed(2)}/{detail.unit})
-                                </span>
-                            </p>
+                        {/* 手机排序 */}
+                        <div className="flex md:hidden items-center gap-2">
+                            <button onClick={() => moveIngredient(i, 'UP')} disabled={i === 0}
+                                className="flex-1 h-9 rounded-lg bg-white border border-gray-200 disabled:opacity-30 flex items-center justify-center gap-1 text-[11px] font-bold">
+                                <ChevronUp size={13} /> 上移
+                            </button>
+                            <button onClick={() => moveIngredient(i, 'DOWN')} disabled={i === recipeLen - 1}
+                                className="flex-1 h-9 rounded-lg bg-white border border-gray-200 disabled:opacity-30 flex items-center justify-center gap-1 text-[11px] font-bold">
+                                <ChevronDown size={13} /> 下移
+                            </button>
                         </div>
 
-                        {/* 👑 V2.2 自动重量与件数换算 (piecesPerKg) */}
-                        {['kg', 'g', '克', '公斤', 'gram'].includes((ing.unit || '').toLowerCase()) && (
-                            <div className="bg-indigo-50/70 border-2 border-indigo-200 rounded-xl p-3 space-y-2">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-sm">🦐</span>
+                        {/* 分组切换 */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {sectionBtn('USE', '用量换算')}
+                            {sectionBtn('KITCHEN', '厨房做法')}
+                            {sectionBtn('ADV', '成本设定')}
+                        </div>
+
+                        {/* ---- 组 1: 用量换算 ---- */}
+                        {ingSection === 'USE' && (
+                            <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+                                <p className="text-[10px] text-gray-500">份数给厨房看（如「5 只虾」）；上方主行的用量才是成本计算依据，两者会自动联动。</p>
+
+                                <div className="grid grid-cols-2 gap-2.5">
                                     <div>
-                                        <span className="text-[10px] font-black text-indigo-700 uppercase tracking-wider block">海鲜/数量高级规格换算 (Pieces & Density)</span>
-                                        <span className="text-[8px] text-indigo-500 block">用于输入数量（几只/几粒）即可自动换算出 KG/g 实际重量</span>
+                                        <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">份数</label>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min="0"
+                                            value={ing.pieceQty || ''}
+                                            onChange={e => {
+                                                const pieceQtyVal = parseFloat(e.target.value) || 0;
+                                                updateIngredientField(i, 'pieceQty', pieceQtyVal);
+                                                if (ing.piecesPerKg && ing.piecesPerKg > 0) {
+                                                    const isKg = ['kg', '公斤'].includes(unitLower);
+                                                    const qtyVal = isKg ? (pieceQtyVal / ing.piecesPerKg) : (pieceQtyVal / ing.piecesPerKg * 1000);
+                                                    updateIngredientQty(i, parseFloat(qtyVal.toFixed(4)));
+                                                }
+                                            }}
+                                            placeholder="5"
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold text-center font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">份数单位</label>
+                                        <input
+                                            type="text"
+                                            list="piece-units-suggestions"
+                                            value={ing.pieceUnit || ''}
+                                            onChange={e => updateIngredientField(i, 'pieceUnit', e.target.value)}
+                                            placeholder="只 / 片 / 段"
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold text-center"
+                                        />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2.5 mt-1">
+                                {canToggleUnit && (
+                                    <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-gray-100">
+                                        <div>
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">每 1kg 数量</label>
+                                            <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                                                <input
+                                                    type="number"
+                                                    placeholder="未设置"
+                                                    value={ing.piecesPerKg || ''}
+                                                    className="w-full p-2.5 text-center text-sm font-bold outline-none bg-transparent font-mono"
+                                                    onChange={e => {
+                                                        const val = parseFloat(e.target.value) || 0;
+                                                        updateIngredientField(i, 'piecesPerKg', val);
+                                                        if (val > 0 && ing.pieceQty) {
+                                                            const isKg = ['kg', '公斤'].includes(unitLower);
+                                                            const weight = isKg ? (ing.pieceQty / val) : (ing.pieceQty / val * 1000);
+                                                            updateIngredientQty(i, parseFloat(weight.toFixed(4)));
+                                                        }
+                                                    }}
+                                                />
+                                                <span className="p-2 border-l bg-white text-[9px] text-gray-400 font-bold shrink-0">/1kg</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">1 份折算成本</label>
+                                            <div className="w-full p-2.5 bg-gray-50 rounded-lg text-sm font-black text-center text-gray-700 border border-gray-200 min-h-[42px] flex items-center justify-center font-mono">
+                                                {ing.piecesPerKg && ing.piecesPerKg > 0 ? (() => {
+                                                    const isKg = ['kg', '公斤'].includes(unitLower);
+                                                    const kgCost = isKg ? (ing.costPerUnit || 0) : ((ing.costPerUnit || 0) * 1000);
+                                                    return `RM ${(kgCost / ing.piecesPerKg).toFixed(4)}`;
+                                                })() : '按重量核算'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="text-[10px] text-gray-600 bg-gray-50 rounded-lg p-2 border border-gray-200 font-mono">
+                                    小计 RM {totalCost.toFixed(2)} = {needConvert ? `${detail.baseQty.toFixed(2)} ${detail.unit}` : `${ing.qty || 0} ${ing.unit}`} × RM {detail.unitCost.toFixed(2)}/{detail.unit}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ---- 组 2: 厨房做法 ---- */}
+                        {ingSection === 'KITCHEN' && (
+                            <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                        <ListOrdered size={10} /> 做法 (Step)
+                                    </label>
+                                    <textarea
+                                        value={ing.step || ''}
+                                        onChange={e => updateIngredientField(i, 'step', e.target.value)}
+                                        placeholder="如: 虾去壳留尾，用淀粉抓洗，沥干水分，热油爆香"
+                                        rows={3}
+                                        className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                        <StickyNote size={10} /> 注解 (Note)
+                                    </label>
+                                    <textarea
+                                        value={ing.note || ''}
+                                        onChange={e => updateIngredientField(i, 'note', e.target.value)}
+                                        placeholder="如: 必须新鲜，冷冻虾口感差"
+                                        rows={2}
+                                        className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2.5">
                                     <div>
-                                        <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">每 1kg 数量 (例如 45 只)</label>
-                                        <div className="flex items-center bg-white rounded-lg border border-indigo-200 overflow-hidden">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                            <Clock size={10} /> 处理时间 (分)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={ing.time || ''}
+                                            onChange={e => updateIngredientField(i, 'time', parseFloat(e.target.value) || 0)}
+                                            placeholder="0"
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold font-mono text-center"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                            <Sparkles size={10} /> 食材规格 (Spec)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={ing.spec || ''}
+                                            onChange={e => updateIngredientField(i, 'spec', e.target.value)}
+                                            placeholder="如: 大只虾"
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                        <Youtube size={11} className="text-red-500" /> YouTube 教学链接
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={ing.youtubeUrl || ''}
+                                        onChange={e => updateIngredientField(i, 'youtubeUrl', e.target.value)}
+                                        placeholder="https://www.youtube.com/watch?v=..."
+                                        className="w-full p-2.5 bg-gray-50 rounded-lg text-sm border border-gray-200 outline-none focus:border-red-300 font-mono"
+                                    />
+                                    {ytId && (
+                                        <a
+                                            href={ing.youtubeUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm active:scale-95 transition-all"
+                                        >
+                                            <Youtube size={18} /> 在 YouTube 打开 <ExternalLink size={13} className="opacity-70" />
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ---- 组 3: 成本设定 ---- */}
+                        {ingSection === 'ADV' && (
+                            <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                            <Scale size={10} /> 出成率 (Yield %)
+                                        </label>
+                                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
                                             <input
                                                 type="number"
-                                                placeholder="未设置 (按重量算)"
-                                                value={ing.piecesPerKg || ''}
-                                                className="w-full p-2 text-center text-xs font-bold outline-none text-[#111111]"
+                                                min="1"
+                                                max="100"
+                                                value={ing.yieldPercent ?? 100}
                                                 onChange={e => {
-                                                    const val = parseFloat(e.target.value) || 0;
-                                                    updateIngredientField(i, 'piecesPerKg', val);
-                                                    if (val > 0 && ing.pieceQty) {
-                                                        const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                                        const weight = isKg ? (ing.pieceQty / val) : (ing.pieceQty / val * 1000);
-                                                        updateIngredientQty(i, parseFloat(weight.toFixed(4)));
-                                                    }
+                                                    const val = parseFloat(e.target.value) || 100;
+                                                    updateIngredientField(i, 'yieldPercent', val > 100 ? 100 : val < 1 ? 1 : val);
                                                 }}
+                                                className="w-full p-2.5 text-center text-base font-bold outline-none bg-transparent font-mono"
                                             />
-                                            <span className="p-2 border-l bg-gray-50 text-[9px] text-gray-400 font-bold shrink-0">只/1kg</span>
+                                            <span className="p-2 border-l bg-white text-[10px] text-gray-500 font-bold shrink-0">%</span>
                                         </div>
                                     </div>
-
                                     <div>
-                                        <label className="text-[9px] font-bold text-gray-500 uppercase mb-1 block">1 只折算成本</label>
-                                        <div className="w-full p-2 bg-gray-50 rounded-lg text-xs font-black text-center text-indigo-700 border border-indigo-100 min-h-[38px] flex items-center justify-center">
-                                            {ing.piecesPerKg && ing.piecesPerKg > 0 ? (() => {
-                                                const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                                const kgCost = isKg ? (ing.costPerUnit || 0) : ((ing.costPerUnit || 0) * 1000);
-                                                const pieceCost = kgCost / ing.piecesPerKg;
-                                                return `RM ${pieceCost.toFixed(4)} /只`;
-                                            })() : '按重量核算'}
-                                        </div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
+                                            <Hash size={10} /> 顺序号
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={ing.order ?? i + 1}
+                                            onChange={e => updateIngredientField(i, 'order', parseInt(e.target.value) || 1)}
+                                            className="w-full p-2.5 bg-gray-50 rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold font-mono text-center"
+                                        />
                                     </div>
                                 </div>
 
-                                {ing.piecesPerKg && ing.piecesPerKg > 0 && (
-                                    <div className="text-[8px] text-indigo-600 bg-white/70 rounded p-1.5 border border-indigo-100 mt-1 leading-normal">
-                                        💡 <strong>智能模式开启</strong>：每1kg重 {ing.piecesPerKg} 只。在上方修改
-                                        <span className="mx-0.5 font-bold text-[#E65100]">份数</span> (如更改为 5 只)
-                                        将精准联动修改 <span className="mx-0.5 font-bold text-green-700">实际用量</span> 为
-                                        {" "}{(() => {
-                                            const isKg = ['kg', '公斤'].includes((ing.unit || '').toLowerCase());
-                                            const convertedVal = isKg ? (ing.pieceQty || 0) / ing.piecesPerKg : ((ing.pieceQty || 0) / ing.piecesPerKg) * 1000;
-                                            return `${convertedVal.toFixed(2)} ${ing.unit}`;
-                                        })()}！
+                                {yieldPercentVal < 100 && (
+                                    <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg p-2.5 leading-normal">
+                                        <strong>净料损耗分析</strong>
+                                        <ul className="list-disc pl-4 mt-1 space-y-0.5 font-mono">
+                                            <li>所需净料 {detail.baseQty.toFixed(2)} {detail.unit}</li>
+                                            <li>需备毛料 {(detail.baseQty / (yieldPercentVal / 100)).toFixed(2)} {detail.unit}（损耗 {((detail.baseQty / (yieldPercentVal / 100)) - detail.baseQty).toFixed(2)}）</li>
+                                            <li>净料真实单价 RM {(detail.unitCost / (yieldPercentVal / 100)).toFixed(2)} / {detail.unit}</li>
+                                        </ul>
                                     </div>
                                 )}
                             </div>
                         )}
-
-                        {/* 食材规格 + 出成率 + 处理时间 + 顺序号 */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                    <Sparkles size={10} /> 食材规格 (Spec)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={ing.spec || ''}
-                                    onChange={e => updateIngredientField(i, 'spec', e.target.value)}
-                                    placeholder="如: 大只虾、自制猪油"
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black text-orange-600 uppercase mb-1 flex items-center gap-1" title="出成率/净料率 % (1-100)">
-                                    <Scale size={10} className="text-orange-600" /> 出成率 (Yield %)
-                                </label>
-                                <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        value={ing.yieldPercent ?? 100}
-                                        onChange={e => {
-                                            const val = parseFloat(e.target.value) || 100;
-                                            updateIngredientField(i, 'yieldPercent', val > 100 ? 100 : val < 1 ? 1 : val);
-                                        }}
-                                        className="w-full p-2.5 text-center text-base font-bold outline-none text-[#111111]"
-                                    />
-                                    <span className="p-2 border-l bg-gray-50 text-[10px] text-gray-500 font-bold shrink-0">%</span>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                    <Clock size={10} /> 处理时间 (分)
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={ing.time || ''}
-                                    onChange={e => updateIngredientField(i, 'time', parseFloat(e.target.value) || 0)}
-                                    placeholder="0"
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                    <Hash size={10} /> 顺序号
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={ing.order ?? i + 1}
-                                    onChange={e => updateIngredientField(i, 'order', parseInt(e.target.value) || 1)}
-                                    className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] font-bold"
-                                />
-                            </div>
-                        </div>
-
-                        {yieldPercentVal < 100 && (
-                            <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded-xl p-3 leading-normal">
-                                💡 <strong>净料与出成损耗分析</strong>：
-                                <ul className="list-disc pl-4 mt-1 space-y-0.5">
-                                    <li>配方中所需基础净料：<strong>{detail.baseQty.toFixed(2)} {detail.unit}</strong> (来源于 {ing.qty} {ing.unit})</li>
-                                    <li>按 <strong>{yieldPercentVal}%</strong> 出成率，需准备基础毛料：<strong>{(detail.baseQty / (yieldPercentVal / 100)).toFixed(2)} {detail.unit}</strong> (损耗约 {((detail.baseQty / (yieldPercentVal / 100)) - detail.baseQty).toFixed(2)} {detail.unit})</li>
-                                    <li>基础采购单价：RM {detail.unitCost.toFixed(2)} / {detail.unit}</li>
-                                    <li>考虑损耗后的基础净料真实单价：<strong>RM {(detail.unitCost / (yieldPercentVal / 100)).toFixed(2)} / {detail.unit}</strong> (增加约 RM {((detail.unitCost / (yieldPercentVal / 100)) - detail.unitCost).toFixed(2)})</li>
-                                </ul>
-                            </div>
-                        )}
-
-                        {/* 做法 step */}
-                        <div>
-                            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                <ListOrdered size={10} /> 做法 (Step) — 该食材如何处理
-                            </label>
-                            <textarea
-                                value={ing.step || ''}
-                                onChange={e => updateIngredientField(i, 'step', e.target.value)}
-                                placeholder="如: 虾去壳留尾，用淀粉抓洗，沥干水分，热油爆香"
-                                rows={3}
-                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
-                            />
-                        </div>
-
-                        {/* 注解 note */}
-                        <div>
-                            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                <StickyNote size={10} /> 注解 (Note)
-                            </label>
-                            <textarea
-                                value={ing.note || ''}
-                                onChange={e => updateIngredientField(i, 'note', e.target.value)}
-                                placeholder="如: 必须新鲜，冷冻虾口感差"
-                                rows={2}
-                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-[#FFD200] resize-y leading-relaxed"
-                            />
-                        </div>
-
-                        {/* 👑 YouTube — 改为按钮式 */}
-                        <div>
-                            <label className="text-[10px] font-black text-gray-500 uppercase mb-1 flex items-center gap-1">
-                                <Youtube size={11} className="text-red-500" /> YouTube 教学链接
-                            </label>
-                            <input
-                                type="url"
-                                value={ing.youtubeUrl || ''}
-                                onChange={e => updateIngredientField(i, 'youtubeUrl', e.target.value)}
-                                placeholder="https://www.youtube.com/watch?v=..."
-                                className="w-full p-2.5 bg-white rounded-lg text-base border border-gray-200 outline-none focus:border-red-300 font-mono"
-                            />
-                            {ytId && (
-                                <a
-                                    href={ing.youtubeUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-2 inline-flex items-center gap-2 px-4 py-3 min-h-[44px] bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm shadow-md active:scale-95 transition-all"
-                                >
-                                    <Youtube size={18} className="fill-white" />
-                                    <span>在 YouTube 打开</span>
-                                    <ExternalLink size={13} className="opacity-70" />
-                                </a>
-                            )}
-                        </div>
                     </div>
                 )}
             </div>
@@ -2011,18 +2332,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
             {viewMode === 'LIST' && (
                 <div className="flex-grow flex flex-col overflow-hidden bg-[#F6F7FB]">
                     <div className="bg-white border-b border-gray-200 p-2 md:p-3 space-y-2 shadow-sm z-20 shrink-0 sticky top-0">
-                        {hasLegacyData && (
-                            <div className="bg-yellow-50 border border-yellow-200 p-2 rounded-xl flex justify-between items-center animate-in slide-in-from-top-4">
-                                <div className="flex items-center gap-2 text-yellow-800 font-bold text-xs">
-                                    <AlertTriangle size={14} />
-                                    <span>发现旧数据 ID (C2, C3...)</span>
-                                </div>
-                                <button onClick={handleFixLegacyData} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex items-center gap-1 active:scale-95 transition-all">
-                                    <Wrench size={10} /> 修复
-                                </button>
-                            </div>
-                        )}
-
                         <div className="flex flex-col md:flex-row justify-between items-center gap-2">
                             <div className="flex gap-2 w-full md:flex-1 md:w-0 overflow-x-auto scrollbar-hide pb-1 md:pb-0 px-1">
                                 {categories.map(c => (
@@ -2055,12 +2364,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                                 )}
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => setViewMode('YIELD_AUDIT')}
-                                            className="px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 shrink-0"
+                                        <input
+                                            ref={recipeImportInputRef}
+                                            type="file"
+                                            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                                            className="hidden"
+                                            onChange={handleRecipeExcelImport}
+                                        />
+                                        <button
+                                            type="button"
+                                            disabled={isImportingRecipe || loading}
+                                            onClick={() => recipeImportInputRef.current?.click()}
+                                            className="px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all border border-green-200 bg-green-50 text-green-800 hover:bg-green-100 active:scale-95 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            title="只读取 Excel 的「配方填写_App同步」工作表"
                                         >
-                                            <Scale size={13} />
-                                            <span>损耗对账与换算</span>
+                                            {isImportingRecipe ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                                            <span>导入配方</span>
                                         </button>
                                         <button
                                             onClick={() => setShowCategoryManager(true)}
@@ -2112,936 +2431,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                 </div>
             )}
 
-            {/* ====================================================== */}
-            {/* YIELD_AUDIT 视图 - 食材损耗换算与物料审计 */}
-            {/* ====================================================== */}
-            {viewMode === 'YIELD_AUDIT' && (
-                <div className="flex-grow flex flex-col bg-[#F6F7FB] overflow-y-auto pb-40 md:pb-6 relative h-full">
-                    {/* 页面子导航 */}
-                    <div className="bg-white px-4 py-3 flex items-center justify-between border-b border-gray-200 shrink-0 sticky top-0 z-20 shadow-sm pt-[max(env(safe-area-inset-top),0.75rem)] pb-[env(safe-area-inset-bottom)]">
-                        <button 
-                            onClick={() => setViewMode('LIST')} 
-                            className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-[#111111] p-2 -ml-2 min-h-[44px] min-w-[44px] active:scale-95 transition-all text-left"
-                        >
-                            <ArrowLeft size={16} />
-                            <span>返回菜品列表</span>
-                        </button>
-                        <div className="text-right">
-                            <span className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-full font-black uppercase tracking-wider">
-                                ⚖️ 损耗换算与物料审计
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="p-4 md:p-6 max-w-7xl mx-auto w-full space-y-6">
-                        {/* 🏆 系统使用场景说明卡片 */}
-                        <div className="bg-gradient-to-r from-slate-900 to-[#1e293b] text-white p-5 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                            <div className="space-y-1">
-                                <h4 className="font-black text-lg flex items-center gap-2 text-[#FFD200]">
-                                    💡 为什么要做「订货换算」与「损耗对账」？
-                                </h4>
-                                <p className="text-xs text-gray-300 leading-relaxed max-w-4xl">
-                                    在餐饮经营中，食材通常以大包装订货（如 <strong>1kg海虾</strong> 或 <strong>1整瓶蚝油</strong>），但菜品配方制作时却是按件或按克计算（如一份炒面用 <strong>2只虾</strong> 或 <strong>15g蚝油</strong>）。 
-                                    本工具帮助您解决：<strong>大包装配料成本科学折算</strong>、<strong>每盘菜品真实用料估算</strong> 与 <strong>当日厨房异常浪费/流失稽核</strong>。只要看理论可出碟数与实际销售是否相符，就能立刻对账厨房异常损耗！
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* ==================================================== */}
-                            {/* 左侧: 食材出成规格换算建模 */}
-                            {/* ==================================================== */}
-                            <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
-                                <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-                                    <h4 className="font-black text-base text-[#111111] flex items-center gap-1.5">
-                                        <span className="text-xl">🛠️</span> 规格换算参数建模 (Profile Creator)
-                                    </h4>
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase">步骤 1</span>
-                                </div>
-
-                                <div className="space-y-4">
-                                    {/* 👑 智能菜谱规格配方实时联动面板 */}
-                                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/30 p-4 rounded-2xl border border-indigo-100/80 space-y-3.5">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                                                <span>🔗</span> 智能菜谱规格与配方联动系统
-                                            </span>
-                                            <span className="text-[8px] bg-indigo-200 text-indigo-900 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                                AUTO SYNCED
-                                            </span>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setUseFormulaSync(true);
-                                                    if (menuItems.length > 0 && !linkedMenuItemId) {
-                                                        setLinkedMenuItemId(menuItems[0].id);
-                                                    }
-                                                }}
-                                                className={`py-2 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition-all text-center min-h-[44px] ${useFormulaSync ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 shadow-sm'}`}
-                                            >
-                                                ⚡ 联动菜品配方
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setUseFormulaSync(false);
-                                                    setLinkedMenuItemId('');
-                                                    setLinkedStockItemId('');
-                                                }}
-                                                className={`py-2 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition-all text-center min-h-[44px] ${!useFormulaSync ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 shadow-sm'}`}
-                                            >
-                                                ✍_ 独立手动填报
-                                            </button>
-                                        </div>
-
-                                        {useFormulaSync && (
-                                            <div className="space-y-3.5 pt-1.5 border-t border-indigo-100/60 animate-in fade-in slide-in-from-top-3 duration-200">
-                                                <div className="grid grid-cols-2 gap-2.5">
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-indigo-950 uppercase mb-1 block">1. 关联系统菜品</label>
-                                                        <select
-                                                            className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-xs font-extrabold outline-none h-[40px] text-indigo-900"
-                                                            value={linkedMenuItemId}
-                                                            onChange={e => {
-                                                                setLinkedMenuItemId(e.target.value);
-                                                                setLinkedStockItemId('');
-                                                            }}
-                                                        >
-                                                            <option value="">-- 请选择菜品 --</option>
-                                                            {menuItems.map(m => (
-                                                                <option key={m.id} value={m.id}>
-                                                                    🍜 {m.name.split(' (')[0].trim()}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-indigo-950 uppercase mb-1 block">2. 对应配方原料</label>
-                                                        <select
-                                                            className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-xs font-extrabold outline-none h-[40px] text-indigo-900"
-                                                            value={linkedStockItemId}
-                                                            onChange={e => {
-                                                                const sId = e.target.value;
-                                                                setLinkedStockItemId(sId);
-                                                                const item = stockItems.find(s => s.id === sId);
-                                                                if (item) {
-                                                                    setSelectedStockItem(item);
-                                                                }
-                                                            }}
-                                                            disabled={!linkedMenuItemId}
-                                                        >
-                                                            <option value="">-- 请选择原料 --</option>
-                                                            {recipeIngredients.map(r => (
-                                                                <option key={r.id} value={r.id}>
-                                                                    🥕 {r.name.split(' (')[0].trim()}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <label className="text-[9px] font-black text-indigo-950 uppercase mb-1 block">3. 损耗对账折算取值类型</label>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <label className={`p-2 rounded-lg border text-center font-bold text-[10px] cursor-pointer block h-[38px] flex items-center justify-center ${syncValueType === 'PIECE' ? 'bg-indigo-600 text-white border-transparent shadow-sm' : 'bg-white border-gray-200 text-gray-600'}`}>
-                                                            <input
-                                                                type="radio"
-                                                                className="hidden"
-                                                                name="syncValueType"
-                                                                value="PIECE"
-                                                                checked={syncValueType === 'PIECE'}
-                                                                onChange={() => setSyncValueType('PIECE')}
-                                                            />
-                                                            🔢 按配方个数 (Piece)
-                                                        </label>
-                                                        <label className={`p-2 rounded-lg border text-center font-bold text-[10px] cursor-pointer block h-[38px] flex items-center justify-center ${syncValueType === 'WEIGHT' ? 'bg-indigo-600 text-white border-transparent shadow-sm' : 'bg-white border-gray-200 text-gray-600'}`}>
-                                                            <input
-                                                                type="radio"
-                                                                className="hidden"
-                                                                name="syncValueType"
-                                                                value="WEIGHT"
-                                                                checked={syncValueType === 'WEIGHT'}
-                                                                onChange={() => setSyncValueType('WEIGHT')}
-                                                            />
-                                                            ⚖️ 按配方克重 (Gram)
-                                                        </label>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* 选择库存材料 */}
-                                    <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">
-                                            绑定库存物料 {useFormulaSync && <span className="text-[#FFD200] ml-1">🔒 [已联动菜谱配方]</span>}
-                                        </label>
-                                        <select 
-                                            className={`w-full p-3 rounded-xl text-xs font-black outline-none border text-black min-h-[44px] ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-900 border-indigo-200 cursor-not-allowed' : 'bg-gray-50 border-gray-200'}`}
-                                            value={selectedStockItem ? selectedStockItem.id : ''}
-                                            disabled={useFormulaSync}
-                                            onChange={e => {
-                                                const id = e.target.value;
-                                                const item = stockItems.find(s => s.id === id);
-                                                if (item) {
-                                                    setSelectedStockItem(item);
-                                                    setProfileName(`${item.name} 规格换算`);
-                                                    setBulkCost(getCostPerBaseUnit(item));
-                                                    setBulkUnit(getBaseUnit(item));
-                                                } else {
-                                                    setSelectedStockItem(null);
-                                                }
-                                            }}
-                                        >
-                                            <option value="">-- 手动输入，或选择系统既有库存物料 --</option>
-                                            {stockItems.map(s => (
-                                                <option key={s.id} value={s.id}>
-                                                    📦 {s.name} ({getBaseUnit(s)}) — 基础成本 RM {getCostPerBaseUnit(s).toFixed(2)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* 规格换算模板名称 */}
-                                    <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">换算模板名称</label>
-                                        <input 
-                                            type="text"
-                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-indigo-400"
-                                            value={profileName}
-                                            onChange={e => setProfileName(e.target.value)}
-                                            placeholder="例: 大只海虾 (41/50) 换算"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3.5 bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                                        {/* 大包装订货信息 */}
-                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pb-1.5 flex items-center gap-1">
-                                            <span>🛒</span> 进货大包装规格
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">订货成本 (RM)</label>
-                                            <input 
-                                                type="number"
-                                                step="0.01"
-                                                className="w-full p-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-center"
-                                                value={bulkCost}
-                                                onChange={e => setBulkCost(parseFloat(e.target.value) || 0)}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">订货大单位</label>
-                                            <select 
-                                                className="w-full p-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-center h-[38px]"
-                                                value={bulkUnit}
-                                                onChange={e => setBulkUnit(e.target.value)}
-                                            >
-                                                <option value="kg">kg (公斤)</option>
-                                                <option value="bottle">bottle (瓶)</option>
-                                                <option value="bag">bag (袋)</option>
-                                                <option value="box">box (箱)</option>
-                                                <option value="pkt">pkt (包)</option>
-                                            </select>
-                                        </div>
-
-                                        {/* 换算出成规格 */}
-                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center gap-1">
-                                            <span>🔢</span> 包装内细分总含量 (Capacity Count)
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">每袋/每公斤含多少</label>
-                                            <input 
-                                                type="number"
-                                                className="w-full p-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-center"
-                                                value={capacityCount}
-                                                onChange={e => setCapacityCount(parseFloat(e.target.value) || 1)}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">
-                                                个/克/毫升单位 {useFormulaSync && <span className="text-indigo-600">🔗</span>}
-                                            </label>
-                                            <input 
-                                                type="text"
-                                                className={`w-full p-2 text-center rounded-lg border text-sm font-bold h-[38px] ${useFormulaSync ? 'bg-indigo-50 text-indigo-700 border-indigo-200 cursor-not-allowed font-extrabold' : 'bg-white border-gray-200 text-black'}`}
-                                                value={capacityUnit}
-                                                disabled={useFormulaSync}
-                                                onChange={e => setCapacityUnit(e.target.value)}
-                                                placeholder="只/g/ml"
-                                            />
-                                            {useFormulaSync && (
-                                                <span className="text-[8px] text-indigo-600 font-bold block mt-1 leading-tight">
-                                                    🔒 自动同步自配方中的“{capacityUnit}”单位。如需更改，请在上方点击【✍_ 独立手动填报】或在菜谱配方中修改。
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* 每碟菜用量/模式选择 */}
-                                        <div className="col-span-2 text-[10px] text-gray-600 font-black tracking-wider border-b border-gray-200 pt-2 pb-1.5 flex items-center justify-between">
-                                            <span className="flex items-center gap-1">🍽️ 菜品单份（碟）制作消耗量</span>
-                                            
-                                            <div className="flex bg-gray-200 p-0.5 rounded-lg border border-gray-300">
-                                                <button
-                                                    type="button"
-                                                    disabled={useFormulaSync}
-                                                    onClick={() => setIsMultiSize(false)}
-                                                    className={`text-[9px] px-2 py-1 rounded font-black transition-all ${useFormulaSync ? 'opacity-50 cursor-not-allowed' : ''} ${!isMultiSize ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-                                                >
-                                                    单规格
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={useFormulaSync}
-                                                    onClick={() => setIsMultiSize(true)}
-                                                    className={`text-[9px] px-2 py-1 rounded font-black transition-all ${useFormulaSync ? 'opacity-50 cursor-not-allowed' : ''} ${isMultiSize ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500'}`}
-                                                >
-                                                    S/M/L (小中大)
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {!isMultiSize ? (
-                                            <>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">
-                                                        一碟菜标准用量 {useFormulaSync && <span className="text-indigo-600">🔗 [自动同步]</span>}
-                                                    </label>
-                                                    <input 
-                                                        type="number"
-                                                        step="0.1"
-                                                        className={`w-full p-2 text-center rounded-lg border text-sm font-bold h-[38px] ${useFormulaSync ? 'bg-indigo-50 text-indigo-700 border-indigo-200 cursor-not-allowed font-extrabold' : 'bg-white border-gray-200 text-black'}`}
-                                                        value={dishQty}
-                                                        disabled={useFormulaSync}
-                                                        onChange={e => setDishQty(parseFloat(e.target.value) || 1)}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block font-mono">单位</label>
-                                                    <div className="w-full p-2 bg-gray-100 border border-gray-200 rounded-lg text-sm font-bold text-center text-gray-600 select-none h-[38px] flex items-center justify-center">
-                                                        {capacityUnit}
-                                                    </div>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="col-span-2 grid grid-cols-3 gap-2.5 bg-indigo-50/20 p-2.5 rounded-xl border border-indigo-100/50">
-                                                <div>
-                                                    <label className="text-[9px] font-black text-indigo-700 uppercase mb- block text-center flex items-center justify-center gap-0.5">
-                                                        <span>🔴 小碟 (S)</span> {useFormulaSync && <span className="text-[9px] text-indigo-500">🔒</span>}
-                                                    </label>
-                                                    <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden h-[34px]">
-                                                        <input 
-                                                            type="number"
-                                                            step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
-                                                            value={dishQtyS}
-                                                            disabled={useFormulaSync}
-                                                            onChange={e => setDishQtyS(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                                            placeholder="0"
-                                                        />
-                                                        <span className="p-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 font-bold flex items-center justify-center border-l select-none shrink-0">{capacityUnit}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <label className="text-[9px] font-black text-indigo-700 uppercase mb- block text-center flex items-center justify-center gap-0.5 font-bold">
-                                                        <span>🟡 中碟 (M)</span> {useFormulaSync && <span className="text-[9px] text-indigo-500">🔒</span>}
-                                                    </label>
-                                                    <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden h-[34px]">
-                                                        <input 
-                                                            type="number"
-                                                            step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
-                                                            value={dishQtyM}
-                                                            disabled={useFormulaSync}
-                                                            onChange={e => setDishQtyM(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                                            placeholder="0"
-                                                        />
-                                                        <span className="p-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 font-bold flex items-center justify-center border-l select-none shrink-0">{capacityUnit}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <label className="text-[9px] font-black text-indigo-700 uppercase mb- block text-center flex items-center justify-center gap-0.5">
-                                                        <span>🟢 大碟 (L)</span> {useFormulaSync && <span className="text-[9px] text-indigo-500">🔒</span>}
-                                                    </label>
-                                                    <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden h-[34px]">
-                                                        <input 
-                                                            type="number"
-                                                            step="0.1"
-                                                            className={`w-full p-1 text-center font-black text-xs outline-none ${useFormulaSync ? 'bg-indigo-50/50 text-indigo-700 cursor-not-allowed font-extrabold' : 'text-gray-900'}`}
-                                                            value={dishQtyL}
-                                                            disabled={useFormulaSync}
-                                                            onChange={e => setDishQtyL(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                                            placeholder="0"
-                                                        />
-                                                        <span className="p-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 font-bold flex items-center justify-center border-l select-none shrink-0">{capacityUnit}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* 自动极速运算面板 */}
-                                    <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3">
-                                        <h5 className="text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center gap-1">
-                                            <span>📊</span> 规格换算计算结果 (Calculated Outputs)
-                                        </h5>
-
-                                        {(() => {
-                                            const singleUnitCost = bulkCost / (capacityCount || 1);
-                                            
-                                            if (!isMultiSize) {
-                                                const dishCost = dishQty * singleUnitCost;
-                                                const platesPerBulk = Math.floor(capacityCount / (dishQty || 1));
-                                                return (
-                                                    <div className="grid grid-cols-2 gap-3.5">
-                                                        <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-sm">
-                                                            <span className="text-[9px] text-gray-400 font-bold block">单件（只/克）核算价</span>
-                                                            <span className="font-mono font-black text-xs text-[#111111]">
-                                                                RM {singleUnitCost.toFixed(4)} <span className="text-[9px] text-gray-500">/{capacityUnit}</span>
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-sm">
-                                                            <span className="text-[9px] text-gray-400 font-bold block">单碟菜品原物料成本</span>
-                                                            <span className="font-mono font-black text-xs text-green-700">
-                                                                RM {dishCost.toFixed(2)} <span className="text-[9px] text-gray-500">/{dishQty}{capacityUnit}</span>
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="bg-white p-3 rounded-xl border-2 border-indigo-200 shadow-sm col-span-2 flex items-center justify-between">
-                                                            <div>
-                                                                <span className="text-[9px] text-indigo-700 font-black block uppercase tracking-wider">每 {bulkUnit === 'kg' ? '1kg' : `1 ${bulkUnit}`} 理论最大可出</span>
-                                                                <p className="text-[10px] text-gray-500 font-medium leading-relaxed mt-0.5">
-                                                                    1大包物料理论可制作标准碟数
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="font-sans font-black text-xl text-indigo-700">
-                                                                    ≈ {platesPerBulk} <span className="text-xs">碟</span>
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            } else {
-                                                const qtyS = Number(dishQtyS) || 0;
-                                                const qtyM = Number(dishQtyM) || 0;
-                                                const qtyL = Number(dishQtyL) || 0;
-
-                                                const costS = qtyS * singleUnitCost;
-                                                const costM = qtyM * singleUnitCost;
-                                                const costL = qtyL * singleUnitCost;
-
-                                                const maxPlatesS = qtyS > 0 ? Math.floor(capacityCount / qtyS) : 0;
-                                                const maxPlatesM = qtyM > 0 ? Math.floor(capacityCount / qtyM) : 0;
-                                                const maxPlatesL = qtyL > 0 ? Math.floor(capacityCount / qtyL) : 0;
-
-                                                return (
-                                                    <div className="space-y-2.5">
-                                                        <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-sm">
-                                                            <span className="text-[9px] text-gray-400 font-bold block">基础单件（只/克）核算价</span>
-                                                            <span className="font-mono font-black text-xs text-[#111111]">
-                                                                RM {singleUnitCost.toFixed(4)} <span className="text-[9px] text-gray-500">/{capacityUnit}</span>
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            <div className="bg-white p-2 rounded-xl border border-amber-100 text-center">
-                                                                <span className="text-[8px] text-gray-400 font-bold block">S小碟成本</span>
-                                                                <span className="font-mono font-black text-xs text-green-700">RM {costS.toFixed(2)}</span>
-                                                                <span className="text-[7px] text-gray-400 block mt-0.5">≈ 可出 {maxPlatesS} 碟</span>
-                                                            </div>
-                                                            <div className="bg-white p-2 rounded-xl border border-amber-100 text-center">
-                                                                <span className="text-[8px] text-gray-400 font-bold block">M中碟成本</span>
-                                                                <span className="font-mono font-black text-xs text-green-700 font-black">RM {costM.toFixed(2)}</span>
-                                                                <span className="text-[7px] text-gray-400 block mt-0.5">≈ 可出 {maxPlatesM} 碟</span>
-                                                            </div>
-                                                            <div className="bg-white p-2 rounded-xl border border-amber-100 text-center">
-                                                                <span className="text-[8px] text-gray-400 font-bold block">L大碟成本</span>
-                                                                <span className="font-mono font-black text-xs text-green-700">RM {costL.toFixed(2)}</span>
-                                                                <span className="text-[7px] text-gray-400 block mt-0.5">≈ 可出 {maxPlatesL} 碟</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-                                        })()}
-                                    </div>
-
-                                    {/* 提交与编辑控制按钮 */}
-                                    <div className="pt-2 flex gap-3">
-                                        <button 
-                                            onClick={handleSaveProfile}
-                                            className="flex-1 py-3 bg-[#111111] hover:bg-black text-[#FFD200] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all min-h-[44px]"
-                                        >
-                                            <Save size={14} /> 保存为换算模板
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* ==================================================== */}
-                            {/* 右侧: 损耗核销稽核（厨房对账） */}
-                            {/* ==================================================== */}
-                            <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
-                                <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-                                    <h4 className="font-black text-base text-[#111111] flex items-center gap-1.5">
-                                        <span className="text-xl">🧮</span> 厨房耗损与漏损对账审计 (Reconciliation Panel)
-                                    </h4>
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase">步骤 2</span>
-                                </div>
-
-                                <div className="space-y-4">
-                                    {/* 选择规则模板 */}
-                                    <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">选择计算模板</label>
-                                        <div className="flex gap-2">
-                                            <select 
-                                                className="flex-grow p-3 bg-gray-50 rounded-xl text-xs font-black outline-none border border-gray-200 text-black min-h-[44px]"
-                                                value={selectedProfileId}
-                                                onChange={e => {
-                                                    const val = e.target.value;
-                                                    setSelectedProfileId(val);
-                                                    setActualBulkConsumed('');
-                                                    setActualDishesSold('');
-                                                    setSoldS('');
-                                                    setSoldM('');
-                                                    setSoldL('');
-                                                }}
-                                            >
-                                                <option value="">-- 请选择对应食材规格换算模板 --</option>
-                                                {conversionProfiles.map(p => {
-                                                    const live = getLiveQuantities(p);
-                                                    const syncTag = live.isLiveSynced ? '🔗 ' : '';
-                                                    const detailText = p.isMultiSize 
-                                                        ? `S碟=${live.dishQtyS} / M碟=${live.dishQtyM} / L碟=${live.dishQtyL} ${live.capacityUnit}` 
-                                                        : `1碟=${live.dishQty} ${live.capacityUnit}`;
-                                                    return (
-                                                        <option key={p.id} value={p.id}>
-                                                            ⚖️ {syncTag}{p.profileName} (1 {p.bulkUnit} = {p.capacityCount} {live.capacityUnit} | {detailText})
-                                                        </option>
-                                                    );
-                                                })}
-                                            </select>
-                                            {selectedProfileId && (
-                                                <button 
-                                                    onClick={() => handleDeleteProfile(selectedProfileId)}
-                                                    className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-red-50 text-red-600 rounded-xl hover:bg-red-500 hover:text-white transition-all active:scale-95 border border-red-200/50"
-                                                    title="删除换算模板"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* 选择模板后的计算参数输入 */}
-                                    {selectedProfileId ? (
-                                        (() => {
-                                            const p = conversionProfiles.find(x => x.id === selectedProfileId);
-                                            if (!p) return null;
-
-                                            // 👑 智能计算当前配方实时联动数值 (穿透最新菜谱配方)
-                                            const live = getLiveQuantities(p);
-
-                                            // 实际参数
-                                            const actualConsumedNum = Number(actualBulkConsumed) || 0;
-                                            
-                                            // 计算理论耗用 (用量单位)
-                                            let totalTheoreticalUsed = 0;
-                                            if (p.isMultiSize) {
-                                                totalTheoreticalUsed = (Number(soldS) || 0) * (live.dishQtyS || 0) + 
-                                                                       (Number(soldM) || 0) * (live.dishQtyM || 0) + 
-                                                                       (Number(soldL) || 0) * (live.dishQtyL || 0);
-                                            } else {
-                                                totalTheoreticalUsed = (Number(actualDishesSold) || 0) * (live.dishQty || 0);
-                                            }
-
-                                            // 1 理论用量比例
-                                            const materialsNeeded = totalTheoreticalUsed / p.capacityCount;
-
-                                            // 2 原料溢耗差异 = 实际消耗 - 标准用量
-                                            const varianceQty = actualConsumedNum - materialsNeeded;
-                                            const variancePct = actualConsumedNum > 0 ? (varianceQty / actualConsumedNum) * 100 : 0;
-                                            const lossCost = varianceQty * p.bulkCost;
-
-                                            // 判定损耗严重度
-                                            let alertColor = 'bg-green-50 border-green-200 text-green-800';
-                                            let alertTitle = '👍 损耗正常 (Excellent)';
-                                            let alertDesc = '厨房用料与账面销售完全匹配，正常损耗率在 5% 以内。请继续保持精细化备餐。';
-                                            if (variancePct > 5 && variancePct <= 15) {
-                                                alertColor = 'bg-yellow-50 border-yellow-300 text-yellow-800';
-                                                alertTitle = '⚠️ 有微量物料损耗 (Moderate Loss)';
-                                                alertDesc = '食材存在 5% - 15% 的中度损耗。可能原因：备餐切配边角料多、解冻带冰水偏多或出餐打秤轻微超标，建议提醒后厨装盘质量。';
-                                            } else if (variancePct > 15) {
-                                                alertColor = 'bg-rose-50 border-rose-200 text-rose-900';
-                                                alertTitle = '🚨 发现厨房严重泄漏流失！(Severe Leakage)';
-                                                alertDesc = '物料耗损率已超 15%！说明当日食材很大去向不明。建议严查：厨房偷吃带走、备餐废弃严重、死秤克数超标、或者存在逃单、飞单漏单行为！';
-                                            } else if (variancePct < -5) {
-                                                alertColor = 'bg-blue-50 border-blue-200 text-blue-900';
-                                                alertTitle = '🧐 食材节省 (Under-portioned / Under-used)';
-                                                alertDesc = '物料消耗比销售理论数量更低。可能原因：后厨出餐克数偏小，请审核菜品规格与装盘质量。';
-                                            }
-
-                                            // 校验是否已经录入数据了
-                                            const hasEnteredSales = p.isMultiSize 
-                                                ? (soldS !== '' || soldM !== '' || soldL !== '')
-                                                : actualDishesSold !== '';
-                                            const isReadyToCalc = actualBulkConsumed !== '' && hasEnteredSales;
-
-                                            return (
-                                                <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-                                                    
-                                                    {/* 👑 配方超联动动态提示条 */}
-                                                    {live.isLiveSynced && (
-                                                        <div className="bg-gradient-to-r from-[#f0fdf4] to-[#f5f3ff] border border-indigo-200/60 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-                                                            <div className="space-y-0.5">
-                                                                <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
-                                                                    <span>⚡</span> 智能配方超联动中 (Active Live Sync)
-                                                                </h6>
-                                                                <p className="text-[9.5px] text-indigo-800 font-medium">
-                                                                    对账数据已穿透并实时匹配 <strong>{live.menuName}</strong> 的规格用量配比。
-                                                                </p>
-                                                            </div>
-                                                            <span className="text-[8px] bg-indigo-700 text-white font-extrabold px-1.5 py-1 rounded shadow-sm select-none shrink-0 uppercase tracking-wider font-mono">
-                                                                LIVE
-                                                            </span>
-                                                        </div>
-                                                    )}
-
-                                                    {/* 段落A: 实际发货/领用量 */}
-                                                    <div className="grid grid-cols-1 gap-3 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
-                                                        <div>
-                                                            <label className="text-[10px] font-black text-indigo-700 uppercase mb-1 block">
-                                                                当日库存实际领用/到货量 (A)
-                                                            </label>
-                                                            <div className="flex bg-white rounded-lg border border-indigo-200 overflow-hidden min-h-[44px]">
-                                                                <input 
-                                                                    type="number"
-                                                                    className="w-full p-2 font-black text-sm text-center text-[#111111] outline-none"
-                                                                    value={actualBulkConsumed}
-                                                                    onChange={e => setActualBulkConsumed(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                                                    placeholder={`如: 开箱 / 订购了多少 ${p.bulkUnit}`}
-                                                                />
-                                                                <span className="p-2.5 bg-indigo-100 text-[10px] font-black flex items-center justify-center text-indigo-800 border-l border-indigo-200 shrink-0 select-none">
-                                                                    {p.bulkUnit}
-                                                                </span>
-                                                            </div>
-                                                            <span className="text-[9px] text-[#FF4500] mt-1 block leading-tight font-medium">💡 即当日从冰库总共发出领用或供应商送货的食材总量。员工无需每日计算厨房消耗，只需关注订了多少。</span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 段落B: 销量输入 */}
-                                                    <div className="bg-emerald-50/20 p-4 rounded-2xl border border-emerald-100 space-y-3">
-                                                        <label className="text-[10px] font-black text-emerald-800 uppercase block">
-                                                            当日 POS 实际出碟销售量 (B)
-                                                        </label>
-
-                                                        {p.isMultiSize ? (
-                                                            <div className="space-y-2">
-                                                                <span className="text-[9px] text-emerald-600 font-bold block mb-1">请输入 POS 导出的各规格销量：</span>
-                                                                <div className="grid grid-cols-3 gap-2">
-                                                                    <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center">
-                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">S小碟销量</span>
-                                                                        <input 
-                                                                            type="number"
-                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
-                                                                            value={soldS}
-                                                                            onChange={e => setSoldS(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                                                            placeholder="0"
-                                                                        />
-                                                                        <span className="text-[7.5px] text-gray-400 block mt-1">{live.dishQtyS} {live.capacityUnit}/碟</span>
-                                                                    </div>
-                                                                    <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center font-bold">
-                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">M中碟销量</span>
-                                                                        <input 
-                                                                            type="number"
-                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
-                                                                            value={soldM}
-                                                                            onChange={e => setSoldM(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                                                            placeholder="0"
-                                                                        />
-                                                                        <span className="text-[7.5px] text-gray-400 block mt-1">{live.dishQtyM} {live.capacityUnit}/碟</span>
-                                                                    </div>
-                                                                    <div className="bg-white p-2 rounded-xl border border-emerald-100 text-center font-bold">
-                                                                        <span className="text-[9px] text-gray-600 font-bold block mb-1">L大碟销量</span>
-                                                                        <input 
-                                                                            type="number"
-                                                                            className="w-full p-1 border border-gray-300 rounded font-mono font-bold text-xs text-center outline-none focus:border-emerald-500 text-black placeholder-gray-300"
-                                                                            value={soldL}
-                                                                            onChange={e => setSoldL(e.target.value === '' ? '' : parseInt(e.target.value))}
-                                                                            placeholder="0"
-                                                                        />
-                                                                        <span className="text-[7.5px] text-gray-400 block mt-1">{live.dishQtyL} {live.capacityUnit}/碟</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div>
-                                                                <div className="flex bg-white rounded-lg border border-emerald-300 overflow-hidden min-h-[44px]">
-                                                                    <input 
-                                                                        type="number"
-                                                                        className="w-full p-2 font-black text-sm text-center text-[#111111] outline-none"
-                                                                        value={actualDishesSold}
-                                                                        onChange={e => setActualDishesSold(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                                                        placeholder="请输入今日销售总碟数"
-                                                                    />
-                                                                    <span className="p-2.5 bg-emerald-50 text-[10px] font-black flex items-center justify-center text-emerald-800 border-l border-emerald-200 shrink-0 select-none">
-                                                                        碟
-                                                                    </span>
-                                                                </div>
-                                                                <span className="text-[9px] text-gray-500 mt-1 block leading-tight font-medium">💡 即当日POS系统统计或前厅下达的实际出餐标准碟数。</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* 对账分析仪表盘 */}
-                                                    {isReadyToCalc && (
-                                                        <div className="space-y-4 pt-2 animate-in fade-in duration-200">
-                                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                                                
-                                                                <div className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
-                                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">到货量理论可制</span>
-                                                                    <span className="font-mono font-bold text-xs text-[#111111] block font-semibold leading-relaxed">
-                                                                        {p.isMultiSize ? (
-                                                                            <span>
-                                                                                S: {Math.floor(p.capacityCount * actualConsumedNum / (live.dishQtyS || 1))} 碟<br/>
-                                                                                M: {Math.floor(p.capacityCount * actualConsumedNum / (live.dishQtyM || 1))} 碟
-                                                                            </span>
-                                                                        ) : (
-                                                                            `${(p.capacityCount * actualConsumedNum / (live.dishQty || 1)).toFixed(1)} 碟`
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-
-                                                                <div className="bg-[#EBF8FF] border border-[#BEE3F8] p-3 rounded-xl">
-                                                                    <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest block mb-0.5">实际销售标准需要</span>
-                                                                    <span className="font-mono font-black text-sm text-blue-700 block">
-                                                                        {materialsNeeded.toFixed(2)} {p.bulkUnit}
-                                                                    </span>
-                                                                    <span className="text-[9px] text-[#2B6CB0] block mt-1 leading-normal font-medium">
-                                                                        配额: {totalTheoreticalUsed.toFixed(1)} {live.capacityUnit}
-                                                                    </span>
-                                                                </div>
-
-                                                                <div className="bg-red-50/55 border border-red-100 p-3 rounded-xl col-span-2 md:col-span-1">
-                                                                    <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest block mb-0.5">异常损耗流失 (A-B)</span>
-                                                                    <span className="font-mono font-black text-sm text-red-700 block">
-                                                                        {varianceQty > 0 ? `⚠️ ${varianceQty.toFixed(2)}` : varianceQty.toFixed(2)} {p.bulkUnit}
-                                                                    </span>
-                                                                    <span className="text-[9px] text-red-600 block mt-1 leading-normal font-bold">
-                                                                        折合流失 RM {lossCost.toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* 🚨 损耗率警告条 */}
-                                                            <div className="bg-gray-100 p-3 rounded-xl flex items-center justify-between border border-gray-200">
-                                                                <div>
-                                                                    <span className="text-[10px] text-gray-600 font-bold block uppercase tracking-wider">当日物料逸损率 (Loss Rate)</span>
-                                                                    <p className="text-[10px] text-gray-400 leading-normal">
-                                                                        大部分食材行业标准浪费常介于 ±5% 内
-                                                                    </p>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <span className={`text-lg font-black ${variancePct > 15 ? 'text-rose-600' : variancePct > 5 ? 'text-amber-600' : 'text-green-600'}`}>
-                                                                        {variancePct.toFixed(2)}%
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* 系统智能判定报告卡 */}
-                                                            <div className={`p-4 rounded-2xl border ${alertColor} space-y-1.5`}>
-                                                                <h5 className="font-black text-sm flex items-center gap-1.5">
-                                                                    {alertTitle}
-                                                                </h5>
-                                                                <p className="text-xs leading-relaxed font-bold">
-                                                                    {alertDesc}
-                                                                </p>
-                                                                {varianceQty > 0 && (
-                                                                    <p className="text-[11px] border-t border-current/15 pt-2 mt-2 leading-relaxed">
-                                                                        📋 <strong>数据分析账单:</strong> 剔除正常切配等偏差后，今日共有 <strong>{(varianceQty * p.capacityCount).toFixed(0)} {live.capacityUnit}</strong> 的物料消失没能核销到销售中，相当于凭空隐性亏损了 <strong>
-                                                                            {p.isMultiSize 
-                                                                                ? `${Math.floor(varianceQty * p.capacityCount / (live.dishQtyS || 1))} 小碟(S) 或 ${Math.floor(varianceQty * p.capacityCount / (live.dishQtyM || 1))} 中碟(M)` 
-                                                                                : `${Math.floor(varianceQty * p.capacityCount / (live.dishQty || 1))} 碟`
-                                                                            }
-                                                                        </strong> 菜品本该得到的收益！
-                                                                    </p>
-                                                                )}
-                                                            </div>
-
-                                                            {/* 🚨 损耗率警告条 */}
-                                                            <div className="bg-gray-100 p-3 rounded-xl flex items-center justify-between border border-gray-200">
-                                                                <div>
-                                                                    <span className="text-[10px] text-gray-500 font-bold block uppercase tracking-wider">当日物料逸损率 (Loss Rate)</span>
-                                                                    <p className="text-[10px] text-gray-400 leading-normal">
-                                                                        大部门食材行业标准浪费常介于 ±5% 内
-                                                                    </p>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <span className={`text-lg font-black ${variancePct > 15 ? 'text-rose-600' : variancePct > 5 ? 'text-amber-600' : 'text-green-600'}`}>
-                                                                        {variancePct.toFixed(2)}%
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* 系统智能判定报告卡 */}
-                                                            <div className={`p-4 rounded-2xl border ${alertColor} space-y-1.5`}>
-                                                                <h5 className="font-black text-sm flex items-center gap-1.5">
-                                                                    {alertTitle}
-                                                                </h5>
-                                                                <p className="text-xs leading-relaxed font-bold">
-                                                                    {alertDesc}
-                                                                </p>
-                                                                {varianceQty > 0 && (
-                                                                    <p className="text-[11px] border-t border-current/15 pt-2 mt-2 leading-relaxed">
-                                                                        📋 <strong>数据分析账单:</strong> 剔除正常切配等偏差后，今日共有 <strong>{(varianceQty * p.capacityCount).toFixed(0)} {p.capacityUnit}</strong> 的物料消失没能核销到销售中，相当于凭空隐性亏损了 <strong>
-                                                                            {p.isMultiSize 
-                                                                                ? `${Math.floor(varianceQty * p.capacityCount / (p.dishQtyS || 1))} 小碟(S) 或 ${Math.floor(varianceQty * p.capacityCount / (p.dishQtyM || 1))} 中碟(M)` 
-                                                                                : `${Math.floor(varianceQty * p.capacityCount / (p.dishQty || 1))} 碟`
-                                                                            }
-                                                                        </strong> 菜品本该得到的收益！
-                                                                    </p>
-                                                                )}
-                                                            </div>
-
-                                                            {/* 是否同步扣减库存选项 */}
-                                                            {p.stockId && p.stockId !== 'manual' && (
-                                                                <div className="flex items-center gap-2.5 p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl mb-2 text-left">
-                                                                    <input 
-                                                                        type="checkbox" 
-                                                                        id="sync-deduct-checkbox" 
-                                                                        className="w-4 h-4 rounded text-indigo-600 border-indigo-200 focus:ring-indigo-500 cursor-pointer"
-                                                                        checked={shouldDeductStock}
-                                                                        onChange={e => setShouldDeductStock(e.target.checked)}
-                                                                    />
-                                                                    <label htmlFor="sync-deduct-checkbox" className="text-[10px] font-black text-indigo-900 cursor-pointer select-none">
-                                                                        🔄 同时自动从【库存总览】中扣减 {actualConsumedNum} {p.bulkUnit} 库存数量
-                                                                    </label>
-                                                                </div>
-                                                            )}
-
-                                                            {/* 保存与归档存档 */}
-                                                            <button 
-                                                                onClick={() => {
-                                                                    let actualSoldDisplay = '';
-                                                                    if (p.isMultiSize) {
-                                                                        actualSoldDisplay = `S:${soldS || 0}碟 M:${soldM || 0}碟 L:${soldL || 0}碟`;
-                                                                    } else {
-                                                                        actualSoldDisplay = `${actualDishesSold}碟`;
-                                                                    }
-                                                                    handleSaveAuditLog({
-                                                                        profileName: p.profileName,
-                                                                        actualConsumed: actualConsumedNum,
-                                                                        bulkUnit: p.bulkUnit,
-                                                                        actualSold: actualSoldDisplay,
-                                                                        variancePct: variancePct,
-                                                                        lossCost: lossCost
-                                                                    }, p.stockId, actualConsumedNum);
-                                                                }}
-                                                                className="w-full py-3 bg-[#111111] hover:bg-black text-[#FFD200] rounded-xl font-black text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md min-h-[44px]"
-                                                            >
-                                                                💾 归档当日对账记录 (Archive Report)
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()
-                                    ) : (
-                                        <div className="bg-gray-50 rounded-2xl p-8 border border-dashed border-gray-300 text-center text-xs text-gray-400 font-bold font-sans">
-                                            💡 请在上方先选择一个已创建的「规格换算模板」，即可开始每日损耗对账审计。
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* ==================================================== */}
-                            {/* 历史审计记录归档 (Persistence Timeline Area) */}
-                            {/* ==================================================== */}
-                            <div className="col-span-1 lg:col-span-2 bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200/80 space-y-4">
-                                <h4 className="font-black text-base text-[#111111] flex items-center gap-2">
-                                    <span>📨</span> 历史物料稽账与稽核归档史 (Audit Archives History)
-                                </h4>
-                                {auditLogs.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs text-left">
-                                            <thead>
-                                                <tr className="border-b border-gray-200 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
-                                                    <th className="py-2">审计日期</th>
-                                                    <th className="py-2">物料换算模板</th>
-                                                    <th className="py-2 text-center">实际原料领发</th>
-                                                    <th className="py-2 text-center">销售碟数</th>
-                                                    <th className="py-2 text-center">溢损率 (%)</th>
-                                                    <th className="py-2 text-right">损耗折合金额</th>
-                                                    <th className="py-2 text-right">操作</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
-                                                {auditLogs.map(log => {
-                                                    const consumedVal = typeof log.actualConsumed === 'number' 
-                                                        ? log.actualConsumed.toFixed(2) 
-                                                        : String(log.actualConsumed);
-                                                    
-                                                    const soldVal = String(log.actualSold).includes('碟') 
-                                                        ? String(log.actualSold) 
-                                                        : `${log.actualSold} 碟`;
-
-                                                    return (
-                                                        <tr key={log.id} className="hover:bg-gray-50/50">
-                                                            <td className="py-3 font-mono font-bold text-gray-400">{log.date}</td>
-                                                            <td className="py-3 font-bold text-[#111111]">{log.profileName}</td>
-                                                            <td className="py-3 text-center font-bold text-indigo-700">
-                                                                {consumedVal} <span className="text-[10px] text-indigo-400">{log.bulkUnit || ''}</span>
-                                                            </td>
-                                                            <td className="py-3 text-center font-bold text-gray-800 text-[11px]">{soldVal}</td>
-                                                            <td className="py-3 text-center animate-pulse">
-                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                                                    log.variancePct > 15 ? 'bg-red-100 text-red-700' : 
-                                                                    log.variancePct > 5 ? 'bg-yellow-100 text-yellow-900' : 
-                                                                    log.variancePct < -5 ? 'bg-blue-100 text-blue-700' :
-                                                                    'bg-green-100 text-green-700'
-                                                                }`}>
-                                                                    {log.variancePct.toFixed(2)}%
-                                                                </span>
-                                                            </td>
-                                                            <td className="py-3 text-right font-mono font-black text-red-700">
-                                                                RM {log.lossCost.toFixed(2)}
-                                                            </td>
-                                                            <td className="py-3 text-right">
-                                                                <button
-                                                                    onClick={() => handleDeleteAuditLog(log.id)}
-                                                                    className="text-red-500 hover:text-red-700 font-extrabold active:scale-95 transition-all text-xs"
-                                                                >
-                                                                    删除
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <p className="text-xs text-gray-400 italic text-center py-6 block font-bold">
-                                        📭 暂无归档的对账稽核单。可在上方点击「归档当日对账记录」进行持久化存储。
-                                    </p>
-                                )}
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ====================================================== */}
             {/* EDIT 视图 - 编辑菜品 */}
@@ -3273,8 +2662,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-2.5">
-                                                {currentVariant.recipe.map((ing, i) => renderIngredientCard(ing, i))}
+                                            {/* 表头 (桌面) */}
+                                            <div className="hidden md:flex items-center gap-2 px-2 pb-1 text-[9px] font-black text-gray-400 uppercase tracking-wider">
+                                                <span className="w-7 shrink-0 text-center">#</span>
+                                                <span className="w-9 shrink-0" />
+                                                <span className="flex-grow">食材 Ingredient</span>
+                                                <span className="w-[150px] shrink-0 text-center">用量 Qty</span>
+                                                <span className="w-[92px] shrink-0 text-right">成本 RM</span>
+                                                <span className="w-6 shrink-0" />
+                                                <span className="w-8 shrink-0" />
+                                                <span className="w-8 shrink-0" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                {currentVariant.recipe.map((ing, i) => renderIngredientRow(ing, i))}
+                                            </div>
+                                            {/* 合计 */}
+                                            <div className="flex items-center justify-between bg-[#111111] text-white rounded-xl px-4 py-3 mt-2">
+                                                <span className="text-[11px] font-bold text-gray-300">食材原料净成本 (未含调料/损耗)</span>
+                                                <span className="font-mono tabular-nums font-black text-[#FFD200] text-base">RM {baseRecipeCost.toFixed(2)}</span>
                                             </div>
                                             {renderPieceUnitsDatalist()}
                                         </>

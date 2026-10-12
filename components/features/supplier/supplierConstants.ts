@@ -31,6 +31,7 @@ export const ACCOUNTING_CATEGORIES_OPTIONS = {
         { id: 'PACKAGING', label: '包装材料 (Packaging)' },
         { id: 'GAS_COGS', label: '烹饪煤气 (Cooking Gas)' },
         { id: 'CHARCOAL', label: '火炭 (Charcoal)' },                // 新增
+        { id: 'INGREDIENT_OIL', label: '食用油 (Cooking Oil)' },     // 新增
         { id: 'SUPPLIER', label: '一般进货 (General)' }
     ],
     'OPEX (营运开支)': [
@@ -73,3 +74,4 @@ export interface SupplierReceivedItem extends PurchaseOrderItem {
     billByWeight?: boolean;
     receivedWeight?: number;
 }
+    

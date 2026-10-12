@@ -2,6 +2,8 @@ import React from "react";
 import { Lock, Info, Save, Settings } from "lucide-react";
 import { TreasuryButton } from "../components/TreasuryButton";
 import { TreasuryFormField } from "../components/TreasuryFormField";
+import { TreasuryCard } from "../components/TreasuryCard";
+import { TreasurySectionHeader } from "../components/TreasurySectionHeader";
 
 interface TreasurySettingsTabProps {
   isSettingsUnlocked: boolean;
@@ -33,22 +35,22 @@ export const TreasurySettingsTab: React.FC<TreasurySettingsTabProps> = ({
   onLock,
 }) => {
   return (
-    <div className="max-w-2xl mx-auto animate-in fade-in duration-200">
+    <div className="mx-auto max-w-2xl">
       {!isSettingsUnlocked ? (
-        /* 🔐 Lock screen password verification */
-        <div className="bg-white p-6 md:p-10 rounded-[2rem] shadow-sm border border-gray-200 text-center space-y-6">
-          <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto select-none">
-            <Lock size={28} className="text-gray-400" />
-          </div>
+        /* 密码锁 */
+        <TreasuryCard className="space-y-5 text-center">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#F6F7FB]">
+            <Lock size={24} strokeWidth={2} className="text-stone-400" />
+          </span>
+
           <div>
-            <h3 className="font-extrabold text-base md:text-lg text-[#111111]">
-              系统设置已锁定
-            </h3>
-            <p className="text-xs text-gray-400 mt-1.5 font-bold">
-              请输入高权限管理员密码以解锁初始资金设置
+            <h3 className="text-base font-bold text-[#111111]">系统设置已锁定</h3>
+            <p className="mt-1.5 text-xs text-stone-500">
+              请输入管理员密码以解锁初始资金设置
             </p>
           </div>
-          <div className="max-w-xs mx-auto">
+
+          <div className="mx-auto max-w-xs">
             <input
               type="password"
               inputMode="numeric"
@@ -61,92 +63,100 @@ export const TreasurySettingsTab: React.FC<TreasurySettingsTabProps> = ({
               onKeyDown={(e) => {
                 if (e.key === "Enter") onUnlock();
               }}
-              placeholder="输入安全密码..."
-              className={`w-full p-4 bg-gray-50 rounded-xl font-mono font-black text-xl text-center outline-none border-2 tracking-[0.5em] transition-colors ${
+              placeholder="输入密码"
+              aria-label="管理员密码"
+              className={`h-14 w-full rounded-xl border bg-[#F6F7FB] text-center font-mono text-xl font-bold tracking-[0.4em] text-[#111111] outline-none transition-colors placeholder:text-base placeholder:tracking-normal placeholder:text-stone-400 ${
                 settingsPasswordError
-                  ? "border-red-400 bg-red-50 animate-shake"
-                  : "border-gray-200 focus:border-[#FFD200]"
+                  ? "border-[#8B0000] bg-[#8B0000]/5"
+                  : "border-[#E5E7EB] focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/25"
               }`}
             />
             {settingsPasswordError && (
-              <p className="text-red-500 text-[11px] font-bold mt-2 animate-in fade-in">
-                ❌ 密码不正确，请重试
+              <p className="mt-2 text-[11px] font-bold text-[#8B0000]">
+                密码不正确，请重试
               </p>
             )}
           </div>
+
           <TreasuryButton
             variant="primary"
             onClick={onUnlock}
-            className="w-full max-w-xs mx-auto"
+            className="mx-auto w-full max-w-xs"
           >
             <Lock size={15} strokeWidth={2.5} /> 解锁系统
           </TreasuryButton>
-        </div>
+        </TreasuryCard>
       ) : (
-        /* 🔓 Unlocked Initial config setup screen */
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-200 space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <Settings size={20} className="text-[#111111]" />
-              <h3 className="font-extrabold text-base md:text-lg text-[#111111]">
-                系统初始结余配置
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={onLock}
-              className="text-xs text-gray-400 hover:text-red-500 font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-red-100 cursor-pointer active:scale-95 transition"
-              style={{ minHeight: "36px" }}
-            >
-              <Lock size={12} /> 锁定面板
-            </button>
+        /* 初始结余配置 */
+        <TreasuryCard>
+          <TreasurySectionHeader
+            title="系统初始结余"
+            subtitle="Opening Balance"
+            icon={Settings}
+            action={
+              <button
+                type="button"
+                onClick={onLock}
+                className="flex h-10 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 text-xs font-bold text-stone-500 transition-colors hover:bg-[#F6F7FB] hover:text-[#111111] active:scale-95"
+              >
+                <Lock size={13} strokeWidth={2.5} /> 锁定
+              </button>
+            }
+          />
+
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] p-3.5">
+            <Info
+              size={15}
+              strokeWidth={2.5}
+              className="mt-0.5 shrink-0 text-stone-500"
+            />
+            <p className="text-[11px] leading-relaxed text-stone-600">
+              修改此配置会直接重整资金计算的历史起点。请确保录入的金额是生效日期当天准确的实点现金与银行余额。
+            </p>
           </div>
 
-          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs text-amber-800 font-bold flex items-start gap-2 leading-relaxed">
-            <Info size={15} className="mt-0.5 shrink-0 text-amber-600" />
-            <div>
-              ⚠️ 注意：修改此配置将会直接重整资金计算的历史起点。
-              <br />
-              请务必确保录入的金额是目标生效日期当天准确的物理现金结余与银行流水余额。
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            {/* Start Date Field */}
+          <div className="space-y-4">
             <TreasuryFormField
-              label="历史生效起点日期 (Start Date)"
+              label="历史生效起点日期"
               id="init-date"
               type="date"
               value={config.initialDate}
-              onChange={(e) => setConfig({ ...config, initialDate: e.target.value })}
+              onChange={(e) =>
+                setConfig({ ...config, initialDate: e.target.value })
+              }
               required
             />
 
-            {/* Inputs grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <TreasuryFormField
-                label="初始现金备用金 (Initial Cash)"
+                label="初始现金备用金"
                 id="init-cash"
                 type="number"
                 step="any"
                 inputMode="decimal"
                 value={config.initialCash}
                 onChange={(e) =>
-                  setConfig({ ...config, initialCash: parseFloat(e.target.value) || 0 })
+                  setConfig({
+                    ...config,
+                    initialCash: parseFloat(e.target.value) || 0,
+                  })
                 }
                 suffix="RM"
                 required
               />
 
               <TreasuryFormField
-                label="初始银行账户余额 (Initial Bank)"
+                label="初始银行余额"
                 id="init-bank"
                 type="number"
                 step="any"
                 inputMode="decimal"
                 value={config.initialBank}
                 onChange={(e) =>
-                  setConfig({ ...config, initialBank: parseFloat(e.target.value) || 0 })
+                  setConfig({
+                    ...config,
+                    initialBank: parseFloat(e.target.value) || 0,
+                  })
                 }
                 suffix="RM"
                 required
@@ -156,12 +166,12 @@ export const TreasurySettingsTab: React.FC<TreasurySettingsTabProps> = ({
             <TreasuryButton
               variant="primary"
               onClick={onSaveConfig}
-              className="w-full !mt-6"
+              className="mt-2 w-full"
             >
-              <Save size={16} /> 保存初始余额并重算资金池
+              <Save size={16} strokeWidth={2.5} /> 保存并重算资金池
             </TreasuryButton>
           </div>
-        </div>
+        </TreasuryCard>
       )}
     </div>
   );

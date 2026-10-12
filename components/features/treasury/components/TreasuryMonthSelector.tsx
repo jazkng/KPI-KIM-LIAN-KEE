@@ -14,61 +14,56 @@ export const TreasuryMonthSelector: React.FC<TreasuryMonthSelectorProps> = ({
   onMonthShift,
   isClosed,
 }) => {
-  // selectedMonth is format "YYYY-MM"
-  const displayLabel = selectedMonth.length >= 7 
-    ? `${selectedMonth.split("-")[0]}年 ${selectedMonth.split("-")[1]}月`
-    : selectedMonth;
+  const [year, month] = selectedMonth.split("-");
+  const displayLabel =
+    selectedMonth.length >= 7 ? `${year}年 ${month}月` : selectedMonth;
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-stone-200/80 bg-white p-2 shadow-xs">
+    <div className="flex items-center justify-between gap-1 rounded-2xl border border-[#E5E7EB] bg-white p-1.5">
       <button
         onClick={() => onMonthShift(-1)}
         type="button"
-        className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone-100 hover:bg-stone-200 active:scale-90 transition-all touch-pan-y text-stone-800"
-        aria-label="Previous Month"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#111111] transition-colors hover:bg-[#F6F7FB] active:scale-90"
+        aria-label="上个月"
       >
         <ChevronLeft size={20} strokeWidth={2.5} />
       </button>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-2 text-center relative">
-        <label className="flex items-center gap-1.5 cursor-pointer hover:bg-stone-100/80 px-3 py-1 rounded-xl transition-colors active:scale-95">
-          <Calendar size={15} className="text-[#FFD200] fill-[#111111] shrink-0" />
-          <span className="text-sm font-black text-[#111111] tabular-nums tracking-wide">
+      <label className="relative flex min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl px-2 py-1 transition-colors hover:bg-[#F6F7FB]">
+        <span className="flex items-center gap-1.5">
+          <Calendar size={14} strokeWidth={2.5} className="shrink-0 text-stone-400" />
+          <span className="font-mono text-sm font-bold tabular-nums text-[#111111]">
             {displayLabel}
           </span>
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => {
-              if (e.target.value) {
-                setSelectedMonth(e.target.value);
-              }
-            }}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+        </span>
+
+        <span
+          className={`flex items-center gap-1.5 text-[10px] font-bold leading-none ${
+            isClosed ? "text-emerald-700" : "text-amber-700"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              isClosed ? "bg-emerald-500" : "bg-amber-500"
+            }`}
           />
-        </label>
-        
-        {/* Sub-label for status */}
-        <div className="mt-0.5 flex items-center justify-center">
-          {isClosed ? (
-            <span className="bg-emerald-50 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-emerald-300/50 flex items-center gap-1 leading-none shadow-2xs">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-              已结账 (Locked & Closed)
-            </span>
-          ) : (
-            <span className="bg-amber-50 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-amber-300/50 flex items-center gap-1 leading-none shadow-2xs">
-              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
-              待结账 (Pending Closing)
-            </span>
-          )}
-        </div>
-      </div>
+          {isClosed ? "已结账锁定" : "待结账"}
+        </span>
+
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          aria-label="选择月份"
+        />
+      </label>
 
       <button
         onClick={() => onMonthShift(1)}
         type="button"
-        className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone-100 hover:bg-stone-200 active:scale-90 transition-all touch-pan-y text-stone-800"
-        aria-label="Next Month"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#111111] transition-colors hover:bg-[#F6F7FB] active:scale-90"
+        aria-label="下个月"
       >
         <ChevronRight size={20} strokeWidth={2.5} />
       </button>

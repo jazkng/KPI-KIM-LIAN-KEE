@@ -15,6 +15,7 @@ export const ORG_LEVEL_OPTIONS: Array<{
 }> = [
   { value: 'OWNER', label: 'L1 老板／决策层 (Owner)', shortLabel: 'L1 老板' },
   { value: 'BRANCH_MANAGER', label: 'L2 门店管理层 (Branch Manager)', shortLabel: 'L2 门店管理' },
+  { value: 'STAFF_SUPPORT', label: 'L2S 幕僚／旁支 (Staff Support)', shortLabel: 'L2S 幕僚' },
   { value: 'DEPARTMENT_HEAD', label: 'L3 部门负责人 (Department Head)', shortLabel: 'L3 部门负责人' },
   { value: 'TEAM_LEAD', label: 'L4 组长／当班负责人 (Team Lead)', shortLabel: 'L4 组长／PIC' },
   { value: 'CREW', label: 'L5 执行员工 (Crew)', shortLabel: 'L5 员工' },
@@ -39,6 +40,16 @@ const inferOrgLevelFromRole = (role = ''): OrgLevel => {
   const normalized = role.trim().toLowerCase();
 
   if (normalized.includes('owner') || normalized.includes('老板')) return 'OWNER';
+
+  // L1：市场管理（老板／决策层）
+  if (normalized.includes('marketing management') || normalized.includes('市场管理')) {
+    return 'OWNER';
+  }
+
+  // L2：会计（门店管理层，使用老板界面但受 allowedModules 限制）
+  if (normalized.includes('accounting') || normalized.includes('会计')) {
+    return 'BRANCH_MANAGER';
+  }
 
   if (
     normalized.includes('store manager') ||
@@ -112,7 +123,7 @@ export const getOrgLevel = (employee: OrgIdentity): OrgLevel => {
 
 /**
  * Default portal mapping agreed for the restaurant:
- * L1 → Boss, L2–L3 → Management, L4–L5 → Staff.
+ * L1–L2 → Boss（L2 受 allowedModules 限制）, L3 → Management, L4–L5 → Staff.
  * A SYSTEM_ADMIN may save portalRoleOverride for genuine exceptions.
  */
 export const getPortalRole = (employee: PortalIdentity): PortalRole => {
@@ -121,7 +132,13 @@ export const getPortalRole = (employee: PortalIdentity): PortalRole => {
   switch (getOrgLevel(employee)) {
     case 'OWNER':
       return PortalRole.BOSS;
+    // L2 使用老板界面外观，但可用功能仍由 allowedModules 勾选控制
+    // （见 utils/bossPortalAccess.ts）
     case 'BRANCH_MANAGER':
+      return PortalRole.BOSS;
+    // 幕僚（会计等）看管理层界面，实际能开哪些功能仍由 allowedModules 控制
+    case 'STAFF_SUPPORT':
+      return PortalRole.MANAGEMENT;
     case 'DEPARTMENT_HEAD':
       return PortalRole.MANAGEMENT;
     case 'TEAM_LEAD':

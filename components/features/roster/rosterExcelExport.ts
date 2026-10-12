@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import { loadExcelJS } from '../../../utils/lazyLibs';
 import { ROSTER_STATUSES } from './rosterConstants';
 import { getDayOfWeekText } from './rosterUtils';
 
@@ -16,7 +16,7 @@ export async function exportRosterToExcel(
     notes: Record<string, string>,
     options: ExportOptions
 ) {
-    const workbook = new ExcelJS.Workbook();
+    const workbook = new (await loadExcelJS()).Workbook();
     workbook.creator = '御膳智控 ERP';
     workbook.lastModifiedBy = '御膳智控 ERP';
     workbook.created = new Date();

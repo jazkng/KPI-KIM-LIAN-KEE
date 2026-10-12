@@ -54,12 +54,31 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
       title="补录/记录支出"
       subtitle="Manual Expense Log"
       onClose={onClose}
-      icon={<FileMinus size={20} className="text-[#EF4444]" />}
+      icon={<FileMinus size={20} className="text-[#8B0000]" />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant="danger"
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                确认支出
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
         {/* Category Selection */}
         <TreasurySelect
-          label="Category (支出类别)"
+          label="支出类别"
           id="exp-category"
           value={form.category || "OTHER"}
           onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -69,7 +88,7 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
 
         {/* Description / Company */}
         <TreasuryFormField
-          label="Description / Item (摘要描述)"
+          label="摘要描述"
           id="exp-company"
           type="text"
           value={form.company || ""}
@@ -80,7 +99,7 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
 
         {/* Amount Field */}
         <TreasuryFormField
-          label="Amount (支出金额)"
+          label="支出金额"
           id="exp-amount"
           type="number"
           step="any"
@@ -95,7 +114,7 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
         {/* Account selection (paymentMethod) */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-bold text-[#111111]">
-            Payment Source (支付渠道) <span className="text-red-500 font-extrabold">*</span>
+            Payment Source (支付渠道) <span className="text-rose-600 font-extrabold">*</span>
           </span>
           <div className="flex gap-2">
             <button
@@ -103,8 +122,8 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
               onClick={() => setForm({ ...form, paymentMethod: "BANK_TRANSFER" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.paymentMethod === "BANK_TRANSFER"
-                  ? "bg-blue-50 border-blue-500 text-blue-600"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-[#F6F7FB] border-blue-500 text-[#111111]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               BANK
@@ -114,8 +133,8 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
               onClick={() => setForm({ ...form, paymentMethod: "CASH" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.paymentMethod === "CASH"
-                  ? "bg-green-50 border-[#22C55E] text-[#22C55E]"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-emerald-50 border-[#22C55E] text-[#22C55E]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               CASH
@@ -125,32 +144,13 @@ export const TreasuryExpenseModal: React.FC<TreasuryExpenseModalProps> = ({
 
         {/* Date Field (Backdate Allowed) */}
         <TreasuryFormField
-          label="Date (日期)"
+          label="日期"
           id="exp-date"
           type="date"
           value={form.time ? form.time.split("T")[0] : ""}
           onChange={(e) => handleDateChange(e.target.value)}
           required
         />
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-2">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant="danger"
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            确认支出
-          </TreasuryButton>
-        </div>
       </div>
     </TreasuryBottomSheet>
   );

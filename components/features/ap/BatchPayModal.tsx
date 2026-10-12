@@ -143,7 +143,7 @@ export const BatchPayModal: React.FC<BatchPayModalProps> = ({
                         />
                         <label htmlFor="batch_generate_pv" className="text-xs font-black text-amber-950 cursor-pointer flex flex-col">
                             <span>同时自动为该批支付生成付款凭单 (Generate PVs)</span>
-                            <span className="text-[9px] text-amber-800 font-normal mt-0.5 animate-pulse">勾选后本次批量支付将自动为所选账单分别生成专属付款凭单 (PV)。若不勾选，将仅登记账单付清，不会生成任何凭单。</span>
+                            <span className="text-[9px] text-amber-800 font-normal mt-0.5 animate-pulse">💡 自动按【商家/供应商】归类合并：同一个商家的多张账单将合并生成一张付款凭单 (PV)（包含多行明细），并支持导出 PDF，极佳的对账与省纸体验。</span>
                         </label>
                     </div>
                 </div>

@@ -1,0 +1,40 @@
+{
+  "packageId": "com.kimliankee.erp",
+  "host": "service-5174.ai.studio",
+  "name": "御膳智控 ERP",
+  "launcherName": "御膳智控",
+  "display": "standalone",
+  "themeColor": "#FFD200",
+  "themeColorDark": "#111111",
+  "navigationColor": "#111111",
+  "navigationColorDark": "#111111",
+  "navigationDividerColor": "#111111",
+  "navigationDividerColorDark": "#111111",
+  "backgroundColor": "#111111",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://service-5174.ai.studio/icons/icon-512.png",
+  "maskableIconUrl": "https://service-5174.ai.studio/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://service-5174.ai.studio/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://service-5174.ai.studio/",
+  "minSdkVersion": 21,
+  "orientation": "default",
+  "fingerprints": []
+}

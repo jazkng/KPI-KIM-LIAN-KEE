@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { google } = require('googleapis');
-// Set global options for googleapis, including connection timeouts to prevent infinite hangs
 google.options({
     timeout: 10000, // 10 seconds timeout
     connectTimeout: 5000 // 5 seconds connection timeout
@@ -26,15 +25,7 @@ app.use(cors({
     }
 }));
 
-/**
- * 🔐 内部调用闸门 (Internal Gate)
- * ---------------------------------------------------------------
- * 本服务的 Service Account 持有完整 Drive 权限，绝不能对公网开放。
- * 只接受来自 ERP 后端 (server.ts) 的调用，凭 X-Internal-Key 识别。
- * 密钥只存在于两边的 Cloud Run 环境变量，不会进入浏览器。
- *
- * /health 不受此限（Cloud Run 健康检查需要）。
- */
+// 🔐 内部闸门：Service Account 有完整 Drive 权限，绝不可对公网开放。/health 不受限。
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 if (!INTERNAL_API_KEY || INTERNAL_API_KEY.length < 32) {
     console.error("❌ 严重错误: 缺少 INTERNAL_API_KEY 环境变量（或长度不足 32）");
@@ -58,14 +49,13 @@ if (!GEMINI_API_KEY) {
     process.exit(1);
 }
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.1-flash-lite';
 const GEMINI_REQUEST_TIMEOUT_MS = Math.max(
     15000,
     Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 60000)
 );
 
-// Cloud Run 优先使用 Service Account，若有 GOOGLE_APPLICATION_CREDENTIALS 会自动读取
 const auth = new google.auth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/drive']
 });
@@ -97,48 +87,76 @@ const whitelist1_MainSuppliers = {
     "8024": { folderName: "8024_MINCO_ENGINEERING_SDN_BHD", keywords: ["MINCO ENGINEERING"] },
     "8025": { folderName: "8025_HONG_ADVERTISING_TRADING_CO", keywords: ["HONG ADVERTISING"] },
     "8028": { folderName: "8028_VLOFT_PRINT_SDN_BHD", keywords: ["VLOFT PRINT"] },
-    "8039": { folderName: "8039_OCEAN_ICE_INDUSTRIES", keywords: ["OCEAN ICE INDUSTRIES", "OCEAN ICE"] },
-    "8047": { folderName: "8047_SHOPEE_MOBILE_MALAYSIA", keywords: ["SHOPEE", "SHOPEE MOBILE", "SHOPEEPAY"] },
     "8050": { folderName: "8050_TTF_MARKETING_HOLDINGS_SDN_BHD", keywords: ["TTF MARKETING"] },
     "8066": { folderName: "8066_HO_PRINTING", keywords: ["HO PRINTING"] },
     "8072": { folderName: "8072_EVO_PRINT_LABEL_SDN_BHD", keywords: ["EVO PRINT"] },
     "8084": { folderName: "8084_EK_FRESH", keywords: ["EK FRESH", "EKFRESH"] },
     "8085": { folderName: "8085_CHOI_SENG_TRADING", keywords: ["CHOI SENG TRADING", "CHOI SENG"] },
+    "8097": { folderName: "8097_RESTORAN_NOBLE", keywords: ["NOBLE HOUSE SEAFOOD", "NOBLE HOUSE", "RESTORAN NOBLE"] },
     "8099": { folderName: "8099_RIPON_MIAH", keywords: ["RIPON MIAH"] },
-    "8102": { folderName: "8102_KLCC_BIHUN_WEE_HAI", keywords: ["KLCC BIHUN"] },
     "8103": { folderName: "8103_KY_MARKETING_RENOVATION_ENTERPRISE", keywords: ["KY MARKETING", "KY RENOVATION"] },
     "8107": { folderName: "8107_MISS_CUTE_SEAFOOD", keywords: ["MISS CUTE SEAFOOD", "MISS CUTE"] },
     "8118": { folderName: "8118_HUANG_LONG_CREATION", keywords: ["HUANG LONG CREATION", "HUANG LONG"] },
     "8121": { folderName: "8121_KIM_LIAN_KEE_HOLDINGS_SDN_BHD", keywords: ["KIM LIAN KEE HOLDINGS", "KIM_LIAN_KEE_HOLDINGS"] },
     "8129": { folderName: "8129_S_AND_T_WORLD_TRADING", keywords: ["S & T WORLD TRADING", "S AND T", "S&T", "Sy T WORLD"] },
-    "8130": { folderName: "8130_PERNIAGAAN_MAHAMAS", keywords: ["PERNIAGAAN MAHAMAS", "MAHAMAS"] },
     "8137": { folderName: "8137_TCM_RESOURCES", keywords: ["TCM RESOURCES", "TCM"] },
-    "8147": { folderName: "8147_TELUR_LOW_HIN_CHING", keywords: ["PERNIAGAAN TELUR LOW HIN CHING", "LOW HIN CHING", "TELUR LOW"] },
     "8159": { folderName: "8159_ONG_TUAN_CHUAN", keywords: ["ONG TUAN CHUAN"] },
-    "8164": { folderName: "8164_MD_JIBON", keywords: ["MD JIBON", "JIBON"] }
+    "8164": { folderName: "8164_MD_JIBON", keywords: ["MD JIBON", "JIBON"] },
+    "8214": { folderName: "8214_ST_FROZEN_FOOD_TRADING", keywords: ["ST FROZEN FOOD TRADING", "ST FROZEN FOOD", "ST FROZEN"] },
+    "8204": { folderName: "8204_FULLY_FISHERY_M_SDN_BHD", keywords: ["FULLY FISHERY", "FULLY FISHERY (M) SDN BHD", "FULLY FISHERY M SDN BHD"] }
 };
 
 const whitelist2_BankTransfers = ["RENTAL", "WATER_SELANGOR", "MAXIS", "INDAH_WATER"];
 
-let scanningLocks = new Set(); 
+// 正在扫描中的档案，避免同一张被两个请求重复处理
+let scanningLocks = new Set();
 
-/**
- * 🔐 Drive Query 转义
- * 供应商名称来自 AI 辨识结果，可能含单引号（例如 O'BRIEN），
- * 直接内插会破坏查询语义甚至被操纵，必须转义。
- */
+// 供应商清单 / 别名由 ERP 存在 Firestore，随归档请求带过来。
+// ⚠️ 不能存 Drive：Service Account 没有储存配额，建有内容的档案一定失败
+//    （资料夹可以建，因为资料夹是 0 bytes）。
+function sanitizeVendorConfig(raw) {
+    const suppliers = {};
+    const rawSuppliers = raw && typeof raw.suppliers === 'object' ? raw.suppliers : {};
+    for (const [id, cfg] of Object.entries(rawSuppliers)) {
+        const folderName = String(cfg?.folderName || '').trim();
+        const keywords = (Array.isArray(cfg?.keywords) ? cfg.keywords : [])
+            .map(k => String(k || '').trim()).filter(Boolean);
+        if (!/^\d{3,6}$/.test(String(id))) continue;
+        if (!folderName || keywords.length === 0) continue;
+        suppliers[String(id)] = { folderName, keywords };
+    }
+
+    const aliases = (Array.isArray(raw?.aliases) ? raw.aliases : [])
+        .map(a => ({
+            match: (Array.isArray(a?.match) ? a.match : []).map(k => String(k || '').trim()).filter(Boolean),
+            name: String(a?.name || '').trim(),
+            supplierId: String(a?.supplierId || '').trim(),
+        }))
+        .filter(a => a.match.length > 0 && a.name);
+
+    return {
+        suppliers: Object.keys(suppliers).length > 0 ? suppliers : null,
+        aliases: aliases.length > 0 ? aliases : null,
+    };
+}
+
+/** 前端带来的设定优先；没有或不合格就退回内建表 */
+function resolveVendorConfig(override) {
+    if (!override) return { suppliers: whitelist1_MainSuppliers, aliases: VENDOR_ALIASES };
+    const clean = sanitizeVendorConfig(override);
+    return {
+        suppliers: clean.suppliers || whitelist1_MainSuppliers,
+        aliases: clean.aliases || VENDOR_ALIASES,
+    };
+}
+
 function escapeDriveQ(value) {
     return String(value == null ? '' : value)
         .replace(/\\/g, '\\\\')
         .replace(/'/g, "\\'");
 }
 
-/**
- * 🔐 父目录白名单校验
- * ---------------------------------------------------------------
- * 只允许操作「暂存区子树」内的档案。
- * 这是纵深防御：即使闸门被绕过，也动不了暂存区以外的任何 Drive 档案。
- */
+// 🔐 只允许操作暂存区子树内的档案；闸门被绕过时的第二道防线
 async function isInStagingArea(fileId, maxDepth = 6) {
     let frontier = [String(fileId)];
     const seen = new Set();
@@ -162,7 +180,7 @@ async function isInStagingArea(fileId, maxDepth = 6) {
     return false;
 }
 
-/** 校验失败时直接回 403 并回传 true，供路由 early-return */
+
 async function rejectIfOutsideStaging(fileId, res) {
     try {
         if (await isInStagingArea(fileId)) return false;
@@ -249,11 +267,7 @@ function withTimeout(promise, timeoutMs, model) {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
-/**
- * Scan with the configured primary model first, then transparently retry once
- * with the configured fallback model. This prevents a transient Gemini timeout
- * from blocking all AP invoice scans for five minutes.
- */
+
 async function analyzeInvoiceWithFallback({ fileData, mimeType, prompt, responseSchema }) {
     const modelsToTry = [...new Set([
         GEMINI_MODEL,
@@ -284,8 +298,7 @@ async function analyzeInvoiceWithFallback({ fileData, mimeType, prompt, response
                     responseMimeType: 'application/json',
                     responseSchema,
                     temperature: 0.1,
-                    // Empty headers ensures the SDK applies this timeout correctly.
-                    httpOptions: {
+                            httpOptions: {
                         timeout: GEMINI_REQUEST_TIMEOUT_MS,
                         headers: {}
                     }
@@ -308,7 +321,113 @@ async function analyzeInvoiceWithFallback({ fileData, mimeType, prompt, response
     throw new Error(`主模型与备用模型均无法完成扫描。${errors.join(' | ')}`);
 }
 
-function validateInvoiceExtraction(aiData) {
+// 供应商别名：AI 读出来的写法每次不同，统一成系统里的正式名称
+// 加新的：{ match: [关键字...], name: '正式名称', supplierId: 'ID' }
+const VENDOR_ALIASES = [
+    { match: ['MRDIY', 'MRD.I.Y'],            name: 'MR D.I.Y. (KUCHAI)',   supplierId: '8158' },
+    { match: ['99SPEEDMART', '99SPEED'],      name: '99 SPEEDMART SDN BHD', supplierId: '8030' },
+    { match: ['ONGTUANCHUAN', 'ONGTUANGCHUAN', 'ONGTUAN'], name: 'ONG TUAN CHUAN', supplierId: '8159' },
+    { match: ['FULLYFISHERY'],                name: 'FULLY FISHERY (M) SDN BHD', supplierId: '8204' },
+];
+
+
+function squashVendorName(raw) {
+    return String(raw || '').toUpperCase().replace(/&/g, ' AND ').replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * 供应商名称有没有命中某个关键字。
+ * ⚠️ 以前是「整串压平后 includes」：S&T 压平成 ST，
+ *    结果 RESTAURANT、STATIONERY、PLASTIC、ST FROZEN 全部被当成 S&T 归进 8129。
+ * 现在：
+ *   · 关键字压平后 ≥ 6 个字（FULLYFISHERY、ONGTUAN…）→ 照旧压平比对（容忍空格、括号、点）
+ *   · 短关键字（S&T、TCM、HT ONE、MRDIY…）→ 必须是「完整的字」：
+ *     供应商名称拆成一个个字，连续几个字拼起来刚好等于关键字才算
+ *     （MR D.I.Y. → MR+D+I+Y = MRDIY ✓；RESTAURANT 里的 ST ✗）
+ */
+const LONG_KEYWORD = 6;
+function vendorTokens(raw) {
+    return String(raw || '').toUpperCase().replace(/&/g, ' AND ').split(/[^A-Z0-9]+/).filter(Boolean);
+}
+function vendorMatchesKeyword(rawVendor, keyword) {
+    const k = squashVendorName(keyword);
+    if (!k) return false;
+    if (k.length >= LONG_KEYWORD) return squashVendorName(rawVendor).includes(k);
+    const t = vendorTokens(rawVendor);
+    for (let i = 0; i < t.length; i++) {
+        let acc = '';
+        for (let j = i; j < t.length && acc.length < k.length; j++) {
+            acc += t[j];
+            if (acc === k) return true;
+        }
+    }
+    return false;
+}
+/** 命中的关键字里最长的那个（越长越具体），没命中 = 0 */
+function bestKeywordScore(rawVendor, keywords) {
+    let best = 0;
+    for (const kw of keywords || []) {
+        if (vendorMatchesKeyword(rawVendor, kw)) best = Math.max(best, squashVendorName(kw).length);
+    }
+    return best;
+}
+
+/**
+ * 档名用的供应商片段。
+ * ⚠️ 一定要先 toUpperCase 再替换 —— 顺序反过来会把所有小写字母变成底线，
+ *    "Fully Fishery (M) Sdn Bhd" 会变成 F_____F________M__SDN__BHD。
+ */
+function vendorForFileName(raw) {
+    const cleaned = String(raw || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    return cleaned || 'UNKNOWN';
+}
+
+
+function applyVendorAlias(rawVendor, aliases = VENDOR_ALIASES) {
+    const squashed = squashVendorName(rawVendor);
+    if (!squashed) return { vendor: rawVendor, supplierId: '', aliasHit: false };
+
+    // 多条别名都命中 → 用关键字最长（最具体）的那条
+    let best = null;
+    let bestScore = 0;
+    for (const alias of (aliases || VENDOR_ALIASES)) {
+        const score = bestKeywordScore(rawVendor, alias.match);
+        if (score > bestScore) { best = alias; bestScore = score; }
+    }
+    if (best) return { vendor: best.name, supplierId: best.supplierId, aliasHit: true };
+    return { vendor: rawVendor, supplierId: '', aliasHit: false };
+}
+
+/**
+ * 明细行清洗。
+ * ⚠️ 一律不改数字，只做格式正规化与丢弃空行。
+ *    合计对不上时只标记 needsReview，绝不「帮你算平」—— 算平就掩盖了读错。
+ */
+const FEE_ROW_PATTERN = /(DELIVERY|FREIGHT|TRANSPORT|SERVICE\s*CHARGE|SST|GST|TAX|ROUND|DISCOUNT|SUB\s*TOTAL|TOTAL|运费|送货|服务费|税|折扣|合计|总计)/i;
+
+function normalizeLineItems(rawItems) {
+    if (!Array.isArray(rawItems)) return [];
+    return rawItems
+        .map(it => ({
+            description: String(it?.description || '').trim(),
+            item_code: String(it?.item_code || '').trim(),
+            qty: normalizeMoney(it?.qty) ?? 0,
+            unit: String(it?.unit || '').trim().toUpperCase(),
+            unit_price: normalizeMoney(it?.unit_price) ?? 0,
+            amount: normalizeMoney(it?.amount) ?? 0,
+        }))
+        .filter(it => it.description !== '' || it.amount !== 0)
+        .map(it => ({
+            ...it,
+            // 费用行标出来，前端可以不算进「进货数量」
+            isFeeRow: FEE_ROW_PATTERN.test(it.description),
+        }));
+}
+
+function validateInvoiceExtraction(aiData, aliases = VENDOR_ALIASES) {
     const reviewReasons = [];
     let dateStr = String(aiData.date || '').trim();
     let yearMonth = '';
@@ -329,10 +448,18 @@ function validateInvoiceExtraction(aiData) {
     }
 
     const vendor = String(aiData.vendor || '').trim();
-    const normalizedVendor = vendor && !vendor.toUpperCase().includes('UNKNOWN')
+    let normalizedVendor = vendor && !vendor.toUpperCase().includes('UNKNOWN')
         ? vendor
         : 'UNKNOWN_VENDOR';
     if (normalizedVendor === 'UNKNOWN_VENDOR') reviewReasons.push('UNKNOWN_VENDOR');
+
+    // 🏷️ 套用供应商别名表，把 MR DIY / 99 Speedmart 之类的写法统一
+    let matchedSupplierId = '';
+    if (normalizedVendor !== 'UNKNOWN_VENDOR') {
+        const aliasResult = applyVendorAlias(normalizedVendor, aliases);
+        normalizedVendor = aliasResult.vendor;
+        matchedSupplierId = aliasResult.supplierId;
+    }
 
     const amount = normalizeMoney(aiData.amount);
     const normalizedAmount = amount !== null && amount > 0 ? amount : 0;
@@ -343,9 +470,22 @@ function validateInvoiceExtraction(aiData) {
     if (!currency || currency === 'UNKNOWN') reviewReasons.push('UNKNOWN_CURRENCY');
     else if (currency !== 'MYR') reviewReasons.push('UNSUPPORTED_CURRENCY');
 
+    const lineItems = normalizeLineItems(aiData.line_items);
+    const lineSum = lineItems.reduce((sum, it) => sum + (it.amount || 0), 0);
+    const roundedLineSum = normalizeMoney(lineSum) ?? 0;
+    // 明细加起来跟总额差超过 1 分就要人看 —— 可能漏读一行，或读到别的栏
+    const lineItemsMatchTotal = lineItems.length === 0
+        ? null
+        : Math.abs(roundedLineSum - (normalizeMoney(aiData.amount) ?? 0)) <= 0.01;
+    if (lineItemsMatchTotal === false) reviewReasons.push('LINE_ITEMS_MISMATCH');
+
     return {
         ...aiData,
         vendor: normalizedVendor,
+        matchedSupplierId,
+        line_items: lineItems,
+        lineItemsTotal: roundedLineSum,
+        lineItemsMatchTotal,
         date: dateStr,
         year_month: yearMonth,
         amount: normalizedAmount,
@@ -357,9 +497,7 @@ function validateInvoiceExtraction(aiData) {
     };
 }
 
-// ==========================================================================
 // API: Health Check
-// ==========================================================================
 app.get('/health', (req, res) => {
     res.json({
         success: true,
@@ -368,24 +506,208 @@ app.get('/health', (req, res) => {
         fallbackModel: GEMINI_FALLBACK_MODEL,
         requestTimeoutMs: GEMINI_REQUEST_TIMEOUT_MS,
         failoverEnabled: true,
+        // 用来确认部署到底有没有生效：旧版本不会有 features 这一栏
+        features: {
+            lineItems: true,
+            batchScan: true,
+            scanCache: true,
+            vendorConfigApi: true,
+        },
+        batchDefault: SCAN_BATCH_DEFAULT,
         timestamp: new Date().toISOString()
     });
 });
 
-// ==========================================================================
-// API: 获取扫描数据 (On-Demand only)
-// ==========================================================================
-app.get('/api/scan-pending', async (req, res) => {
+// API: 扫描暂存区（一次扫多张）
+const SCAN_PROMPT = `You are a highly precise financial auditor AI. Analyze this invoice/receipt.
+CURRENT YEAR IS ${new Date().getFullYear()}.
+STRICT EXTRACTION RULES:
+1. Date: Check carefully. Often formatted as DD/MM/YYYY locally. Convert to YYYYMMDD.
+2. Amount: Extract the FINAL AMOUNT DUE or GRAND TOTAL. NEVER extract 'Cash Tendered', 'Change', or 'Subtotal'.
+3. Invoice No: Look for INV No, Receipt No, or Tax Invoice No. Return the exact alphanumeric code.
+4. Currency: Return the ISO currency code. Malaysian Ringgit must be returned as MYR. Never assume MYR when another currency is printed.
+5. Vendor — WHO WE PAID, never ourselves:
+   "KIM LIAN KEE", "金莲记", "KIM LIAN KEE GROUP" and "金莲记甲洞 / Kim Lian Kee - Kepong" are OUR OWN company. They are NEVER the vendor.
+   If the document is our own self-issued voucher (it says "CASH BILL", "采购支出凭单", "支出凭单", "PAYMENT VOUCHER", or has a "收款人 PAYEE" field),
+   the vendor is the name printed in the PAYEE field — not the letterhead at the top.
+   For a normal supplier invoice or receipt, the vendor is the letterhead company as usual.
+6. Vendor spelling: return the store name as printed. Do not merge different branches into one name.
+7. Line items — copy the table exactly, never invent:
+   Return one entry per printed line in the items table. For each line:
+     description  = the item description as printed (keep the original language, keep codes like WP077-XXJH26 out of it).
+     item_code    = the supplier's own item/product code if a code column exists, else empty string.
+     qty          = the number in the Qty / Quantity column. If the qty column reads "24.00 KG", qty is 24 and unit is "KG".
+     unit         = the unit printed next to the quantity (KG, CTN, PKT, BTL, 项, 件...). Empty string if none.
+     unit_price   = the Price/Unit or Unit Price column.
+     amount       = the line Amount / Total column.
+   Rules:
+     - Do NOT include delivery fee, freight, service charge, tax, rounding, discount or grand-total rows as items.
+       Those belong in the totals, not in line_items.
+     - If the document has no itemised table at all (a plain receipt with only a total), return an empty array.
+     - Never guess a quantity that is not printed. If a line has no quantity, use 0.
+     - Keep the printed order.`;
+
+const SCAN_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        vendor: { type: Type.STRING, description: "Main store or company name in English upper-case. Exclude suffixes like SDN BHD, ENTERPRISE, PLT." },
+        date: { type: Type.STRING, description: "Exact invoice date in YYYYMMDD format. MUST be 8 digits." },
+        year_month: { type: Type.STRING, description: "Exact year and month in YYYY_MM format." },
+        amount: { type: Type.NUMBER, description: "FINAL GRAND TOTAL or AMOUNT DUE as a float." },
+        invoice_no: { type: Type.STRING, description: "Clean alphanumeric Invoice No. If none exists, return 'UNKNOWN'." },
+        currency: { type: Type.STRING, description: "ISO 4217 currency code such as MYR, SGD, USD, or CNY. Return UNKNOWN if it is not visible." },
+        line_items: {
+            type: Type.ARRAY,
+            description: "One entry per printed line in the items table. Empty array if the document has no itemised table.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    description: { type: Type.STRING, description: "Item description exactly as printed." },
+                    item_code: { type: Type.STRING, description: "Supplier's own item code if printed, else empty string." },
+                    qty: { type: Type.NUMBER, description: "Quantity as printed. 0 if no quantity is printed." },
+                    unit: { type: Type.STRING, description: "Unit printed with the quantity (KG, CTN, PKT...). Empty string if none." },
+                    unit_price: { type: Type.NUMBER, description: "Price per unit as printed. 0 if not printed." },
+                    amount: { type: Type.NUMBER, description: "Line total as printed." }
+                },
+                required: ["description", "item_code", "qty", "unit", "unit_price", "amount"]
+            }
+        }
+    },
+    required: ["vendor", "date", "year_month", "amount", "invoice_no", "currency", "line_items"],
+};
+
+// 扫描结果快取：同一个档案没改过就不重打 Gemini（重开画面 / 重扫都是免费的）
+// ⚠️ 存在记忆体里，Cloud Run 换实例就没了 —— 只是省钱，不是持久化
+const SCAN_CACHE_TTL_MS = Number(process.env.SCAN_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+const SCAN_CACHE_MAX = Number(process.env.SCAN_CACHE_MAX || 300);
+const scanCache = new Map();   // key: fileId|modifiedTime → { at, payload }
+
+function readScanCache(key) {
+    const hit = scanCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.at > SCAN_CACHE_TTL_MS) { scanCache.delete(key); return null; }
+    return hit.payload;
+}
+function writeScanCache(key, payload) {
+    if (scanCache.size >= SCAN_CACHE_MAX) {
+        const oldest = scanCache.keys().next().value;
+        if (oldest) scanCache.delete(oldest);
+    }
+    scanCache.set(key, { at: Date.now(), payload });
+}
+
+// 连续失败的档案：失败满次数就自动移进保留区，不然它每一批都被扫、每次都失败、每次都付钱
+const SCAN_FAIL_LIMIT = Number(process.env.SCAN_FAIL_LIMIT || 3);
+const scanFailCounts = new Map();
+
+const SCAN_BATCH_DEFAULT = Number(process.env.SCAN_BATCH_DEFAULT || 3);
+const SCAN_BATCH_MAX = Number(process.env.SCAN_BATCH_MAX || 25);
+// 并发别开太大：Gemini 会 429，Drive 也有配额
+const SCAN_CONCURRENCY = Math.max(1, Number(process.env.SCAN_CONCURRENCY || 3));
+
+async function scanOneFile(file, { useCache = true } = {}) {
+    const cacheKey = `${file.id}|${file.modifiedTime || ''}`;
+    if (useCache) {
+        const cached = readScanCache(cacheKey);
+        if (cached) {
+            console.log(`♻️ 用快取，不重打 Gemini: ${file.name}`);
+            return { ...cached, fromCache: true };
+        }
+    }
+
+    const fileData = await drive.files.get({ fileId: file.id, alt: 'media' }, { responseType: 'arraybuffer' });
+
+    // 👑 送去 Gemini 之前先检查文件本身，不然坏档只会回一句看不懂的「400 INVALID_ARGUMENT」
+    const byteLength = fileData?.data?.byteLength ?? 0;
+    if (byteLength === 0) {
+        throw new Error('文件是空的（0 KB），扫描机上传没成功。请重新扫描上传，再把这个空档从暂存区删掉。');
+    }
+    // Gemini 直接夹带文件上限约 20MB（base64 会再变大 1/3），超过就会 400
+    const MAX_INLINE_BYTES = 14 * 1024 * 1024;
+    if (byteLength > MAX_INLINE_BYTES) {
+        throw new Error(`文件太大（${(byteLength / 1024 / 1024).toFixed(1)} MB），超过 AI 扫描上限约 14 MB。请用较低解析度（200–300 dpi）或黑白模式重新扫描。`);
+    }
+
+    const { result, modelUsed } = await analyzeInvoiceWithFallback({
+        fileData: fileData.data,
+        mimeType: file.mimeType,
+        prompt: SCAN_PROMPT,
+        responseSchema: SCAN_SCHEMA
+    });
+
+    let aiData = JSON.parse(result.text.trim());
+    aiData = validateInvoiceExtraction(aiData, VENDOR_ALIASES);
+
+    const fingerprint = buildInvoiceFingerprint(aiData.vendor, aiData.amount, aiData.invoice_no, aiData.date);
+    const duplicateArchive = await findArchivedFingerprint(fingerprint, file.id);
+
+    const payload = {
+        fileId: file.id,
+        originalName: file.name,
+        mimeType: file.mimeType,
+        tempLink: file.webViewLink,
+        vendor: aiData.vendor,
+        date: aiData.date || '',
+        year_month: aiData.year_month || '',
+        amount: aiData.amount,
+        currency: aiData.currency,
+        invoice_no: aiData.invoice_no,
+        line_items: aiData.line_items || [],
+        lineItemsTotal: aiData.lineItemsTotal ?? 0,
+        lineItemsMatchTotal: aiData.lineItemsMatchTotal,
+        fingerprint,
+        modelUsed,
+        isDuplicate: !!duplicateArchive,
+        duplicateFileName: duplicateArchive?.name || '',
+        duplicateFileLink: duplicateArchive?.webViewLink || '',
+        needsReview: !!aiData.needsReview,
+        reviewReason: aiData.reviewReason,
+        reviewReasons: aiData.reviewReasons || [],
+    };
+
+    writeScanCache(cacheKey, payload);
+    return { ...payload, fromCache: false };
+}
+
+/** 失败满 SCAN_FAIL_LIMIT 次就移进保留区，避免无止境重扫烧钱 */
+async function quarantineFailedFile(file, errMessage) {
     try {
-        console.log("🕵️ 前端请求抓取单据...");
-        let fileToScan = null;
+        const meta = await drive.files.get({ fileId: file.id, fields: 'parents' });
+        const previousParents = (meta.data.parents || []).join(',');
+        const holdingFolderId = await getOrCreateFolder("_HOLDING_AREA", currentStagingFolderId);
+        await drive.files.update({
+            fileId: file.id,
+            addParents: holdingFolderId,
+            removeParents: previousParents,
+            requestBody: { appProperties: { apScanFailed: 'SCAN_ERROR', apScanFailedMsg: String(errMessage).slice(0, 100) } },
+            fields: 'id'
+        });
+        scanFailCounts.delete(file.id);
+        console.warn(`⏸️ 连续失败 ${SCAN_FAIL_LIMIT} 次，已移入保留区: ${file.name}`);
+        return true;
+    } catch (err) {
+        console.error(`💥 移入保留区失败: ${file.name} — ${err.message}`);
+        return false;
+    }
+}
+
+app.get('/api/scan-pending', async (req, res) => {
+    const claimed = [];
+    try {
+        const requested = Number(req.query.limit);
+        const limit = Math.min(
+            SCAN_BATCH_MAX,
+            Math.max(1, Number.isFinite(requested) && requested > 0 ? requested : SCAN_BATCH_DEFAULT)
+        );
+
+        const candidates = [];
         let pageToken;
         let supportedFileFound = false;
 
         do {
             const response = await drive.files.list({
                 q: `'${currentStagingFolderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`,
-                fields: 'nextPageToken, files(id, name, mimeType, webViewLink)',
+                fields: 'nextPageToken, files(id, name, mimeType, webViewLink, modifiedTime)',
                 orderBy: 'createdTime asc',
                 pageSize: 100,
                 pageToken,
@@ -395,98 +717,81 @@ app.get('/api/scan-pending', async (req, res) => {
                 file.mimeType === 'application/pdf' || String(file.mimeType || '').startsWith('image/')
             );
             supportedFileFound = supportedFileFound || targetFiles.length > 0;
-            fileToScan = targetFiles.find(file => !scanningLocks.has(file.id)) || null;
+            targetFiles.forEach(f => { if (!scanningLocks.has(f.id)) candidates.push(f); });
             pageToken = response.data.nextPageToken;
-        } while (!fileToScan && pageToken);
+        } while (pageToken);
 
         if (!supportedFileFound) {
-            return res.json({ success: true, message: "暂存区没有可扫描的 PDF 或图片", data: [] });
+            return res.json({ success: true, message: "暂存区没有可扫描的 PDF 或图片", data: [], total: 0, remaining: 0 });
         }
-
-        if (!fileToScan) {
+        if (candidates.length === 0) {
             return res.status(409).json({ success: false, code: 'FILE_ALREADY_SCANNING', error: "文件正在处理中，请稍后再试" });
         }
 
-        scanningLocks.add(fileToScan.id);
+        const batch = candidates.slice(0, limit);
+        batch.forEach(f => { scanningLocks.add(f.id); claimed.push(f.id); });
 
-        try {
-            console.log(`🧠 开始现场 AI 分析: ${fileToScan.name}`);
-            const fileData = await drive.files.get({ fileId: fileToScan.id, alt: 'media' }, { responseType: 'arraybuffer' });
-            
-            const prompt = `You are a highly precise financial auditor AI. Analyze this invoice/receipt.
-            CURRENT YEAR IS ${new Date().getFullYear()}.
-            STRICT EXTRACTION RULES:
-            1. Date: Check carefully. Often formatted as DD/MM/YYYY locally. Convert to YYYYMMDD.
-            2. Amount: Extract the FINAL AMOUNT DUE or GRAND TOTAL. NEVER extract 'Cash Tendered', 'Change', or 'Subtotal'.
-            3. Invoice No: Look for INV No, Receipt No, or Tax Invoice No. Return the exact alphanumeric code.
-            4. Currency: Return the ISO currency code. Malaysian Ringgit must be returned as MYR. Never assume MYR when another currency is printed.`;
+        console.log(`🧠 批次扫描 ${batch.length} 张（暂存区共 ${candidates.length} 张待扫）`);
 
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    vendor: { type: Type.STRING, description: "Main store or company name in English upper-case. Exclude suffixes like SDN BHD, ENTERPRISE, PLT." },
-                    date: { type: Type.STRING, description: "Exact invoice date in YYYYMMDD format. MUST be 8 digits." },
-                    year_month: { type: Type.STRING, description: "Exact year and month in YYYY_MM format." },
-                    amount: { type: Type.NUMBER, description: "FINAL GRAND TOTAL or AMOUNT DUE as a float." },
-                    invoice_no: { type: Type.STRING, description: "Clean alphanumeric Invoice No. If none exists, return 'UNKNOWN'." },
-                    currency: { type: Type.STRING, description: "ISO 4217 currency code such as MYR, SGD, USD, or CNY. Return UNKNOWN if it is not visible." }
-                },
-                required: ["vendor", "date", "year_month", "amount", "invoice_no", "currency"],
-            };
+        const results = new Array(batch.length);
+        const failures = [];
+        let cursor = 0;
 
-            const { result, modelUsed } = await analyzeInvoiceWithFallback({
-                fileData: fileData.data,
-                mimeType: fileToScan.mimeType,
-                prompt,
-                responseSchema
-            });
+        const worker = async () => {
+            while (true) {
+                const i = cursor++;
+                if (i >= batch.length) return;
+                const file = batch[i];
+                try {
+                    results[i] = await scanOneFile(file, { useCache: req.query.refresh !== '1' });
+                    scanFailCounts.delete(file.id);
+                } catch (err) {
+                    const fails = (scanFailCounts.get(file.id) || 0) + 1;
+                    scanFailCounts.set(file.id, fails);
+                    console.error(`⚠️ 扫描失败 (${fails}/${SCAN_FAIL_LIMIT}): ${file.name} — ${err.message}`);
+                    let quarantined = false;
+                    if (fails >= SCAN_FAIL_LIMIT) quarantined = await quarantineFailedFile(file, err.message);
+                    failures.push({ fileId: file.id, originalName: file.name, error: err.message, attempts: fails, quarantined });
+                    results[i] = null;
+                }
+            }
+        };
 
-            let aiData = JSON.parse(result.text.trim());
-            aiData = validateInvoiceExtraction(aiData);
+        await Promise.all(Array.from({ length: Math.min(SCAN_CONCURRENCY, batch.length) }, worker));
 
-            const fingerprint = buildInvoiceFingerprint(
-                aiData.vendor,
-                aiData.amount,
-                aiData.invoice_no,
-                aiData.date,
-            );
-            const duplicateArchive = await findArchivedFingerprint(fingerprint, fileToScan.id);
-            
-            const payload = {
-                fileId: fileToScan.id,
-                originalName: fileToScan.name,
-                mimeType: fileToScan.mimeType,
-                tempLink: fileToScan.webViewLink, 
-                vendor: aiData.vendor,
-                date: aiData.date || '',
-                year_month: aiData.year_month || '',
-                amount: aiData.amount,
-                currency: aiData.currency,
-                invoice_no: aiData.invoice_no,
-                fingerprint,
-                modelUsed,
-                isDuplicate: !!duplicateArchive,
-                duplicateFileName: duplicateArchive?.name || '',
-                duplicateFileLink: duplicateArchive?.webViewLink || '',
-                needsReview: !!aiData.needsReview,
-                reviewReason: aiData.reviewReason,
-                reviewReasons: aiData.reviewReasons || [],
-            };
+        const data = results.filter(Boolean);
+        const cacheHits = data.filter(d => d.fromCache).length;
+        console.log(`✅ 批次完成：成功 ${data.length}（快取 ${cacheHits}），失败 ${failures.length}`);
 
-            res.json({ success: true, data: [payload] });
-        } finally {
-            scanningLocks.delete(fileToScan.id);
-        }
-
+        res.json({
+            success: true,
+            data,
+            total: candidates.length,
+            scanned: batch.length,
+            remaining: Math.max(0, candidates.length - batch.length),
+            cacheHits,
+            failures,
+        });
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, code: "SCAN_ERROR", error: err.message });
+    } finally {
+        claimed.forEach(id => scanningLocks.delete(id));
     }
 });
 
-// ==========================================================================
-// API: 物理废弃移入隔离区 (Trash Bin)
-// ==========================================================================
+// API: 内建的供应商清单与别名（设定页拿来当「还原内建」的基准）
+// 自订设定存在 ERP 的 Firestore，不经过这里
+app.get('/api/vendor-config', (req, res) => {
+    res.json({
+        success: true,
+        source: 'builtin',
+        builtinSuppliers: whitelist1_MainSuppliers,
+        builtinAliases: VENDOR_ALIASES,
+    });
+});
+
+// API: 废弃 → _REJECTED_TRASH_BIN
 app.post('/api/delete-pending', async (req, res) => {
     try {
         const { fileId } = req.body;
@@ -508,9 +813,7 @@ app.post('/api/delete-pending', async (req, res) => {
     }
 });
 
-// ==========================================================================
-// API: 移入保留区 (Holding Area)
-// ==========================================================================
+// API: 挂起 → _HOLDING_AREA
 app.post('/api/hold-pending', async (req, res) => {
     try {
         const { fileId, reason } = req.body;
@@ -545,9 +848,7 @@ app.post('/api/hold-pending', async (req, res) => {
     }
 });
 
-// ==========================================================================
-// API: 收单归档 (Commit Bill)
-// ==========================================================================
+// API: 收单归档
 app.post('/api/commit-bill', async (req, res) => {
     try {
         const { fileId, originalName, mimeType, verifiedVendor, verifiedDate, verifiedAmount, verifiedInvoiceNo, forceCommit } = req.body;
@@ -575,7 +876,13 @@ app.post('/api/commit-bill', async (req, res) => {
         }
         if (!isValidDateKey(customDateStr)) customDateStr = '(unk)';
 
-        const cleanVendorValue = String(verifiedVendor || '').trim();
+        // 人工确认过的名字也要过一次别名表，否则 "Ong Tuang Chuan" 这种拼法配不到 8159
+        // vendorConfig 由 ERP 前端带来（存在 Firestore），没带就用内建表
+        const { suppliers: activeSuppliers, aliases: activeAliases } = resolveVendorConfig(req.body?.vendorConfig);
+        const aliasOnCommit = applyVendorAlias(String(verifiedVendor || '').trim(), activeAliases);
+        const cleanVendorValue = aliasOnCommit.aliasHit
+            ? aliasOnCommit.vendor
+            : String(verifiedVendor || '').trim();
         const normalizedAmount = normalizeMoney(verifiedAmount);
         if (!cleanVendorValue || normalizeVendorKey(cleanVendorValue) === 'UNKNOWNVENDOR') {
             return res.status(400).json({ success: false, code: 'VERIFICATION_REQUIRED', error: '供应商名称无效，请人工确认后再归档。' });
@@ -597,25 +904,37 @@ app.post('/api/commit-bill', async (req, res) => {
         let matchedId = null;
         let matchedConfig = null;
 
-        for (const [id, config] of Object.entries(whitelist1_MainSuppliers)) {
-            if (config.keywords.some(kw => String(verifiedVendor).toUpperCase().includes(kw))) {
+        // 压平成纯英数再比对：大小写、空格、括号、点都不影响
+        // 例如 "Fully Fishery (M) Sdn Bhd" → FULLYFISHERYMSDNBHD，含 FULLYFISHERY
+        // ⚠️ 不再是「第一家命中就算」：几家都命中时取关键字最长（最具体）的那家，
+        //    短关键字必须是完整的字（见 vendorMatchesKeyword）
+        const squashedVendor = squashVendorName(cleanVendorValue);
+        let bestScore = 0;
+        for (const [id, config] of Object.entries(activeSuppliers)) {
+            const score = bestKeywordScore(cleanVendorValue, config.keywords);
+            if (score > bestScore) {
+                bestScore = score;
                 matchedId = id;
                 matchedConfig = config;
-                break;
             }
+        }
+        // 别名表直接指定了供应商 ID → 以别名为准
+        if (aliasOnCommit.aliasHit && aliasOnCommit.supplierId && activeSuppliers[aliasOnCommit.supplierId]) {
+            matchedId = aliasOnCommit.supplierId;
+            matchedConfig = activeSuppliers[aliasOnCommit.supplierId];
         }
 
         if (matchedId && matchedConfig) {
             targetFolderId = await getOrCreateFolder(matchedConfig.folderName, mainSuppliersBaseFolderId);
             const vendorString = matchedConfig.folderName.replace(/^\d{4}_/, ''); 
             finalName = `${customDateStr}_${vendorString}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
-        } else if (whitelist2_BankTransfers.some(kw => String(verifiedVendor).toUpperCase().includes(kw)) || normalizedAmount >= 1000) {
+        } else if (whitelist2_BankTransfers.some(kw => squashedVendor.includes(squashVendorName(kw))) || normalizedAmount >= 1000) {
             targetFolderId = await getOrCreateFolder("BIG_AMOUNT_TRANSFERS", mainSuppliersBaseFolderId);
-            const cleanVendor = verifiedVendor ? String(verifiedVendor).replace(/[^A-Z0-9]/g, "_").toUpperCase() : '(unk)';
+            const cleanVendor = vendorForFileName(cleanVendorValue);
             finalName = `${customDateStr}_BANK_${cleanVendor}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
         } else {
             targetFolderId = await getOrCreateFolder(yearMonthFolder, pettyCashBaseFolderId);
-            const cleanVendor = verifiedVendor ? String(verifiedVendor).replace(/[^A-Z0-9]/g, "_").toUpperCase() : '(unk)';
+            const cleanVendor = vendorForFileName(cleanVendorValue);
             finalName = `PETTY_CASH_${customDateStr}_${cleanVendor}_${cleanInvoiceNo}_RM${formattedAmountStr}${fileExt}`;
         }
 

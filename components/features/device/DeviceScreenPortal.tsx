@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     AlertTriangle,
     ChefHat,
@@ -169,15 +169,33 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
         return unsubscribe;
     }, [status]);
 
+    // 👑 用 ref 保存最新 session。effect 若直接依赖 session 物件，
+    //    回呼里 setSession 换新物件 → effect 重跑 → 重新订阅 → 又收到一次快照 → 再 setSession…
+    //    每绕一圈就多一次 Firestore 读取，这就是 device_accounts 读写暴量的放大器。
+    const sessionRef = useRef<DeviceSession | null>(null);
+    useEffect(() => { sessionRef.current = session; }, [session]);
+
+    // 👑 写 localStorage 移到独立 effect，不要放在 setSession 的 updater 里（updater 必须是纯函数）
     useEffect(() => {
-        if (status !== 'READY' || !session) return;
+        if (session) safeStorage.set(session);
+    }, [session]);
+
+    // 👑 只在「真的换了设备 / 换了会话版本 / 换了 token」时才重新订阅
+    const subscribedDeviceId = session?.deviceId;
+    const subscribedVersion = session?.sessionVersion;
+    const subscribedToken = session?.sessionToken;
+
+    useEffect(() => {
+        if (status !== 'READY') return;
+        const activeSession = sessionRef.current;
+        if (!activeSession) return;
 
         return DeviceAccountService.subscribeSession(
-            session,
+            activeSession,
             account => {
                 setConnectionOnline(navigator.onLine);
                 setSession(current => {
-                    if (!current || current.deviceId !== session.deviceId) return current;
+                    if (!current || current.deviceId !== activeSession.deviceId) return current;
                     const screensUnchanged = current.allowedScreens.length === account.allowedScreens.length
                         && current.allowedScreens.every((screen, index) => screen === account.allowedScreens[index]);
                     if (
@@ -190,7 +208,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                     ) {
                         return current;
                     }
-                    const refreshedSession: DeviceSession = {
+                    return {
                         ...current,
                         deviceCode: account.deviceCode,
                         deviceName: account.deviceName,
@@ -199,8 +217,6 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                         defaultScreen: account.defaultScreen,
                         sessionVersion: account.sessionVersion,
                     };
-                    safeStorage.set(refreshedSession);
-                    return refreshedSession;
                 });
             },
             error => {
@@ -212,7 +228,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                 }
             },
         );
-    }, [clearSession, session, status]);
+    }, [clearSession, status, subscribedDeviceId, subscribedVersion, subscribedToken]);
 
     useEffect(() => {
         if (status !== 'READY' || !session || session.allowedScreens.includes(activeScreen)) return;

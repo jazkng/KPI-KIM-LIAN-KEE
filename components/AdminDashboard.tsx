@@ -1,7 +1,7 @@
 // components/AdminDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing } from 'lucide-react';
+import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing, Wallet } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
@@ -25,6 +25,7 @@ import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule'; 
 import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
 import { SelfInvoiceModule } from './features/SelfInvoiceModule';
 import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
+import { StaffCashModule } from './features/staffcash/StaffCashModule';
 
 const defaultBossEmployee: Employee = {
     id: 'BOSS_TEMP',
@@ -44,7 +45,7 @@ const defaultBossEmployee: Employee = {
 interface ManagerDashboardProps {
     onBack?: () => void; 
     allowedModules?: AppModule[]; 
-    initialTab?: 'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'KITCHEN_ALERT';
+    initialTab?: 'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'KITCHEN_ALERT';
     isSingleMode?: boolean;
     onOpenTV?: () => void;
     currentEmployee?: Employee; 
@@ -53,7 +54,7 @@ interface ManagerDashboardProps {
 }
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allowedModules, initialTab, isSingleMode = false, onOpenTV, currentEmployee, isManagementStaff = false, lang = 'zh_en' }) => {
-  const [activeTab, setActiveTab] = useState<'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'KITCHEN_ALERT'>('SETTLEMENT');
+  const [activeTab, setActiveTab] = useState<'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'KITCHEN_ALERT'>('SETTLEMENT');
   const [storeConfig, setStoreConfig] = useState<StoreConfig>({ 
       businessDayCutoff: 4,
       timeZoneOffset: 8,
@@ -188,6 +189,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      if (showAll || allowedModules?.includes('SELF_INVOICE')) {
          tabs.push({ key: 'SELF_INVOICE', label: lang === 'my' ? 'ကိုယ်တိုင်ပြေစာ' : '自开凭单', icon: <FileText size={18} /> });
      }
+     if (showAll || allowedModules?.includes('STAFF_CASH')) {
+         tabs.push({ key: 'STAFF_CASH', label: lang === 'my' ? 'အချိန်ပိုင်း/ကြိုတင်' : '兼职与预支', icon: <Wallet size={18} /> });
+     }
      return sortNavigationItems(tabs, tab => tab.key);
   }, [allowedModules, lang]);
 
@@ -219,6 +223,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
               case 'ASSESSMENT': return 'Skill Matrix Assessment';
               case 'AP': return 'Accounts Payable';
               case 'SELF_INVOICE': return 'Voucher Maker';
+              case 'STAFF_CASH': return 'Part-Time & Advance';
               default: return 'Admin Console';
           }
       }
@@ -239,6 +244,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
               case 'ASSESSMENT': return 'ဝန်ထမ်း စွမ်းဆောင်ရည် အကဲဖြတ်စနစ် (Skill Matrix)';
               case 'AP': return 'ပေးရန်ရှိ ငွေစာရင်း စီမံခန့်ခွဲမှု (Accounts Payable)';
               case 'SELF_INVOICE': return 'ကိုယ်တိုင်ထုတ် ပြေစာများ ရေးဆွဲပြုလုပ်ခြင်း (Voucher Maker)';
+              case 'STAFF_CASH': return 'အချိန်ပိုင်းလုပ်ခ နှင့် ကြိုတင်လစာ';
               default: return 'စီမံခန့်ခွဲသူ မျက်နှာပြင်';
           }
       }
@@ -258,6 +264,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
           case 'ASSESSMENT': return '员工技能评估 (Skill Matrix)';
           case 'AP': return '应付账款 (Accounts Payable)';
           case 'SELF_INVOICE': return '自开凭单 (Voucher Maker)';
+          case 'STAFF_CASH': return '兼职与预支 (Part-Time & Advance)';
           default: return '管理控制台';
       }
   }
@@ -486,6 +493,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                 onClose={handleModuleExit} 
              />
          )}
+         {activeTab === 'STAFF_CASH' && <StaffCashModule onClose={handleModuleExit} currentEmployee={currentEmployee} embedded />}
       </div>
     </div>
   );

@@ -348,7 +348,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 <button
                     type="button"
                     onClick={() => void enableNotificationSound()}
-                    className="absolute top-[calc(100%+0.5rem)] right-0 min-h-[38px] px-3 rounded-xl bg-[#FFD200] text-[#111111] border border-black/10 shadow-lg flex items-center gap-1.5 whitespace-nowrap text-[10px] font-black active:scale-95 transition-transform"
+                    className="absolute top-[calc(100%+0.5rem)] right-0 z-[99999] min-h-[38px] px-3 rounded-xl bg-[#FFD200] text-[#111111] border border-black/10 shadow-2xl flex items-center gap-1.5 whitespace-nowrap text-[10px] font-black active:scale-95 transition-transform"
                 >
                     <Volume2 size={14} />
                     {copy.enableSound}
@@ -357,7 +357,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             {isOpen && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-[9999] bg-black/55 backdrop-blur-[2px] flex items-end md:items-center justify-center md:p-5"
+                    className="fixed inset-0 z-[99999] bg-black/55 backdrop-blur-[2px] flex items-end md:items-center justify-center md:p-5"
                     onMouseDown={event => {
                         if (event.currentTarget === event.target) setIsOpen(false);
                     }}

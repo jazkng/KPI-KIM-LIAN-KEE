@@ -144,6 +144,7 @@ export const getEmployeeLevel = (emp: Employee): 1 | 2 | 3 => {
 const ORG_LEVEL_ORDER: Record<OrgLevel, number> = {
     OWNER: 1,
     BRANCH_MANAGER: 2,
+    STAFF_SUPPORT: 2,   // 幕僚跟门店管理同级
     DEPARTMENT_HEAD: 3,
     TEAM_LEAD: 4,
     CREW: 5,

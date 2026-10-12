@@ -1,10 +1,32 @@
+import { html2canvas, loadJsPDF } from '../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Calendar, ArrowRight, PieChart, TrendingUp, TrendingDown, Download, Loader2, Info, Users, Receipt, Briefcase, Wallet, Truck, BarChart3, ChevronRight, AlertCircle, ChevronLeft, Table2, ExternalLink, ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
-import { SettlementRecord, ExpenseItem, BillPaymentRecord, FundTransfer, TreasuryConfig, PayrollRecord, Employee, MARKETING_SUBCAT_LABELS, MARKETING_SUBCAT_EMOJIS, AD_CHANNEL_LABELS, AD_CHANNEL_EMOJIS, BEVERAGE_SUBCAT_LABELS, BEVERAGE_SUBCAT_EMOJIS, SEAFOOD_SUBCAT_LABELS, SEAFOOD_SUBCAT_EMOJIS } from '../../types';
+import { SettlementRecord, ExpenseItem, CategorySplit, BillPaymentRecord, FundTransfer, TreasuryConfig, PayrollRecord, Employee, MARKETING_SUBCAT_LABELS, MARKETING_SUBCAT_EMOJIS, AD_CHANNEL_LABELS, AD_CHANNEL_EMOJIS, BEVERAGE_SUBCAT_LABELS, BEVERAGE_SUBCAT_EMOJIS, SEAFOOD_SUBCAT_LABELS, SEAFOOD_SUBCAT_EMOJIS } from '../../types';
 import { DataManager } from '../../utils/dataManager';
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
+import { ClassicPnLTab } from './ClassicPnLTab';
+import { LABOR_DEPT_ROLE_FALLBACK } from '../../constants/classicPnLCostMap';
+import { buildCategoryMargins, buildClassicPnL } from '../../utils/classicPnLBuilder';
+import { aggregateMonth, monthRange, diffCostByCategory } from '../../utils/monthlyPnLAggregator';
+import { exportClassicPnLMultiToExcel } from '../../utils/classicPnLMultiExport';
+import { downloadBlob } from '../../utils/classicPnLExport';
+import { CATEGORY_MARGIN_PAIRS } from '../../constants/classicPnLCostMap';
+import type { StorehubMonthlySales } from '../../utils/storehubImport';
+import {
+    growthPct,
+    inDateRange,
+    daysBetween,
+    calcPrimeCost,
+    calcBreakEven,
+    calcMenuEngineering,
+    calcInventoryTurnover,
+    calcCashForecast,
+    HEALTH_STYLE,
+    MENU_QUADRANT_LABEL,
+    MENU_QUADRANT_ADVICE,
+    type MenuQuadrant,
+    type CashForecastItem,
+} from '../../utils/financialMetrics';
 
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from '../../firebaseConfig';
@@ -43,15 +65,17 @@ interface DetailedExpenseItem {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-    'INGREDIENT_HQ': '食材-总店 (HQ)', 'INGREDIENT_MEAT': '食材-肉类 (Meat)', 'INGREDIENT_SEAFOOD': '食材-海鲜 (Seafood)', 'INGREDIENT_VEG': '食材-蔬果 (Veg)',
-    'INGREDIENT_DRY': '食材-干货 (Dry)', 'INGREDIENT_SAUCE': '食材-酱料 (Sauce)', 'INGREDIENT_NOODLE': '食材-面条 (Noodle)', 'INGREDIENT_OIL': '食材-油类 (Oil)', 
-    'INGREDIENT_EGG': '食材-蛋类 (Eggs)', 'INGREDIENT_FROZEN': '食材-冷冻品 (Frozen)', 'BEVERAGE': '水吧 (Beverage)', 'INGREDIENT_ICE': '食材-冰块 (Ice)', 'PACKAGING': '包装材料 (Packaging)', 
+    'INGREDIENT_HQ': '食材-总店 (HQ)', 'INGREDIENT_MEAT': '食材-肉类 (Meat)', 'INGREDIENT_SEAFOOD': '食材-海鲜-其他 (Seafood Others)',
+    'INGREDIENT_FISH': '食材-鱼类 (Fish)', 'INGREDIENT_PRAWN': '食材-虾类 (Prawn)', 'INGREDIENT_SOTONG': '食材-苏东 (Sotong)', 'INGREDIENT_LALA': '食材-啦啦 (Lala)', 'INGREDIENT_SEAFOOD_PROCESSED': '食材-海鲜加工品 (Processed)', 'INGREDIENT_VEG': '食材-蔬菜 (Vegetables)', 'INGREDIENT_FRUIT': '食材-水果 (Fruits)',
+    'INGREDIENT_DRY': '食材-干货 (Dry)', 'INGREDIENT_SAUCE': '食材-酱料 (Sauce)', 'INGREDIENT_NOODLE': '食材-面条 (Noodle)', 'INGREDIENT_OIL': '食用油 (Cooking Oil)', 
+    'INGREDIENT_EGG': '食材-蛋类 (Eggs)', 'INGREDIENT_FROZEN': '食材-冷冻品 (Frozen)',
+    'BEVERAGE': '水吧-其他 (Beverage Others)', 'BEVERAGE_TEA': '水吧-茶叶 (Tea)', 'BEVERAGE_CANNED': '水吧-罐装水 (Canned)', 'BEVERAGE_ALCOHOL': '酒类 (Alcohol)', 'INGREDIENT_ICE': '食材-冰块 (Ice)', 'PACKAGING': '包装材料 (Packaging)', 
     'GAS_COGS': '烹饪煤气 (Gas)', 'CHARCOAL': '火炭 (Charcoal)', /* 👈 新增：火炭标签 */ 'SUPPLIER': '一般进货 (General)', 'SUPPLIER_HQ': '总店进货 (HQ)', 'SALARY': '薪资支出 (Salary)',
-    'RENT': '租金 (Rent)', 'UTILITIES': '水电杂费 (Utilities)', 'UTILITIES_ELECTRIC': '电费 (Electricity)', 'UTILITIES_WATER': '水费 (Water)', 
+    'RENT': '租金 (Rent)', 'RENT_STAFF': '宿舍租金 (Staff Hostel Rent)', 'UTILITIES': '水电杂费 (Utilities)', 'UTILITIES_ELECTRIC': '电费 (Electricity)', 'UTILITIES_WATER': '水费 (Water)', 'UTILITIES_ELECTRIC_STAFF': '宿舍电费 (Staff Electricity)', 'UTILITIES_WATER_STAFF': '宿舍水费 (Staff Water)', 
     'UTILITIES_GAS': '管道煤气 (Piped Gas)', 'INTERNET': '网络/电话 (Internet)', 'SALES': '营业收入 (Sales)', 'TRANSFER': '资金转账 (Transfer)', 
     'BILL': '固定账单 (Bill)', 'EXPENSE': '杂项支出 (Expense)', 'ADJUSTMENT': '现金调整 (Adjustment)', 'FUND': '资金注入/提取 (Fund)',
-    'STAFF_ADVANCE': '员工预支 (Advance)', 'STAFF_MEAL': '员工餐 (Staff Meal)', 'STAFF_ACCOMMODATION': '员工住宿 (Housing)',
-    'PAYROLL': '月度薪资 (Payroll)', 'EPF': '公积金 (EPF)', 'SOCSO': '社险 (SOCSO)', 'RENOVATION': '装修 (Renovation)', 
+    'STAFF_ADVANCE': '员工预支 (Advance)', 'STAFF_LOAN': '员工借款 (Staff Loan)', 'STAFF_MEAL': '员工餐 (Staff Meal)', 'STAFF_ACCOMMODATION': '员工住宿 (Housing)',
+    'PAYROLL': '月度薪资 (Payroll)', 'EPF': '公积金 (EPF)', 'SOCSO': '社险 (SOCSO)', 'EPF_SOCSO': '法定缴款 (EPF/SOCSO/EIS/LINDUNG/PCB)', 'EIS': '就业保险 (EIS)', 'LINDUNG': 'LINDUNG 24 Jam (SKBBK)', 'RENOVATION': '装修 (Renovation)', 
     'EQUIPMENT': '设备 (Equipment)', 'KITCHEN_EQUIPMENT': '厨房设备 (Kitchen)', 'FURNITURE': '家具/桌椅 (Furniture)', 'IT_SYSTEM': '电脑/系统 (IT/POS)', 
     'SIGNAGE': '招牌/装饰 (Signage)', 'MAINTENANCE': '维修/保养/清洁 (Maintenance)', 'PEST_CONTROL': '虫害防治 (Pest)', 'CLEANING': '清洁服务 (Cleaning)',
     'WASTE': '垃圾处理 (Waste)', 'MARKETING': '营销 (Marketing)', 'ADVERTISING': '广告与推广 (Advertising & Promotion)', 'IT_SOFTWARE': '软件与信息技术 (IT & Software)', 'PROFESSIONAL': '专业服务 (Professional)', 'ACCOUNTING': '会计服务 (Accounting)', 
@@ -77,7 +101,9 @@ const categorizeExpense = (category: string) => {
     if (['TRANSFER', 'FUND', 'ADJUSTMENT', 'SALES'].some(k => c.includes(k))) return 'IGNORE'; 
     
     if (c.includes('DIVIDEND')) return 'DIVIDEND'; 
-    if (c.includes('DEPOSIT')) return 'ASSET'; 
+    // 👑 员工借款 (STAFF_LOAN) 本质是应收款，员工会还回来，不是真正的营运成本 —— 跟押金一样归 ASSET，
+    //    避免把它算进 LABOR/OPEX 拉低利润率。跟 STAFF_ADVANCE（预支工资，本质是提前发薪）区分开来。
+    if (c.includes('DEPOSIT') || c.includes('STAFF_LOAN')) return 'ASSET'; 
     
     // 👇 修改：在数组中加入了 'CHARCOAL'，确保火炭被正确归类为随销量浮动的成本 (COGS)
     if (['INGREDIENT', 'MEAT', 'SEAFOOD', 'VEG', 'DRY', 'SAUCE', 'NOODLE', 'OIL', 'EGG', 'FROZEN', 'BEVERAGE', 'PACKAGING', 'GAS_COGS', 'CHARCOAL', 'SUPPLIER', 'HQ'].some(k => c.includes(k))) return 'COGS';
@@ -130,6 +156,11 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     const [treasuryConfig, setTreasuryConfig] = useState<TreasuryConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
+    // 📒 多月份 P&L 导出
+    const [multiOpen, setMultiOpen] = useState(false);
+    const [multiStart, setMultiStart] = useState('');
+    const [multiEnd, setMultiEnd] = useState('');
+    const [multiBusy, setMultiBusy] = useState('');
     
     const printRef = useRef<HTMLDivElement>(null);
     const printCostRef = useRef<HTMLDivElement>(null);
@@ -146,8 +177,25 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     const [startDate, setStartDate] = useState(getMonthStartStr()); 
     const [endDate, setEndDate] = useState(getTodayStr());
     
-    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SALES' | 'COST' | 'AUDIT' | 'DIVIDEND'>('OVERVIEW');
+    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SALES' | 'COST' | 'CLASSIC' | 'AUDIT' | 'DIVIDEND'>('OVERVIEW');
     const [accountingMode, setAccountingMode] = useState<'ACCRUAL' | 'CASH'>('ACCRUAL');
+    // 👑 Prime Cost 目标线：餐饮业惯例 65%，老板可以按自己的标准调
+    const [primeCostTarget, setPrimeCostTarget] = useState<number>(65);
+    const [healthExpanded, setHealthExpanded] = useState(true);
+
+    // 👑 菜单分析：要额外读一次 StoreHub 月度销售，所以做成「点了才载入」，
+    //    不点就完全不会产生额外的 Firestore 读取。
+    const [menuSales, setMenuSales] = useState<StorehubMonthlySales | null>(null);
+    const [menuLoading, setMenuLoading] = useState(false);
+    const [menuLoaded, setMenuLoaded] = useState(false);
+    const [menuQuadrantFilter, setMenuQuadrantFilter] = useState<MenuQuadrant | 'ALL'>('ALL');
+
+    // 👑 资金体检（存货周转 + 现金流预测）：要读库存和待付帐款，一样做成「按了才载入」
+    const [fundsData, setFundsData] = useState<{ stockValue: number; stockCount: number; items: CashForecastItem[] } | null>(null);
+    const [fundsLoading, setFundsLoading] = useState(false);
+    const [fundsLoaded, setFundsLoaded] = useState(false);
+    const [cashOnHandInput, setCashOnHandInput] = useState<number>(0);
+    const [forecastDays, setForecastDays] = useState<number>(30);
     
     // 👑 阶段二：4 张主题卡折叠状态
     const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({
@@ -325,10 +373,6 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     };
 
     const formatMoney = (amount: number) => `RM ${Number(amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    const calculateGrowth = (current: number, prev: number) => {
-        if (prev === 0) return current > 0 ? 100 : 0;
-        return ((current - prev) / prev) * 100;
-    };
 
     // 👑 核心引擎
     const analytics = useMemo(() => {
@@ -345,6 +389,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
 
         const rev = { cash: 0, tng: 0, debitCard: 0, creditCard: 0, amex: 0, card: 0, deliveryGross: 0, inStoreSales: 0, totalGrossRevenue: 0, variance: 0, refunds: 0 };
         const bdown = { grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0 };
+        // 📒 传统账目并排比较用：上期平台 Gross
+        const prevBdown = { grabGross: 0, pandaGross: 0, shopeeGross: 0, lalamove: 0, grabComm: 0, grabAds: 0, pandaComm: 0, pandaAds: 0, shopeeComm: 0, shopeeAds: 0 };
+        // 📌 旧「虾和Sotong」混合类别的金额，画面上提示使用者这几笔是估的
+        const mixedSeafoodLegacy = { amount: 0 };
         let totalCOGS = 0, totalLabor = 0, totalOPEX = 0, totalDeposits = 0, totalCapex = 0, totalDividends = 0;
         let totalPandaFees = 0, totalShopeeFees = 0, totalOtherPlatformFees = 0;
         let totalGrabCommission = 0; // 🚨 新增：按天独立累计抽佣池
@@ -353,7 +401,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         const groups: Record<string, CostGroup> = {};
         const prevGroups: Record<string, CostGroup> = {}; // 👑 上期品类级别追踪
 
-        const prev = { totalGrossRevenue: 0, cogs: 0, labor: 0, opex: 0, deliveryDirectCost: 0 };
+        const prev = { totalGrossRevenue: 0, cogs: 0, labor: 0, opex: 0, deliveryDirectCost: 0, inStoreSales: 0 };
 
         const dailySalesMap: Record<string, number> = {};
         const dailyDeliveryMap: Record<string, number> = {};
@@ -361,8 +409,73 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         let weekdaySales = 0, weekdayDays = 0;
         let holidaySales = 0, holidayDays = 0;
 
+        /**
+         * 👑 成本科目拆分分派器
+         * 账单有 categorySplits 时，把金额按拆分比例分到各科目再入账。
+         *
+         * 用「比例」而不是直接用 splits 的金额，是因为实际入账金额可能不等于账单总额：
+         *   · CASH 口径只算已付金额（部分付款）
+         *   · 扣掉 credit note
+         * 按比例分摊能保证「各科目加总 = 实际入账金额」，绝不虚增或漏算。
+         */
+        const addCostWithSplits = (
+            amount: number,
+            expense: { category?: string; categorySplits?: CategorySplit[] },
+            label: string | undefined,
+            isPending: boolean,
+            isPrev: boolean
+        ) => {
+            // 👑 历史资料自动归位：
+            // 2026-08 之前，茶/罐装水/酒 是记成 BEVERAGE + beverageSubCategory。
+            // 现在它们各自独立成科目，这里在报表端自动改归，旧账单不用手动重记。
+            const legacyBeverageMap: Record<string, string> = {
+                TEA: 'BEVERAGE_TEA',
+                CANNED: 'BEVERAGE_CANNED',
+                ALCOHOL: 'BEVERAGE_ALCOHOL',
+            };
+            // 海鲜同理：以前记成 INGREDIENT_SEAFOOD + seafoodSubCategory。
+            // ⚠️ SHRIMP_SOTONG 是「虾和Sotong」混合的历史类别，系统无法得知各占多少，
+            //    依照决定先全部归到虾类，并另外统计金额供画面提示。
+            const legacySeafoodMap: Record<string, string> = {
+                FISH: 'INGREDIENT_FISH',
+                SHRIMP: 'INGREDIENT_PRAWN',
+                SOTONG: 'INGREDIENT_SOTONG',
+                LALA: 'INGREDIENT_LALA',
+                PROCESSED: 'INGREDIENT_SEAFOOD_PROCESSED',
+                SHRIMP_SOTONG: 'INGREDIENT_PRAWN',
+            };
+            const anyExp = expense as any;
+            let effectiveCategory = expense.category || 'OTHER';
+            const upperCat = String(effectiveCategory).toUpperCase();
+            if (upperCat === 'BEVERAGE' && anyExp.beverageSubCategory) {
+                effectiveCategory = legacyBeverageMap[String(anyExp.beverageSubCategory).toUpperCase()] || effectiveCategory;
+            } else if (upperCat === 'INGREDIENT_SEAFOOD' && anyExp.seafoodSubCategory) {
+                const sub = String(anyExp.seafoodSubCategory).toUpperCase();
+                effectiveCategory = legacySeafoodMap[sub] || effectiveCategory;
+                if (sub === 'SHRIMP_SOTONG' && !isPrev) mixedSeafoodLegacy.amount += amount;
+            }
+
+            const splits = expense.categorySplits;
+            if (Array.isArray(splits) && splits.length > 0) {
+                const splitTotal = splits.reduce((s, x) => s + Number(x.amount || 0), 0);
+                if (splitTotal > 0) {
+                    let allocated = 0;
+                    splits.forEach((sp, i) => {
+                        // 最后一行吃掉四舍五入的零头，确保分毫不差
+                        const part = i === splits.length - 1
+                            ? amount - allocated
+                            : Number(((amount * Number(sp.amount || 0)) / splitTotal).toFixed(2));
+                        allocated += part;
+                        addCost(part, sp.category, label, isPending, isPrev);
+                    });
+                    return;
+                }
+            }
+            addCost(amount, effectiveCategory, label, isPending, isPrev);
+        };
+
         const addCost = (amount: number, category: string, label: string | undefined, isPending: boolean, isPrev: boolean) => {
-            if (!amount && !isPending) return; 
+            if (!amount && !isPending) return;
             let catKey = category ? category.toUpperCase() : 'OTHER';
             
             // 👑 1. 历史数据清洗器：强行把老账单的旧 Key 归宗到新体系
@@ -436,30 +549,46 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const dailyTotalGross = netStoreSales + dailyDeliveryGross;
             
             const rs = (s as any).reconStatus || {};
-            const gNet = (rs.grab !== undefined && typeof rs.grab === 'number') 
+            const rawGNet = (rs.grab !== undefined && typeof rs.grab === 'number') 
                 ? Number(rs.grab) 
                 : (Number(b.grabNet) || Number(b.grab) || 0);
+            const gNet = rawGNet > 0 ? rawGNet : gGross;
             const gAds = Number(b.grabAds) || 0;
             
             // 🚨 修复：仅当 gNet 有值(已对账)时才计算差额，防范未对账导致 100% 误判抽佣
             const dailyGrabComm = (gNet > 0 && gGross > gNet) ? (gGross - gNet) : 0;
 
-            const shNet = (rs.shopee !== undefined && typeof rs.shopee === 'number') 
+            const rawShNet = (rs.shopee !== undefined && typeof rs.shopee === 'number') 
                 ? Number(rs.shopee) 
                 : (b.shopeeNet !== undefined ? Number(b.shopeeNet) : (Number(b.shopee) || 0));
+            const shNet = rawShNet > 0 ? rawShNet : shGross;
             const shAds = Number(b.shopeeAds) || 0;
             const dailyShopeeComm = (shNet > 0 && shGross > shNet) ? (shGross - shNet) : 0;
 
-            const pNet = (rs.panda !== undefined && typeof rs.panda === 'number') 
+            const rawPNet = (rs.panda !== undefined && typeof rs.panda === 'number') 
                 ? Number(rs.panda) 
                 : (b.pandaNet !== undefined ? Number(b.pandaNet) : (Number(b.panda) || 0));
+            const pNet = rawPNet > 0 ? rawPNet : pGross;
             const pAds = Number(b.pandaAds) || 0;
             const dailyPandaComm = (pNet > 0 && pGross > pNet) ? (pGross - pNet) : 0;
 
             if (isPrv) {
                 prev.totalGrossRevenue += dailyTotalGross;
-                prev.deliveryDirectCost += (dailyGrabComm + gAds + dailyShopeeComm + shAds + dailyPandaComm + pAds);
-                s.expenses?.forEach(e => addCost(Number(e.amount||0), e.category, e.company || e.note, false, true));
+                prev.inStoreSales += netStoreSales;   // 📒 传统账目并排比较用
+                // 👑 抽佣是用「账面流水 − 净回款」倒推的，里面已经含了广告费，
+                //    再加一次 gAds/shAds/pAds 就重复了（老板对账单实证：
+                //    35,117.76 − 11,055.36(抽佣) − 3,173.52(广告) = 20,888.88 实收）。
+                prev.deliveryDirectCost += (dailyGrabComm + dailyShopeeComm + dailyPandaComm);
+                // 📒 传统账目并排比较需要上期的平台 Gross
+                prevBdown.grabGross += gGross;
+                prevBdown.pandaGross += pGross;
+                prevBdown.shopeeGross += shGross;
+                prevBdown.lalamove += lala;
+                // 📒 传统账目要列出平台抽佣与广告费，上期也要有才比得起来
+                prevBdown.grabComm += dailyGrabComm;   prevBdown.grabAds += gAds;
+                prevBdown.pandaComm += dailyPandaComm; prevBdown.pandaAds += pAds;
+                prevBdown.shopeeComm += dailyShopeeComm; prevBdown.shopeeAds += shAds;
+                s.expenses?.forEach(e => addCostWithSplits(Number(e.amount||0), e, e.company || e.note, false, true));
                 return;
             }
 
@@ -498,7 +627,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             else if (dayOfWeek === 0 || dayOfWeek === 6) { weekendSales += dailyTotalGross; weekendDays++; } 
             else { weekdaySales += dailyTotalGross; weekdayDays++; }
 
-            s.expenses?.forEach(e => addCost(Number(e.amount||0), e.category, e.company || e.note, false, false));
+            s.expenses?.forEach(e => addCostWithSplits(Number(e.amount||0), e, e.company || e.note, false, false));
         });
 
         standaloneExpenses.forEach(e => {
@@ -513,14 +642,47 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
             const amt = Number(accountingMode === 'ACCRUAL' ? (e.totalBillAmount || e.amount) : e.amount) - Number(e.creditNote || 0);
             
-            if (amt > 0) addCost(amt, e.category, e.company || e.note, false, isPrv);
+            if (amt > 0) addCostWithSplits(amt, e, e.company || e.note, false, isPrv);
         });
 
         billPayments.forEach(b => {
             const bAny = b as any;
-            if (isCurrentRange(b.date)) addCost(Number(b.amount || 0), b.category, bAny.note || bAny.payee || bAny.companyLabel, false, false);
-            else if (isPrevRange(b.date)) addCost(Number(b.amount || 0), b.category, bAny.note || bAny.payee || bAny.companyLabel, false, true);
+            // 代收代付：整张账单先全额付出去，其中他人分摊的部分不是本店的成本
+            const shared = (b.costShares || []).reduce((sum: number, x: any) => sum + (Number(x.amount) || 0), 0);
+            const netAmt = Math.max(0, Number(b.amount || 0) - shared);
+            const label = bAny.note || bAny.payee || bAny.companyLabel;
+            if (isCurrentRange(b.date)) addCost(netAmt, b.category, label, false, false);
+            else if (isPrevRange(b.date)) addCost(netAmt, b.category, label, false, true);
         });
+
+        /**
+         * 👑 薪资净发：自己从 details 重算，不直接信任存档的 totalNetPay
+         *
+         * 旧版本存档时把两种钱混进了 totalNetPay：
+         *   ① 兼职 —— 兼职本身是独立支出，财报已经从 standalone_expenses 抓过一次，
+         *      再从这里算一次就变重复（传统账目的 PAYROLL 和 薪资SALARY 会算两遍）
+         *   ② 离职员工的旧草稿 —— 那几笔根本没发出去
+         *
+         * details 里只有正式员工（兼职从来不写进 details），所以从 details 重算就自动排除 ①；
+         * 再比对员工档案的离职日期，把「没发过 + 离职月已过」的旧草稿剔掉，就解决 ②。
+         * 这样不用老板手动重存旧月份，报表自己就是对的。
+         */
+        const netPayFromDetails = (p: PayrollRecord): number => {
+            const details: any[] = Array.isArray((p as any).details) ? (p as any).details : [];
+            if (details.length === 0) return Number(p.totalNetPay || 0);
+            return details.reduce((sum, d) => {
+                const amount = Number(d?.netPay) || 0;
+                if (d?.isPaid) return sum + amount;          // 真的发出去的钱，一律算
+                const emp = employees.find(e => e.id === d?.employeeId);
+                if (emp) {
+                    const terminated = emp.isArchived || emp.status === 'TERMINATED';
+                    const term = emp.terminationDate ? emp.terminationDate.substring(0, 7) : '';
+                    // 离职月已经过了、又没发过 → 残留的旧草稿，不算
+                    if (terminated && term && term < p.month) return sum;
+                }
+                return sum + amount;
+            }, 0);
+        };
 
         const payrollSummary = { monthlyTotal: 0, paidAmount: 0, unpaidAmount: 0, isPosted: false };
         payrollRecords.forEach(p => {
@@ -529,7 +691,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
              const isPrv = isPrevRange(effDate);
 
              if (p.status === 'POSTED') {
-                 const net = Number(p.totalNetPay || 0);
+                 const net = netPayFromDetails(p);
                  const govt = Number(p.totalGovtPay || 0);
                  if (isPrv) {
                      addCost(net, 'PAYROLL', undefined, false, true);
@@ -548,6 +710,18 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                          if (!groups[pKey]) groups[pKey] = { id: pKey, label: `Statutory (${p.month}) - Draft`, amount: govt, type: 'LABOR', isPending: true };
                      }
                  }
+             } else if (isCurr || isPrv) {
+                 // 👑 还没结账（DRAFT）的月份，以前完全不进成本 ——
+                 //    传统账目的部门明细却照草稿拆，于是 LABOUR CHARGES 跟部门加总永远差一大截。
+                 //    · 业务发生 (ACCRUAL)：薪水是这个月做出来的，不管发了没都算这个月的人工（应付薪资）
+                 //    · 现金实收 (CASH)：只算已经发出去的那几个人
+                 //    预支 (STAFF_ADVANCE) 本来就另外记过，netPay 已经扣掉预支，所以不会重复。
+                 const net = accountingMode === 'ACCRUAL'
+                     ? netPayFromDetails(p)
+                     : ((p as any).details || []).reduce((s: number, d: any) => s + (d?.isPaid ? Number(d?.netPay) || 0 : 0), 0);
+                 if (net > 0.005) {
+                     addCost(net, 'PAYROLL', isPrv ? undefined : `Staff Payroll (${p.month})${accountingMode === 'ACCRUAL' ? ' · 未结账' : ' · 已发部分'}`, false, isPrv);
+                 }
              }
         });
 
@@ -562,7 +736,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const currentMonthPrefix = startDate.slice(0, 7);
             const draftRecord = (payrollRecords || []).find(p => p?.id === currentMonthPrefix && p?.status === 'DRAFT');
             if (draftRecord) {
-                const draftTotal = Number(draftRecord.totalNetPay || 0) + Number(draftRecord.totalGovtPay || 0);
+                // DRAFT 的预测也走同一套重算，免得旧存档的兼职/幽灵草稿把预测撑大
+                const draftTotal = netPayFromDetails(draftRecord) + Number(draftRecord.totalGovtPay || 0);
                 if (draftTotal > 0) {
                     estimatedPayroll = draftTotal;
                     forecastSource = 'DRAFT';
@@ -581,7 +756,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         const grabCommission = totalGrabCommission;
         const shopeeCommission = totalShopeeCommission;
         const pandaCommission = totalPandaCommission;
-        const totalDeliveryDirectCost = grabCommission + bdown.grabAds + totalPandaFees + pandaCommission + bdown.pandaAds + totalShopeeFees + shopeeCommission + bdown.shopeeAds + totalOtherPlatformFees;
+        // 👑 三个平台的 Commission 都是「账面流水 − 净回款」倒推来的，广告费已经含在里面，
+        //    所以这里不能再加一次 bdown.*Ads（以前会重复扣，真实落袋被低估）。
+        //    Panda/Shopee 的 Fees 是另外记的服务费/调节费，不在倒推值内，要保留。
+        const totalDeliveryDirectCost = grabCommission + totalPandaFees + pandaCommission + totalShopeeFees + shopeeCommission + totalOtherPlatformFees;
         const netRealizedRevenue = rev.totalGrossRevenue - totalDeliveryDirectCost;
         
         // 👑 每日人工同步与门店支出结算 (Budget and Actual Sync)
@@ -782,6 +960,44 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             margins: { cogs: cogsMargin, labor: laborMargin, opex: opexMargin },
             costs: { totalCOGS, totalLabor: totalLaborSynced, rawLabor: totalLabor, totalOPEX, totalStoreCosts, totalCapex, totalDeposits },
             lists: { cogsList, laborList, opexList, capexList, deliveryCostList },
+            // 📒 传统账目：所有支出分类摊平成 catKey → 金额（含 CAPEX / DELIVERY_COST）
+            classicPnL: {
+                // 📒 传统账目的 SALES 用的是平台「账面流水」(Gross)，
+                //    但平台抽佣和广告费是算出来的、不会走支出单，所以 groups 里根本没有 ——
+                //    结果传统账目只看到收入、看不到平台扣了多少，净利被高估。
+                //    这里把算好的金额补进去（抽佣已扣掉广告费，两者相加 = 平台实际扣的总额）。
+                costByCategory: (() => {
+                    const acc = Object.values(groups).reduce((m, g) => {
+                        m[g.id] = (m[g.id] || 0) + g.amount;
+                        return m;
+                    }, {} as Record<string, number>);
+                    const put = (k: string, v: number) => { if (v > 0.005) acc[k] = (acc[k] || 0) + v; };
+                    put('PLATFORM_COMM_GRAB',   Math.max(0, grabCommission - bdown.grabAds));
+                    put('PLATFORM_ADS_GRAB',    bdown.grabAds);
+                    put('PLATFORM_COMM_PANDA',  Math.max(0, pandaCommission - bdown.pandaAds));
+                    put('PLATFORM_ADS_PANDA',   bdown.pandaAds);
+                    put('PLATFORM_COMM_SHOPEE', Math.max(0, shopeeCommission - bdown.shopeeAds));
+                    put('PLATFORM_ADS_SHOPEE',  bdown.shopeeAds);
+                    return acc;
+                })(),
+                prevCostByCategory: (() => {
+                    const acc = Object.values(prevGroups).reduce((m, g) => {
+                        m[g.id] = (m[g.id] || 0) + g.amount;
+                        return m;
+                    }, {} as Record<string, number>);
+                    const put = (k: string, v: number) => { if (v > 0.005) acc[k] = (acc[k] || 0) + v; };
+                    put('PLATFORM_COMM_GRAB',   Math.max(0, prevBdown.grabComm - prevBdown.grabAds));
+                    put('PLATFORM_ADS_GRAB',    prevBdown.grabAds);
+                    put('PLATFORM_COMM_PANDA',  Math.max(0, prevBdown.pandaComm - prevBdown.pandaAds));
+                    put('PLATFORM_ADS_PANDA',   prevBdown.pandaAds);
+                    put('PLATFORM_COMM_SHOPEE', Math.max(0, prevBdown.shopeeComm - prevBdown.shopeeAds));
+                    put('PLATFORM_ADS_SHOPEE',  prevBdown.shopeeAds);
+                    return acc;
+                })(),
+                prevBdown,
+                prevInStoreSales: prev.inStoreSales,
+                mixedSeafoodLegacyAmount: mixedSeafoodLegacy.amount,
+            },
             topMovers,
             payrollForecast: { amount: payrollForecast, isPosted: payrollSummary.isPosted, source: forecastSource, afterPayrollNet, activeStaffCount },
             dailySales, avgDailySales, settlementCount,
@@ -792,12 +1008,14 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 bestDay
             },
             mom: {
-                revenue: calculateGrowth(rev.totalGrossRevenue, prev.totalGrossRevenue),
-                netRealized: calculateGrowth(netRealizedRevenue, prevNetRealizedRevenue),
-                storeCosts: calculateGrowth(totalStoreCosts, prevStoreCosts),
-                cogs: calculateGrowth(totalCOGS, prev.cogs),
-                labor: calculateGrowth(totalLabor, prev.labor),
-                opex: calculateGrowth(totalOPEX, prev.opex),
+                // 统一走 growthPct：上期是 0 时回 null，画面显示「新增」，
+                // 不再出现「上期没有这笔，却显示 +100%」这种会看错的数字
+                revenue: growthPct(rev.totalGrossRevenue, prev.totalGrossRevenue),
+                netRealized: growthPct(netRealizedRevenue, prevNetRealizedRevenue),
+                storeCosts: growthPct(totalStoreCosts, prevStoreCosts),
+                cogs: growthPct(totalCOGS, prev.cogs),
+                labor: growthPct(totalLabor, prev.labor),
+                opex: growthPct(totalOPEX, prev.opex),
             },
             salesDetails: {
                 dineInGross: rev.inStoreSales,
@@ -829,7 +1047,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 pandaAdsDensity: bdown.pandaGross > 0 ? (bdown.pandaAds / bdown.pandaGross) * 100 : 0,
                 shopeeAdsDensity: bdown.shopeeGross > 0 ? (bdown.shopeeAds / bdown.shopeeGross) * 100 : 0,
                 
-                grabNetRatio: bdown.grabGross > 0 ? ((bdown.grabNet - bdown.grabAds) / bdown.grabGross) * 100 : 0,
+                grabNetRatio: bdown.grabGross > 0 ? (bdown.grabNet / bdown.grabGross) * 100 : 0,   // 净回款已扣过广告费，不再多减
                 pandaNetRatio: bdown.pandaGross > 0 ? ((bdown.pandaNet - bdown.pandaAds) / bdown.pandaGross) * 100 : 0,
                 shopeeNetRatio: bdown.shopeeGross > 0 ? ((bdown.shopeeNet - bdown.shopeeAds) / bdown.shopeeGross) * 100 : 0,
             },
@@ -851,6 +1069,173 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         };
     }, [settlementRecords, standaloneExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
 
+    // ========== 👑 经营体检指标 (Prime Cost / 盈亏平衡) ==========
+    // 纯计算，用的全是 analytics 已经算好的数字，不额外读取任何资料
+    const healthMetrics = useMemo(() => {
+        if (!analytics) return null;
+        const revenue = analytics.pnl?.netRealizedRevenue || 0;
+        const cogs = analytics.costs?.totalCOGS || 0;
+        const labor = analytics.costs?.totalLabor || 0;
+        const opex = analytics.costs?.totalOPEX || 0;
+        // 变动成本 = 食材 + 外送平台的抽佣与广告（生意越多付越多）
+        const deliveryVariable = analytics.pnl?.totalDeliveryDirectCost || 0;
+
+        const daysInPeriod = daysBetween(startDate, endDate);
+        // 已经有结算记录的天数才算「已经过的天数」，没结算的不算
+        const daysElapsed = Math.min(analytics.settlementCount || 0, daysInPeriod);
+
+        return {
+            prime: calcPrimeCost(cogs, labor, revenue, primeCostTarget),
+            breakEven: calcBreakEven({
+                revenue,
+                variableCost: cogs + deliveryVariable,
+                fixedCost: labor + opex,
+                daysElapsed,
+                daysInPeriod,
+            }),
+            daysInPeriod,
+            daysElapsed,
+        };
+    }, [analytics, startDate, endDate, primeCostTarget]);
+
+    // 载入菜单分析用的 SKU 销售（1 次 doc 读取）
+    const loadMenuAnalysis = async () => {
+        if (menuLoading) return;
+        setMenuLoading(true);
+        try {
+            const month = startDate.slice(0, 7);
+            const data = await DataManager.getStorehubSales(month);
+            setMenuSales(data);
+            setMenuLoaded(true);
+        } catch (err) {
+            console.error('载入 SKU 销售失败', err);
+            alert('❌ 载入 SKU 销售失败，请检查网络');
+        } finally {
+            setMenuLoading(false);
+        }
+    };
+
+    // 日期范围一变，之前载入的 SKU 资料就不对了，清掉重来
+    useEffect(() => {
+        setMenuSales(null);
+        setMenuLoaded(false);
+        setMenuQuadrantFilter('ALL');
+    }, [startDate, endDate]);
+
+    // 载入资金体检需要的资料：库存价值 + 待付帐款 + 经常性账单
+    const loadFundsCheck = async () => {
+        if (fundsLoading) return;
+        setFundsLoading(true);
+        try {
+            const [kitchen, bar, general, fuel, recurring, pendingSnap] = await Promise.all([
+                DataManager.getStock('KITCHEN'),
+                DataManager.getStock('BAR'),
+                DataManager.getStock('GENERAL'),
+                DataManager.getStock('FUEL'),
+                DataManager.getRecurringBills(),
+                getDocs(query(collection(db, 'standalone_expenses'), where('paymentStatus', '==', 'PENDING'))),
+            ]);
+
+            // 库存价值 = 各品项 现有基础单位数量 × 每基础单位成本
+            const allStock = [...kitchen, ...bar, ...general, ...fuel];
+            let stockValue = 0;
+            allStock.forEach(it => {
+                const qty = Number((it as any).currentQtyBase ?? it.currentQty ?? 0) || 0;
+                const unitCost = Number((it as any).costPerBaseUnit ?? it.cost ?? 0) || 0;
+                stockValue += qty * unitCost;
+            });
+
+            const items: CashForecastItem[] = [];
+
+            pendingSnap.docs.forEach(d => {
+                const e = d.data() as any;
+                const amt = Number(e.amount) || 0;
+                if (amt <= 0) return;
+                items.push({
+                    label: e.company || e.note || '未命名应付',
+                    amount: amt,
+                    dueDate: (e.paymentDate || e.time || '').split('T')[0],
+                    kind: 'AP',
+                });
+            });
+
+            // 薪资：用报表已经算好的预估/实际数
+            const payroll = analytics?.payrollForecast?.amount || 0;
+            if (payroll > 0) {
+                items.push({ label: `薪资 (${startDate.slice(0, 7)})`, amount: payroll, kind: 'PAYROLL' });
+            }
+
+            // 经常性账单：用每个账单的最近一期金额当作下一期要付的钱
+            (recurring || []).forEach((b: any) => {
+                const history = b.paymentHistory || b.payments || [];
+                const last = history.length > 0 ? history[history.length - 1] : null;
+                const amt = Number(last?.amount ?? b.estimatedAmount ?? b.amount ?? 0) || 0;
+                if (amt <= 0) return;
+                items.push({ label: b.name || '经常性账单', amount: amt, kind: 'RECURRING' });
+            });
+
+            setFundsData({ stockValue, stockCount: allStock.length, items });
+            setFundsLoaded(true);
+        } catch (err) {
+            console.error('载入资金体检失败', err);
+            alert('❌ 载入资金体检失败，请检查网络');
+        } finally {
+            setFundsLoading(false);
+        }
+    };
+
+    // ========== 👑 资金体检 ==========
+    const fundsAnalysis = useMemo(() => {
+        if (!fundsData || !analytics) return null;
+        const daysInPeriod = daysBetween(startDate, endDate);
+        return {
+            inventory: calcInventoryTurnover(fundsData.stockValue, analytics.costs?.totalCOGS || 0, daysInPeriod),
+            cash: calcCashForecast({
+                cashOnHand: cashOnHandInput,
+                items: fundsData.items,
+                avgDailyRevenue: analytics.avgDailySales || 0,
+                horizonDays: forecastDays,
+            }),
+            stockCount: fundsData.stockCount,
+        };
+    }, [fundsData, analytics, cashOnHandInput, forecastDays, startDate, endDate]);
+
+    // ========== 👑 菜单工程（单品贡献度）==========
+    const menuAnalysis = useMemo(() => {
+        if (!menuSales || !analytics) return null;
+        const costByCategory = analytics.classicPnL?.costByCategory || {};
+        const marginRows = buildCategoryMargins(menuSales, costByCategory, 'DETAILED');
+
+        // 把「品类毛利率」摊平成 SKU 的 category → 毛利率%
+        const marginByCategory: Record<string, number> = {};
+        marginRows.forEach(row => {
+            const pair = CATEGORY_MARGIN_PAIRS.find(p => p.id === row.id);
+            if (!pair || row.marginPct === null) return;
+            pair.salesCategories.forEach(salesKey => {
+                marginByCategory[salesKey] = row.marginPct! * 100;
+            });
+        });
+
+        const result = calcMenuEngineering(
+            menuSales.skuRows.map(r => ({
+                productName: r.productName,
+                sku: r.resolvedCode || r.sku,
+                qty: r.qty,
+                netSales: r.netSales,
+                category: r.category,
+                avgCost: r.avgCost,   // StoreHub 有设成本就用真的，没有才退回品类估算
+            })),
+            marginByCategory,
+            { minQty: 0 },
+        );
+
+        // 没有对应到毛利率的品类（还没设成本科目），提醒一下
+        const missing = Array.from(new Set(
+            menuSales.skuRows.map(r => r.category).filter(c => marginByCategory[c] === undefined)
+        ));
+        return { ...result, missingCategories: missing, month: menuSales.month };
+    }, [menuSales, analytics]);
+
     // ========== DrillDown ==========
     const getDrillDownData = (criteria: { 
         type?: string, 
@@ -860,11 +1245,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         beverageSubCat?: string
     }) => {
         const rawItems: DetailedExpenseItem[] = [];
-        const isInRange = (dateStr: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= startDate && d <= endDate;
-        };
+        const isInRange = (dateStr: string) => inDateRange(dateStr, startDate, endDate);
 
         const addItem = (item: DetailedExpenseItem) => {
             const itemType = categorizeExpense(item.category);
@@ -907,7 +1288,9 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const gAds = Number(bd.grabAds) || 0;
             const comm = gGross > gNet ? (gGross - gNet) : 0;
 
-            if (comm > 0) addItem({ id: `grab_comm_${s.id}`, date: dStr, category: 'PLATFORM_FEE_GRAB', desc: 'GrabFood 基础抽佣 (Settlement)', amount: comm, source: 'Settlement', type: 'DELIVERY_COST' });
+            // 倒推抽佣含广告费 → 明细要剥开列，两笔加起来还是等于 comm，不会重复
+            const pureComm = Math.max(0, comm - gAds);
+            if (pureComm > 0) addItem({ id: `grab_comm_${s.id}`, date: dStr, category: 'PLATFORM_FEE_GRAB', desc: 'GrabFood 基础抽佣 (Settlement)', amount: pureComm, source: 'Settlement', type: 'DELIVERY_COST' });
             if (gAds > 0) addItem({ id: `grab_ads_${s.id}`, date: dStr, category: 'PLATFORM_FEE_GRAB', desc: 'GrabFood 当班广告 (Settlement)', amount: gAds, source: 'Settlement', type: 'DELIVERY_COST' });
 
             s.expenses?.forEach((e, idx) => {
@@ -1152,6 +1535,64 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         };
     }, [payrollRecords, employees, startDate, analytics]);
 
+    // ==========================================
+    // 📒 传统账目：部门薪资明细
+    // ------------------------------------------
+    // 与上方 laborDeptAnalysis 不同：这里优先读 Employee.department 栏位（准确），
+    // 只有该栏位空白时才退回职位名称关键字推断（会标示笔数）。
+    // ==========================================
+    const classicLaborByDept = useMemo(() => {
+        const build = (monthPrefix: string) => {
+            const byDept: Record<string, number> = {};
+            let guessedCount = 0;
+            let guessedAmount = 0;
+            let totalCount = 0;
+
+            (payrollRecords || []).forEach(pr => {
+                if (!pr || pr.id !== monthPrefix) return;
+                (pr.details || []).forEach((d: any) => {
+                    if (!d) return;
+                    // 👑 2026-09 改口径：部门金额 = 净发 + 预支（现金口径），
+                    //    不再用 totalCost（雇佣总成本，含雇主公积金）。
+                    //    这样「各部门 + 兼职 + 员工餐」加起来正好 = LABOUR CHARGES，老板可以直接对。
+                    //    预支是当月先发出去的现金，本来就属于那个部门的人工，所以归回部门，不另外列一行。
+                    //    现金实收模式：还没结账、这个人也还没发 → 净发不算（预支照算，那是已经付出去的现金）
+                    const cashNotPaid = accountingMode === 'CASH' && pr.status !== 'POSTED' && !d.isPaid;
+                    const cost = (cashNotPaid ? 0 : Number(d.netPay || 0)) + Number(d.advanceLoan || 0);
+                    if (!cost) return;
+                    totalCount++;
+
+                    const emp = (employees || []).find(e => e.id === d.employeeId);
+                    let dept = emp?.department ? String(emp.department).toUpperCase() : '';
+
+                    // department 空白或 OTHER → 退回职位名称推断
+                    if (!dept || dept === 'OTHER') {
+                        const role = String(emp?.role || '').toUpperCase();
+                        const hit = LABOR_DEPT_ROLE_FALLBACK.find(rule =>
+                            rule.keywords.some(k => role.includes(k.toUpperCase()))
+                        );
+                        if (hit) {
+                            dept = hit.department;
+                            guessedCount++;
+                            guessedAmount += cost;
+                        } else {
+                            dept = 'UNASSIGNED';
+                        }
+                    }
+
+                    byDept[dept] = (byDept[dept] || 0) + cost;
+                });
+            });
+
+            return { byDept, guessedCount, guessedAmount, totalCount };
+        };
+
+        return {
+            current: build(startDate ? startDate.slice(0, 7) : ''),
+            prev: build(prevStartDate ? prevStartDate.slice(0, 7) : ''),
+        };
+    }, [payrollRecords, employees, startDate, prevStartDate, accountingMode]);
+
     // 👑 每日人工核算 — 用于推算保本门槛 (Daily Labor Breakdown)
     const dailyLaborBreakdown = useMemo(() => {
         // 👑 数据源优先级：laborDeptAnalysis.actualLabor (DRAFT 实编数据) > payrollForecast.amount (POSTED/基础预估)
@@ -1242,11 +1683,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     // 独立扫描原始账单，按 marketingSubCategory / adChannel 聚合
     // 与 analytics 同口径过滤，避免重复计算
     const marketingBreakdown = useMemo(() => {
-        const isInRange = (dateStr: string, start: string, end: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= start && d <= end;
-        };
+        // 日期区间判断统一走 utils/financialMetrics 的 inDateRange
 
         const subCatsCur: Record<string, { amount: number; count: number; channels: Record<string, { amount: number; count: number }> }> = {};
         const subCatsPrev: Record<string, { amount: number; count: number; channels: Record<string, { amount: number; count: number }> }> = {};
@@ -1302,10 +1739,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
             const amt = Number(accountingMode === 'ACCRUAL' ? (e.totalBillAmount || e.amount) : e.amount) - Number(e.creditNote || 0);
 
-            if (isInRange(dateToUse, startDate, endDate)) {
+            if (inDateRange(dateToUse, startDate, endDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addMarketing(e, amt, false);
-            } else if (isInRange(dateToUse, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dateToUse, prevStartDate, prevEndDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addMarketing(e, amt, true);
             }
@@ -1314,12 +1751,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         // 2. 结算单内嵌账单
         settlementRecords.forEach(s => {
             const dStr = s.date.split('T')[0];
-            if (isInRange(dStr, startDate, endDate)) {
+            if (inDateRange(dStr, startDate, endDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'MARKETING') return;
                     addMarketing(e, Number(e.amount || 0), false);
                 });
-            } else if (isInRange(dStr, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dStr, prevStartDate, prevEndDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'MARKETING') return;
                     addMarketing(e, Number(e.amount || 0), true);
@@ -1381,11 +1818,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
 
     // 👑 Seafood Breakdown
     const seafoodBreakdown = useMemo(() => {
-        const isInRange = (dateStr: string, start: string, end: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= start && d <= end;
-        };
+        // 日期区间判断统一走 utils/financialMetrics 的 inDateRange
 
         const subCatsCur: Record<string, { amount: number; count: number }> = {};
         const subCatsPrev: Record<string, { amount: number; count: number }> = {};
@@ -1429,10 +1862,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
             const amt = Number(accountingMode === 'ACCRUAL' ? (e.totalBillAmount || e.amount) : e.amount) - Number(e.creditNote || 0);
 
-            if (isInRange(dateToUse, startDate, endDate)) {
+            if (inDateRange(dateToUse, startDate, endDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addSeafood(e, amt, false);
-            } else if (isInRange(dateToUse, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dateToUse, prevStartDate, prevEndDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addSeafood(e, amt, true);
             }
@@ -1441,12 +1874,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         // 2. Petty cash in settlement records
         settlementRecords.forEach(s => {
             const dStr = s.date.split('T')[0];
-            if (isInRange(dStr, startDate, endDate)) {
+            if (inDateRange(dStr, startDate, endDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'INGREDIENT_SEAFOOD') return;
                     addSeafood(e, Number(e.amount || 0), false);
                 });
-            } else if (isInRange(dStr, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dStr, prevStartDate, prevEndDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'INGREDIENT_SEAFOOD') return;
                     addSeafood(e, Number(e.amount || 0), true);
@@ -1456,10 +1889,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
 
         // 3. Bill payments
         billPayments.forEach(b => {
-            if (isInRange(b.date, startDate, endDate)) {
+            if (inDateRange(b.date, startDate, endDate)) {
                 if ((b.category || '').toUpperCase() !== 'INGREDIENT_SEAFOOD') return;
                 addSeafood(b, Number(b.amount || 0), false);
-            } else if (isInRange(b.date, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(b.date, prevStartDate, prevEndDate)) {
                 if ((b.category || '').toUpperCase() !== 'INGREDIENT_SEAFOOD') return;
                 addSeafood(b, Number(b.amount || 0), true);
             }
@@ -1498,11 +1931,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
 
     // 👑 Beverage Breakdown
     const beverageBreakdown = useMemo(() => {
-        const isInRange = (dateStr: string, start: string, end: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= start && d <= end;
-        };
+        // 日期区间判断统一走 utils/financialMetrics 的 inDateRange
 
         const subCatsCur: Record<string, { amount: number; count: number }> = {};
         const subCatsPrev: Record<string, { amount: number; count: number }> = {};
@@ -1546,10 +1975,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
             const amt = Number(accountingMode === 'ACCRUAL' ? (e.totalBillAmount || e.amount) : e.amount) - Number(e.creditNote || 0);
 
-            if (isInRange(dateToUse, startDate, endDate)) {
+            if (inDateRange(dateToUse, startDate, endDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addBeverage(e, amt, false);
-            } else if (isInRange(dateToUse, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dateToUse, prevStartDate, prevEndDate)) {
                 if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return;
                 addBeverage(e, amt, true);
             }
@@ -1558,12 +1987,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         // 2. Petty cash in settlement records
         settlementRecords.forEach(s => {
             const dStr = s.date.split('T')[0];
-            if (isInRange(dStr, startDate, endDate)) {
+            if (inDateRange(dStr, startDate, endDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'BEVERAGE') return;
                     addBeverage(e, Number(e.amount || 0), false);
                 });
-            } else if (isInRange(dStr, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(dStr, prevStartDate, prevEndDate)) {
                 s.expenses?.forEach((e: any) => {
                     if ((e.category || '').toUpperCase() !== 'BEVERAGE') return;
                     addBeverage(e, Number(e.amount || 0), true);
@@ -1573,10 +2002,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
 
         // 3. Bill payments
         billPayments.forEach(b => {
-            if (isInRange(b.date, startDate, endDate)) {
+            if (inDateRange(b.date, startDate, endDate)) {
                 if ((b.category || '').toUpperCase() !== 'BEVERAGE') return;
                 addBeverage(b, Number(b.amount || 0), false);
-            } else if (isInRange(b.date, prevStartDate, prevEndDate)) {
+            } else if (inDateRange(b.date, prevStartDate, prevEndDate)) {
                 if ((b.category || '').toUpperCase() !== 'BEVERAGE') return;
                 addBeverage(b, Number(b.amount || 0), true);
             }
@@ -1622,6 +2051,93 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         : { label: '平稳 (NORMAL)', color: 'text-green-600 bg-green-50 border-green-200' };
 
     // ========== CSV Export ==========
+    // ==========================================
+    // 📒 多月份 P&L 导出
+    // ------------------------------------------
+    // 一次抓整段期间的原始资料，逐月用 aggregateMonth 算，再一起写进一张 Excel。
+    // ⚠️ aggregateMonth 是另一份算法（抄自本档的大 useMemo），所以每次导出都会
+    //    拿「本月」的结果跟画面正在用的 costByCategory 逐项比对，对不上会写在 Excel 最后。
+    // ==========================================
+    const handleExportMultiMonth = async () => {
+        const months = monthRange(multiStart, multiEnd, 12);
+        if (months.length === 0) return alert('⚠️ 月份范围不对，起始月不能比结束月晚');
+
+        setMultiBusy(`读取 ${months.length} 个月的资料…`);
+        try {
+            const rangeStart = `${months[0]}-01`;
+            const lastY = Number(months[months.length - 1].split('-')[0]);
+            const lastM = Number(months[months.length - 1].split('-')[1]);
+            const lastDay = new Date(lastY, lastM, 0).getDate();
+            const rangeEnd = `${months[months.length - 1]}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
+            const [setSnap, billSnap, expSnap1, expSnap2, shList] = await Promise.all([
+                getDocs(query(collection(db, 'settlements'), where('date', '>=', rangeStart), where('date', '<=', rangeEnd))),
+                getDocs(query(collection(db, 'bill_payments'), where('date', '>=', rangeStart), where('date', '<=', rangeEnd))),
+                getDocs(query(collection(db, 'standalone_expenses'), where('time', '>=', rangeStart), where('time', '<=', rangeEnd))),
+                getDocs(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', rangeStart), where('paymentDate', '<=', rangeEnd))),
+                DataManager.getStorehubSalesRange(months[0], months[months.length - 1]),
+            ]);
+
+            const expMap = new Map<string, any>();
+            expSnap1.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+            expSnap2.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+
+            const raw = {
+                settlements: setSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[],
+                standaloneExpenses: Array.from(expMap.values()) as any[],
+                billPayments: billSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[],
+                payrollRecords: (payrollRecords || []) as any[],
+                employees: (employees || []) as any[],
+            };
+            const shByMonth: Record<string, any> = {};
+            (shList || []).forEach((x: any) => { if (x?.month) shByMonth[x.month] = x; });
+
+            setMultiBusy('计算中…');
+            const periods = months.map(m => {
+                const agg = aggregateMonth(m, raw as any, accountingMode);
+                const data = buildClassicPnL({
+                    month: m,
+                    storehub: shByMonth[m] || null,
+                    platformGross: agg.platformGross,
+                    costByCategory: agg.costByCategory,
+                    viewMode: 'DETAILED',
+                    channelMode: 'IN_STORE',
+                    includeCost: true,
+                    costDetailMode: 'DETAILED',
+                    laborByDept: agg.laborByDept,
+                    inStoreSales: agg.inStoreSales,
+                });
+                return { label: m, data, agg };
+            }).filter(p => p.agg.hasData || p.data.salesTotal > 0);
+
+            if (periods.length === 0) { setMultiBusy(''); return alert('⚠️ 这段期间没有任何结算资料'); }
+
+            // 🔍 自我校验：本月的新算法 vs 画面正在用的那份
+            const curMonth = startDate ? startDate.slice(0, 7) : '';
+            const curPeriod = periods.find(p => p.label === curMonth);
+            const selfCheck = curPeriod
+                ? { month: curMonth, issues: diffCostByCategory(curPeriod.agg.costByCategory, analytics.classicPnL?.costByCategory || {}) }
+                : null;
+
+            setMultiBusy('产生 Excel…');
+            const blob = await exportClassicPnLMultiToExcel({
+                periods: periods.map(p => ({ label: p.label, data: p.data })),
+                selfCheck,
+            });
+            downloadBlob(blob, `传统账目_多月PL_${months[0]}_至_${months[months.length - 1]}.xlsx`);
+            setMultiOpen(false);
+
+            if (selfCheck && selfCheck.issues.length > 0) {
+                alert(`⚠️ 自我校验发现 ${selfCheck.issues.length} 个科目跟画面对不上，已经写在 Excel 最后一段。\n请先别拿这份去报税或给会计，把那几行截图给开发者看。`);
+            }
+        } catch (e: any) {
+            console.error('多月导出失败', e);
+            alert(`❌ 导出失败：${e?.message || '未知错误'}`);
+        } finally {
+            setMultiBusy('');
+        }
+    };
+
     const handleExportCSV = () => {
         const pnl = analytics.pnl;
         const cost = analytics.costs;
@@ -1721,7 +2237,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
-            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             
             // 👑 800px 宽对应的标准 A4 高度为 1131px
@@ -1768,7 +2284,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
-            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
             const pw = pdf.internal.pageSize.getWidth();
             
             // 👑 850px 宽对应的标准 A4 高度为 1202px (修复底部溢出重影的终极关键)
@@ -1795,7 +2311,18 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     // Formatter Helpers
     const prevPeriodLabel = `${new Date(prevStartDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'})} to ${new Date(prevEndDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'})}`;
 
-    const renderMoM = (pct: number, invertColor: boolean = false) => {
+    const renderMoM = (pct: number | null, invertColor: boolean = false) => {
+        // null = 上期根本没有这笔（除以 0），显示「新增」比显示 +100% 诚实
+        if (pct === null) {
+            return (
+                <div className="flex flex-col items-end shrink-0">
+                    <span className="text-[10px] md:text-xs font-black px-1.5 py-0.5 rounded-full whitespace-nowrap bg-gray-100 text-gray-500">
+                        新增
+                    </span>
+                    <span className="text-[8px] text-gray-400 mt-0.5 whitespace-nowrap hidden md:block">{prevPeriodLabel} 没有</span>
+                </div>
+            );
+        }
         if (pct === 0 || !isFinite(pct)) return null;
         const isPositive = pct > 0;
         const isGood = invertColor ? !isPositive : isPositive;
@@ -1976,6 +2503,20 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                         <button onClick={handleExportCSV} className="bg-[#111111] hover:bg-black text-[#FFD200] px-3 md:px-4 py-2 rounded-xl text-[10px] md:text-xs font-black items-center gap-2 transition-all active:scale-95 hidden md:flex">
                             <Table2 size={16}/> 导出 P&L (CSV)
                         </button>
+                        <button
+                            onClick={() => {
+                                const cur = startDate ? startDate.slice(0, 7) : new Date().toISOString().slice(0, 7);
+                                if (!multiEnd) setMultiEnd(cur);
+                                if (!multiStart) {
+                                    const y = Number(cur.split('-')[0]);
+                                    setMultiStart(`${y}-01`);   // 预设当年 1 月到本月
+                                }
+                                setMultiOpen(true);
+                            }}
+                            className="bg-[#111111] hover:bg-black text-[#FFD200] px-3 md:px-4 py-2 rounded-xl text-[10px] md:text-xs font-black items-center gap-2 transition-all active:scale-95 hidden md:flex"
+                        >
+                            <Table2 size={16}/> 导出多月 P&L
+                        </button>
                         <button onClick={handleExportPDF} disabled={isExporting} className="bg-[#F6F7FB] hover:bg-[#E5E7EB] text-[#111111] px-2.5 md:px-3 py-2 rounded-xl text-[10px] md:text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 border border-[#E5E7EB]">
                             {isExporting ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>} <span className="hidden md:inline">导出</span> PDF
                         </button>
@@ -2042,6 +2583,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                             { id: 'OVERVIEW', label: '📊 损益概览', desc: 'P&L Summary' },
                             { id: 'SALES', label: '💰 多维营收', desc: 'Sales Metrics' },
                             { id: 'COST', label: '🍗 开销审计', desc: 'Cost & Margin' },
+                            { id: 'CLASSIC', label: '📒 传统账目', desc: 'Classic P&L' },
                             { id: 'AUDIT', label: '🔍 审计流水', desc: 'Audit Ledger' },
                             { id: 'DIVIDEND', label: '👑 分红预算', desc: 'Dividend Plan' }
                         ] as const).map(tab => (
@@ -2049,7 +2591,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                  key={tab.id}
                                  type="button"
                                  onClick={() => setActiveTab(tab.id)}
-                                className={`${tab.id === 'AUDIT' || tab.id === 'DIVIDEND' ? 'hidden md:flex' : 'flex'} flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex-col items-center justify-center min-h-[38px] active:scale-95 cursor-pointer ${
+                                className={`${tab.id === 'CLASSIC' || tab.id === 'AUDIT' || tab.id === 'DIVIDEND' ? 'hidden md:flex' : 'flex'} flex-1 py-1 px-1.5 rounded-lg text-xs font-black transition-all flex-col items-center justify-center min-h-[38px] active:scale-95 cursor-pointer ${
                                     activeTab === tab.id
                                         ? 'bg-[#FFD200] text-[#111111] shadow-sm'
                                         : 'text-[#6B7280] hover:text-[#111111] hover:bg-[#FFFFFF]'
@@ -2063,7 +2605,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                             type="button"
                             onClick={() => setIsMobileMoreTabsOpen(value => !value)}
                             className={`md:hidden flex-1 min-h-[38px] rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition-all ${
-                                activeTab === 'AUDIT' || activeTab === 'DIVIDEND' || isMobileMoreTabsOpen
+                                activeTab === 'CLASSIC' || activeTab === 'AUDIT' || activeTab === 'DIVIDEND' || isMobileMoreTabsOpen
                                     ? 'bg-[#FFD200] text-[#111111]'
                                     : 'text-[#6B7280] hover:bg-[#FFFFFF]'
                             }`}
@@ -2073,6 +2615,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                     </div>
                     {isMobileMoreTabsOpen && (
                         <div className="md:hidden absolute right-2 top-[calc(100%+6px)] z-40 w-44 p-2 bg-[#FFFFFF] border border-[#E5E7EB] rounded-2xl shadow-[0_12px_30px_rgba(17,17,17,0.16)] space-y-1.5">
+                            <button onClick={() => { setActiveTab('CLASSIC'); setIsMobileMoreTabsOpen(false); }} className={`w-full min-h-[42px] px-3 rounded-xl text-left text-[11px] font-bold ${activeTab === 'CLASSIC' ? 'bg-[#FFD200] text-[#111111]' : 'bg-[#F6F7FB] text-[#4B5563]'}`}>传统账目</button>
                             <button onClick={() => { setActiveTab('AUDIT'); setIsMobileMoreTabsOpen(false); }} className={`w-full min-h-[42px] px-3 rounded-xl text-left text-[11px] font-bold ${activeTab === 'AUDIT' ? 'bg-[#FFD200] text-[#111111]' : 'bg-[#F6F7FB] text-[#4B5563]'}`}>审计流水</button>
                             <button onClick={() => { setActiveTab('DIVIDEND'); setIsMobileMoreTabsOpen(false); }} className={`w-full min-h-[42px] px-3 rounded-xl text-left text-[11px] font-bold ${activeTab === 'DIVIDEND' ? 'bg-[#FFD200] text-[#111111]' : 'bg-[#F6F7FB] text-[#4B5563]'}`}>分红预算</button>
                             <button onClick={() => { handleExportPDF(); setIsMobileMoreTabsOpen(false); }} className="w-full min-h-[42px] px-3 rounded-xl text-left text-[11px] font-bold bg-[#111111] text-[#FFD200]">导出 PDF</button>
@@ -2213,6 +2756,163 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                     </div>
                                 )}
 
+                                {/* ━━━━━━━ 👑 经营体检：Prime Cost + 盈亏平衡 ━━━━━━━ */}
+                                {activeTab === 'OVERVIEW' && healthMetrics && (
+                                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setHealthExpanded(v => !v)}
+                                            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 active:bg-gray-100 transition-all min-h-[44px] md:min-h-0"
+                                        >
+                                            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                                                <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-[#111111] text-[#FFD200] flex items-center justify-center font-black text-xs shrink-0">体检</div>
+                                                <div className="text-left min-w-0">
+                                                    <div className="font-black text-sm md:text-base text-gray-900 leading-tight">经营体检 · Prime Cost 与盈亏平衡</div>
+                                                    <div className="text-[10px] md:text-xs text-gray-400 font-bold truncate">餐饮最核心的两个数：成本结构健不健康、这个月做够本了没</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${HEALTH_STYLE[healthMetrics.prime.level].bg} ${HEALTH_STYLE[healthMetrics.prime.level].text}`}>
+                                                    {healthMetrics.prime.percent.toFixed(1)}%
+                                                </span>
+                                                {healthExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                                            </div>
+                                        </button>
+
+                                        {healthExpanded && (
+                                            <div className="border-t border-gray-100 p-3 md:p-4 bg-gray-50/40 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+
+                                                {/* ───────── Prime Cost ───────── */}
+                                                {(() => {
+                                                    const pc = healthMetrics.prime;
+                                                    const st = HEALTH_STYLE[pc.level];
+                                                    return (
+                                                        <div className={`rounded-xl border-2 ${st.border} ${st.bg} p-4`}>
+                                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                                <div>
+                                                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-wide">Prime Cost (食材 + 人工)</div>
+                                                                    <div className={`text-3xl font-mono font-black mt-1 ${st.text}`}>{pc.percent.toFixed(1)}%</div>
+                                                                    <div className="text-[11px] font-bold text-gray-500 mt-0.5">{formatMoney(pc.amount)}</div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black text-white shrink-0 ${st.dot}`}>{st.label}</span>
+                                                            </div>
+
+                                                            {/* 食材 / 人工 拆分条 */}
+                                                            <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden flex mb-1.5">
+                                                                <div className="bg-orange-500 h-full" style={{ width: `${Math.min(100, pc.cogsPercent)}%` }} title="食材" />
+                                                                <div className="bg-indigo-500 h-full" style={{ width: `${Math.min(100 - Math.min(100, pc.cogsPercent), pc.laborPercent)}%` }} title="人工" />
+                                                            </div>
+                                                            <div className="flex justify-between text-[10px] font-bold mb-3">
+                                                                <span className="text-orange-700">● 食材 {pc.cogsPercent.toFixed(1)}%</span>
+                                                                <span className="text-indigo-700">● 人工 {pc.laborPercent.toFixed(1)}%</span>
+                                                            </div>
+
+                                                            <div className="bg-white/70 rounded-lg p-2.5 space-y-2">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="text-[10px] font-black text-gray-500">我的目标线</span>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={primeCostTarget}
+                                                                            onChange={e => setPrimeCostTarget(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                                                                            className="w-16 px-2 py-1 rounded-lg border border-gray-200 font-mono font-black text-right text-[16px] md:text-xs"
+                                                                            style={{ minHeight: '36px' }}
+                                                                        />
+                                                                        <span className="text-[11px] font-black text-gray-500">%</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-[11px] font-bold leading-relaxed">
+                                                                    {pc.gapToTarget > 0 ? (
+                                                                        <span className="text-red-700">比目标多花了 <b className="font-mono">{formatMoney(pc.gapToTarget)}</b>。要拉回 {primeCostTarget}%，得省下这笔，或把营业额做到 {formatMoney(pc.amount / (primeCostTarget / 100))}。</span>
+                                                                    ) : (
+                                                                        <span className="text-emerald-700">还在目标内，比目标线省了 <b className="font-mono">{formatMoney(Math.abs(pc.gapToTarget))}</b>。</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">
+                                                                业界惯例：≤60% 很好 · 60–65% 健康 · 65–70% 偏高 · &gt;70% 危险。
+                                                                单看食材或单看人工会骗人（请少人但外包变贵），要合起来看。
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* ───────── 盈亏平衡 ───────── */}
+                                                {(() => {
+                                                    const be = healthMetrics.breakEven;
+                                                    const done = be.achievedPercent >= 100;
+                                                    const st = HEALTH_STYLE[done ? 'GOOD' : (be.achievedPercent >= 85 ? 'WARN' : 'BAD')];
+                                                    return (
+                                                        <div className={`rounded-xl border-2 ${st.border} ${st.bg} p-4`}>
+                                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                                <div>
+                                                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-wide">盈亏平衡点 (Break-Even)</div>
+                                                                    <div className={`text-3xl font-mono font-black mt-1 ${st.text}`}>
+                                                                        {be.isValid ? formatMoney(be.revenueNeeded).replace('RM ', '') : '—'}
+                                                                    </div>
+                                                                    <div className="text-[11px] font-bold text-gray-500 mt-0.5">这段期间要做到这个数才不亏</div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black text-white shrink-0 ${st.dot}`}>
+                                                                    {done ? '已做够本' : '未打平'}
+                                                                </span>
+                                                            </div>
+
+                                                            {be.isValid ? (
+                                                                <>
+                                                                    <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden mb-1.5">
+                                                                        <div className={`h-full ${done ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, be.achievedPercent)}%` }} />
+                                                                    </div>
+                                                                    <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-3">
+                                                                        <span>已做 {be.achievedPercent.toFixed(0)}%</span>
+                                                                        <span>{be.daysElapsed} / {be.daysInPeriod} 天</span>
+                                                                    </div>
+
+                                                                    <div className="bg-white/70 rounded-lg p-2.5 space-y-1.5">
+                                                                        <div className="flex justify-between text-[11px] font-bold">
+                                                                            <span className="text-gray-500">固定成本 (人工+开销)</span>
+                                                                            <span className="font-mono text-gray-800">{formatMoney(be.fixedCost)}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between text-[11px] font-bold">
+                                                                            <span className="text-gray-500">贡献毛利率</span>
+                                                                            <span className="font-mono text-gray-800">{be.contributionMarginPercent.toFixed(1)}%</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between text-[11px] font-bold">
+                                                                            <span className="text-gray-500">平均每天要做</span>
+                                                                            <span className="font-mono text-gray-800">{formatMoney(be.dailyNeeded)}</span>
+                                                                        </div>
+                                                                        <div className="pt-1.5 border-t border-gray-200 text-[11px] font-black leading-relaxed">
+                                                                            {be.shortfall > 0 ? (
+                                                                                <span className="text-red-700">
+                                                                                    还差 <b className="font-mono">{formatMoney(be.shortfall)}</b>
+                                                                                    {be.dailyNeededForRest > 0 && <> · 剩下 {be.daysInPeriod - be.daysElapsed} 天每天要做 <b className="font-mono">{formatMoney(be.dailyNeededForRest)}</b></>}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-emerald-700">已经超过打平点 <b className="font-mono">{formatMoney(Math.abs(be.shortfall))}</b>，这部分才是真的赚。</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">
+                                                                        算法：固定成本 ÷ 贡献毛利率。变动成本 = 食材 + 外送平台抽佣广告；
+                                                                        固定成本 = 人工 + 营运开销（人工归固定是餐饮通用算法，算出来会保守一点）。
+                                                                    </p>
+                                                                </>
+                                                            ) : (
+                                                                <p className="text-[11px] font-bold text-red-700 leading-relaxed bg-white/70 rounded-lg p-2.5">
+                                                                    这段期间的变动成本（食材 + 平台抽佣）已经吃掉全部营业额，
+                                                                    每多做一块生意反而多亏一块，算不出打平点。
+                                                                    先检查食材成本或平台抽佣是不是记错了。
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* ━━━━━━━ 👑 智能财务诊断与经营预警雷达 ━━━━━━━ */}
                                 {activeTab === 'OVERVIEW' && (
                                     <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden relative mb-4">
@@ -2332,7 +3032,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                     <div className="mt-1 bg-white/60 p-2.5 rounded-lg border border-red-50 text-[10px] md:text-[11px] text-gray-700 font-bold space-y-1">
                                                                         <p className="text-red-800">⚠️ 排班与薪酬结构升级政策: </p>
                                                                         <p>1. 固定佣工重叠。建议对周一至周三非活跃经营日的非营业峰谷（如下午 14:00-17:00）多设“一人前厅”单人守护，将厨房备料移入午前提前消化；</p>
-                                                                        <p>2. 当前人效日均开支 RM {formatMoney(dailyLaborBreakdown.perEmployeeDaily)}，可合理提倡基础工兼职化，并使用前厅销售提成变固定转浮动提振士气。</p>
+                                                                        <p>2. 当前人效日均开支 {formatMoney(dailyLaborBreakdown.perEmployeeDaily)}，可合理提倡基础工兼职化，并使用前厅销售提成变固定转浮动提振士气。</p>
                                                                     </div>
                                                                 )}
                                                                 {isLow && (
@@ -2461,7 +3161,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                         </div>
                                                     </div>
                                                     <p className="text-[10px] md:text-[11px] text-rose-800 font-bold mt-1.5 leading-relaxed bg-white/70 p-2 rounded-lg border border-rose-100/60 shadow-sm">
-                                                        💡 扭亏回本极速路径: 相较目前的日营业额主线 RM {formatMoney(dailyLaborBreakdown.avgDailyRevenue)}，只需在余下的较短天数内，每天利用高毛利水吧加赠券、外卖首单特惠引流新客、或企业宴席团配提前交付，多获得少量高热流水，便能成功护航全月财务扳平，撤回盈利绿化带以上。
+                                                        💡 扭亏回本极速路径: 相较目前的日营业额主线 {formatMoney(dailyLaborBreakdown.avgDailyRevenue)}，只需在余下的较短天数内，每天利用高毛利水吧加赠券、外卖首单特惠引流新客、或企业宴席团配提前交付，多获得少量高热流水，便能成功护航全月财务扳平，撤回盈利绿化带以上。
                                                     </p>
                                                 </div>
                                             )}
@@ -2691,15 +3391,15 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                         </div>
 
                                         <div className="space-y-2 md:space-y-3 text-xs md:text-sm pl-2 pr-2">
-                                            {analytics.pnl.grabCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - Grab 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.grabCommission)}</span></div>}
-                                            {analytics.pnl.grabAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - Grab 广告</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.grabAds)}</span></div>}
+                                            {analytics.pnl.grabCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - Grab 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.grabCommission - analytics.pnl.grabAds)}</span></div>}
+                                            {analytics.pnl.grabAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - Grab 广告费</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.grabAds)}</span></div>}
                                             
-                                            {analytics.pnl.pandaCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - FoodPanda 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.pandaCommission)}</span></div>}
-                                            {analytics.pnl.pandaAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - FoodPanda 广告</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.pandaAds)}</span></div>}
+                                            {analytics.pnl.pandaCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - FoodPanda 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.pandaCommission - analytics.pnl.pandaAds)}</span></div>}
+                                            {analytics.pnl.pandaAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - FoodPanda 广告费</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.pandaAds)}</span></div>}
                                             {analytics.pnl.pandaFees > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - FoodPanda 调节费/服务自单</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.pandaFees)}</span></div>}
                                             
-                                            {analytics.pnl.shopeeCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - ShopeeFood 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.shopeeCommission)}</span></div>}
-                                            {analytics.pnl.shopeeAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - ShopeeFood 广告</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.shopeeAds)}</span></div>}
+                                            {analytics.pnl.shopeeCommission > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - ShopeeFood 抽佣</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.shopeeCommission - analytics.pnl.shopeeAds)}</span></div>}
+                                            {analytics.pnl.shopeeAds > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - ShopeeFood 广告费</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.shopeeAds)}</span></div>}
                                             {analytics.pnl.shopeeFees > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - ShopeeFood 平台费/调节费</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.shopeeFees)}</span></div>}
                                             
                                             {analytics.pnl.otherPlatformFees > 0 && <div className="flex justify-between items-center gap-2"><span className="font-bold text-orange-700/80 min-w-0 truncate"> - 其他平台费用</span><span className="font-mono font-bold text-orange-800 shrink-0 tabular-nums">-{formatMoney(analytics.pnl.otherPlatformFees)}</span></div>}
@@ -2837,6 +3537,159 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                 {/* ━━━━━━━ 卡 1 结束 ━━━━━━━ */}
 
                                 {/* ━━━━━━━ 卡 2：收款 Sales ━━━━━━━ */}
+                                {/* ━━━━━━━ 👑 菜单工程：哪些菜该推、哪些该砍 ━━━━━━━ */}
+                                {activeTab === 'SALES' && (
+                                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+                                        <div className="p-3 md:p-4 flex items-center justify-between gap-2 flex-wrap">
+                                            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                                                <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-xs shrink-0">菜单</div>
+                                                <div className="text-left min-w-0">
+                                                    <div className="font-black text-sm md:text-base text-[#111111]">菜单工程 · 单品贡献度</div>
+                                                    <div className="text-[10px] md:text-xs text-gray-400 font-bold">把菜分成四类：该推的、该改的、该砍的</div>
+                                                </div>
+                                            </div>
+                                            {!menuLoaded && (
+                                                <button
+                                                    onClick={loadMenuAnalysis}
+                                                    disabled={menuLoading}
+                                                    className="px-4 py-2 rounded-xl bg-[#111111] text-white text-[11px] font-black active:scale-95 disabled:opacity-50 flex items-center gap-1.5 min-h-[44px] md:min-h-0"
+                                                >
+                                                    {menuLoading ? <><Loader2 size={13} className="animate-spin" /> 载入中</> : <>载入菜单分析</>}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {!menuLoaded && !menuLoading && (
+                                            <div className="px-4 pb-4">
+                                                <p className="text-[11px] text-gray-500 font-bold bg-gray-50 rounded-xl p-3 leading-relaxed border border-gray-100">
+                                                    这块要另外读一次 StoreHub 的 SKU 销售报表，所以做成「按了才载入」，
+                                                    不按就完全不会多花流量。载入的是 <b className="font-mono">{startDate.slice(0, 7)}</b> 这个月的资料。
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {menuLoaded && !menuAnalysis && (
+                                            <div className="px-4 pb-4">
+                                                <p className="text-[11px] font-bold text-amber-800 bg-amber-50 rounded-xl p-3 leading-relaxed border border-amber-200">
+                                                    ⚠️ <b>{startDate.slice(0, 7)}</b> 还没有导入 StoreHub 的 SKU 销售报表，算不了菜单分析。
+                                                    请先到「传统账目」分页导入该月的 SKU 报表。
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {menuAnalysis && (
+                                            <div className="border-t border-gray-100 p-3 md:p-4 bg-gray-50/40 space-y-3">
+                                                {/* 估算警语 —— 一定要讲清楚 */}
+                                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                    <p className="text-[11px] font-bold text-amber-900 leading-relaxed">
+                                                        ⚠️ <b>大部分商品的毛利是估算的。</b>
+                                                        StoreHub 里有设「平均成本」的商品，用的是真实数字（
+                                                        <b className="font-mono">{menuAnalysis.realCostCount}</b> / {menuAnalysis.items.length} 项，表格里标
+                                                        <span className="px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 font-black mx-0.5">真</span>）；
+                                                        其余的毛利额 = 销售额 × <b>所属品类的整体毛利率</b>，标
+                                                        <span className="px-1 py-0.5 rounded bg-gray-100 text-gray-500 font-black mx-0.5">估</span>。
+                                                        看排序和趋势可以，别把「估」的当精算成本。
+                                                    </p>
+                                                    <p className="text-[10px] font-bold text-amber-700 mt-2 pt-2 border-t border-amber-200">
+                                                        💡 想让更多商品变成真数字：到 StoreHub 后台把商品的「平均成本」填上，
+                                                        下次导出的 CSV 就会带成本，这里自动改用真实毛利。
+                                                    </p>
+                                                    {menuAnalysis.missingCategories.length > 0 && (
+                                                        <p className="text-[10px] font-bold text-amber-700 mt-2 pt-2 border-t border-amber-200">
+                                                            这些销售分类还没配到成本科目，毛利一律当 0：
+                                                            <span className="font-mono"> {menuAnalysis.missingCategories.join('、')}</span>
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* 四象限统计 */}
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                    {(['STAR', 'PLOWHORSE', 'PUZZLE', 'DOG'] as MenuQuadrant[]).map(q => {
+                                                        const color = q === 'STAR' ? 'emerald' : q === 'PLOWHORSE' ? 'blue' : q === 'PUZZLE' ? 'amber' : 'gray';
+                                                        const active = menuQuadrantFilter === q;
+                                                        return (
+                                                            <button
+                                                                key={q}
+                                                                onClick={() => setMenuQuadrantFilter(active ? 'ALL' : q)}
+                                                                className={`text-left rounded-xl border-2 p-3 transition-all active:scale-[0.98] min-h-[44px] md:min-h-0 ${
+                                                                    active ? `border-${color}-500 bg-${color}-50 ring-2 ring-${color}-200` : 'border-gray-200 bg-white hover:border-gray-300'
+                                                                }`}
+                                                            >
+                                                                <div className={`text-2xl font-mono font-black ${
+                                                                    q === 'STAR' ? 'text-emerald-600' : q === 'PLOWHORSE' ? 'text-blue-600' : q === 'PUZZLE' ? 'text-amber-600' : 'text-gray-400'
+                                                                }`}>{menuAnalysis.counts[q]}</div>
+                                                                <div className="text-[10px] font-black text-gray-700 leading-tight mt-0.5">{MENU_QUADRANT_LABEL[q]}</div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {menuQuadrantFilter !== 'ALL' && (
+                                                    <div className="bg-white border border-gray-200 rounded-xl p-3">
+                                                        <div className="text-[10px] font-black text-gray-400 uppercase mb-1">该怎么做</div>
+                                                        <p className="text-[11px] font-bold text-gray-700 leading-relaxed">{MENU_QUADRANT_ADVICE[menuQuadrantFilter]}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* 明细表 */}
+                                                <div className="border border-gray-200 rounded-xl bg-white max-h-[420px] overflow-y-auto overflow-x-auto">
+                                                    <table className="w-full min-w-[520px] text-left border-collapse">
+                                                        <thead className="sticky top-0 bg-gray-100 z-10">
+                                                            <tr className="text-[10px] font-black text-gray-500 uppercase border-b border-gray-200">
+                                                                <th className="p-2.5">品项</th>
+                                                                <th className="p-2.5 text-right">销量</th>
+                                                                <th className="p-2.5 text-right">销售额</th>
+                                                                <th className="p-2.5 text-right">估算毛利</th>
+                                                                <th className="p-2.5 text-center">分类</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100 text-xs">
+                                                            {menuAnalysis.items
+                                                                .filter(it => menuQuadrantFilter === 'ALL' || it.quadrant === menuQuadrantFilter)
+                                                                .sort((a, b) => b.estGrossProfit - a.estGrossProfit)
+                                                                .slice(0, 100)
+                                                                .map(it => {
+                                                                    const color = it.quadrant === 'STAR' ? 'bg-emerald-100 text-emerald-700'
+                                                                        : it.quadrant === 'PLOWHORSE' ? 'bg-blue-100 text-blue-700'
+                                                                        : it.quadrant === 'PUZZLE' ? 'bg-amber-100 text-amber-700'
+                                                                        : 'bg-gray-100 text-gray-500';
+                                                                    return (
+                                                                        <tr key={it.sku + it.name} className="hover:bg-gray-50">
+                                                                            <td className="p-2.5">
+                                                                                <div className="font-bold text-gray-800 leading-tight">{it.name}</div>
+                                                                                <div className="text-[9px] font-mono text-gray-400">{it.sku} · {it.category}</div>
+                                                                            </td>
+                                                                            <td className="p-2.5 text-right font-mono font-bold text-gray-700">{it.qty.toLocaleString()}</td>
+                                                                            <td className="p-2.5 text-right font-mono text-gray-600">{it.netSales.toFixed(0)}</td>
+                                                                            <td className="p-2.5 text-right font-mono font-black text-gray-800">
+                                                                                <span className={`px-1 py-0.5 rounded text-[9px] font-black mr-1 ${it.isEstimated ? 'bg-gray-100 text-gray-500' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                                                    {it.isEstimated ? '估' : '真'}
+                                                                                </span>
+                                                                                {it.estGrossProfit.toFixed(0)}
+                                                                                <span className="text-[9px] font-bold text-gray-400 ml-1">({it.marginPercent.toFixed(0)}%)</span>
+                                                                            </td>
+                                                                            <td className="p-2.5 text-center">
+                                                                                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${color}`}>
+                                                                                    {MENU_QUADRANT_LABEL[it.quadrant].split(' · ')[0]}
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <p className="text-[10px] text-gray-400 font-bold leading-relaxed">
+                                                    切分线：销量中位数 <b className="font-mono">{menuAnalysis.medianQty.toFixed(0)}</b> ·
+                                                    毛利额中位数 <b className="font-mono">RM {menuAnalysis.medianProfit.toFixed(0)}</b>。
+                                                    最多显示前 100 项，按估算毛利排序。资料月份 {menuAnalysis.month}。
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {activeTab === 'SALES' && (
                                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                                     <button onClick={() => toggleCard('SALES')} className="w-full p-3 md:p-4 flex items-center justify-between hover:bg-gray-50 active:bg-gray-100 transition-colors">
@@ -2960,7 +3813,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                 </div>
                                                             </span>
                                                             <span className="font-mono font-black text-sm md:text-lg text-orange-900 tabular-nums">
-                                                                {formatMoney(expandedSections['GRAB_DETAILS'] ? analytics.deliveryBreakdown.grabGross : (analytics.deliveryBreakdown.grabNet - analytics.deliveryBreakdown.grabAds))}
+                                                                {formatMoney(expandedSections['GRAB_DETAILS'] ? analytics.deliveryBreakdown.grabGross : analytics.deliveryBreakdown.grabNet)}
                                                             </span>
                                                         </div>
                                                         
@@ -2970,13 +3823,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                     <span className="font-bold text-gray-500">Net Sales (账面销售额)</span>
                                                                     <span className="font-mono font-bold text-gray-700">{formatMoney(analytics.deliveryBreakdown.grabGross)}</span>
                                                                 </div>
+                                                                {/* 👑 系统的「抽佣」是用 账面流水 − 净回款 倒推的，里面已经含了广告费。
+                                                                    对账单上 Deduction 和 Advertisements 是分开两行的，所以这里要拆回来：
+                                                                    Deduction = 倒推抽佣 − 广告费，广告费单独一行。两行相加 = 倒推抽佣。 */}
                                                                 <div className="flex justify-between items-center text-[10px] md:text-xs">
                                                                     <span className="font-bold text-red-500">Deduction (平台抽佣)</span>
-                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.grabCommission)}</span>
-                                                                </div>
-                                                                <div className="flex justify-between items-center text-[10px] md:text-xs bg-green-50 p-1.5 rounded-lg border border-green-100">
-                                                                    <span className="font-black text-green-700">Net Earnings (净回款)</span>
-                                                                    <span className="font-mono font-black text-green-700">{formatMoney(analytics.deliveryBreakdown.grabNet)}</span>
+                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.grabCommission - analytics.pnl.grabAds)}</span>
                                                                 </div>
                                                                 {analytics.pnl.grabAds > 0 && (
                                                                     <div className="flex justify-between items-center text-[10px] md:text-xs">
@@ -2984,6 +3836,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                         <span className="font-mono font-bold text-orange-600">-{formatMoney(analytics.pnl.grabAds)}</span>
                                                                     </div>
                                                                 )}
+                                                                <div className="flex justify-between items-center text-[10px] md:text-xs bg-green-50 p-1.5 rounded-lg border border-green-100">
+                                                                    <span className="font-black text-green-700">Net Earnings (净回款)</span>
+                                                                    <span className="font-mono font-black text-green-700">{formatMoney(analytics.deliveryBreakdown.grabNet)}</span>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -3001,7 +3857,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                 </div>
                                                             </span>
                                                             <span className="font-mono font-black text-sm md:text-lg text-orange-950 tabular-nums">
-                                                                {formatMoney(expandedSections['PANDA_DETAILS'] ? analytics.deliveryBreakdown.pandaGross : (analytics.deliveryBreakdown.pandaNet - analytics.deliveryBreakdown.pandaAds))}
+                                                                {formatMoney(expandedSections['PANDA_DETAILS'] ? analytics.deliveryBreakdown.pandaGross : analytics.deliveryBreakdown.pandaNet)}
                                                             </span>
                                                         </div>
                                                         
@@ -3011,20 +3867,23 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                     <span className="font-bold text-gray-500">Net Sales (账面销售额)</span>
                                                                     <span className="font-mono font-bold text-gray-700">{formatMoney(analytics.deliveryBreakdown.pandaGross)}</span>
                                                                 </div>
+                                                                {/* 👑 系统的「抽佣」是用 账面流水 − 净回款 倒推的，里面已经含了广告费。
+                                                                    对账单上 Deduction 和 Advertisements 是分开两行的，所以这里要拆回来：
+                                                                    Deduction = 倒推抽佣 − 广告费，广告费单独一行。两行相加 = 倒推抽佣。 */}
                                                                 <div className="flex justify-between items-center text-[10px] md:text-xs">
                                                                     <span className="font-bold text-red-500">Deduction (平台抽佣)</span>
-                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.pandaCommission)}</span>
+                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.pandaCommission - analytics.pnl.pandaAds)}</span>
                                                                 </div>
+                                                                {analytics.pnl.pandaAds > 0 && (
+                                                                    <div className="flex justify-between items-center text-[10px] md:text-xs">
+                                                                        <span className="font-bold text-orange-500">Advertisements (广告费)</span>
+                                                                        <span className="font-mono font-bold text-orange-600">-{formatMoney(analytics.pnl.pandaAds)}</span>
+                                                                    </div>
+                                                                )}
                                                                 <div className="flex justify-between items-center text-[10px] md:text-xs bg-pink-50 p-1.5 rounded-lg border border-pink-100">
                                                                     <span className="font-black text-pink-700">Net Earnings (净回款)</span>
                                                                     <span className="font-mono font-black text-pink-700">{formatMoney(analytics.deliveryBreakdown.pandaNet)}</span>
                                                                 </div>
-                                                                {analytics.pnl.pandaAds > 0 && (
-                                                                    <div className="flex justify-between items-center text-[10px] md:text-xs">
-                                                                        <span className="font-bold text-red-500">Advertisements (平台广告费)</span>
-                                                                        <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.pandaAds)}</span>
-                                                                    </div>
-                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -3042,7 +3901,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                 </div>
                                                             </span>
                                                             <span className="font-mono font-black text-sm md:text-lg text-orange-950 tabular-nums">
-                                                                {formatMoney(expandedSections['SHOPEE_DETAILS'] ? analytics.deliveryBreakdown.shopeeGross : (analytics.deliveryBreakdown.shopeeNet - analytics.deliveryBreakdown.shopeeAds))}
+                                                                {formatMoney(expandedSections['SHOPEE_DETAILS'] ? analytics.deliveryBreakdown.shopeeGross : analytics.deliveryBreakdown.shopeeNet)}
                                                             </span>
                                                         </div>
                                                         
@@ -3052,20 +3911,23 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                                     <span className="font-bold text-gray-500">Net Sales (账面销售额)</span>
                                                                     <span className="font-mono font-bold text-gray-700">{formatMoney(analytics.deliveryBreakdown.shopeeGross)}</span>
                                                                 </div>
+                                                                {/* 👑 系统的「抽佣」是用 账面流水 − 净回款 倒推的，里面已经含了广告费。
+                                                                    对账单上 Deduction 和 Advertisements 是分开两行的，所以这里要拆回来：
+                                                                    Deduction = 倒推抽佣 − 广告费，广告费单独一行。两行相加 = 倒推抽佣。 */}
                                                                 <div className="flex justify-between items-center text-[10px] md:text-xs">
                                                                     <span className="font-bold text-red-500">Deduction (平台抽佣)</span>
-                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.shopeeCommission)}</span>
+                                                                    <span className="font-mono font-bold text-red-600">-{formatMoney(analytics.pnl.shopeeCommission - analytics.pnl.shopeeAds)}</span>
                                                                 </div>
+                                                                {analytics.pnl.shopeeAds > 0 && (
+                                                                    <div className="flex justify-between items-center text-[10px] md:text-xs">
+                                                                        <span className="font-bold text-orange-500">Advertisements (广告费)</span>
+                                                                        <span className="font-mono font-bold text-orange-600">-{formatMoney(analytics.pnl.shopeeAds)}</span>
+                                                                    </div>
+                                                                )}
                                                                 <div className="flex justify-between items-center text-[10px] md:text-xs bg-orange-50/60 p-1.5 rounded-lg border border-orange-100">
                                                                     <span className="font-black text-orange-700">Net Earnings (结转及净回款)</span>
                                                                     <span className="font-mono font-black text-orange-900">{formatMoney(analytics.deliveryBreakdown.shopeeNet)}</span>
                                                                 </div>
-                                                                {analytics.pnl.shopeeAds > 0 && (
-                                                                    <div className="flex justify-between items-center text-[10px] md:text-xs">
-                                                                        <span className="font-bold text-red-500">Advertisements (平台广告费)</span>
-                                                                        <span className="font-mono font-bold text-red-500">-{formatMoney(analytics.pnl.shopeeAds)}</span>
-                                                                    </div>
-                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -3076,10 +3938,11 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                                 <div className="flex justify-between items-center bg-green-50/50 p-2.5 md:p-3 rounded-xl border border-green-200">
                                                     <span className="text-[10px] md:text-xs font-bold text-green-800">三平台净回款预测 (Net Platforms Payout)</span>
                                                     <span className="font-mono font-black text-xs md:text-sm text-green-700 tabular-nums">
+                                                        {/* 广告费已含在各平台的抽佣里，这里不再多减一次 */}
                                                         {formatMoney(
-                                                            (analytics.deliveryBreakdown.grabNet - analytics.pnl.grabAds) + 
-                                                            (analytics.deliveryBreakdown.pandaNet - analytics.pnl.pandaAds) + 
-                                                            (analytics.deliveryBreakdown.shopeeNet - analytics.pnl.shopeeAds)
+                                                            analytics.deliveryBreakdown.grabNet +
+                                                            analytics.deliveryBreakdown.pandaNet +
+                                                            analytics.deliveryBreakdown.shopeeNet
                                                         )}
                                                     </span>
                                                 </div>
@@ -3435,6 +4298,190 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                 {/* ━━━━━━━ 卡 2 结束 ━━━━━━━ */}
 
                                 {/* ━━━━━━━ 卡 3：开销 Cost ━━━━━━━ */}
+                                {/* ━━━━━━━ 👑 资金体检：存货周转 + 现金流预测 ━━━━━━━ */}
+                                {activeTab === 'COST' && (
+                                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+                                        <div className="p-3 md:p-4 flex items-center justify-between gap-2 flex-wrap">
+                                            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                                                <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-black text-xs shrink-0">资金</div>
+                                                <div className="text-left min-w-0">
+                                                    <div className="font-black text-sm md:text-base text-[#111111]">资金体检 · 存货与现金流</div>
+                                                    <div className="text-[10px] md:text-xs text-gray-400 font-bold">库存压了多少钱、接下来要付多少钱</div>
+                                                </div>
+                                            </div>
+                                            {!fundsLoaded && (
+                                                <button
+                                                    onClick={loadFundsCheck}
+                                                    disabled={fundsLoading}
+                                                    className="px-4 py-2 rounded-xl bg-[#111111] text-white text-[11px] font-black active:scale-95 disabled:opacity-50 flex items-center gap-1.5 min-h-[44px] md:min-h-0"
+                                                >
+                                                    {fundsLoading ? <><Loader2 size={13} className="animate-spin" /> 载入中</> : <>载入资金体检</>}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {!fundsLoaded && !fundsLoading && (
+                                            <div className="px-4 pb-4">
+                                                <p className="text-[11px] text-gray-500 font-bold bg-gray-50 rounded-xl p-3 leading-relaxed border border-gray-100">
+                                                    这块要另外读库存品项和待付帐款，所以做成「按了才载入」，不按就不会多花流量。
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {fundsAnalysis && (
+                                            <div className="border-t border-gray-100 p-3 md:p-4 bg-gray-50/40 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+
+                                                {/* ───────── 存货周转 ───────── */}
+                                                {(() => {
+                                                    const inv = fundsAnalysis.inventory;
+                                                    const st = HEALTH_STYLE[inv.level];
+                                                    return (
+                                                        <div className={`rounded-xl border-2 ${st.border} ${st.bg} p-4`}>
+                                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                                <div>
+                                                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-wide">存货周转</div>
+                                                                    <div className={`text-3xl font-mono font-black mt-1 ${st.text}`}>
+                                                                        {inv.isValid ? inv.daysOfSupply.toFixed(1) : '—'}
+                                                                        <span className="text-base ml-1">天</span>
+                                                                    </div>
+                                                                    <div className="text-[11px] font-bold text-gray-500 mt-0.5">现有库存还能撑几天</div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black text-white shrink-0 ${st.dot}`}>{st.label}</span>
+                                                            </div>
+
+                                                            <div className="bg-white/70 rounded-lg p-2.5 space-y-1.5">
+                                                                <div className="flex justify-between text-[11px] font-bold">
+                                                                    <span className="text-gray-500">库存总值</span>
+                                                                    <span className="font-mono text-gray-800">{formatMoney(inv.stockValue)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold">
+                                                                    <span className="text-gray-500">品项数</span>
+                                                                    <span className="font-mono text-gray-800">{fundsAnalysis.stockCount}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold">
+                                                                    <span className="text-gray-500">日均用料</span>
+                                                                    <span className="font-mono text-gray-800">{formatMoney(inv.dailyCogs)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold pt-1.5 border-t border-gray-200">
+                                                                    <span className="text-gray-500">年周转次数</span>
+                                                                    <span className="font-mono text-gray-800">{inv.isValid ? inv.turnsPerYear.toFixed(1) : '—'} 次</span>
+                                                                </div>
+                                                            </div>
+
+                                                            <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">
+                                                                生鲜为主的餐厅：≤7 天很好 · 7–14 健康 · 14–21 偏多 · &gt;21 压货太重。
+                                                                <b className="text-amber-600"> 注意：</b>用的是「现在的库存值」，不是期初期末平均（系统没存库存快照），
+                                                                看趋势可以，别当会计报表用。
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* ───────── 现金流预测 ───────── */}
+                                                {(() => {
+                                                    const cf = fundsAnalysis.cash;
+                                                    const st = HEALTH_STYLE[cf.level];
+                                                    return (
+                                                        <div className={`rounded-xl border-2 ${st.border} ${st.bg} p-4`}>
+                                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                                <div>
+                                                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-wide">未来 {forecastDays} 天要付</div>
+                                                                    <div className={`text-3xl font-mono font-black mt-1 ${st.text}`}>{formatMoney(cf.totalDue).replace('RM ', '')}</div>
+                                                                    <div className="text-[11px] font-bold text-gray-500 mt-0.5">应付 + 薪资 + 经常性账单</div>
+                                                                </div>
+                                                                <select
+                                                                    value={forecastDays}
+                                                                    onChange={e => setForecastDays(Number(e.target.value))}
+                                                                    className="px-2 py-1 rounded-lg border border-gray-200 bg-white font-black text-[16px] md:text-[11px] shrink-0"
+                                                                    style={{ minHeight: '36px' }}
+                                                                >
+                                                                    <option value={7}>7 天</option>
+                                                                    <option value={14}>14 天</option>
+                                                                    <option value={30}>30 天</option>
+                                                                    <option value={60}>60 天</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <div className="bg-white/70 rounded-lg p-2.5 space-y-1.5 mb-2">
+                                                                {(['AP', 'PAYROLL', 'RECURRING'] as const).map(k => (
+                                                                    cf.byKind[k] > 0 && (
+                                                                        <div key={k} className="flex justify-between text-[11px] font-bold">
+                                                                            <span className="text-gray-500">{k === 'AP' ? '应付供应商' : k === 'PAYROLL' ? '薪资' : '经常性账单'}</span>
+                                                                            <span className="font-mono text-gray-800">{formatMoney(cf.byKind[k])}</span>
+                                                                        </div>
+                                                                    )
+                                                                ))}
+                                                            </div>
+
+                                                            <div className="bg-white/70 rounded-lg p-2.5 space-y-2">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="text-[10px] font-black text-gray-500">手上现金 (自己填)</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        inputMode="decimal"
+                                                                        value={cashOnHandInput || ''}
+                                                                        onChange={e => setCashOnHandInput(Math.max(0, Number(e.target.value) || 0))}
+                                                                        placeholder="0"
+                                                                        className="w-28 px-2 py-1 rounded-lg border border-gray-200 font-mono font-black text-right text-[16px] md:text-xs"
+                                                                        style={{ minHeight: '36px' }}
+                                                                    />
+                                                                </div>
+                                                                {cashOnHandInput > 0 && (
+                                                                    <div className="text-[11px] font-black leading-relaxed pt-1.5 border-t border-gray-200">
+                                                                        {cf.projectedBalance < 0 ? (
+                                                                            <span className="text-red-700">
+                                                                                照现在的生意，{forecastDays} 天后会短缺 <b className="font-mono">{formatMoney(Math.abs(cf.projectedBalance))}</b>
+                                                                                {cf.daysToCover > 0 && <> · 要再多做 {Math.ceil(cf.daysToCover)} 天生意才补得回来</>}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-emerald-700">
+                                                                                付完之后大约还剩 <b className="font-mono">{formatMoney(cf.projectedBalance)}</b>
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">
+                                                                进账用「日均营业额 × 天数 × 15%」推算（15% 是扣掉当期就要付的食材人工后，
+                                                                实际留在手上的现金比例，属于保守估计）。手上现金要自己填 —— 系统还没有即时的银行/现金余额。
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* 待付明细 */}
+                                                {fundsAnalysis.cash.items.length > 0 && (
+                                                    <div className="md:col-span-2 border border-gray-200 rounded-xl bg-white max-h-[260px] overflow-y-auto overflow-x-auto">
+                                                        <table className="w-full min-w-[380px] text-left border-collapse">
+                                                            <thead className="sticky top-0 bg-gray-100 z-10">
+                                                                <tr className="text-[10px] font-black text-gray-500 uppercase border-b border-gray-200">
+                                                                    <th className="p-2.5">项目</th>
+                                                                    <th className="p-2.5">类型</th>
+                                                                    <th className="p-2.5 text-right">金额</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-gray-100 text-xs">
+                                                                {fundsAnalysis.cash.items.slice(0, 60).map((it, i) => (
+                                                                    <tr key={i} className="hover:bg-gray-50">
+                                                                        <td className="p-2.5 font-bold text-gray-800">{it.label}</td>
+                                                                        <td className="p-2.5">
+                                                                            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-gray-100 text-gray-600">
+                                                                                {it.kind === 'AP' ? '应付' : it.kind === 'PAYROLL' ? '薪资' : it.kind === 'RECURRING' ? '经常性' : '其他'}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="p-2.5 text-right font-mono font-black text-gray-800">{formatMoney(it.amount)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {activeTab === 'COST' && (
                                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                                     <button onClick={() => toggleCard('COST')} className="w-full p-3 md:p-4 flex items-center justify-between hover:bg-gray-50 active:bg-gray-100 transition-colors">
@@ -4459,6 +5506,42 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                 </div>
                                 )}
                                 {/* ━━━━━━━ 卡 4 结束 ━━━━━━━ */}
+
+                                {/* ━━━━━━━ 📒 传统账目 (Classic P&L) ━━━━━━━ */}
+                                {activeTab === 'CLASSIC' && (
+                                <div className="space-y-3 md:space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                                    <ClassicPnLTab
+                                        month={startDate.slice(0, 7)}
+                                        prevMonth={prevStartDate.slice(0, 7)}
+                                        platformGross={{
+                                            grab: analytics.bdown.grabGross,
+                                            shopee: analytics.bdown.shopeeGross,
+                                            panda: analytics.bdown.pandaGross,
+                                            lalamove: analytics.bdown.lalamove,
+                                        }}
+                                        prevPlatformGross={{
+                                            grab: analytics.classicPnL.prevBdown.grabGross,
+                                            shopee: analytics.classicPnL.prevBdown.shopeeGross,
+                                            panda: analytics.classicPnL.prevBdown.pandaGross,
+                                            lalamove: analytics.classicPnL.prevBdown.lalamove,
+                                        }}
+                                        costByCategory={analytics.classicPnL.costByCategory}
+                                        prevCostByCategory={analytics.classicPnL.prevCostByCategory}
+                                        laborByDept={classicLaborByDept.current.byDept}
+                                        prevLaborByDept={classicLaborByDept.prev.byDept}
+                                        laborDeptMeta={{
+                                            guessedCount: classicLaborByDept.current.guessedCount,
+                                            guessedAmount: classicLaborByDept.current.guessedAmount,
+                                            totalCount: classicLaborByDept.current.totalCount,
+                                        }}
+                                        inStoreSales={analytics.rev.inStoreSales}
+                                        prevInStoreSales={analytics.classicPnL.prevInStoreSales}
+                                        mixedSeafoodLegacyAmount={analytics.classicPnL.mixedSeafoodLegacyAmount}
+                                        currentRange={{ start: startDate, end: endDate }}
+                                        prevRange={{ start: prevStartDate, end: prevEndDate }}
+                                    />
+                                </div>
+                                )}
 
                                 {/* ━━━━━━━ 月底工具 1：审计流水 ━━━━━━━ */}
                                 {activeTab === 'AUDIT' && (
@@ -5616,6 +6699,58 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                             <div className="p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:p-4 md:pb-[max(env(safe-area-inset-bottom),1rem)] bg-gray-50 border-t border-gray-200 flex items-center justify-between shrink-0">
                                 <span className="text-[10px] md:text-xs font-bold text-gray-500 uppercase">Total</span>
                                 <span className="text-lg md:text-xl font-black font-mono text-[#111111] tabular-nums">RM {Number(detailView?.items?.reduce((sum, i) => sum + (i.amount || 0), 0) || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 📒 多月份 P&L 导出 */}
+                {multiOpen && (
+                    <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm">
+                        <div className="bg-white w-full md:max-w-md md:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col">
+                            <div className="flex items-start justify-between p-4 md:p-5 border-b border-gray-100">
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-base text-stone-900 flex items-center gap-2">
+                                        <Table2 size={17} className="text-[#FFD200]" /> 导出多月 P&L
+                                    </h3>
+                                    <p className="text-[11px] text-gray-500 mt-0.5">一次导出多个月，一张 Excel，最多 12 个月</p>
+                                </div>
+                                <button onClick={() => !multiBusy && setMultiOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl min-h-[44px] min-w-[44px] flex justify-center items-center shrink-0"><X size={18} /></button>
+                            </div>
+
+                            <div className="p-4 md:p-5 space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">从</label>
+                                        <input type="month" value={multiStart} onChange={e => setMultiStart(e.target.value)}
+                                            className="w-full bg-gray-100 rounded-xl px-3 font-black text-stone-900 outline-none focus:bg-white focus:ring-2 focus:ring-[#FFD200]/40"
+                                            style={{ fontSize: '16px', minHeight: '46px' }} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">到</label>
+                                        <input type="month" value={multiEnd} onChange={e => setMultiEnd(e.target.value)}
+                                            className="w-full bg-gray-100 rounded-xl px-3 font-black text-stone-900 outline-none focus:bg-white focus:ring-2 focus:ring-[#FFD200]/40"
+                                            style={{ fontSize: '16px', minHeight: '46px' }} />
+                                    </div>
+                                </div>
+                                <p className="text-[11px] font-bold text-gray-500">
+                                    将导出 <b className="text-stone-900">{monthRange(multiStart, multiEnd, 12).length}</b> 个月
+                                    {monthRange(multiStart, multiEnd, 12).length >= 12 && <span className="text-amber-600">（已达 12 个月上限）</span>}
+                                </p>
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[10px] text-amber-900 font-bold leading-relaxed">
+                                    · 会一次读取这段期间的全部结算、支出、账单资料，月份多会比较慢（十几秒）。<br/>
+                                    · Excel 里「合计」栏是公式，同时给「% 占销售」和「% 占该段」两种百分比。<br/>
+                                    · 导出时会自动拿本月数字跟画面核对一次，对不上会写在 Excel 最后并跳提示。
+                                </div>
+                            </div>
+
+                            <div className="p-4 md:p-5 border-t border-gray-100 flex items-center gap-3">
+                                <div className="text-[11px] text-gray-500 font-bold flex-grow min-w-0 truncate">{multiBusy || ' '}</div>
+                                <button onClick={() => setMultiOpen(false)} disabled={!!multiBusy} className="h-11 px-4 rounded-xl bg-gray-100 text-gray-600 text-xs font-black disabled:opacity-40 shrink-0">取消</button>
+                                <button onClick={handleExportMultiMonth} disabled={!!multiBusy || monthRange(multiStart, multiEnd, 12).length === 0}
+                                    className="h-11 px-5 rounded-xl bg-stone-900 text-[#FFD200] text-xs font-black flex items-center gap-2 disabled:opacity-40 shrink-0">
+                                    {multiBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} 导出
+                                </button>
                             </div>
                         </div>
                     </div>

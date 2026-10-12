@@ -1,8 +1,10 @@
+import 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
 import { SystemDialogProvider } from './components/ui/SystemDialog';
 import { authReady } from './firebaseConfig';
+import { AppErrorBoundary, markAppMounted } from './components/ui/AppErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -42,6 +44,7 @@ const BootSplash = () => (
 );
 
 root.render(<BootSplash />);
+markAppMounted();
 
 // 👑 最多等 8 秒；超时也照样进 App，绝不把系统卡死在开机画面
 const bootGuard = Promise.race([
@@ -53,9 +56,12 @@ bootGuard.then((ok) => {
   if (!ok) {
     console.warn("⚠️ [启动] 未取得匿名身份，数据可能无法读取。请检查网络或 Console 的 Anonymous 开关。");
   }
+
   root.render(
-    <SystemDialogProvider>
-      <App />
-    </SystemDialogProvider>
+    <AppErrorBoundary>
+      <SystemDialogProvider>
+        <App />
+      </SystemDialogProvider>
+    </AppErrorBoundary>
   );
 });

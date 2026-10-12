@@ -19,9 +19,43 @@ export default defineConfig(() => {
         'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(process.env.VITE_FIREBASE_APP_ID),
         'import.meta.env.VITE_FIREBASE_MEASUREMENT_ID': JSON.stringify(process.env.VITE_FIREBASE_MEASUREMENT_ID),
       },
+      optimizeDeps: {
+        include: [
+          'react',
+          'react-dom',
+          'react-dom/client',
+          'react/jsx-runtime',
+          'react/jsx-dev-runtime',
+        ],
+      },
+      build: {
+        // 📱 明确支援到 iPhone iOS 14（Safari 14）
+        target: ['es2020', 'safari14'],
+        rollupOptions: {
+          output: {
+            // 以前全部打成一个 3MB 的 JS，iPhone 要整包下载 + 解析完才看得到画面。
+            // 拆成几包：可以同时下载，而且改了 App 代码时，firebase / 图表这些不用重新下载。
+            manualChunks(id: string) {
+              if (!id.includes('node_modules')) return undefined;
+              if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'vendor-firebase';
+              if (
+                id.includes('/node_modules/react/') ||
+                id.includes('/node_modules/react-dom/') ||
+                id.includes('/node_modules/scheduler/')
+              ) {
+                return 'vendor-react';
+              }
+              return undefined;
+            },
+          },
+        },
+      },
       resolve: {
+        dedupe: ['react', 'react-dom'],
         alias: {
           '@': path.resolve(__dirname, '.'),
+          'react': path.resolve(__dirname, 'node_modules/react'),
+          'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
         }
       }
     };

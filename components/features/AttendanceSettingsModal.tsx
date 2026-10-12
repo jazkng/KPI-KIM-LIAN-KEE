@@ -123,11 +123,11 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
         // Validate
         if (hasSpecial) {
             if (!specialStart || !specialEnd) {
-                alert('请填写完整的特定日期范围开始和结束日期');
+                alert('⚠️ 请填写完整的特定日期范围开始和结束日期');
                 return;
             }
             if (specialStart > specialEnd) {
-                alert('结束日期不能早于开始日期');
+                alert('⚠️ 结束日期不能早于开始日期');
                 return;
             }
         }
@@ -181,15 +181,15 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
             }, 1000);
         } catch (error) {
             console.error('Save settings failed:', error);
-            alert('保存设置失败，请重试');
+            alert('❌ 保存设置失败，请重试');
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col border-t-8 border-[#FFD200] overflow-hidden max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-t-3xl md:rounded-3xl w-full md:max-w-xl shadow-2xl flex flex-col border-t-8 border-[#FFD200] overflow-hidden max-h-[92vh] md:max-h-[90vh]">
                 
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -202,7 +202,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                             <p className="text-xs text-gray-400 font-bold mt-0.5">Configure shifts, special dates, and grace thresholds</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                         <X size={20}/>
                     </button>
                 </div>
@@ -221,16 +221,16 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                 <button
                                     type="button"
                                     onClick={() => setActiveShiftTab('SHIFT_1')}
-                                    className={`px-3 py-1 text-xs font-black rounded-lg transition-all ${activeShiftTab === 'SHIFT_1' ? 'bg-white shadow text-yellow-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    className={`min-h-[44px] md:min-h-0 px-3 py-1 text-xs font-black rounded-lg transition-all ${activeShiftTab === 'SHIFT_1' ? 'bg-white shadow text-yellow-600' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
-                                    班次 1 (默认)
+                                    Group A (班次 1)
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setActiveShiftTab('SHIFT_2')}
-                                    className={`px-3 py-1 text-xs font-black rounded-lg transition-all ${activeShiftTab === 'SHIFT_2' ? 'bg-white shadow text-yellow-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    className={`min-h-[44px] md:min-h-0 px-3 py-1 text-xs font-black rounded-lg transition-all ${activeShiftTab === 'SHIFT_2' ? 'bg-white shadow text-yellow-600' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
-                                    班次 2 (人群)
+                                    Group B (班次 2)
                                 </button>
                             </div>
                         </div>
@@ -239,7 +239,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
                                 {/* Weekdays Shift 1 */}
                                 <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-4">
-                                    <span className="text-xs font-black text-gray-500 block">工作日班次 (周一至周五)</span>
+                                    <span className="text-xs font-black text-gray-500 block">Group A 工作日 (周一至周五)</span>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应上班时间</label>
@@ -247,8 +247,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayIn} 
                                                 onChange={e => setWeekdayIn(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应下班时间</label>
@@ -256,8 +255,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayOut} 
                                                 onChange={e => setWeekdayOut(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                     </div>
                                     
@@ -280,8 +278,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekdayBreakStart} 
                                                         onChange={e => setWeekdayBreakStart(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400 block mb-0.5">回岗/重新上班</label>
@@ -289,8 +286,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekdayBreakEnd} 
                                                         onChange={e => setWeekdayBreakEnd(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                             </div>
                                         )}
@@ -299,7 +295,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
                                 {/* Weekends Shift 1 */}
                                 <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-4">
-                                    <span className="text-xs font-black text-red-500 block">休息日班次 (周六至周日)</span>
+                                    <span className="text-xs font-black text-red-500 block">Group A 周末 (周六至周日)</span>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应上班时间</label>
@@ -307,8 +303,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendIn} 
                                                 onChange={e => setWeekendIn(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应下班时间</label>
@@ -316,8 +311,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendOut} 
                                                 onChange={e => setWeekendOut(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                     </div>
 
@@ -340,8 +334,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekendBreakStart} 
                                                         onChange={e => setWeekendBreakStart(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400 block mb-0.5">回岗/重新上班</label>
@@ -349,8 +342,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekendBreakEnd} 
                                                         onChange={e => setWeekendBreakEnd(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                             </div>
                                         )}
@@ -361,7 +353,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
                                 {/* Weekdays Shift 2 */}
                                 <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-4">
-                                    <span className="text-xs font-black text-gray-500 block">工作日班次 2 (周一至周五)</span>
+                                    <span className="text-xs font-black text-gray-500 block">Group B 工作日 (周一至周五)</span>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应上班时间</label>
@@ -369,8 +361,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayIn2} 
                                                 onChange={e => setWeekdayIn2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应下班时间</label>
@@ -378,8 +369,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekdayOut2} 
                                                 onChange={e => setWeekdayOut2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                     </div>
 
@@ -402,8 +392,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekdayBreakStart2} 
                                                         onChange={e => setWeekdayBreakStart2(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400 block mb-0.5">回岗/重新上班</label>
@@ -411,8 +400,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekdayBreakEnd2} 
                                                         onChange={e => setWeekdayBreakEnd2(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                             </div>
                                         )}
@@ -421,7 +409,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
 
                                 {/* Weekends Shift 2 */}
                                 <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-4">
-                                    <span className="text-xs font-black text-red-500 block">休息日班次 2 (周六至周日)</span>
+                                    <span className="text-xs font-black text-red-500 block">Group B 周末 (周六至周日)</span>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应上班时间</label>
@@ -429,8 +417,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendIn2} 
                                                 onChange={e => setWeekendIn2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">应下班时间</label>
@@ -438,8 +425,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                 type="time" 
                                                 value={weekendOut2} 
                                                 onChange={e => setWeekendOut2(e.target.value)} 
-                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                            />
+                                                className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                         </div>
                                     </div>
 
@@ -462,8 +448,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekendBreakStart2} 
                                                         onChange={e => setWeekendBreakStart2(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400 block mb-0.5">回岗/重新上班</label>
@@ -471,8 +456,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         type="time" 
                                                         value={weekendBreakEnd2} 
                                                         onChange={e => setWeekendBreakEnd2(e.target.value)} 
-                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 text-xs font-black outline-none"
-                                                    />
+                                                        className="w-full bg-white p-2 rounded-lg border border-gray-200 font-black outline-none text-[16px] md:text-xs" />
                                                 </div>
                                             </div>
                                         )}
@@ -508,8 +492,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="date" 
                                             value={specialStart} 
                                             onChange={e => setSpecialStart(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD200] outline-none"
-                                        />
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 block mb-1">特定日期：结束</label>
@@ -517,8 +500,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="date" 
                                             value={specialEnd} 
                                             onChange={e => setSpecialEnd(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-xs md:text-sm font-black focus:border-[#FFD200] outline-none"
-                                        />
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                     </div>
                                 </div>
 
@@ -529,8 +511,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="time" 
                                             value={specialIn} 
                                             onChange={e => setSpecialIn(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                        />
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 block mb-1">特定日期：下班时间</label>
@@ -538,8 +519,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             type="time" 
                                             value={specialOut} 
                                             onChange={e => setSpecialOut(e.target.value)} 
-                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 text-sm font-black focus:border-[#FFD200] outline-none"
-                                        />
+                                            className="w-full bg-white p-2.5 rounded-xl border border-gray-200 font-black focus:border-[#FFD200] outline-none text-[16px] md:text-sm" />
                                     </div>
                                 </div>
                             </div>
@@ -567,8 +547,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                         max="60"
                                         value={grace} 
                                         onChange={e => setGrace(Number(e.target.value))} 
-                                        className="w-full text-center font-black text-sm outline-none bg-transparent"
-                                    />
+                                        className="w-full text-center font-black outline-none bg-transparent text-[16px] md:text-sm" />
                                     <span className="text-xs font-bold text-gray-400 shrink-0">分</span>
                                 </div>
                             </div>
@@ -649,8 +628,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                     min="0"
                                                     value={tier.lateMinutes}
                                                     onChange={e => handleTierChange(tier.id, 'lateMinutes', Number(e.target.value))}
-                                                    className="w-full text-center font-black text-xs outline-none bg-transparent"
-                                                />
+                                                    className="w-full text-center font-black outline-none bg-transparent text-[16px] md:text-xs" />
                                                 <span className="text-[10px] font-bold text-gray-400 shrink-0">分钟</span>
                                             </div>
                                         </div>
@@ -659,8 +637,7 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                             <select
                                                 value={tier.deductionType}
                                                 onChange={e => handleTierChange(tier.id, 'deductionType', e.target.value)}
-                                                className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-black outline-none focus:border-[#FFD200]"
-                                            >
+                                                className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 font-black outline-none focus:border-[#FFD200] text-[16px] md:text-xs" >
                                                 <option value="AMOUNT">每次扣除固定金额 (RM)</option>
                                                 <option value="HALF_DAY">扣除半天薪资 / Half-Day Absent</option>
                                                 <option value="FULL_DAY">扣除一天薪资 / Full-Day Absent</option>
@@ -675,14 +652,13 @@ export const AttendanceSettingsModal: React.FC<AttendanceSettingsModalProps> = (
                                                         step="0.01"
                                                         value={tier.deductionAmount}
                                                         onChange={e => handleTierChange(tier.id, 'deductionAmount', Number(e.target.value))}
-                                                        className="w-full text-center font-black text-xs outline-none bg-transparent"
-                                                    />
+                                                        className="w-full text-center font-black outline-none bg-transparent text-[16px] md:text-xs" />
                                                 </div>
                                             )}
 
                                             <button 
                                                 onClick={() => handleRemoveTier(tier.id)}
-                                                className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-colors shrink-0"
+                                                className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-colors shrink-0 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                                 title="删除阶梯"
                                             >
                                                 <Trash2 size={16} />

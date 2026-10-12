@@ -166,7 +166,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
             }, 2000);
         } catch (error) {
             console.error('Migration failed:', error);
-            alert('转换失败，请重试');
+            alert('❌ 转换失败，请重试');
         } finally {
             setIsSaving(false);
         }
@@ -197,8 +197,8 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
 
             {/* 确认列表弹窗 (Confirmation Dialog - iOS Style) */}
             {showModal && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
-                    <div className="bg-[#F6F7FB] dark:bg-stone-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl border border-white/40 overflow-hidden flex flex-col my-8" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+                <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-fade-in overflow-y-auto">
+                    <div className="bg-[#F6F7FB] dark:bg-stone-900 w-full max-w-2xl rounded-t-3xl md:rounded-[2.5rem] shadow-2xl border border-white/40 overflow-hidden flex flex-col max-h-[92vh] md:my-8" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
                         {/* Header */}
                         <div className="p-6 bg-gradient-to-r from-[#8B0000] to-[#A00000] text-white flex justify-between items-center relative shrink-0">
                             <div>
@@ -210,7 +210,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
                             </div>
                             <button 
                                 onClick={() => !isSaving && setShowModal(false)}
-                                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors active:scale-90"
+                                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                 disabled={isSaving}
                             >
                                 <X size={16} />
@@ -263,7 +263,7 @@ export const DepartmentMigrationBanner: React.FC<DepartmentMigrationBannerProps>
                                                                 ...selectedMapping,
                                                                 [emp.id]: e.target.value
                                                             })}
-                                                            className="bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] cursor-pointer"
+                                                            className="bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-2.5 py-1.5 font-bold outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] cursor-pointer text-[16px] md:text-xs"
                                                             style={{ minWidth: '130px', minHeight: '32px' }}
                                                         >
                                                             {DEPARTMENTS.map((dept) => (

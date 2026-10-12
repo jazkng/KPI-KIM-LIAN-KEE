@@ -1,3 +1,4 @@
+import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Truck, Plus, Search, Phone, Edit3, Trash2, X, FileText, 
@@ -5,13 +6,11 @@ import {
     FileDown, Receipt, UserCircle, ChevronUp, ChevronDown,
     User, ClipboardCheck,
     Loader2, MessageCircle,
-    ShoppingBag, Star, CalendarOff 
-} from 'lucide-react';
+    ShoppingBag, Star, CalendarOff, Tag 
+, Link2 } from 'lucide-react';
 import { Supplier, CatalogItem, PurchaseOrder, StockItem, PurchaseOrderItem, UomOption, ExpenseItem } from '../../../types';
 import { normalizeCatalogItem } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
-import { jsPDF } from "jspdf";
-import html2canvas from 'html2canvas-pro';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import {
     calculateWeightedAverageCost,
@@ -28,6 +27,8 @@ import { ModuleGuideButton } from '../../ui/ModuleGuide';
 // 子组件
 import { SupplierEditModal } from './SupplierEditModal';
 import { ProductEditModal } from './ProductEditModal';
+import { BatchSupplierCodeModal } from './BatchSupplierCodeModal';
+import { BatchStockLinkModal, StockLinkChange } from './BatchStockLinkModal';
 import { BillFormModal } from './BillFormModal';
 import { ReceivePOModal } from './ReceivePOModal';
 import { POCart } from './POCart';
@@ -331,6 +332,71 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     // Product CRUD
     // ============================================================
     const handleAddProduct = () => { setProductForm({ unit: 'unit', price: 0 }); setProductUoms(DEFAULT_UOMS); setIsEditingProduct(true); };
+
+    // 👑 批量填供应商编号
+    const [isBatchCodeOpen, setIsBatchCodeOpen] = useState(false);
+    const [isStockLinkOpen, setIsStockLinkOpen] = useState(false);   // 批量关联库存
+
+    /**
+     * 把「产品 id → 编号」写回该供应商的 catalog。
+     * 空字串 = 清掉编号（用来处理以前乱填的），所以这里不 filter 掉空值。
+     */
+    const handleSaveBatchCodes = async (codeMap: Record<string, string>) => {
+        if (!selectedSupplier) return;
+        const updatedSupplier: Supplier = {
+            ...selectedSupplier,
+            catalog: (selectedSupplier.catalog || []).map(item =>
+                codeMap[item.id] !== undefined
+                    ? { ...item, supplierCode: codeMap[item.id] || undefined }
+                    : item
+            ),
+        };
+        await DataManager.saveSupplier(updatedSupplier);
+        setSuppliers(prev => prev.map(s => (s.id === updatedSupplier.id ? updatedSupplier : s)));
+        setSelectedSupplier(updatedSupplier);
+    };
+
+    /**
+     * 批量关联库存：把 linkedStockId + 换算写回各供应商的目录。
+     * 一次可能横跨多个供应商，所以按 supplierId 分组各存一次。
+     */
+    const handleSaveStockLinks = async (changes: StockLinkChange[]) => {
+        if (changes.length === 0) return;
+        const bySupplier: Record<string, StockLinkChange[]> = {};
+        changes.forEach(c => { (bySupplier[c.supplierId] = bySupplier[c.supplierId] || []).push(c); });
+
+        const updated: Supplier[] = [];
+        for (const [supplierId, list] of Object.entries(bySupplier)) {
+            const sup = suppliers.find(x => x.id === supplierId);
+            if (!sup) continue;
+            const map: Record<string, StockLinkChange> = {};
+            list.forEach(c => { map[c.catalogItemId] = c; });
+
+            const newSup: Supplier = {
+                ...sup,
+                catalog: (sup.catalog || []).map(item => {
+                    const c = map[item.id];
+                    if (!c) return item;
+                    return {
+                        ...item,
+                        linkedStockId: c.stockId,
+                        purchaseUnitName: c.purchaseUnitName || item.purchaseUnitName || item.unit,
+                        toBaseRatio: c.toBaseRatio,
+                        baseUnit: c.baseUnit || item.baseUnit,
+                    };
+                }),
+            };
+            await DataManager.saveSupplier(newSup);
+            updated.push(newSup);
+        }
+
+        setSuppliers(prev => prev.map(s => updated.find(u => u.id === s.id) || s));
+        if (selectedSupplier) {
+            const mine = updated.find(u => u.id === selectedSupplier.id);
+            if (mine) setSelectedSupplier(mine);
+        }
+        alert(`✅ 已关联 ${changes.length} 个产品到库存品项。之后收货就会自动加库存。`);
+    };
 
     const handleSaveProduct = async () => {
         if (!selectedSupplier || !productForm.name || !productForm.price) return alert("Name and Price required");
@@ -679,7 +745,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         setTimeout(async () => {
             if (!printRef.current) return;
             try {
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 const totalPages = Math.ceil(po.items.length / ITEMS_PER_PAGE);
                 for (let i = 0; i < totalPages; i++) {
                     const pageElement = document.getElementById(`po-print-page-${i}`);
@@ -731,9 +797,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         applyResolvedStylesForPdf(supplierPrintRef.current as HTMLElement, clonedEl as HTMLElement);
                     }
                 }
-            }).then((canvas) => {
+            }).then(async (canvas) => {
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 const imgWidth = 210;
                 const pageHeight = 297;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -778,9 +844,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         applyResolvedStylesForPdf(supplierPrintRef.current as HTMLElement, clonedEl as HTMLElement);
                     }
                 }
-            }).then((canvas) => {
+            }).then(async (canvas) => {
                 const imgData = canvas.toDataURL('image/jpeg', 0.82);
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
                 const imgWidth = 210;
                 const pageHeight = 297;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -809,7 +875,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         const phone = targetSup.contact.replace(/\D/g, '');
         if (!phone) return alert("供应商无联系电话");
         let text = `*PURCHASE ORDER: ${po.id}*\nTo: ${po.supplierName}\nDate: ${po.date.split('T')[0]}\n\n*ITEMS:*\n`;
-        po.items.forEach((item, i) => { text += `${i + 1}. ${item.name} [${item.supplierCode || ''}]\n  Qty: ${item.orderQty} ${item.unit}\n`; });
+        po.items.forEach((item, i) => { text += `${i + 1}. ${item.name}${item.supplierCode ? ` [${item.supplierCode}]` : ''}\n  Qty: ${item.orderQty} ${item.unit}\n`; });
         text += `\nPlease confirm delivery. Thanks!`;
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
     };
@@ -848,7 +914,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         return `${id}_${cleanName}`;
     };
 
-    const handleConfirmExport = () => {
+    const handleConfirmExport = async () => {
         const toExport = suppliers.filter(s => selectedExportIds.includes(s.id));
         if (toExport.length === 0) {
             alert("请选择至少一个商家进行导出");
@@ -856,7 +922,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         }
         
         try {
-            const doc = new jsPDF('p', 'mm', 'a4');
+            const doc = new (await loadJsPDF())('p', 'mm', 'a4');
             let currentY = 20;
             const pageHeight = 297;
             const margin = 15;
@@ -1485,7 +1551,32 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 <div className="p-4 md:p-6">
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="font-black text-base md:text-lg text-[#111111] flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-[#111111] text-[#FFD200] flex items-center justify-center shadow-md"><ShoppingBag size={16}/></div>供应目录</h3>
-                                        <button onClick={handleAddProduct} className="px-4 py-2.5 bg-[#111111] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95"><Plus size={14}/> 添加商品</button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setIsStockLinkOpen(true)}
+                                                className="px-3 py-2.5 bg-white border border-gray-200 text-[#111111] rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-gray-50 active:scale-95"
+                                                title="批量把供应商产品关联到库存品项（不关联收货不会进库存）"
+                                            >
+                                                <Link2 size={14}/>
+                                                <span className="hidden md:inline">关联库存</span>
+                                            </button>
+                                            {(selectedSupplier.catalog || []).length > 0 && (
+                                                <button
+                                                    onClick={() => setIsBatchCodeOpen(true)}
+                                                    className="px-3 py-2.5 bg-white border border-gray-200 text-[#111111] rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-gray-50 active:scale-95"
+                                                    title="一次填完所有产品的供应商编号"
+                                                >
+                                                    <Tag size={14}/>
+                                                    批量填编号
+                                                    {(selectedSupplier.catalog || []).filter(i => !i.supplierCode).length > 0 && (
+                                                        <span className="bg-orange-100 text-orange-700 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                                            {(selectedSupplier.catalog || []).filter(i => !i.supplierCode).length}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            )}
+                                            <button onClick={handleAddProduct} className="px-4 py-2.5 bg-[#111111] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black active:scale-95"><Plus size={14}/> 添加商品</button>
+                                        </div>
                                     </div>
                                     {(!selectedSupplier.catalog || selectedSupplier.catalog.length === 0) ? (
                                         <div className="py-16 text-center border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50/50"><Package size={40} className="mx-auto text-gray-300 mb-3"/><p className="text-gray-400 font-bold text-sm">目录为空</p></div>
@@ -1900,6 +1991,25 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
             {isEditingSupplier && (
                 <SupplierEditModal supplierForm={supplierForm} suppliers={suppliers} isSyncingName={isSyncingName} onChange={setSupplierForm} onSave={handleSaveSupplier} onClose={() => setIsEditingSupplier(false)} />
+            )}
+
+            {isBatchCodeOpen && selectedSupplier && (
+                <BatchSupplierCodeModal
+                    isOpen={true}
+                    onClose={() => setIsBatchCodeOpen(false)}
+                    supplier={selectedSupplier}
+                    onSave={handleSaveBatchCodes}
+                />
+            )}
+
+            {isStockLinkOpen && (
+                <BatchStockLinkModal
+                    isOpen={true}
+                    onClose={() => setIsStockLinkOpen(false)}
+                    suppliers={suppliers}
+                    allStockList={allStockList}
+                    onSave={handleSaveStockLinks}
+                />
             )}
 
             {isEditingProduct && (

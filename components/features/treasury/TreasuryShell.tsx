@@ -7,6 +7,16 @@ interface TreasuryShellProps {
   footer?: React.ReactNode;
 }
 
+/**
+ * 资金管理 — 页面外壳
+ *
+ * ⚠️ 这里刻意「不」使用 -webkit-overflow-scrolling: touch。
+ *    iOS 上该属性会让本容器变成独立滚动器，任何 position:fixed 的子元素
+ *    都会被绑到这个滚动器上，导致弹窗自身的内部滚动失效（手机滑不动）。
+ *    现代 iOS 已原生支援惯性滚动，不需要这个属性。
+ *
+ * ⚠️ 弹窗一律各自 createPortal 到 document.body，不要放进这个容器里。
+ */
 export const TreasuryShell: React.FC<TreasuryShellProps> = ({
   header,
   navigation,
@@ -16,53 +26,28 @@ export const TreasuryShell: React.FC<TreasuryShellProps> = ({
   return (
     <div
       id="treasury-page"
-      className="
-        fixed
-        inset-0
-        z-[120]
-        w-full
-        max-w-full
-        overflow-y-auto
-        overflow-x-hidden
-        bg-[#F4F5F8]
-        text-[#111111]
-        touch-pan-y
-      "
-      style={{
-        height: "100dvh",
-        minHeight: "-webkit-fill-available",
-        WebkitOverflowScrolling: "touch",
-        touchAction: "pan-y",
-        overscrollBehaviorY: "contain",
-      }}
+      className="fixed inset-0 z-[120] flex w-full max-w-full flex-col bg-[#F6F7FB] text-[#111111]"
+      style={{ height: "100dvh" }}
     >
-      <div className="sticky top-0 z-50 bg-[#111111] shadow-md">
-        <div
-          style={{
-            paddingTop: "env(safe-area-inset-top, 0px)",
-          }}
-        >
-          {header}
-        </div>
-
-        {navigation && (
-          <div className="bg-[#111111]">
-            {navigation}
-          </div>
-        )}
+      <div
+        className="shrink-0 bg-[#111111]"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        {header}
+        {navigation}
       </div>
 
       <main
-        className="bg-[#F4F5F8] touch-pan-y"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#F6F7FB]"
         style={{
-          paddingBottom:
-            "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          overscrollBehaviorY: "contain",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
         }}
       >
         {children}
       </main>
 
-      {footer && <div>{footer}</div>}
+      {footer && <div className="shrink-0">{footer}</div>}
     </div>
   );
 };

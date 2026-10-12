@@ -1,3 +1,5 @@
+import type { PicArea } from './constants/hrSkill';
+
 // Determines which dashboard experience opens after login. This is not an organization level.
 export enum PortalRole {
   BOSS = 'BOSS',
@@ -33,6 +35,12 @@ export type EmployeeRank = 'TOP' | 'MANAGEMENT' | 'HEAD' | 'PIC' | 'CREW';
 export type OrgLevel =
   | 'OWNER'
   | 'BRANCH_MANAGER'
+  /**
+   * 幕僚 / 旁支单位（会计、顾问这类）。
+   * 层级上跟门店管理平行，但「不直接管理门店」——
+   * 组织图会画在主干旁边、用虚线连接，底下不接部门。
+   */
+  | 'STAFF_SUPPORT'
   | 'DEPARTMENT_HEAD'
   | 'TEAM_LEAD'
   | 'CREW';
@@ -82,7 +90,12 @@ export interface PayrollRecordDetail {
     ee_epf: number;
     ee_socso: number;
     ee_eis?: number;
+    /** LINDUNG 24 Jam (SKBBK) —— 员工全额承担，雇主 0 */
+    ee_lindung?: number;
+    hasLindung?: boolean;
     ee_pcb?: number;
+    /** 本月从薪水扣回的欠款 */
+    loanRepay?: number;
     er_epf: number;
     er_socso: number;
     er_eis: number;
@@ -160,7 +173,9 @@ export type LogPriority = 'NORMAL' | 'HIGH';
 export type QueueSize = 'SMALL' | 'MEDIUM' | 'LARGE';
 export type QueueStatus = 'WAITING' | 'CALLING' | 'SEATED' | 'CANCELLED';
 
-export type RecurringBillCategory = 'RENT' | 'ELECTRICITY' | 'WATER' | 'INTERNET' | 'WASTE' | 'LICENSE' | 'SUBSCRIPTION' | 'OTHER';
+// ELECTRICITY_STAFF / WATER_STAFF = 员工宿舍的独立电表/水表账单，
+// 跟店面分开记，传统账目的「UTINITY CHARGES STAFF」才有数。
+export type RecurringBillCategory = 'RENT' | 'RENT_STAFF' | 'ELECTRICITY' | 'WATER' | 'ELECTRICITY_STAFF' | 'WATER_STAFF' | 'INTERNET' | 'WASTE' | 'LICENSE' | 'SUBSCRIPTION' | 'OTHER';
 export type RecurringBillType = 'MONTHLY' | 'YEARLY';
 
 export type AllowanceKey = 'ATTENDANCE' | 'MEAL' | 'HOSTEL' | 'OTHER';
@@ -470,6 +485,26 @@ export interface LoanRecord {
     via?: string; // e.g. 'CASH', 'BANK', 'SALARY_DEDUCT'
 }
 
+/** ⭐ 工作能力星级：一个工作项目的评分（定义见 constants/skillCatalog.ts） */
+export interface SkillRating {
+    level: 1 | 2 | 3 | 4 | 5;
+    /** YYYY-MM-DD */
+    ratedAt: string;
+    ratedBy?: string;
+}
+
+/** ⭐ 改分记录（看进步趋势 / 查谁改的） */
+export interface SkillRatingLog {
+    itemId: string;
+    /** 改之前（没有 = 第一次评） */
+    from?: number;
+    /** 改之后（没有 = 清除） */
+    to?: number;
+    /** ISO 时间 */
+    at: string;
+    by?: string;
+}
+
 export interface Employee {
     id: string;
     name: string;
@@ -498,6 +533,8 @@ export interface Employee {
     address?: string;
     avatar?: string;
     allowedModules?: AppModule[];
+    /** 只读模式：可查看已授权模块，但不能新增／修改／删除（前端层防护） */
+    readOnlyAccess?: boolean;
     /** Direct inventory switches configured by the owner/system administrator. */
     inventoryAccess?: InventoryAccessConfig;
     moduleProficiency?: Record<string, number>;
@@ -520,6 +557,16 @@ export interface Employee {
     dateOfBirth?: string;
     passportNo?: string;
     specialSkills?: string; // 专业技能 / 技能特长 (如：电工、养鱼、剖鱼)
+    /** 🎓 技能等级 1-4（学习/辅助/独立/熟练）—— 定义见 constants/hrSkill.ts */
+    skillLevel?: 1 | 2 | 3 | 4;
+    /** 技能等级最后评定日期 YYYY-MM-DD */
+    skillLevelDate?: string;
+    /** 🧹 PIC：这个人本身负责什么 + 每项评分 */
+    picAreas?: PicArea[];
+    /** ⭐ 工作能力星级：工作项目 id → 评分 */
+    skillRatings?: Record<string, SkillRating>;
+    /** ⭐ 改分记录（最新在前，最多留 300 笔） */
+    skillRatingLog?: SkillRatingLog[];
     workPermitNo?: string;
     workPermitExpiry?: string;
     eisNo?: string;
@@ -548,11 +595,31 @@ export interface Employee {
     isAttendanceExempt?: boolean; // 新增：免打卡标记
     isPayrollEligible?: boolean; // 新增：是否参与薪资结算 (接收薪资)
     shiftGroup?: number; // 新增：班次人群 (1 = 班次1, 2 = 班次2)
+
+    // 🏢 组织架构图（只影响组织图显示，不影响权限 orgLevel、薪资 / 报表用的 department）
+    /** BOD / MANAGEMENT / STAFF；没设定 = 按 orgLevel 自动判断（见 utils/orgChartModel.ts） */
+    orgChartTier?: 'BOD' | 'MANAGEMENT' | 'STAFF';
+    /** 组织图上显示的职位名称，例如「Head Chef」「Accounting」；没设定 = 用 role */
+    orgPosition?: string;
+    /** 负责单位（管理层用）：HR、Accounting、Marketing…；厨房 / 楼面等营运部门直接用 department */
+    orgUnit?: string;
+    /** 管理层负责的营运部门（可以多个，例如 Kelvin = 楼面 + 水吧 + 洗碗）；没设定 = 自己的 department */
+    orgManagesDepts?: string[];
+    /** 直属上司（员工 id）；没设定 = 自动接到同部门的管理层 */
+    reportsTo?: string;
+    /** 第二身份，例如「Personal Assistant」 */
+    orgSecondaryRole?: string;
+    /** 第二身份汇报对象（员工 id），例如 Ben —— 组织图用虚线表示，不影响正式汇报线 */
+    orgSecondaryReportsTo?: string;
     loanRecords?: LoanRecord[];
     terminationType?: 'RESIGNED' | 'FIRED' | 'CONTRACT_END' | 'ABSCONDED';
     noticeDate?: string;
     settlementStatus?: 'PENDING' | 'SETTLED';
     hasKitchenAlertPermission?: boolean; // 🟢 是否有通知厨房功能权限
+    /** 💳 薪资默认付款方式 —— 薪资结算会自动带入，不用每个月重新按 */
+    payrollPaymentMethod?: 'BANK' | 'CASH';
+    /** 🛡️ 本地员工已向 PERKESO 申请退出 LINDUNG 24 Jam（外劳强制参加，此栏无效） */
+    lindungOptOut?: boolean;
 }
 
 export interface StoreConfig {
@@ -627,6 +694,16 @@ export interface FundTransfer {
     createdAt?: string;
 }
 
+/** 兼职账目的一次更正：谁、什么时候、为什么，改之前 / 之后 */
+export interface PartTimeRevision {
+    at: string;
+    actorId: string;
+    actorName: string;
+    reason: string;
+    before: { amount: number; totalBillAmount?: number; time?: string; paymentDate?: string; note?: string; partTime?: any };
+    after: { amount: number; totalBillAmount?: number; time?: string; paymentDate?: string; note?: string; partTime?: any };
+}
+
 export interface ExpenseItem {
     id: string;
     category: string;
@@ -658,7 +735,64 @@ export interface ExpenseItem {
     // 👑 水吧/海鲜细分 V1 新增
     beverageSubCategory?: BeverageSubCategory;
     seafoodSubCategory?: SeafoodSubCategory;
+    /**
+     * 👑 成本科目拆分 V1
+     * 用途：供应商同时卖多类产品时（菜+水果、肉+蛋），把一张账单拆到多个会计科目，
+     *      让财务报告的成本细分变准。
+     *
+     * ⚠️ 拆分「不改变任何金额」—— amount、totalBillAmount、付款记录、凭单、金库全部不受影响，
+     *    它只是给报表看的标签。所以已付的旧账也能安全回头补拆分。
+     *
+     * 规则：splits 金额加总必须等于 totalBillAmount，保存时强制校验。
+     *      报表入账时若实际金额与总额不同（部分付款、扣了 credit note），
+     *      会按 splits 比例分摊，不会算错总数。
+     */
+    categorySplits?: CategorySplit[];
+    /**
+     * ⏱️ 兼职日薪登记（薪资结算 →「兼职」分页写入，id 以 parttime_ 开头）
+     * 金额 amount = hours × rate + extra；这里只是留底给报表/导出用
+     */
+    partTime?: {
+        employeeId?: string;
+        hours: number;
+        rate: number;
+        extra?: number;
+        extraNote?: string;
+        clockIn?: string;
+        clockOut?: string;
+    };
+    /** 兼职账目更正记录（PartTimeCorrection 写入；最新在最后） */
+    partTimeRevisions?: PartTimeRevision[];
+    /** 👥 预支 / 兼职：对应的员工 id（旧资料没有，靠 company = 名字对应） */
+    employeeId?: string;
+    /** 👥 谁登记的（主管「兼职与预支」页面写入，打印单据时预填主管签名栏） */
+    recordedBy?: { id: string; name: string };
 }
+
+/** 成本科目拆分的一行 */
+export interface CategorySplit {
+    /** 会计科目 key，对应 apConstants 的 ACCOUNTING_CATEGORIES id */
+    category: string;
+    /** 该科目分到的金额 */
+    amount: number;
+    /** 选填备注，例如「猪肉 12kg」 */
+    note?: string;
+    /**
+     * true = 这是「主科目」那一行，金额由系统自动算（总额 − 其他科目合计）。
+     * 使用者只填例外的科目，主科目吃剩下的余额。
+     */
+    isMain?: boolean;
+}
+
+/** 每日结算的天气状况 */
+export type WeatherCondition = 'SUNNY' | 'CLOUDY' | 'RAIN' | 'HEAVY_RAIN';
+
+export const WEATHER_OPTIONS: Array<{ value: WeatherCondition; label: string; en: string }> = [
+  { value: 'SUNNY',      label: '晴',   en: 'Sunny' },
+  { value: 'CLOUDY',     label: '阴',   en: 'Cloudy' },
+  { value: 'RAIN',       label: '雨',   en: 'Rain' },
+  { value: 'HEAVY_RAIN', label: '大雨', en: 'Heavy Rain' },
+];
 
 export interface SettlementRecord {
   id: string;
@@ -694,6 +828,8 @@ export interface SettlementRecord {
   expenses: any[]; 
   variance: number;
   varianceReason?: string;
+  /** 当日天气状况（可选） */
+  weather?: WeatherCondition;
   submittedBy: string;
   isClosed: boolean;
   createdAt?: string;
@@ -702,6 +838,10 @@ export interface SettlementRecord {
   
   // 🟢 加入下面这一行，允许记录核销状态
   reconStatus?: Record<string, boolean>; 
+    /** 总单数（每日营业报告可手动填） */
+    orderCount?: number;
+    /** 每日营运数据：人数 / 单数 / VIP / WhatsApp（读取请用 settlementOps.getOps） */
+    ops?: { pax?: number; bills?: number; vipNew?: number; vipVisits?: number; waJoin?: number; waOrders?: number };
 }
 
 export interface RecurringBill {
@@ -737,7 +877,27 @@ export interface BillPaymentRecord {
     referenceNo?: string;
     usage?: number;
     usageUnit?: string;
+    /** 仪表读数：上次 / 本次（水电类账单才有，编辑时用来回填） */
+    meterPrev?: number;
+    meterCurr?: number;
+    /**
+     * 他人分摊（代收代付）：整张账单我先全额付给 TNB，
+     * 其中一部分是其他商家分摊的，之后收回来。
+     * 财务报告的成本 = amount − 分摊合计；amount 本身保持全额（现金流对得上）。
+     */
+    costShares?: BillCostShare[];
     linkUrl?: string;
+}
+
+/** 账单的他人分摊明细（代收代付） */
+export interface BillCostShare {
+    id: string;
+    /** 分摊方，例如「隔壁 A 商家」 */
+    payer: string;
+    amount: number;
+    /** 钱收回来了没 */
+    received?: boolean;
+    receivedDate?: string;
 }
 
 export interface UomOption {
@@ -884,7 +1044,15 @@ export interface SupplierBank {
 export interface Supplier {
     id: string;
     name: string;
+    /** 主统驭科目（单选，沿用原本逻辑） */
     category: string;
+    /**
+     * 👑 常用科目（多选）V1
+     * 这个供应商平常会卖到的其他科目。例如 EK Fresh 同时卖蔬菜和水果。
+     * ⚠️ 纯粹是「开单时的便利提示」—— 不影响任何金额与记账逻辑，
+     *    只让应付账款拆分科目的下拉把这几个排在最上面，不用在长列表里找。
+     */
+    secondaryCategories?: string[];
     tags: string[];
     contact: string;
     contactPerson?: string;

@@ -1,194 +1,176 @@
-import React, { useState, useMemo } from "react";
-import { ScrollText, X, Search, ChevronDown, ExternalLink } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  ScrollText,
+  X,
+  Search,
+  ChevronDown,
+  ExternalLink,
+  Download,
+} from "lucide-react";
 import { LedgerItem } from "../treasuryTypes";
+import { buildLedgerCsv, downloadCsv } from "../treasuryUtils";
 
-// GroupedLedgerItem Component (Compact row design optimized for touch and readability)
+/** 同日同摘要的多笔记录会合并成一组，展开后看明细 */
 export const GroupedLedgerItem = ({ group }: { group: any }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isSingle = group.items.length === 1;
   const mainItem = group.items[0];
+  const isIn = group.type === "IN";
 
   return (
-    <div className="bg-white rounded-xl md:rounded-none shadow-xs md:shadow-none border border-gray-200 md:border-b md:border-t-0 md:border-x-0 overflow-hidden flex flex-col transition-all">
-      {/* --- MOBILE COMPACT VIEW (md:hidden) --- */}
+    <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
       <div
         onClick={() => !isSingle && setIsExpanded(!isExpanded)}
-        className="p-2.5 flex md:hidden items-center justify-between gap-3 active:bg-gray-100 transition-colors cursor-pointer select-none"
+        className={`flex min-h-[56px] items-center justify-between gap-3 px-3 py-2.5 ${
+          isSingle
+            ? ""
+            : "cursor-pointer active:bg-[#F6F7FB] md:hover:bg-[#F6F7FB]"
+        }`}
       >
-        <div className="min-w-0 flex-1 flex items-start gap-2">
-          {/* Status Dot / Flag */}
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           <span
-            className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
-              group.type === "IN"
-                ? "bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.4)]"
-                : "bg-[#EF4444] shadow-[0_0_6px_rgba(239,68,68,0.4)]"
+            className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+              isIn ? "bg-emerald-500" : "bg-rose-500"
             }`}
           />
 
           <div className="min-w-0 flex-1">
-            <div className="font-extrabold text-xs text-stone-900 truncate leading-tight flex items-center gap-1.5 flex-wrap">
-              <span className="truncate max-w-[160px]">{group.baseDesc}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className="truncate text-xs font-bold leading-tight text-[#111111]"
+                title={group.baseDesc}
+              >
+                {group.baseDesc}
+              </span>
               {!isSingle && (
-                <span className="text-[8px] bg-amber-50 text-[#111111] px-1 py-0.2 rounded font-black shrink-0">
-                  合{group.items.length}笔
+                <span className="shrink-0 rounded bg-[#F6F7FB] px-1.5 py-0.5 font-mono text-[9px] font-bold tabular-nums text-stone-500">
+                  {group.items.length} 笔
                 </span>
               )}
+              {isSingle && mainItem.linkUrl && (
+                <a
+                  href={mainItem.linkUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex shrink-0 items-center gap-0.5 rounded bg-[#F6F7FB] px-1.5 py-0.5 text-[9px] font-bold text-stone-600 hover:bg-stone-200"
+                >
+                  <ExternalLink size={9} strokeWidth={2.5} /> 单据
+                </a>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-1 text-[9px] text-stone-400 font-medium mt-0.5">
-              <span className="font-mono">{group.date}</span>
-              <span>•</span>
-              <span className="bg-stone-100 text-stone-600 px-1 rounded-sm text-[8px] font-bold">
-                {group.category}
-              </span>
+
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[10px] tabular-nums text-stone-400">
+              <span>{group.date}</span>
+              {group.category && (
+                <>
+                  <span>·</span>
+                  <span>{group.category}</span>
+                </>
+              )}
               {group.tag && (
                 <>
-                  <span>•</span>
-                  <span className="text-blue-600 font-bold">#{group.tag}</span>
+                  <span>·</span>
+                  <span>#{group.tag}</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        <div className="text-right shrink-0 flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <span
-            className={`font-mono font-black text-xs ${
-              group.type === "IN" ? "text-green-600" : "text-red-600"
+            className={`font-mono text-xs font-bold tabular-nums ${
+              isIn ? "text-emerald-600" : "text-rose-600"
             }`}
           >
-            {group.type === "IN" ? "+" : "-"}{" "}
+            {isIn ? "+" : "-"}
             {group.totalAmount.toLocaleString(undefined, {
               minimumFractionDigits: 2,
             })}
           </span>
           {!isSingle && (
             <ChevronDown
-              size={12}
-              className={`text-stone-500 transition-transform duration-200 ${
-                isExpanded ? "rotate-180 text-amber-500" : ""
+              size={14}
+              strokeWidth={2.5}
+              className={`text-stone-400 transition-transform duration-200 ${
+                isExpanded ? "rotate-180" : ""
               }`}
             />
           )}
         </div>
       </div>
 
-      {/* --- DESKTOP VIEW (hidden md:flex) --- */}
-      <div
-        onClick={() => !isSingle && setIsExpanded(!isExpanded)}
-        className={`hidden md:flex flex-col gap-1 px-3 py-2 border-b border-gray-100 transition-colors ${
-          !isSingle ? "cursor-pointer hover:bg-gray-50" : "hover:bg-gray-50"
-        }`}
-      >
-        {/* LINE 1: Description & Amount */}
-        <div className="flex justify-between items-center w-full gap-2">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span
-              className="font-extrabold text-stone-900 text-xs truncate"
-              title={group.baseDesc}
-            >
-              {group.baseDesc}
-            </span>
-            {!isSingle && (
-              <span className="text-[8px] bg-amber-50 text-[#111111] px-1 py-0.2 rounded font-black shrink-0">
-                合{group.items.length}笔
-              </span>
-            )}
-            {isSingle && mainItem.linkUrl && (
-              <a
-                href={mainItem.linkUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-[8px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 px-1 py-0.2 rounded flex items-center gap-0.5 font-bold transition-all border border-indigo-100 shrink-0"
-              >
-                <ExternalLink size={8} strokeWidth={3} /> 单据
-              </a>
-            )}
-          </div>
-
-          <div className="shrink-0 text-right font-mono font-black text-xs">
-            <span className={group.type === "IN" ? "text-green-600" : "text-red-600"}>
-              {group.type === "IN" ? "+" : "-"}{" "}
-              {group.totalAmount.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-        </div>
-
-        {/* LINE 2: Badges/Meta */}
-        <div className="flex justify-between items-center w-full gap-2 text-[10px]">
-          <div className="flex flex-wrap items-center gap-1.5 text-stone-400 font-semibold min-w-0">
-            <span
-              className={`px-1 py-0.2 rounded text-[8px] font-black border leading-none ${
-                group.type === "IN"
-                  ? "bg-green-50 text-green-700 border-green-100"
-                  : "bg-red-50 text-red-700 border-red-100"
-              }`}
-            >
-              {group.type}
-            </span>
-            <span className="font-mono text-stone-500 text-[9px]">{group.date}</span>
-            {group.category && (
-              <>
-                <span>•</span>
-                <span className="bg-stone-100 text-stone-600 px-1 rounded-sm text-[8px] font-bold">
-                  {group.category}
-                </span>
-              </>
-            )}
-            {group.tag && (
-              <>
-                <span>•</span>
-                <span className="text-blue-600 text-[8px] font-bold bg-blue-50 px-1 rounded-sm border border-blue-100">
-                  #{group.tag}
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="shrink-0 text-right font-mono text-[10px] text-stone-600 flex items-center gap-1">
-            {!isSingle && (
-              <ChevronDown
-                size={11}
-                className={`text-stone-500 transition-transform ${
-                  isExpanded ? "rotate-180 text-amber-500" : ""
-                }`}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
       {!isSingle && isExpanded && (
-        <div className="border-t border-gray-100 bg-gray-50/80 p-1.5 md:p-2 md:pl-10 space-y-1 animate-in slide-in-from-top-1 shadow-inner">
+        <div className="space-y-1 border-t border-[#E5E7EB] bg-[#F6F7FB] p-2">
           {group.items.map((item: any, idx: number) => (
             <div
               key={item.id}
-              className="flex justify-between items-center bg-white py-1 px-2.5 rounded-lg border border-gray-200 shadow-xs hover:border-gray-300 transition-colors"
+              className="flex items-center justify-between gap-2 rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2"
             >
-              <div className="text-[10px] md:text-xs text-gray-500 font-bold flex items-center gap-2 pr-2 overflow-hidden">
-                <span className="bg-[#111111] text-[#FFD200] rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] shrink-0 font-extrabold">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#111111] font-mono text-[9px] font-bold text-[#FFD200]">
                   {idx + 1}
                 </span>
-                <span className="truncate">{item.desc}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span
-                  className={`font-mono font-bold text-[10px] md:text-xs ${
-                    item.type === "IN" ? "text-[#22C55E]" : "text-[#EF4444]"
-                  }`}
-                >
-                  {item.type === "IN" ? "+" : "-"} RM{" "}
-                  {item.amount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
+                <span className="truncate text-[11px] font-medium text-stone-600">
+                  {item.desc}
                 </span>
               </div>
+              <span
+                className={`shrink-0 font-mono text-[11px] font-bold tabular-nums ${
+                  item.type === "IN" ? "text-emerald-600" : "text-rose-600"
+                }`}
+              >
+                {item.type === "IN" ? "+" : "-"}
+                {item.amount.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}
+              </span>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+/** 电脑端的收入 / 支出分栏 */
+const LedgerColumn: React.FC<{
+  title: string;
+  tone: "IN" | "OUT";
+  groups: any[];
+  total: number;
+}> = ({ title, tone, groups, total }) => {
+  const isIn = tone === "IN";
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-[#E5E7EB] bg-[#F6F7FB] px-3 py-2.5">
+        <span className="text-xs font-bold text-[#111111]">
+          {title}
+          <span className="ml-1.5 font-mono text-[10px] font-medium tabular-nums text-stone-400">
+            {groups.length} 笔
+          </span>
+        </span>
+        <span
+          className={`font-mono text-xs font-bold tabular-nums ${
+            isIn ? "text-emerald-600" : "text-rose-600"
+          }`}
+        >
+          {isIn ? "+" : "-"}RM{" "}
+          {total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5 bg-[#F6F7FB] p-2">
+        {groups.length === 0 ? (
+          <p className="px-3 py-10 text-center text-xs text-stone-400">
+            无符合的{title}记录
+          </p>
+        ) : (
+          groups.map((group) => (
+            <GroupedLedgerItem key={group.key} group={group} />
+          ))
+        )}
+      </div>
     </div>
   );
 };
@@ -200,6 +182,12 @@ interface TreasuryLedgerModalProps {
   items: LedgerItem[] | undefined;
 }
 
+const FLOW_TABS = [
+  ["ALL", "全部"],
+  ["IN", "收入"],
+  ["OUT", "支出"],
+] as const;
+
 export const TreasuryLedgerModal: React.FC<TreasuryLedgerModalProps> = ({
   isOpen,
   type,
@@ -209,19 +197,16 @@ export const TreasuryLedgerModal: React.FC<TreasuryLedgerModalProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFlow, setActiveFlow] = useState<"ALL" | "IN" | "OUT">("ALL");
 
-  // No background scroll lock to preserve standard native mobile scrolling
-
   const filteredItems = useMemo(() => {
     if (!items) return [];
-    
-    // Filter by tab type (ALL, IN, OUT)
+
     let flowFiltered = items;
     if (activeFlow !== "ALL") {
       flowFiltered = items.filter((item) => item.type === activeFlow);
     }
 
     if (!searchQuery.trim()) return flowFiltered;
-    
+
     const q = searchQuery.toLowerCase().trim();
     return flowFiltered.filter((item) => {
       const descMatch =
@@ -274,217 +259,213 @@ export const TreasuryLedgerModal: React.FC<TreasuryLedgerModalProps> = ({
     return groups;
   }, [filteredItems]);
 
-  const inGroups = useMemo(() => {
-    return groupedItems.filter((g) => g.type === "IN");
-  }, [groupedItems]);
+  const inGroups = useMemo(
+    () => groupedItems.filter((g) => g.type === "IN"),
+    [groupedItems],
+  );
+  const outGroups = useMemo(
+    () => groupedItems.filter((g) => g.type === "OUT"),
+    [groupedItems],
+  );
 
-  const outGroups = useMemo(() => {
-    return groupedItems.filter((g) => g.type === "OUT");
-  }, [groupedItems]);
+  // 导出对账用 CSV（只导出当前筛选结果，不改动任何数据）
+  const handleExportCsv = () => {
+    const { csv, count } = buildLedgerCsv(filteredItems, type);
+    if (!count) {
+      alert("目前没有可导出的流水记录。");
+      return;
+    }
+    const stamp = new Date().toISOString().split("T")[0];
+    downloadCsv(csv, `${type}_Ledger_${stamp}.csv`);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
+  // ⚠️ 必须 portal 到 body：留在 #treasury-page 内会导致 iOS 上无法滚动
   return (
-    <div className="fixed inset-0 bg-[#111111]/80 z-[200] flex items-center justify-center p-0 md:p-4 backdrop-blur-xs animate-in zoom-in duration-200">
-      <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative font-sans">
-        
+    <div
+      className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-0 md:p-4"
+      style={{ overscrollBehavior: "contain" }}
+    >
+      <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#F6F7FB] font-sans md:h-[88dvh] md:max-w-5xl md:rounded-2xl">
         {/* Header */}
         <header
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}
-          className="bg-[#111111] px-4 pb-4 flex justify-between items-center text-white shrink-0 border-b-4 border-[#FFD200] z-10 shadow-md"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+          className="z-10 flex shrink-0 items-center justify-between gap-2 bg-[#111111] px-4 pb-3 text-white"
         >
-          <div className="flex items-center gap-3">
-            <div className="bg-[#FFD200] text-[#111111] p-2 rounded-xl shadow-lg">
-              <ScrollText size={20} />
-            </div>
-            <div>
-              <h3 className="font-serif font-black text-base md:text-lg tracking-wide uppercase">
-                {type} LEDGER (流水账)
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+              <ScrollText
+                size={17}
+                strokeWidth={2.5}
+                className="text-[#FFD200]"
+              />
+            </span>
+            <div className="min-w-0">
+              <h3 className="truncate text-[15px] font-bold leading-tight">
+                {type === "CASH" ? "现金流水" : "银行流水"}
               </h3>
-              <p className="text-[9px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">
-                Transaction Ledger Details
+              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.1em] text-stone-500">
+                Ledger
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-            style={{ minWidth: "44px", minHeight: "44px" }}
-          >
-            <X size={20} />
-          </button>
+
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={handleExportCsv}
+              type="button"
+              className="flex h-11 items-center gap-1.5 rounded-xl px-3 transition-colors hover:bg-white/10 active:scale-95"
+              aria-label="导出 CSV"
+            >
+              <Download size={18} strokeWidth={2.5} />
+              <span className="hidden text-xs font-bold md:inline">导出</span>
+            </button>
+            <button
+              onClick={onClose}
+              type="button"
+              className="flex h-11 w-11 items-center justify-center rounded-xl transition-colors hover:bg-white/10 active:scale-95"
+              aria-label="关闭"
+            >
+              <X size={20} strokeWidth={2.5} />
+            </button>
+          </div>
         </header>
 
-        {/* Search & Tabs Row */}
-        <div className="bg-stone-50 border-b border-stone-200 p-3 flex flex-col gap-2.5 md:flex-row md:items-center shrink-0">
-          {/* Search box */}
-          <div className="flex items-center bg-white border border-stone-300 rounded-xl px-3 py-2 flex-grow shadow-inner">
-            <Search size={15} className="text-stone-400 mr-2 shrink-0" />
+        {/* 搜寻与筛选 */}
+        <div className="shrink-0 space-y-2 border-b border-[#E5E7EB] bg-white p-3">
+          <label className="flex h-11 items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3">
+            <Search
+              size={15}
+              strokeWidth={2.5}
+              className="shrink-0 text-stone-400"
+            />
             <input
               type="text"
-              placeholder="查询特定摘要、类型、分类或金额..."
+              placeholder="查询摘要、分类或金额"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent flex-grow font-bold text-xs md:text-sm text-stone-900 outline-none placeholder:text-stone-400 w-full"
+              className="w-full bg-transparent text-sm font-medium text-[#111111] outline-none placeholder:text-stone-400"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="p-1 hover:bg-stone-100 rounded-full text-stone-400 hover:text-stone-600 transition-colors"
+                type="button"
+                className="shrink-0 rounded-full p-1 text-stone-400 hover:bg-stone-100"
+                aria-label="清除"
               >
-                <X size={14} />
+                <X size={14} strokeWidth={2.5} />
               </button>
             )}
+          </label>
+
+          <div className="flex rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] p-1">
+            {FLOW_TABS.map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setActiveFlow(key)}
+                type="button"
+                className={`h-9 flex-1 rounded-lg text-xs font-bold transition-colors ${
+                  activeFlow === key
+                    ? key === "IN"
+                      ? "bg-white text-emerald-600"
+                      : key === "OUT"
+                        ? "bg-white text-rose-600"
+                        : "bg-white text-[#111111]"
+                    : "text-stone-500"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* Subtabs (Swivel switch) */}
-          <div className="flex bg-gray-200 border border-gray-300 rounded-xl p-0.5 shadow-xs shrink-0">
-            <button
-              onClick={() => setActiveFlow("ALL")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                activeFlow === "ALL"
-                  ? "bg-[#111111] text-white shadow-xs"
-                  : "text-stone-600 hover:text-[#111111]"
-              }`}
-            >
-              全部
-            </button>
-            <button
-              onClick={() => setActiveFlow("IN")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                activeFlow === "IN"
-                  ? "bg-[#22C55E] text-white shadow-xs"
-                  : "text-stone-600 hover:text-[#111111]"
-              }`}
-            >
-              🟢 收入 (IN)
-            </button>
-            <button
-              onClick={() => setActiveFlow("OUT")}
-              className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                activeFlow === "OUT"
-                  ? "bg-[#EF4444] text-white shadow-xs"
-                  : "text-stone-600 hover:text-[#111111]"
-              }`}
-            >
-              🔴 支出 (OUT)
-            </button>
+          {/* 小计 */}
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] px-3 py-2">
+            <span className="text-[11px] font-bold text-stone-500">
+              筛选后小计
+            </span>
+            <span className="font-mono text-xs font-bold tabular-nums">
+              <span className="text-emerald-600">
+                +RM{" "}
+                {totalIn.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+              <span className="mx-1.5 text-stone-300">/</span>
+              <span className="text-rose-600">
+                -RM{" "}
+                {totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+            </span>
           </div>
         </div>
 
-        {/* Flow Subtotals Stats Row */}
-        <div className="grid grid-cols-2 gap-2.5 p-3 bg-stone-100 border-b border-gray-200 shrink-0">
-          <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 md:p-3 flex items-center justify-between shadow-xs">
-            <div>
-              <p className="text-[9px] md:text-[10px] text-green-700 font-extrabold uppercase tracking-widest leading-none">
-                总流入 (TOTAL IN)
-              </p>
-              <p className="text-xs md:text-sm font-black text-[#22C55E] mt-1.5 font-mono">
-                +RM {totalIn.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <span className="text-sm md:text-base select-none">📈</span>
-          </div>
-          <div className="bg-red-50 border border-red-100 rounded-xl p-2.5 md:p-3 flex items-center justify-between shadow-xs">
-            <div>
-              <p className="text-[9px] md:text-[10px] text-red-700 font-extrabold uppercase tracking-widest leading-none">
-                总流出 (TOTAL OUT)
-              </p>
-              <p className="text-xs md:text-sm font-black text-[#EF4444] mt-1.5 font-mono">
-                -RM {totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <span className="text-sm md:text-base select-none">📉</span>
-          </div>
-        </div>
-
-        {/* Scrollable Container */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-3 md:p-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+        {/* 内容区 */}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto p-3"
+          style={{
+            overscrollBehavior: "contain",
+            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+          }}
+        >
           {groupedItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-gray-400 my-12">
-              <ScrollText size={48} className="opacity-20 mb-3" />
-              <p className="text-xs font-bold">
-                {searchQuery ? "没有找到符合搜索条件的项目" : "暂无交易明细记录"}
+            <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-stone-400">
+              <ScrollText size={36} strokeWidth={1.5} />
+              <p className="text-sm font-medium">
+                {searchQuery ? "没有符合的记录" : "本月暂无交易明细"}
               </p>
             </div>
           ) : (
-            <div>
-              {/* DESKTOP VIEW (Two columns) */}
+            <>
+              {/* 电脑：收入 / 支出 双栏 */}
               <div
-                className={`hidden md:grid ${
+                className={`hidden items-start gap-3 md:grid ${
                   activeFlow === "ALL" ? "grid-cols-2" : "grid-cols-1"
-                } gap-4 items-start`}
+                }`}
               >
-                {/* Inflows column */}
                 {(activeFlow === "ALL" || activeFlow === "IN") && (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden min-h-[300px]">
-                    <div className="bg-green-50/60 border-b border-gray-100 px-4 py-2.5 flex items-center justify-between sticky top-0 z-10 shrink-0">
-                      <h4 className="text-[10px] font-black text-green-700 tracking-wider flex items-center gap-1.5 uppercase leading-none">
-                        <span>📥</span> 收入流水 (INFLOWS)
-                      </h4>
-                      <span className="text-[10px] font-black text-[#22C55E] font-mono leading-none">
-                        共 {inGroups.length} 笔 • +RM{" "}
-                        {totalIn.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-gray-100 p-2 space-y-1.5 bg-stone-50/20">
-                      {inGroups.length === 0 ? (
-                        <div className="p-12 text-center text-stone-400 text-xs font-bold">
-                          无符合的收入记录
-                        </div>
-                      ) : (
-                        inGroups.map((group) => <GroupedLedgerItem key={group.key} group={group} />)
-                      )}
-                    </div>
-                  </div>
+                  <LedgerColumn
+                    title="收入"
+                    tone="IN"
+                    groups={inGroups}
+                    total={totalIn}
+                  />
                 )}
-
-                {/* Outflows column */}
                 {(activeFlow === "ALL" || activeFlow === "OUT") && (
-                  <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden min-h-[300px]">
-                    <div className="bg-red-50/60 border-b border-gray-100 px-4 py-2.5 flex items-center justify-between sticky top-0 z-10 shrink-0">
-                      <h4 className="text-[10px] font-black text-red-700 tracking-wider flex items-center gap-1.5 uppercase leading-none">
-                        <span>📤</span> 支出流水 (OUTFLOWS)
-                      </h4>
-                      <span className="text-[10px] font-black text-[#EF4444] font-mono leading-none">
-                        共 {outGroups.length} 笔 • -RM{" "}
-                        {totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-gray-100 p-2 space-y-1.5 bg-stone-50/20">
-                      {outGroups.length === 0 ? (
-                        <div className="p-12 text-center text-stone-400 text-xs font-bold">
-                          无符合的支出记录
-                        </div>
-                      ) : (
-                        outGroups.map((group) => <GroupedLedgerItem key={group.key} group={group} />)
-                      )}
-                    </div>
-                  </div>
+                  <LedgerColumn
+                    title="支出"
+                    tone="OUT"
+                    groups={outGroups}
+                    total={totalOut}
+                  />
                 )}
               </div>
 
-              {/* MOBILE VIEW (Single list timeline) */}
-              <div className="block md:hidden space-y-3">
-                <div className="flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs">
-                  <div className="bg-stone-50 border-b border-gray-200 px-3 py-2 flex items-center justify-between">
-                    <h4 className="text-[11px] font-bold text-stone-700 flex items-center gap-1.5">
-                      <span>📋</span> 交易明细时间流
-                    </h4>
-                    <span className="text-[9px] bg-[#111111] text-white font-bold px-1.5 py-0.5 rounded-sm">
-                      共 {groupedItems.length} 笔
-                    </span>
-                  </div>
-                  <div className="p-1.5 gap-1.5 flex flex-col bg-gray-50/50">
-                    {[...groupedItems]
-                      .sort((a, b) => b.date.localeCompare(a.date))
-                      .map((group) => (
-                        <GroupedLedgerItem key={group.key} group={group} />
-                      ))}
-                  </div>
+              {/* 手机：单栏时间流 */}
+              <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white md:hidden">
+                <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-[#F6F7FB] px-3 py-2.5">
+                  <span className="text-xs font-bold text-[#111111]">
+                    交易明细
+                  </span>
+                  <span className="font-mono text-[10px] font-bold tabular-nums text-stone-500">
+                    {groupedItems.length} 笔
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5 bg-[#F6F7FB] p-2">
+                  {[...groupedItems]
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .map((group) => (
+                      <GroupedLedgerItem key={group.key} group={group} />
+                    ))}
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

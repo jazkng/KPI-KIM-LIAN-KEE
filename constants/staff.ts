@@ -454,6 +454,59 @@ export const DEFAULT_ROLE_GUIDES: Record<string, RoleGuide> = {
     confirmedExpectation: '掌握基本备料，可以协助打荷或二锅。'
   },
 
+  // ------------------------------------------------------------------
+  // ACCOUNTING & MARKETING
+  // ------------------------------------------------------------------
+  'Accounting (会计)': {
+    description: '负责公司账务处理、应付账款、资金对账与月度报表编制，确保财务数据准确及时。',
+    coreValue: '准确 · 保密 · 及时',
+    safetyRedLine: '严禁挪用公司资金 / 严禁泄露财务与薪资资料 / 严禁未经批准修改历史账目',
+    employeeRules: GENERAL_EMPLOYEE_RULES,
+    duties: [
+        '录入与核对供应商发票 (Accounts Payable)',
+        '核对每日结算单与银行进账',
+        '跟进经常性支出 (租金/水电/网络) 的到期与付款',
+        '编制月度损益表 (P&L) 与成本分析',
+        '协助处理 SST／税务与外部会计师往来',
+        '每月银行对账 (Bank Reconciliation)'
+    ],
+    troubleshooting: [
+        { issue: "银行结余与系统对不上", solution: "先分开检查现金支出与银行支出是否被归错类，再核对付款日期 (paymentDate) 是否被写成发票日期 (time)。" },
+        { issue: "供应商说我们少付了", solution: "调出该供应商的应付账款明细与付款记录，核对发票号码与金额，确认后再回复。" },
+        { issue: "结算单现金差异超过 RM10", solution: "调出当日结算单，核对开班备用金、现金收入、现金支出与业主提支四项，找出差异后要求当班主管书面说明。" }
+    ],
+    salaryRange: { min: 3000, max: 4500 },
+    specialIncentive: '月结准时奖 (On-time Closing Bonus)',
+    enabledAllowances: ['ATTENDANCE', 'MEAL'],
+    probationExpectation: '熟悉系统内应付账款与结算模块，能独立录入单据。',
+    confirmedExpectation: '独立完成月度对账与报表，账目零错误。'
+  },
+
+  'Marketing Management (市场管理)': {
+    description: '负责品牌推广、营销活动策划与外卖平台运营，提升客流与营业额。',
+    coreValue: '创意 · 数据 · 回报率',
+    safetyRedLine: '严禁未经批准擅自承诺折扣或对外发布不实宣传',
+    employeeRules: GENERAL_EMPLOYEE_RULES,
+    duties: [
+        '策划并执行节日与促销活动',
+        '管理社交媒体内容 (FB / IG / 小红书 / TikTok)',
+        '跟进 GrabFood / ShopeeFood 平台的广告投放与 ROI',
+        '监控活动成本与实际带来的营业额增长',
+        '维护品牌形象与对外统一话术',
+        '收集顾客评价与市场反馈'
+    ],
+    troubleshooting: [
+        { issue: "促销活动亏本", solution: "立即调出活动期间的营业额与广告费，计算实际 ROI，低于预期立即暂停并检讨定价。" },
+        { issue: "外卖平台差评增加", solution: "调出该期间的运营日志与订单记录，找出出品或配送问题，24小时内回复顾客。" },
+        { issue: "广告费超出预算", solution: "先暂停低效广告组，保留 ROI 最高的组合，并向老板书面汇报。" }
+    ],
+    salaryRange: { min: 3000, max: 5000 },
+    specialIncentive: '营销 ROI 达标奖 (Campaign ROI Bonus)',
+    enabledAllowances: ['ATTENDANCE', 'MEAL'],
+    probationExpectation: '熟悉品牌调性，能独立产出社交媒体内容。',
+    confirmedExpectation: '独立策划活动并达成设定的 ROI 目标。'
+  },
+
   // OWNER ROLE DEFAULT
   'Owner (老板)': {
     description: 'Company Owner',
@@ -494,6 +547,8 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     // ✅ NEW ROLES
     { id: 'm_hr',    title: 'HR Management (人事管理)',    department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['招聘', '档案管理', '薪资处理', '劳资关系'], allowedModules: ['HR_FILES', 'REPORTS', 'ROSTER', 'ASSESSMENT'] },
     { id: 'm_store', title: 'Store Management (店面管理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'DEPARTMENT_HEAD', duties: ['库存管理', '采购协调', '设备维护', '营业跟进'], allowedModules: ['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'SUPPLIER_CONTACTS', 'LOGBOOK', 'SOP_INSPECT', 'REPORTS'] },
+    { id: 'm_acct',   title: 'Accounting (会计)',        department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'BRANCH_MANAGER', duties: ['账务处理', '应付账款', '资金对账', '报表编制'], allowedModules: ['AP', 'BILLS', 'TREASURY', 'REPORTS', 'SELF_INVOICE', 'SETTLEMENT'] },
+    { id: 'm_mkt',    title: 'Marketing Management (市场管理)', department: 'MANAGEMENT', rankCategory: 'MANAGEMENT', orgLevel: 'OWNER', duties: ['品牌推广', '营销活动', '社交媒体', '外卖平台运营'], allowedModules: ['PLANNING', 'REPORTS', 'MENU_MANAGEMENT', 'PRICE_MONITOR'] },
     { id: 'x_delivery', title: 'Delivery (外卖)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['外卖配送'], allowedModules: [] },
     { id: 'x_order_checker', title: 'Order Checker (看单)', department: 'FOH', rankCategory: 'ENTRY_LEVEL', orgLevel: 'CREW', duties: ['核单'], allowedModules: [] },
 ];

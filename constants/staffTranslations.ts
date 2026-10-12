@@ -840,6 +840,11 @@ export const STAFF_MODULE_TRANSLATIONS: Record<string, {
     desc: { zh: "self invoice模块", en: "Self Invoice Module", my: "ကိုယ်တိုင်အသုံးစရိတ် ဖြတ်ပိုင်း ထုတ်လုပ်ခြင်း" },
     guide: { zh: "请遵循操作指引", en: "Please follow standard Self Invoice procedures.", my: "လုပ်ငန်းစဉ်များကို လိုက်နာပါ" }
   },
+  "STAFF_CASH": {
+    label: { zh: "兼职与预支", en: "Part-Time & Advance", my: "အချိန်ပိုင်းလုပ်ခ နှင့် ကြိုတင်လစာ" },
+    desc: { zh: "主管登记预支 / 兼职，A5 三方签收单", en: "Record salary advances & part-time wages, print A5 vouchers", my: "ကြိုတင်လစာ / အချိန်ပိုင်းလုပ်ခ မှတ်တမ်းနှင့် A5 လက်မှတ်စာရွက်" },
+    guide: { zh: "预支保存即生效，自动在当月薪水扣回；记错请找人事修改。", en: "Advances take effect immediately and are deducted from that month's salary.", my: "ကြိုတင်ငွေသည် ချက်ချင်းအကျုံးဝင်ပြီး ထိုလ၏လစာမှ နုတ်ယူပါမည်။" }
+  },
   "TREASURY": {
     label: { zh: "TREASURY", en: "Treasury", my: "ငွေတိုက်နှင့် ဘဏ္ဍာရေး" },
     desc: { zh: "treasury模块", en: "Treasury Module", my: "လက်ကျန်ငွေ၊ အရန်ငွေနှင့် အကောင့်မျိုးစုံစာရင်း တိုက်ဆိုင်စစ်ဆေးခြင်း" },

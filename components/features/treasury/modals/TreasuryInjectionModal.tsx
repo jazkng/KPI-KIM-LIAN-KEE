@@ -32,15 +32,34 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
   return (
     <TreasuryBottomSheet
       open={open}
-      title="股东注资 (Injection)"
+      title="股东注资"
       subtitle="Shareholder Capital Injection"
       onClose={onClose}
       icon={<PlusCircle size={20} />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant="primary"
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                确认注资
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
         {/* Shareholder selection */}
         <TreasurySelect
-          label="Shareholder (股东)"
+          label="股东"
           id="inj-sh"
           value={form.shareholderName || ""}
           onChange={(e) => setForm({ ...form, shareholderName: e.target.value })}
@@ -50,7 +69,7 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
 
         {/* Amount Field */}
         <TreasuryFormField
-          label="Amount (金额)"
+          label="金额"
           id="inj-amount"
           type="number"
           step="any"
@@ -65,7 +84,7 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
         {/* Account selection */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-bold text-[#111111]">
-            Into Account (存入账户) <span className="text-red-500 font-extrabold">*</span>
+            Into Account (存入账户) <span className="text-rose-600 font-extrabold">*</span>
           </span>
           <div className="flex gap-2">
             <button
@@ -73,8 +92,8 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
               onClick={() => setForm({ ...form, toAccount: "BANK" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.toAccount === "BANK"
-                  ? "bg-blue-50 border-blue-500 text-blue-600"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-[#F6F7FB] border-blue-500 text-[#111111]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               BANK
@@ -84,8 +103,8 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
               onClick={() => setForm({ ...form, toAccount: "CASH" })}
               className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 form.toAccount === "CASH"
-                  ? "bg-green-50 border-[#22C55E] text-[#22C55E]"
-                  : "bg-white border-[#E5E7EB] text-gray-500 hover:text-[#111111]"
+                  ? "bg-emerald-50 border-[#22C55E] text-[#22C55E]"
+                  : "bg-white border-[#E5E7EB] text-stone-500 hover:text-[#111111]"
               }`}
             >
               CASH
@@ -95,7 +114,7 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
 
         {/* Date Field */}
         <TreasuryFormField
-          label="Date (日期)"
+          label="日期"
           id="inj-date"
           type="date"
           value={form.date || ""}
@@ -105,32 +124,13 @@ export const TreasuryInjectionModal: React.FC<TreasuryInjectionModalProps> = ({
 
         {/* Note Field */}
         <TreasuryFormField
-          label="Note (备注)"
+          label="备注"
           id="inj-note"
           type="text"
           value={form.note || ""}
           onChange={(e) => setForm({ ...form, note: e.target.value })}
           placeholder="例如：补充营运资金"
         />
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-2">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant="primary"
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            确认注资
-          </TreasuryButton>
-        </div>
       </div>
     </TreasuryBottomSheet>
   );

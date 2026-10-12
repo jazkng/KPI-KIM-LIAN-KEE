@@ -166,6 +166,23 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                         <input type="text" value={productForm.name || ''} onChange={e => onFormChange({...productForm, name: e.target.value})} className={SUP_INPUT_STYLE} placeholder="e.g. Fresh Chicken Breast"/>
                     </div>
 
+                    {/* 👑 供应商编号 —— 原本表单缺这个栏位，导致有值也改不掉、没值也填不了 */}
+                    <div>
+                        <label className={SUP_LABEL_STYLE}>Supplier Code (供应商编号 — 选填)</label>
+                        <input
+                            type="text"
+                            value={productForm.supplierCode || ''}
+                            onChange={e => onFormChange({ ...productForm, supplierCode: e.target.value })}
+                            className={`${SUP_INPUT_STYLE} font-mono`}
+                            placeholder="照供应商报价单抄，例如 04-008"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                            这是<b>供应商自己的产品编号</b>，会印在采购单 (PO) 上给对方看。
+                            请对着报价单抄，<b>不要自己编</b> —— 编错了对方会对错货。
+                            没有就留空，PO 会改印产品名称。
+                        </p>
+                    </div>
+
                     <div>
                         <label className={SUP_LABEL_STYLE}>Pricing Mode (计价模式)</label>
                         <select

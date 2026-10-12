@@ -3,17 +3,17 @@ import {
   Users,
   UserPlus,
   Trash2,
-  Settings,
+  Pencil,
   PiggyBank,
   ArrowDownLeft,
   ArrowUpRight,
   ChevronDown,
-  ChevronUp,
   MinusCircle,
   Gem,
 } from "lucide-react";
 import { FundTransfer } from "../treasuryTypes";
-import { TreasuryButton } from "../components/TreasuryButton";
+import { TreasuryCard } from "../components/TreasuryCard";
+import { TreasurySectionHeader } from "../components/TreasurySectionHeader";
 
 interface Shareholder {
   id: string;
@@ -40,6 +40,62 @@ interface TreasuryEquityTabProps {
   formatMoney: (val: number) => string;
 }
 
+/** 姓名首字圆形头像 */
+const Avatar: React.FC<{ name: string }> = ({ name }) => (
+  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#111111] text-xs font-bold text-[#FFD200]">
+    {name ? name.charAt(0).toUpperCase() : "?"}
+  </span>
+);
+
+/** 卡片右上角的小工具按钮，尺寸满足触控 */
+const IconButton: React.FC<{
+  onClick: () => void;
+  label: string;
+  danger?: boolean;
+  children: React.ReactNode;
+}> = ({ onClick, label, danger, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={label}
+    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white transition-colors active:scale-95 ${
+      danger
+        ? "text-stone-400 hover:bg-[#8B0000] hover:text-white"
+        : "text-stone-500 hover:bg-[#F6F7FB] hover:text-[#111111]"
+    }`}
+  >
+    {children}
+  </button>
+);
+
+/** 三栏数字统计格 */
+const StatCell: React.FC<{
+  label: string;
+  value: string;
+  tone?: "ink" | "up" | "down";
+  badge?: string;
+}> = ({ label, value, tone = "ink", badge }) => (
+  <div className="min-w-0 px-2 py-2.5 text-center">
+    <p className="text-[10px] font-bold text-stone-500">{label}</p>
+    <p
+      className={`mt-1 truncate font-mono text-[11px] font-bold tabular-nums ${
+        tone === "up"
+          ? "text-emerald-600"
+          : tone === "down"
+            ? "text-rose-600"
+            : "text-[#111111]"
+      }`}
+    >
+      {value}
+    </p>
+    {badge && (
+      <span className="mt-1 inline-block rounded bg-white px-1.5 py-0.5 font-mono text-[9px] font-bold tabular-nums text-stone-500">
+        {badge}
+      </span>
+    )}
+  </div>
+);
+
 export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
   shareholders = [],
   totalCapital,
@@ -56,50 +112,51 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
   onDeleteTransfer,
   formatMoney,
 }) => {
-  const [expandedDividends, setExpandedDividends] = useState<Record<string, boolean>>({});
+  const [expandedDividends, setExpandedDividends] = useState<
+    Record<string, boolean>
+  >({});
 
   const toggleDividendExpand = (name: string) => {
-    setExpandedDividends((prev) => ({
-      ...prev,
-      [name]: !prev[name],
-    }));
+    setExpandedDividends((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-200">
-      
-      {/* Shareholders List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
-        <div className="flex justify-between items-center mb-5">
-          <div>
-            <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
-              <Users size={18} className="text-[#111111]" /> 股东与实收资本
-            </h3>
-            <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1 tracking-wider">
-              Paid-up Capital: {formatMoney(totalCapital)}
-            </p>
-          </div>
-          <TreasuryButton
-            variant="primary"
-            onClick={onAddShareholder}
-            className="!h-10 px-4 text-xs font-bold"
-          >
-            <UserPlus size={14} /> 添加股东
-          </TreasuryButton>
+    <div className="mx-auto max-w-4xl space-y-4 md:space-y-5">
+      {/* ── 股东与实收资本 ───────────────── */}
+      <TreasuryCard>
+        <TreasurySectionHeader
+          title="股东与实收资本"
+          subtitle="Shareholders"
+          icon={Users}
+          action={
+            <button
+              type="button"
+              onClick={onAddShareholder}
+              className="flex h-10 items-center gap-1.5 rounded-xl bg-[#FFD200] px-3.5 text-xs font-bold text-[#111111] transition-colors hover:bg-[#E5C100] active:scale-95"
+            >
+              <UserPlus size={14} strokeWidth={2.5} /> 添加股东
+            </button>
+          }
+        />
+
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-[#E5E7EB] bg-[#F6F7FB] px-3 py-2.5">
+          <span className="text-[11px] font-bold text-stone-500">实收资本</span>
+          <span className="font-mono text-sm font-bold tabular-nums text-[#111111]">
+            {formatMoney(totalCapital)}
+          </span>
         </div>
 
-        {/* Shareholders Grid */}
         {shareholders.length === 0 ? (
-          <div className="text-center py-8 text-xs text-gray-400 italic">
-            暂无股东资料，请点击右上角按钮添加。
-          </div>
+          <p className="py-8 text-center text-xs text-stone-400">
+            暂无股东资料，请点击上方按钮添加。
+          </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 md:gap-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {shareholders.map((s) => {
               const shareholderTransfers = transfers.filter(
                 (t) =>
                   (t.fromAccount === "SHAREHOLDER" && t.note?.includes(s.name)) ||
-                  (t.toAccount === "SHAREHOLDER" && t.note?.includes(s.name))
+                  (t.toAccount === "SHAREHOLDER" && t.note?.includes(s.name)),
               );
               const totalInject = shareholderTransfers
                 .filter((t) => t.fromAccount === "SHAREHOLDER")
@@ -109,157 +166,137 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                 .reduce((sum, t) => sum + t.amount, 0);
               const netInjection = totalInject - totalRepay;
 
-              const shareholderDividends = dividendHistory.filter((t) => t.company === s.name);
-              const totalDividend = shareholderDividends.reduce((sum, t) => sum + t.amount, 0);
+              const shareholderDividends = dividendHistory.filter(
+                (t) => t.company === s.name,
+              );
+              const totalDividend = shareholderDividends.reduce(
+                (sum, t) => sum + t.amount,
+                0,
+              );
 
               return (
                 <div
                   key={s.id}
-                  className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col justify-between hover:border-gray-300 transition-colors relative"
+                  className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white"
                 >
-                  <div className="w-full">
-                    {/* Shareholder Metadata Header */}
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-extrabold text-sm text-[#111111]">
+                  <div className="flex items-center justify-between gap-2 border-b border-[#E5E7EB] px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar name={s.name} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold leading-tight text-[#111111]">
                           {s.name}
-                        </h4>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 block">
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-[0.1em] text-stone-400">
                           {s.role || "Investor"}
-                        </span>
-                      </div>
-                      
-                      {/* Action buttons */}
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => onEditShareholder(s)}
-                          className="p-1.5 bg-white border border-gray-200 rounded-lg text-gray-400 hover:text-[#111111] shadow-xs cursor-pointer"
-                          title="编辑股东"
-                        >
-                          <Settings size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteShareholder(s.id)}
-                          className="p-1.5 bg-white border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 shadow-xs cursor-pointer"
-                          title="删除股东"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        </p>
                       </div>
                     </div>
 
-                    {/* Numeric breakdown cards */}
-                    <div className="grid grid-cols-3 gap-2 mt-4">
-                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
-                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                          股本 (Capital)
-                        </div>
-                        <div className="text-[11px] font-mono font-black text-blue-600 leading-none">
-                          {formatMoney(s.investmentAmount)}
-                        </div>
-                        <div className="text-[8px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded-full inline-block mt-1 font-black">
-                          {s.equityPercentage}%
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
-                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                          净垫资 (Net Inj.)
-                        </div>
-                        <div
-                          className={`text-[11px] font-mono font-black leading-none ${
-                            netInjection >= 0 ? "text-green-600" : "text-red-500"
-                          }`}
-                        >
-                          {formatMoney(netInjection)}
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
-                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                          已分红 (Dividends)
-                        </div>
-                        <div className="text-[11px] font-mono font-black text-red-500 leading-none">
-                          {formatMoney(totalDividend)}
-                        </div>
-                      </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <IconButton
+                        onClick={() => onEditShareholder(s)}
+                        label="编辑股东"
+                      >
+                        <Pencil size={14} strokeWidth={2.5} />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => onDeleteShareholder(s.id)}
+                        label="删除股东"
+                        danger
+                      >
+                        <Trash2 size={14} strokeWidth={2.5} />
+                      </IconButton>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 divide-x divide-[#E5E7EB] bg-[#F6F7FB]">
+                    <StatCell
+                      label="股本"
+                      value={formatMoney(s.investmentAmount)}
+                      badge={`${s.equityPercentage}%`}
+                    />
+                    <StatCell
+                      label="净垫资"
+                      value={formatMoney(netInjection)}
+                      tone={netInjection >= 0 ? "up" : "down"}
+                    />
+                    <StatCell
+                      label="已分红"
+                      value={formatMoney(totalDividend)}
+                      tone="down"
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+      </TreasuryCard>
 
-      {/* Shareholder Injections & Repayments List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-5">
-          <div>
-            <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
-              <PiggyBank size={18} className="text-[#111111]" /> 股东注资与还款记录
-            </h3>
-            <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1 tracking-wider uppercase">
-              Capital Injection & Repayments
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onAddRepayment}
-              className="flex-1 md:flex-none bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
-            >
-              <ArrowDownLeft size={14} /> 还钱给股东
-            </button>
-            <button
-              type="button"
-              onClick={onAddInjection}
-              className="flex-1 md:flex-none bg-green-50 text-green-700 border border-green-100 px-3 py-2 rounded-xl text-xs font-bold hover:bg-green-100 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95 transition"
-            >
-              <ArrowUpRight size={14} /> 股东注资
-            </button>
-          </div>
+      {/* ── 注资与还款 ───────────────────── */}
+      <TreasuryCard>
+        <TreasurySectionHeader
+          title="股东注资与还款"
+          subtitle="Injection & Repayment"
+          icon={PiggyBank}
+        />
+
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onAddInjection}
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white text-xs font-bold text-[#111111] transition-colors hover:bg-[#F6F7FB] active:scale-95"
+          >
+            <ArrowUpRight size={15} strokeWidth={2.5} className="text-emerald-600" />
+            股东注资
+          </button>
+          <button
+            type="button"
+            onClick={onAddRepayment}
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white text-xs font-bold text-[#111111] transition-colors hover:bg-[#F6F7FB] active:scale-95"
+          >
+            <ArrowDownLeft size={15} strokeWidth={2.5} className="text-rose-600" />
+            还钱给股东
+          </button>
         </div>
 
-        {/* Action list */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {(() => {
             const shareholderTransfers = transfers.filter(
               (t) =>
-                t.fromAccount === ("SHAREHOLDER" as any) || t.toAccount === ("SHAREHOLDER" as any)
+                t.fromAccount === ("SHAREHOLDER" as any) ||
+                t.toAccount === ("SHAREHOLDER" as any),
             );
             if (shareholderTransfers.length === 0) {
               return (
-                <div className="text-center py-8 text-xs text-gray-400 italic">
-                  暂无记录
-                </div>
+                <p className="py-8 text-center text-xs text-stone-400">暂无记录</p>
               );
             }
 
-            // Group by shareholder name
-            const grouped = shareholderTransfers.reduce((acc, t) => {
-              let name = "Unknown";
-              if (t.toAccount === ("SHAREHOLDER" as any)) {
-                const match = t.note?.match(/\[还钱给股东\](.*?):/);
-                name = match ? match[1].trim() : "Unknown";
-              } else {
-                const match = t.note?.match(/\[股东注资\](.*?):/);
-                if (match) {
-                  name = match[1].trim();
+            const grouped = shareholderTransfers.reduce(
+              (acc, t) => {
+                let name = "Unknown";
+                if (t.toAccount === ("SHAREHOLDER" as any)) {
+                  const match = t.note?.match(/\[还钱给股东\](.*?):/);
+                  name = match ? match[1].trim() : "Unknown";
                 } else {
-                  name =
-                    t.note
-                      ?.replace(/\[股东注资\]|\[垫资\]/g, "")
-                      .split(":")[0]
-                      ?.trim() || "Unknown";
+                  const match = t.note?.match(/\[股东注资\](.*?):/);
+                  if (match) {
+                    name = match[1].trim();
+                  } else {
+                    name =
+                      t.note
+                        ?.replace(/\[股东注资\]|\[垫资\]/g, "")
+                        .split(":")[0]
+                        ?.trim() || "Unknown";
+                  }
                 }
-              }
-              if (!acc[name]) acc[name] = [];
-              acc[name].push(t);
-              return acc;
-            }, {} as Record<string, typeof shareholderTransfers>);
+                if (!acc[name]) acc[name] = [];
+                acc[name].push(t);
+                return acc;
+              },
+              {} as Record<string, typeof shareholderTransfers>,
+            );
 
             return Object.entries(grouped).map(([name, items]) => {
               const isExpanded = expandedInjections[name];
@@ -274,87 +311,106 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
               return (
                 <div
                   key={name}
-                  className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-xs transition-all duration-200"
+                  className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white"
                 >
-                  {/* Collapsible header row */}
-                  <div
+                  <button
+                    type="button"
                     onClick={() => onToggleExpand(name)}
-                    className="cursor-pointer bg-gray-50/50 p-3 flex justify-between items-center border-b border-gray-200 hover:bg-gray-100/50 transition-colors touch-pan-y"
+                    aria-expanded={!!isExpanded}
+                    className="flex min-h-[60px] w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F6F7FB] active:bg-stone-100"
                   >
-                    <div className="font-extrabold text-xs text-[#111111] flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">
-                        {name ? name.charAt(0).toUpperCase() : "?"}
-                      </div>
-                      <div>
-                        <div>{name}</div>
-                        <div className="text-[9px] text-gray-400 font-medium mt-0.5">
-                          净垫资:{" "}
-                          <span className={netTotal >= 0 ? "text-green-600" : "text-red-500"}>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar name={name} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold leading-tight text-[#111111]">
+                          {name}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[10px] tabular-nums text-stone-400">
+                          净垫资{" "}
+                          <span
+                            className={
+                              netTotal >= 0 ? "text-emerald-600" : "text-rose-600"
+                            }
+                          >
                             {formatMoney(netTotal)}
                           </span>
-                        </div>
+                        </p>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-[9px] text-gray-400 font-bold">
-                          总注资: <span className="text-green-600">+{formatMoney(totalInject)}</span>
-                        </div>
-                        <div className="text-[9px] text-gray-400 font-bold">
-                          已还款: <span className="text-indigo-500">-{formatMoney(totalRepay)}</span>
-                        </div>
-                      </div>
-                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-200">
-                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Sublist mapping */}
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <div className="text-right font-mono text-[10px] tabular-nums">
+                        <p className="text-emerald-600">
+                          +{formatMoney(totalInject)}
+                        </p>
+                        <p className="text-rose-600">-{formatMoney(totalRepay)}</p>
+                      </div>
+                      <ChevronDown
+                        size={16}
+                        strokeWidth={2.5}
+                        className={`text-stone-400 transition-transform duration-200 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
                   {isExpanded && (
-                    <div className="p-1.5 space-y-1 bg-white animate-in slide-in-from-top-2 duration-150">
+                    <div className="space-y-1 border-t border-[#E5E7EB] bg-[#F6F7FB] p-2">
                       {items
-                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .sort(
+                          (a, b) =>
+                            new Date(b.date).getTime() - new Date(a.date).getTime(),
+                        )
                         .map((t) => {
                           const isRepay = t.toAccount === ("SHAREHOLDER" as any);
                           return (
                             <div
                               key={t.id}
-                              className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition border border-transparent hover:border-gray-100"
+                              className="flex items-center justify-between gap-2 rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2"
                             >
-                              <div>
-                                <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
                                   {isRepay ? (
-                                    <ArrowDownLeft size={12} className="text-indigo-500" />
+                                    <ArrowDownLeft
+                                      size={12}
+                                      strokeWidth={2.5}
+                                      className="shrink-0 text-rose-500"
+                                    />
                                   ) : (
-                                    <ArrowUpRight size={12} className="text-green-500" />
+                                    <ArrowUpRight
+                                      size={12}
+                                      strokeWidth={2.5}
+                                      className="shrink-0 text-emerald-500"
+                                    />
                                   )}
-                                  {t.note?.split(":").slice(1).join(":").trim() ||
-                                    (isRepay ? "Repayment" : "Injection")}
+                                  <span className="truncate text-xs font-bold text-[#111111]">
+                                    {t.note?.split(":").slice(1).join(":").trim() ||
+                                      (isRepay ? "还款" : "注资")}
+                                  </span>
                                 </div>
-                                <div className="text-[10px] text-gray-400 font-medium mt-0.5">
-                                  {t.date} • {isRepay ? `From ${t.fromAccount}` : `Into ${t.toAccount}`}
-                                </div>
+                                <p className="mt-0.5 font-mono text-[10px] tabular-nums text-stone-400">
+                                  {t.date} ·{" "}
+                                  {isRepay ? t.fromAccount : t.toAccount}
+                                </p>
                               </div>
-                              
-                              <div className="flex items-center gap-3 shrink-0">
+
+                              <div className="flex shrink-0 items-center gap-1.5">
                                 <span
-                                  className={`font-mono font-bold text-xs ${
-                                    isRepay ? "text-indigo-600" : "text-green-600"
+                                  className={`font-mono text-xs font-bold tabular-nums ${
+                                    isRepay ? "text-rose-600" : "text-emerald-600"
                                   }`}
                                 >
                                   {isRepay ? "-" : "+"}
                                   {formatMoney(t.amount)}
                                 </span>
-                                <button
-                                  type="button"
+                                <IconButton
                                   onClick={() => onDeleteTransfer(t.id)}
-                                  className="text-gray-300 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-lg cursor-pointer"
-                                  style={{ minWidth: "36px", minHeight: "36px" }}
+                                  label="删除记录"
+                                  danger
                                 >
-                                  <Trash2 size={13} />
-                                </button>
+                                  <Trash2 size={13} strokeWidth={2.5} />
+                                </IconButton>
                               </div>
                             </div>
                           );
@@ -366,34 +422,33 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
             });
           })()}
         </div>
-      </div>
+      </TreasuryCard>
 
-      {/* Dividend Payouts List Card */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs border border-gray-200">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h3 className="font-extrabold text-sm md:text-base text-[#111111] flex items-center gap-2">
-              <Gem size={18} className="text-[#111111]" /> 股东分红 / 提款
-            </h3>
-            <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1 tracking-wider uppercase">
-              Dividend Payouts (Wages)
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onAddDividend}
-            className="bg-red-50 text-red-700 border border-red-100 px-3 md:px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-100 flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 transition"
-          >
-            <MinusCircle size={14} /> 分发分红
-          </button>
-        </div>
-        <div className="space-y-4">
+      {/* ── 股东分红 ─────────────────────── */}
+      <TreasuryCard>
+        <TreasurySectionHeader
+          title="股东分红"
+          subtitle="Dividend Payouts"
+          icon={Gem}
+          action={
+            <button
+              type="button"
+              onClick={onAddDividend}
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3.5 text-xs font-bold text-[#111111] transition-colors hover:bg-[#F6F7FB] active:scale-95"
+            >
+              <MinusCircle size={14} strokeWidth={2.5} className="text-rose-600" />
+              分发分红
+            </button>
+          }
+        />
+
+        <div className="space-y-2">
           {(() => {
             if (dividendHistory.length === 0) {
               return (
-                <div className="text-center py-6 text-gray-400 text-xs italic">
+                <p className="py-8 text-center text-xs text-stone-400">
                   暂无分红记录
-                </div>
+                </p>
               );
             }
 
@@ -404,77 +459,83 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
                 acc[name].push(t);
                 return acc;
               },
-              {} as Record<string, any[]>
+              {} as Record<string, any[]>,
             );
 
             return Object.entries(grouped).map(([name, items]) => {
               const isExpanded = expandedDividends[name];
-              const totalDividend = (items as any[]).reduce((sum, t) => sum + t.amount, 0);
+              const totalDividend = (items as any[]).reduce(
+                (sum, t) => sum + t.amount,
+                0,
+              );
 
               return (
                 <div
                   key={name}
-                  className="border border-red-100 rounded-2xl overflow-hidden bg-white shadow-xs transition-all duration-200"
+                  className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white"
                 >
-                  <div
+                  <button
+                    type="button"
                     onClick={() => toggleDividendExpand(name)}
-                    className="cursor-pointer bg-red-50/50 p-3.5 flex justify-between items-center border-b border-red-50 hover:bg-red-50 transition-colors touch-pan-y"
+                    aria-expanded={!!isExpanded}
+                    className="flex min-h-[60px] w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F6F7FB] active:bg-stone-100"
                   >
-                    <div className="font-black text-xs text-gray-900 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
-                        {name ? name.charAt(0).toUpperCase() : "?"}
-                      </div>
-                      <div>
-                        <div>{name}</div>
-                        <div className="text-[10px] text-gray-500 font-normal">
-                          累计分红:{" "}
-                          <span className="text-red-500 font-bold">
-                            {formatMoney(totalDividend)}
-                          </span>
-                        </div>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar name={name} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold leading-tight text-[#111111]">
+                          {name}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[10px] tabular-nums text-stone-400">
+                          {(items as any[]).length} 笔
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+
+                    <div className="flex shrink-0 items-center gap-2.5">
                       <div className="text-right">
-                        <div className="text-[10px] text-gray-400 font-bold">
-                          已付:{" "}
-                          <span className="text-red-500 font-bold">
-                            {formatMoney(totalDividend)}
-                          </span>
-                        </div>
+                        <p className="text-[10px] font-bold text-stone-500">
+                          累计分红
+                        </p>
+                        <p className="font-mono text-xs font-bold tabular-nums text-rose-600">
+                          {formatMoney(totalDividend)}
+                        </p>
                       </div>
-                      <div className="text-gray-400 bg-white p-1 rounded-full shadow-xs border border-gray-200">
-                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                      </div>
+                      <ChevronDown
+                        size={16}
+                        strokeWidth={2.5}
+                        className={`text-stone-400 transition-transform duration-200 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
                     </div>
-                  </div>
+                  </button>
+
                   {isExpanded && (
-                    <div className="p-2 space-y-1 bg-white animate-in slide-in-from-top-2 duration-150">
+                    <div className="space-y-1 border-t border-[#E5E7EB] bg-[#F6F7FB] p-2">
                       {(items as any[])
-                        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-                        .map((t) => {
-                          return (
-                            <div
-                              key={t.id}
-                              className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors border border-transparent hover:border-gray-100"
-                            >
-                              <div>
-                                <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                                  <ArrowDownLeft size={12} className="text-red-500" />
-                                  {t.note || "Dividend"}
-                                </div>
-                                <div className="text-[10px] text-gray-400 font-medium mt-0.5">
-                                  {t.time.split("T")[0]} • Via {t.paymentMethod}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold text-xs text-red-600">
-                                  -{formatMoney(t.amount)}
-                                </span>
-                              </div>
+                        .sort(
+                          (a, b) =>
+                            new Date(b.time).getTime() - new Date(a.time).getTime(),
+                        )
+                        .map((t) => (
+                          <div
+                            key={t.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-bold text-[#111111]">
+                                {t.note || "分红"}
+                              </p>
+                              <p className="mt-0.5 font-mono text-[10px] tabular-nums text-stone-400">
+                                {t.time.split("T")[0]} · {t.paymentMethod}
+                              </p>
                             </div>
-                          );
-                        })}
+                            <span className="shrink-0 font-mono text-xs font-bold tabular-nums text-rose-600">
+                              -{formatMoney(t.amount)}
+                            </span>
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -482,7 +543,7 @@ export const TreasuryEquityTab: React.FC<TreasuryEquityTabProps> = ({
             });
           })()}
         </div>
-      </div>
+      </TreasuryCard>
     </div>
   );
 };

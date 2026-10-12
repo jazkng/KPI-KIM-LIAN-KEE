@@ -31,10 +31,29 @@ export const TreasuryTransferModal: React.FC<TreasuryTransferModalProps> = ({
       subtitle="Fund Transfer"
       onClose={onClose}
       icon={<ArrowRightLeft size={20} />}
+      footer={
+        <div className="flex gap-3">
+              <TreasuryButton
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                取消
+              </TreasuryButton>
+              <TreasuryButton
+                variant="primary"
+                onClick={onSave}
+                loading={loading}
+                className="flex-[2]"
+              >
+                确认提交
+              </TreasuryButton>
+        </div>
+      }
     >
       <div className="space-y-4">
         {/* Toggle between DEPOSIT (Cash -> Bank) and WITHDRAWAL (Bank -> Cash) */}
-        <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+        <div className="grid grid-cols-2 gap-2 p-1 bg-[#F6F7FB] rounded-xl">
           <button
             type="button"
             onClick={() =>
@@ -48,7 +67,7 @@ export const TreasuryTransferModal: React.FC<TreasuryTransferModalProps> = ({
             className={`py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
               isDeposit
                 ? "bg-white shadow-xs text-[#22C55E]"
-                : "text-gray-400 hover:text-[#111111]"
+                : "text-stone-400 hover:text-[#111111]"
             }`}
           >
             存入 (Bank In)
@@ -65,8 +84,8 @@ export const TreasuryTransferModal: React.FC<TreasuryTransferModalProps> = ({
             }
             className={`py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
               !isDeposit
-                ? "bg-white shadow-xs text-blue-600"
-                : "text-gray-400 hover:text-[#111111]"
+                ? "bg-white shadow-xs text-[#111111]"
+                : "text-stone-400 hover:text-[#111111]"
             }`}
           >
             提款 (Withdrawal)
@@ -111,25 +130,6 @@ export const TreasuryTransferModal: React.FC<TreasuryTransferModalProps> = ({
           onChange={(e) => setForm({ ...form, note: e.target.value })}
           placeholder="例如：柜员机存入、提取备用金"
         />
-
-        {/* Buttons */}
-        <div className="flex gap-3 mt-6">
-          <TreasuryButton
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-          >
-            取消
-          </TreasuryButton>
-          <TreasuryButton
-            variant="primary"
-            onClick={onSave}
-            loading={loading}
-            className="flex-[2]"
-          >
-            确认提交
-          </TreasuryButton>
-        </div>
       </div>
     </TreasuryBottomSheet>
   );

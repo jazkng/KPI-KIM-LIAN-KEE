@@ -1,18 +1,3 @@
-/**
- * Utility to copy computed styles from original elements to their html2canvas cloned elements.
- * This resolves all Tailwind CSS v4 variables (e.g., var(--color-gray-100)) and dynamic layouts,
- * ensuring high-fidelity color, borders, spacing, and grid/flex alignments in exported PDFs.
- */
-
-/**
- * 打印模板会用到的字体 / 字重组合。
- *
- * `document.fonts.ready` 只等待「已经被请求过」的字体，而打印模板通常是隐藏渲染的，
- * 屏幕上没出现过的字重可能压根没发起请求。html2canvas 会先量文字宽度再画，
- * 一旦量的时候用的是后备字体、画的时候换成了真字体（或反过来），
- * 宽度就对不上——表现就是单词间空格被吃掉、文字挤出换行、换行后压到下一行元素上。
- * 所以导出前要显式把这些组合都加载一遍。
- */
 const PDF_FONT_SPECS: ReadonlyArray<readonly [spec: string, sampleText?: string]> = [
     ['400 16px Inter'],
     ['500 16px Inter'],
@@ -24,15 +9,14 @@ const PDF_FONT_SPECS: ReadonlyArray<readonly [spec: string, sampleText?: string]
     ['500 16px "JetBrains Mono"'],
     ['700 16px "JetBrains Mono"'],
     ['800 16px "JetBrains Mono"'],
-    // CJK 字体按 unicode-range 分片下载，必须给样本文字才会拉取对应分片
-    ['700 16px "Noto Serif SC"', '金莲记结算薪资打卡'],
-    ['900 16px "Noto Serif SC"', '金莲记结算薪资打卡'],
+    ['400 16px "Noto Sans SC"', '金莲记结算薪资打卡'],
+    ['500 16px "Noto Sans SC"', '金莲记结算薪资打卡'],
+    ['600 16px "Noto Sans SC"', '金莲记结算薪资打卡'],
+    ['700 16px "Noto Sans SC"', '金莲记结算薪资打卡'],
+    ['900 16px "Noto Sans SC"', '金莲记结算薪资打卡'],
 ];
 
-/**
- * 在调用 html2canvas 之前等待字体就绪。字体加载失败不阻断导出——
- * 退回系统字体的 PDF 也好过导不出来。
- */
+
 export const waitForPdfFonts = async (): Promise<void> => {
     if (typeof document === 'undefined' || !document.fonts) return;
     try {
@@ -50,11 +34,7 @@ export const waitForPdfFonts = async (): Promise<void> => {
 const CRITICAL_PROPERTIES = [
     // Layout & Sizing
     'display', 'position', 'top', 'left', 'right', 'bottom',
-    // 刻意不复制 `height`：getComputedStyle 返回的是原始 DOM 的实测高度（像素）。
-    // 一旦克隆体里文字比原始 DOM 宽一点点而多折了一行，被锁死的高度就装不下，
-    // 多出来的那行会溢出去压在下一个元素上——结算单标题压住 KEPONG BRANCH、
-    // 「Owner's Drawings」压住业主提支，都是这么来的。
-    // 高度交给内容自己撑；固定高度的元素本来就有 Tailwind 的 h-* 类在克隆体里生效。
+
     'width', 'min-width', 'min-height', 'max-width', 'max-height', 'box-sizing',
     // Flexbox
     'flex', 'flex-direction', 'flex-wrap', 'flex-grow', 'flex-shrink', 'flex-basis',
@@ -90,10 +70,6 @@ const CRITICAL_PROPERTIES = [
 export const applyResolvedStylesForPdf = (originalRoot: HTMLElement, clonedRoot: HTMLElement) => {
     if (!originalRoot || !clonedRoot) return;
 
-    // html2canvas calls onclone only after clonedDocument has already been created.
-    // Adding IDs to the original DOM here is therefore too late: those IDs will
-    // never exist in the clone. html2canvas preserves the element order, so pair
-    // the original and cloned trees by index instead.
     const originalElements = [originalRoot, ...Array.from(originalRoot.querySelectorAll<HTMLElement>('*'))];
     const clonedElements = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll<HTMLElement>('*'))];
 
@@ -121,4 +97,64 @@ export const applyResolvedStylesForPdf = (originalRoot: HTMLElement, clonedRoot:
     clonedRoot.style.visibility = 'visible';
     clonedRoot.style.opacity = '1';
     clonedRoot.style.backgroundColor = '#ffffff';
+};
+/**
+ * 👑 html2canvas 的 clone iframe 专用：等字体真的可以用了再让它量字宽。
+ *
+ * 为什么需要：html2canvas 先在一个「新 iframe」里复制整页，再用 Range 量每个字的位置，
+ * 最后在 canvas 上用 Inter 把字一段一段画到量到的位置。
+ * 新 iframe 里的 Google Fonts <link> 要重新载入 —— iPhone Safari 上这时 @font-face 还没生效，
+ * document.fonts.ready 会「马上」resolve（因为根本还没有字体在排队），
+ * 结果 Range 用后备字体（苹方）量，canvas 却用 Inter 画：
+ *   · Inter 的数字比苹方宽 → 「2026-09-28」「SET-…-6924」数字压在一起、连字号被盖掉
+ *   · 苹方的「·」是全角宽 → 「Kelvin ·  Advance」中间多出一大块空白
+ * 电脑 Chrome 字体有缓存几乎同步可用，所以桌面导出正常、手机才会走位。
+ *
+ * 做法：① 等 clone 里的样式表载完 ② 用 fonts.load 逐个字重把 Inter / JetBrains Mono / Noto Sans SC 真的拉下来
+ *       ③ 强制重排，让之后的 Range 量测用正确字体。整段有逾时保护，最坏情况照旧导出。
+ */
+export const prepareClonedDocumentForPdf = async (clonedDoc: Document, timeoutMs = 4000): Promise<void> => {
+    if (!clonedDoc) return;
+    const deadline = new Promise<void>(resolve => setTimeout(resolve, timeoutMs));
+
+    const work = (async () => {
+        // ① 样式表（含 Google Fonts 的 @font-face）载完
+        const links = Array.from(clonedDoc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'));
+        await Promise.all(
+            links.map(link => {
+                try {
+                    if (link.sheet) return Promise.resolve();
+                } catch {
+                    // 跨域样式表读 sheet 可能抛错，但抛错本身就代表已载入
+                    return Promise.resolve();
+                }
+                return new Promise<void>(resolve => {
+                    link.addEventListener('load', () => resolve(), { once: true });
+                    link.addEventListener('error', () => resolve(), { once: true });
+                });
+            })
+        );
+
+        // ② 真的把每个字重下载 / 解码（样本字串含数字、连字号、间隔号，确保用到的分片都会被拉）
+        const fonts = (clonedDoc as any).fonts as FontFaceSet | undefined;
+        if (fonts) {
+            const latinSample = '0123456789-:·.RMABCabc';
+            await Promise.all(
+                PDF_FONT_SPECS.map(([spec, sampleText]) =>
+                    fonts.load(spec, sampleText || latinSample).catch(() => undefined)
+                )
+            );
+            try { await fonts.ready; } catch { /* ignore */ }
+        }
+
+        // ③ 强制重排，后面的 Range 量测才会用新字体
+        void clonedDoc.body?.offsetHeight;
+        await new Promise<void>(resolve => {
+            const win = clonedDoc.defaultView;
+            if (win?.requestAnimationFrame) win.requestAnimationFrame(() => resolve());
+            else resolve();
+        });
+    })();
+
+    await Promise.race([work, deadline]);
 };
