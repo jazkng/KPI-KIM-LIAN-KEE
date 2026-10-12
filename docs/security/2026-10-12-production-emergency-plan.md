@@ -80,9 +80,10 @@ CHG-01 和 CHG-02 不改代码，批准后当天就可以完成。CHG-03 和 CHG
      - 再修改几份文件，然后用修改前的时间点导出：`gcloud firestore export gs://<备份bucket>/drill-pitr-<日期> --collection-ids=_restore_drill --snapshot-time=<修改前时间>`；
      - 再导入并核对恢复原样。
      - 这一步同时验证 PITR 确实可用。
-  4. **完整导出的完整性**：
-     - 用 `gcloud firestore operations describe <第 3 项导出的操作名称>` 查看已处理的文件数；
-     - 与导出时在 Console 看到的主要集合文件数（`employees`、`settlements`、`payment_vouchers`、`standalone_expenses` 等）对照，数量必须相符，操作状态必须为成功。
+  4. **完整导出的完整性**（核对的是上方「内容」第 3 项的**完整导出**，不是本演练的集合导出）：
+     - 完整导出应在非营业时段进行。导出前，先记录**全部集合**各自的文件数，作为基准总数（可用 Console 或 count 查询）；
+     - 导出完成后，用 `gcloud firestore operations describe <完整导出的操作名称>` 查看操作状态与已处理的文件数；
+     - 操作状态必须为成功，已处理文件数必须等于基准总数。如有差异，只能是导出期间确知的新写入，并逐项说明；无法解释的差异视为不通过。
   5. **清理**：演练结束后删除 `_restore_drill` 集合。这是演练专用资料，不涉及营业记录。
   - 执行前用 `gcloud firestore export --help` 和 `gcloud firestore import --help` 确认参数，因为 gcloud 版本之间可能有差异。
   - **第 2–4 项任何一项不通过，CHG-01 就不算完成**，CHG-06、CHG-07 等高风险变更也不得开始。必须先找出原因并修正。

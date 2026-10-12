@@ -96,14 +96,14 @@ const getClientIp = (req: express.Request): string => {
 
 // 🧪 Emulator 模式：此模式下前端只连本机 Emulator，服务端也必须停用会改动正式资源的代理。
 //    ① 运行时开关：与 vite.config.ts 相同的判断（命令行环境变量优先，其次 .env / .env.local）
-//    ② 构建标记：正式模式下读取 dist/.build-mode.json —— 前端若以 Emulator 模式构建，
-//       即使部署后的进程没有设置开关，服务端也视为 Emulator 模式（构建与运行分离的部署）
+//    ② 构建标记：一律读取 dist/.build-mode.json —— 前端若以 Emulator 模式构建，
+//       即使部署后的进程没有设置开关（例如 npm start 未设 NODE_ENV），服务端也视为 Emulator 模式。
+//       两者任一为 true 就停用正式代理（只会更严格，不会放行）
 const isEmulatorMode = (() => {
   const runtimeFlag =
     process.env.VITE_USE_FIREBASE_EMULATOR ??
     loadEnv(process.env.NODE_ENV === "production" ? "production" : "development", process.cwd(), "VITE_").VITE_USE_FIREBASE_EMULATOR;
   if (runtimeFlag === "true") return true;
-  if (process.env.NODE_ENV !== "production") return false;
   try {
     const marker = JSON.parse(fs.readFileSync(path.join(process.cwd(), "dist", ".build-mode.json"), "utf8"));
     return marker?.emulator === true;
