@@ -400,12 +400,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
       if(!confirm("⚠️ 确认初始化？ ID: 001, 密码: 8888")) return;
       setIsLoading(true);
       try {
-          await DataManager.syncLocalToCloud(DEFAULT_STAFF); 
+          await DataManager.initializeEmptySystem(DEFAULT_STAFF);
           const list = await DataManager.getEmployees();
           setEmployees(list.map(e => ({ ...e, pin: e.pin || (e.role.includes('Owner') ? '8888' : '0000') })));
           setIsSystemEmpty(false);
           alert("✅ 初始化成功！");
-      } catch (e) { alert("FAILED"); }
+      } catch (e) {
+          if (e instanceof Error && e.message === 'SYSTEM_NOT_EMPTY') {
+              // 页面载入后已有其他人建立员工资料：不初始化，改为重新载入
+              setIsSystemEmpty(false);
+              alert("系统已有员工资料，未执行初始化。页面将重新载入。");
+              window.location.reload();
+              return;
+          }
+          alert("FAILED");
+      }
       setIsLoading(false);
   };
 
