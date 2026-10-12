@@ -6,10 +6,18 @@
 
 ## 绝对禁止（未经负责人在对话中明确批准）
 - 合并或推送到 `main`；发布 V2 正式版；修改 V1 两个 AI Studio 部署（`kimliankee-epr.ai.studio`、`service-5174.ai.studio`）。
-- 修改 Cloudflare DNS、正式 Firebase（Rules、Auth、索引、数据）、Cloud Run、付款设置。
-- 用任何代码、脚本或测试读写**正式** Firestore 的营业数据。测试只能用 Emulator（`demo-klk-erp`）或 Mock。
+- 修改 Cloudflare DNS、正式 Firebase 的 Security Rules / Auth 设置 / 索引、Cloud Run、付款设置。
+- 对正式 Firestore **自行执行**批量删除、批量改写、破坏性迁移（删除或改名字段、改变字段格式、重写历史记录）。
+- 让自动化测试（单元测试、Rules 测试、CI）连接正式 Firestore；自动化测试只能用 Emulator（`demo-klk-erp`）或 Mock。
 - `git push --force` 到共享分支；跳过审核；修改分支保护；删除他人分支。
 - 在代码、日志、PR、聊天中输出密钥、Token、Service Account JSON、`.env` 内容。
+
+## 数据策略（负责人最终决定，详见规范第 10 条）
+- 只有**一个** Firebase 项目、**一个**正式数据库。不建第二个项目，不建新数据库实例。**不要再询问是否建立测试数据库。**
+- `dev.kimliankee.app`（V2 预览）连接正式数据库，由负责人亲自操作和验收；V2 产生的数据会同步出现在 V1，负责人已接受。
+- 正常开发流程可以使用现有数据库。**高风险变更**（批量写入、修改、删除，迁移，删除或改名字段，改动财务历史、日结、审计日志，修改 Rules、索引、Auth）必须：先备份并确认可用 → 说明影响与回滚 → 取得负责人批准 → 才可执行。
+- **V1 必须能读懂 V2 写入的数据**：只新增可选字段或新集合，不删除、不改名、不改变既有字段的类型。改动写入路径的 PR 要附「V1 兼容性说明」。
+- 不在正式数据库中建立测试订单、测试交易。新功能先在 Emulator 中测通，再由负责人在预览站验收。
 
 ## 分支
 - `develop-v2`：V2 整合分支，只接受 PR。
