@@ -20,6 +20,9 @@ pnpm-lock.yaml
 .env.production
 *.pem
 *.key
+# Android APK 签名密钥（丢失或外泄都无法挽回，绝不进 Git）
+*.keystore
+*.jks
 
 # 5. 日志与缓存 (无用的运行时数据)
 npm-debug.log*

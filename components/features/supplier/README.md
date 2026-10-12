@@ -12,7 +12,9 @@ supplier/
 ├── BillFormModal.tsx          ← 录入账单弹窗
 ├── ReceivePOModal.tsx         ← 入库对账弹窗
 ├── POCart.tsx                 ← 底部悬浮购物车
-└── SupplierDeleteModals.tsx   ← 三个删除确认弹窗
+├── SupplierDeleteModals.tsx   ← 三个删除确认弹窗
+├── BatchStockLinkModal.tsx    ← 批量关联库存品项（供应商产品 → 库存品项）
+└── BatchSupplierCodeModal.tsx ← 批量填写供应商产品编号
 ```
 
 ## 各文件职责
@@ -50,6 +52,16 @@ supplier/
 
 ### `SupplierDeleteModals.tsx`
 三个删除确认弹窗：删除商品、删除采购单、删除供应商。
+
+### `BatchStockLinkModal.tsx`
+批量设定「供应商产品 → 库存品项」的关联（`linkedStockId`）。
+- 收货时系统靠这个关联才知道要把货加到哪一格库存。**没有关联的品项会被静默跳过**：收货单存了、账单也出了，唯独库存原地不动。
+- 同一样东西向不同供应商购买没有问题：每个供应商的产品各自关联到同一个库存品项即可。
+
+### `BatchSupplierCodeModal.tsx`
+把没有填 `supplierCode`（画面显示 NO-CODE）的产品排成一张表，对着报价单一次填完。
+- `supplierCode` 是**供应商自己的产品编号**，会印在采购单（PO）上给对方看。
+- 系统**绝不自动生成**这个编号，编错了对方会送错货；只能从报价单或发票抄写。
 
 ## 数据流
 

@@ -10,6 +10,8 @@ ap/
 ├── QuickPayModal.tsx         ← 单笔未付单据快捷核销弹窗
 ├── BatchPayModal.tsx         ← 多笔未付单据安全账合并批量付款弹窗
 ├── BatchDeleteModal.tsx      ← 批量删除护栏（事务安全剔除结算内嵌账）
+├── PayablesOverview.tsx      ← 应付总览（供应商账龄、员工薪资、每月固定费用；只读）
+├── VendorConfigModal.tsx     ← 供应商归档设定（发票扫描的供应商清单与别名）
 └── ApMigrationTool.tsx       ← 历史未分类营销账单细分批量转换工具
 ```
 
@@ -45,6 +47,18 @@ ap/
 - 只有被选账单不归属于结算单时，才直接利用 `deleteDoc` 拆除；若为 parent settlement，则使用 `runTransaction` 原子级将其中特定子支出擦除。
 
 ---
+
+### `PayablesOverview.tsx`
+一页看完「还有多少钱没给」，**只读，不改任何资料**：
+- **供应商**：未付或部分付款的账单，按单据日期计算账龄，分为 ≤15 天与 >15 天。
+- **员工薪资**：上个月（应发）与本月（预计），按楼面、厨房、水吧、后勤、管理分组。
+- **每月固定费用**：租金、员工宿舍、Maxis、水电等，显示本月是否已付。
+
+### `VendorConfigModal.tsx`
+发票扫描服务（`ap-ai-service`）的供应商清单与别名设定：
+- 以前写死在 `ap-ai-service/api-server.js`，加一家供应商就要改代码并重新部署 Cloud Run；现在在这里修改后立即生效。
+- 设定存放在 **Firestore**，不存 Drive（Service Account 没有 Drive 储存配额）。
+- 通过 `requestApAi` 读取 `GET /api/vendor-config` 的内建清单作为基础。
 
 ## 📱 移动端与 iOS 适配规范
 
