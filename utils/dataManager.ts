@@ -2270,6 +2270,24 @@ export class DataManager {
             await batch.commit();
         }
     }
+    /**
+     * 首次初始化：只在 employees 集合确实为空时写入默认员工。
+     * - 不使用缓存，写入前重新向服务器读取；
+     * - 在交易中逐一确认目标文档不存在才建立，任何一个已存在就整笔放弃，
+     *   因此不可能覆盖其他分页 / 设备刚建立的员工资料。
+     */
+    static async initializeEmptySystem(staff: Employee[]): Promise<void> {
+        DataManager.clearCacheKeys(['employees']);
+        const existing = await getDocs(query(collection(db, 'employees'), limit(1)));
+        if (!existing.empty) throw new Error('SYSTEM_NOT_EMPTY');
+        await runTransaction(db, async (transaction) => {
+            const refs = staff.map(emp => doc(db, 'employees', emp.id));
+            const snaps = await Promise.all(refs.map(ref => transaction.get(ref)));
+            if (snaps.some(snap => snap.exists())) throw new Error('SYSTEM_NOT_EMPTY');
+            refs.forEach((ref, i) => transaction.set(ref, staff[i]));
+        });
+        DataManager.clearCacheKeys(['employees']);
+    }
     static async resetToDefaults(type: string): Promise<boolean> {
         let col = '';
         if (type === 'INVENTORY') col = 'stock_kitchen'; 

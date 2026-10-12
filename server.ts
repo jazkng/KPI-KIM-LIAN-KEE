@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, loadEnv } from "vite";
@@ -94,6 +95,46 @@ const getClientIp = (req: express.Request): string => {
   return req.ip || req.socket.remoteAddress || 'unknown';
 };
 
+// 🔒 预览站访问门禁（dev.kimliankee.app）
+//    只有设置 PREVIEW_ACCESS_PASSWORD 时才启用；V1 不设置，行为完全不变。
+//    在送出任何页面、静态文件或 API 之前于服务端验证（HTTP Basic Auth），不是前端隐藏按钮。
+// X-Forwarded-For 的最左边可由客户端伪造；Cloud Run 的前端会把真实来源 IP 附加在最右边
+const getTrustedClientIp = (req: express.Request): string => {
+  const forwarded = req.headers['x-forwarded-for'];
+  const list = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded || '').split(',').map(v => v.trim()).filter(Boolean);
+  return list[list.length - 1] || req.socket.remoteAddress || 'unknown';
+};
+const PREVIEW_GATE_MAX_FAILS = 10;
+const PREVIEW_GATE_WINDOW_MS = 15 * 60 * 1000;
+const previewGateFails = new Map<string, RateLimitInfo>();
+const createPreviewGate = (password: string): express.RequestHandler => {
+  const expected = crypto.createHash("sha256").update(password).digest();
+  return (req, res, next) => {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const ip = getTrustedClientIp(req);
+    const now = Date.now();
+    const fails = previewGateFails.get(ip);
+    // 先检查锁定：同一 IP 15 分钟内错误 10 次后，即使密码正确也拒绝，防止持续猜测
+    if (fails && now < fails.resetTime && fails.count >= PREVIEW_GATE_MAX_FAILS) {
+      return res.status(429).send("尝试次数过多，请 15 分钟后再试。");
+    }
+    const header = req.headers.authorization || "";
+    if (header.startsWith("Basic ")) {
+      const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+      const provided = decoded.slice(decoded.indexOf(":") + 1);
+      const providedHash = crypto.createHash("sha256").update(provided).digest();
+      if (crypto.timingSafeEqual(providedHash, expected)) return next();
+      if (!fails || now >= fails.resetTime) {
+        previewGateFails.set(ip, { count: 1, resetTime: now + PREVIEW_GATE_WINDOW_MS });
+      } else {
+        fails.count += 1;
+      }
+    }
+    res.setHeader("WWW-Authenticate", 'Basic realm="KLK ERP V2 Preview", charset="UTF-8"');
+    return res.status(401).send("需要预览站密码。");
+  };
+};
+
 // 🧪 Emulator 模式：此模式下前端只连本机 Emulator，服务端也必须停用会改动正式资源的代理。
 //    ① 运行时开关：与 vite.config.ts 相同的判断（命令行环境变量优先，其次 .env / .env.local）
 //    ② 构建标记：一律读取 dist/.build-mode.json —— 前端若以 Emulator 模式构建，
@@ -114,6 +155,11 @@ const isEmulatorMode = (() => {
 
 async function startServer() {
   const app = express();
+
+  if (process.env.PREVIEW_ACCESS_PASSWORD) {
+    app.use(createPreviewGate(process.env.PREVIEW_ACCESS_PASSWORD));
+    console.log("🔒 预览站访问门禁已启用");
+  }
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));

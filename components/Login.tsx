@@ -363,6 +363,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSystemEmpty, setIsSystemEmpty] = useState(false);
+  // 读取失败或找不到负责人时显示错误，绝不显示「初始化系统」（初始化会覆盖正式员工资料）
+  const [loadError, setLoadError] = useState<'LOAD_FAILED' | 'NO_OWNER' | null>(null);
   const [customLogo, setCustomLogo] = useState<string>('');
 
   useEffect(() => {
@@ -375,14 +377,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             const list = await DataManager.getEmployees();
             const activeList = list.filter(e => e.status !== 'TERMINATED' && e.isArchived !== true);
             const hasOwner = list.some(e => e.role.includes('Owner') || ['001', '002', '003', '004'].includes(e.id));
-            if (list.length === 0 || !hasOwner) {
+            if (list.length === 0) {
+                // 只有「成功读取且确实为 0 位员工」才允许初始化
                 setIsSystemEmpty(true);
+            } else if (!hasOwner) {
+                setLoadError('NO_OWNER');
             } else {
                 setEmployees(activeList.map(e => ({ ...e, pin: e.pin || (e.role.includes('Owner') ? '8888' : '0000') })));
                 setIsSystemEmpty(false);
             }
         } catch (e) {
-            setIsSystemEmpty(true);
+            console.error('Failed to load employees', e);
+            setLoadError('LOAD_FAILED');
         } finally {
             setIsLoading(false);
         }
@@ -394,12 +400,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
       if(!confirm("⚠️ 确认初始化？ ID: 001, 密码: 8888")) return;
       setIsLoading(true);
       try {
-          await DataManager.syncLocalToCloud(DEFAULT_STAFF); 
+          await DataManager.initializeEmptySystem(DEFAULT_STAFF);
           const list = await DataManager.getEmployees();
           setEmployees(list.map(e => ({ ...e, pin: e.pin || (e.role.includes('Owner') ? '8888' : '0000') })));
           setIsSystemEmpty(false);
           alert("✅ 初始化成功！");
-      } catch (e) { alert("FAILED"); }
+      } catch (e) {
+          if (e instanceof Error && e.message === 'SYSTEM_NOT_EMPTY') {
+              // 页面载入后已有其他人建立员工资料：不初始化，改为重新载入
+              setIsSystemEmpty(false);
+              alert("系统已有员工资料，未执行初始化。页面将重新载入。");
+              window.location.reload();
+              return;
+          }
+          alert("FAILED");
+      }
       setIsLoading(false);
   };
 
@@ -609,6 +624,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                 <Loader2 size={34} className="mx-auto text-[#650707] animate-spin" />
                 <p className="mt-4 text-sm font-black">正在连接员工资料……</p>
                 <p className="mt-1 text-xs font-semibold text-stone-400">Connecting employee records</p>
+              </div>
+            ) : loadError ? (
+              <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
+                <ShieldCheck size={42} className="mx-auto text-[#650707]" />
+                <h2 className="mt-4 text-xl font-black">{loadError === 'LOAD_FAILED' ? '无法连接员工资料' : '找不到负责人帐号'}</h2>
+                <p className="mt-2 text-sm font-semibold text-stone-500">
+                  {loadError === 'LOAD_FAILED' ? '请检查网络后重试。' : '员工资料存在，但没有负责人帐号，请联系系统管理员。'}
+                </p>
+                <button onClick={() => window.location.reload()} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">重试</button>
               </div>
             ) : isSystemEmpty ? (
               <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
