@@ -2,6 +2,7 @@
 
 - 日期：2026-10-12
 - 状态：**方案草案，待负责人批准**。本文件不修改任何生产系统。
+- 可执行的生产变更单（含审批与回滚）：见 [`2026-10-12-production-emergency-plan.md`](2026-10-12-production-emergency-plan.md)。
 - 依据代码：`main@2f9fad2`（假设与 V1 当前运行版本一致；这一点待核实，见审计报告第 6 节）
 - 本文件不包含任何密钥值。
 
@@ -129,7 +130,7 @@ match /queue_tickets/{id} { allow read, write: if staff() || device(); }
 | 破坏性操作 | `restoreSystem`、`resetToDefaults`、批量删除改由服务端接口执行，并写审计日志；前端不再直接批量删除 |
 | 服务端接口 | 统一 middleware：验证 ID Token、检查 claim、限流、写审计日志 |
 | 防自动化滥用（可选） | Firebase App Check（reCAPTCHA Enterprise） |
-| 备份 | GCP 托管备份或 PITR，再加定期导出到独立 Bucket；每季度做一次恢复演练（还原到 Emulator 或临时数据库验证，不覆盖正式库） |
+| 备份 | PITR + 每日备份计划 + 定期导出到 Bucket；每季度做一次恢复演练（导入本机 Emulator 核对，不新建数据库，不覆盖正式库；详见紧急整改计划 CHG-01） |
 
 每一项都会先写测试：Rules 用 Emulator 测试，接口用单元测试，再提交 PR。
 

@@ -5,6 +5,7 @@
 - 审计对象：`origin/main` @ `2f9fad2`（"feat: implement read-only mode and staff cash module"，2026-10-12 23:29 +0800）
 - 性质：**只读**。未修改生产 Firebase、Cloudflare、AI Studio 部署或 `main`。未连接任何生产服务。
 - 本报告不包含任何密钥值。
+- **2026-10-12 更新**：负责人已决定不新建数据库实例。第 8 节关于预览站数据的建议，以 [`docs/deploy/dev-preview-plan.md`](../deploy/dev-preview-plan.md) 为准。
 
 ---
 
