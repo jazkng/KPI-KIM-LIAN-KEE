@@ -1,6 +1,7 @@
 import express from "express";
+import fs from "fs";
 import path from "path";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, loadEnv } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import {
   inferContentType,
@@ -92,6 +93,24 @@ const getClientIp = (req: express.Request): string => {
   }
   return req.ip || req.socket.remoteAddress || 'unknown';
 };
+
+// 🧪 Emulator 模式：此模式下前端只连本机 Emulator，服务端也必须停用会改动正式资源的代理。
+//    ① 运行时开关：与 vite.config.ts 相同的判断（命令行环境变量优先，其次 .env / .env.local）
+//    ② 构建标记：一律读取 dist/.build-mode.json —— 前端若以 Emulator 模式构建，
+//       即使部署后的进程没有设置开关（例如 npm start 未设 NODE_ENV），服务端也视为 Emulator 模式。
+//       两者任一为 true 就停用正式代理（只会更严格，不会放行）
+const isEmulatorMode = (() => {
+  const runtimeFlag =
+    process.env.VITE_USE_FIREBASE_EMULATOR ??
+    loadEnv(process.env.NODE_ENV === "production" ? "production" : "development", process.cwd(), "VITE_").VITE_USE_FIREBASE_EMULATOR;
+  if (runtimeFlag === "true") return true;
+  try {
+    const marker = JSON.parse(fs.readFileSync(path.join(process.cwd(), "dist", ".build-mode.json"), "utf8"));
+    return marker?.emulator === true;
+  } catch {
+    return false; // 旧版构建没有标记文件，维持原本行为
+  }
+})();
 
 async function startServer() {
   const app = express();
@@ -325,6 +344,11 @@ ${JSON.stringify(contextData, null, 2)}
 
   // Secure AP AI Proxy Endpoint to bypass browser CORS limitations and dynamic preview URL shifts
   app.use("/api/ap-ai", async (req, res) => {
+    // 发票扫描服务操作的是正式 Google Drive，Emulator 模式下一律停用
+    if (isEmulatorMode) {
+      return res.status(503).json({ success: false, code: "EMULATOR_MODE", error: "Emulator 模式下停用发票扫描（会改动正式 Google Drive）" });
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 seconds timeout
 

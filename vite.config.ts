@@ -1,15 +1,32 @@
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+    // 🧪 Emulator 开关：命令行环境变量优先，其次 .env / .env.local。
+    //    只对这两个键读取 .env 文件；正式 Firebase 配置的来源（process.env）保持不变。
+    const fileEnv = loadEnv(mode, process.cwd(), 'VITE_');
+    const useEmulator = process.env.VITE_USE_FIREBASE_EMULATOR ?? fileEnv.VITE_USE_FIREBASE_EMULATOR;
+    const emulatorHost = process.env.VITE_FIREBASE_EMULATOR_HOST ?? fileEnv.VITE_FIREBASE_EMULATOR_HOST;
+
     return {
       server: {
         port: 3000,
         host: '0.0.0.0',
       },
-      plugins: [react(), tailwindcss()],
+      plugins: [
+        react(),
+        tailwindcss(),
+        {
+          // 把构建模式写进产物，让部署后的 server.ts 知道前端是否以 Emulator 模式构建
+          // （点开头的文件不会被 express.static 对外送出）
+          name: 'klk-build-mode',
+          generateBundle() {
+            this.emitFile({ type: 'asset', fileName: '.build-mode.json', source: JSON.stringify({ emulator: useEmulator === 'true' }) });
+          },
+        },
+      ],
       define: {
         'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(process.env.VITE_FIREBASE_API_KEY),
         'import.meta.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(process.env.VITE_FIREBASE_AUTH_DOMAIN),
@@ -18,6 +35,8 @@ export default defineConfig(() => {
         'import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
         'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(process.env.VITE_FIREBASE_APP_ID),
         'import.meta.env.VITE_FIREBASE_MEASUREMENT_ID': JSON.stringify(process.env.VITE_FIREBASE_MEASUREMENT_ID),
+        'import.meta.env.VITE_USE_FIREBASE_EMULATOR': JSON.stringify(useEmulator),
+        'import.meta.env.VITE_FIREBASE_EMULATOR_HOST': JSON.stringify(emulatorHost),
       },
       optimizeDeps: {
         include: [
