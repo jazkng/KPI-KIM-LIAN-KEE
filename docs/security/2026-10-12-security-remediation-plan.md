@@ -120,6 +120,7 @@ match /queue_tickets/{id} { allow read, write: if staff() || device(); }
 ```
 
 **进入窗口前必须完成**（任何一项未完成，都不得开始窗口）：
+- 紧急整改计划 CHG-01 已完成，包括恢复演练全部通过。
 - 在 Emulator 中演练全流程：把 KNOWN GAP 测试改为 `assertFails`，并补上「`epoch` 1 身份被拒」「旧 PIN 登录被拒」「已登录员工也读不到 `employee_secrets`」三组测试，全部通过。
 - E2 已在两个 V1 部署上线并稳定。
 - 已安排好每位员工领取临时 PIN 的时间。
@@ -170,7 +171,7 @@ match /queue_tickets/{id} { allow read, write: if staff() || device(); }
 | 破坏性操作 | `restoreSystem`、`resetToDefaults`、批量删除改由服务端接口执行，并写审计日志；前端不再直接批量删除 |
 | 服务端接口 | 统一 middleware：验证 ID Token、检查 claim、限流、写审计日志 |
 | 防自动化滥用（可选） | Firebase App Check（reCAPTCHA Enterprise） |
-| 备份 | PITR + 每日备份计划 + 定期导出到 Bucket；每季度做一次恢复演练（导入本机 Emulator 核对，不新建数据库，不覆盖正式库；详见紧急整改计划 CHG-01） |
+| 备份 | PITR + 每日备份计划 + 定期导出到 Bucket；每季度做一次恢复演练：以专用演练集合实际执行导出与导入往返（含 PITR），并核对完整导出的文件数；不新建数据库，不碰营业资料。详见紧急整改计划 CHG-01 |
 
 每一项都会先写测试：Rules 用 Emulator 测试，接口用单元测试，再提交 PR。
 

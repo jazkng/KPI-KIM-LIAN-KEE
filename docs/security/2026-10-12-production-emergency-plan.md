@@ -68,15 +68,31 @@ CHG-01 和 CHG-02 不改代码，批准后当天就可以完成。CHG-03 和 CHG
     - 导入会覆盖同 ID 文件，不会删除多出来的文件。
   - **手动导出**：用同样的 `import` 方式恢复。
   - ⚠️ 「从备份计划恢复」在 Firestore 中**一定会建立一个新数据库**。按目前的约束，这种方式只作为最后手段，事故发生时另行批准。
-- **恢复演练（不建新数据库）**：
-  - 把导出文件下载到负责人自己的电脑，导入本机 Emulator 核对员工、日结、账单的笔数。
-  - 这一步在负责人电脑上进行，不在 CI 或云端，完成后删除本地副本，因为里面有 PIN 等敏感资料。
-  - 能否直接导入 Emulator 需要先验证；如果不行，改为只核对导出文件的完整性与大小。
+- **恢复演练（真正执行恢复，但不新建数据库实例、不碰营业资料）**：
+  - 说明：Emulator 的 `--import` 只接受 Emulator 自己导出的格式，**不能**导入 Firestore 托管导出。所以演练改为在正式数据库中，用一个专用的演练集合实际执行 `gcloud firestore import`。
+  1. **建立演练集合**：在 `(default)` 中建立 `_restore_drill` 集合，放约 20 份**不含任何营业资料**的文件，例如编号与时间戳。
+  2. **手动导出往返**：
+     - `gcloud firestore export gs://<备份bucket>/drill-<日期> --collection-ids=_restore_drill`；
+     - 修改其中几份、删除几份；
+     - `gcloud firestore import gs://<备份bucket>/drill-<日期> --collection-ids=_restore_drill`；
+     - 核对：被修改和被删除的文件**全部恢复原样**。
+  3. **PITR 往返**：
+     - 再修改几份文件，然后用修改前的时间点导出：`gcloud firestore export gs://<备份bucket>/drill-pitr-<日期> --collection-ids=_restore_drill --snapshot-time=<修改前时间>`；
+     - 再导入并核对恢复原样。
+     - 这一步同时验证 PITR 确实可用。
+  4. **完整导出的完整性**：
+     - 用 `gcloud firestore operations describe <第 3 项导出的操作名称>` 查看已处理的文件数；
+     - 与导出时在 Console 看到的主要集合文件数（`employees`、`settlements`、`payment_vouchers`、`standalone_expenses` 等）对照，数量必须相符，操作状态必须为成功。
+  5. **清理**：演练结束后删除 `_restore_drill` 集合。这是演练专用资料，不涉及营业记录。
+  - 执行前用 `gcloud firestore export --help` 和 `gcloud firestore import --help` 确认参数，因为 gcloud 版本之间可能有差异。
+  - **第 2–4 项任何一项不通过，CHG-01 就不算完成**，CHG-06、CHG-07 等高风险变更也不得开始。必须先找出原因并修正。
+  - 如果需要「完整资料库」级别的恢复演练，就必须恢复到一个临时数据库，这属于新建数据库实例，需要负责人另行批准，本计划不预设。
 - **验证**：
   - Console 中 PITR 显示「已启用」；
   - 备份计划列表中有每日计划；
   - 第一份每日备份成功；
-  - 手动导出的 bucket 中有完整文件。
+  - 手动导出的 bucket 中有完整文件；
+  - 恢复演练第 2–4 项全部通过，并把结果写入文末的执行记录。
 - **回滚**：关闭 PITR（`--no-enable-pitr`）、删除备份计划。这些操作对现有数据没有任何影响。
 - **对员工的影响**：无。
 - **费用**：按存储量计费。开启前请用 GCP 价格计算器估算；小型数据库通常很低。
@@ -149,6 +165,7 @@ CHG-01 和 CHG-02 不改代码，批准后当天就可以完成。CHG-03 和 CHG
   2. 所有旧 PIN 作废。它们在此之前对外公开可读，必须视为已经外泄；如果不作废，持有旧 PIN 的人仍可通过新的登录接口拿到被新 Rules 信任的身份。
   3. 新 PIN 只在新 Rules 生效**之后**产生，并以哈希存入客户端无法访问的 `employee_secrets`。
 - **前提**：
+  - CHG-01 已完成，**包括恢复演练全部通过**。
   - CHG-05 已在**两个** V1 部署上线并稳定（两个部署共用同一套 Rules）。
   - 在 Emulator 完成全流程演练：KNOWN GAP 测试改为 `assertFails`，并新增以下测试，全部通过：
     - 「`epoch` 1 身份被拒」
@@ -183,7 +200,7 @@ CHG-01 和 CHG-02 不改代码，批准后当天就可以完成。CHG-03 和 CHG
 
 ## CHG-07 · 删除旧 PIN 字段、取消默认 PIN（不可逆）
 
-- **前提**：CHG-06 完成后，所有在职员工和专用设备都已设置新 PIN，并稳定运行至少一周。
+- **前提**：CHG-01 恢复演练已通过；CHG-06 完成后，所有在职员工和专用设备都已设置新 PIN，并稳定运行至少一周。
 - **步骤**：
   1. 另做一次 CHG-01 手动导出。
   2. 删除 `employees` 中的旧 `pin` 字段，以及 `device_accounts` 中的旧 PIN 哈希字段。
