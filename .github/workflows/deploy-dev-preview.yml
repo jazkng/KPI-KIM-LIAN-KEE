@@ -1,0 +1,151 @@
+# 御膳智控 ERP V2 · 预览站部署（dev.kimliankee.app → Cloud Run erp-v2-dev）
+#
+# - 只能手动触发，只接受 develop-v2；不会碰 V1（AI Studio）的任何部署
+# - 使用 Workload Identity Federation，GitHub 中不保存任何服务账号密钥
+# - 部署专用服务账号只对 erp-v2-dev 这一个 Cloud Run 服务有权限
+# - 三个动作：
+#     deploy   → 先跑完整 CI，再部署一个「不接流量」的候选版本，产生候选网址供负责人验收
+#     promote  → 验收通过后，把 100% 流量切到最新版本
+#     rollback → 把 100% 流量切回指定的旧版本（revision）
+name: Deploy dev preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "deploy = 部署候选版本；promote = 切换流量到最新版本；rollback = 切回指定版本"
+        type: choice
+        options: [deploy, promote, rollback]
+        default: deploy
+      revision:
+        description: "rollback 时填要切回的 revision 名称（可在上一次运行的摘要中找到）"
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-dev-preview
+  cancel-in-progress: false
+
+env:
+  SERVICE: erp-v2-dev
+  REGION: ${{ vars.GCP_REGION }}
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/erp-v2/erp-v2-dev
+
+jobs:
+  guard:
+    name: 分支检查
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${GITHUB_REF}" != "refs/heads/develop-v2" ]; then
+            echo "::error::只能从 develop-v2 部署（当前：${GITHUB_REF}）"; exit 1
+          fi
+
+  ci:
+    name: CI
+    needs: guard
+    if: inputs.action == 'deploy'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: 部署候选版本（不接流量）
+    needs: ci
+    if: inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    environment: dev-preview
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: 构建并推送镜像
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "${IMAGE}:${GITHUB_SHA}" \
+            --build-arg VITE_FIREBASE_API_KEY="${{ vars.VITE_FIREBASE_API_KEY }}" \
+            --build-arg VITE_FIREBASE_AUTH_DOMAIN="${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \
+            --build-arg VITE_FIREBASE_PROJECT_ID="${{ vars.VITE_FIREBASE_PROJECT_ID }}" \
+            --build-arg VITE_FIREBASE_STORAGE_BUCKET="${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}" \
+            --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}" \
+            --build-arg VITE_FIREBASE_APP_ID="${{ vars.VITE_FIREBASE_APP_ID }}" \
+            --build-arg VITE_FIREBASE_MEASUREMENT_ID="${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}" \
+            .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+      - name: 部署候选版本（0% 流量）
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}:${GITHUB_SHA}" \
+            --region "${REGION}" \
+            --service-account "${{ vars.GCP_RUNTIME_SA }}" \
+            --port 3000 \
+            --set-env-vars "NODE_ENV=production,VITE_AP_AI_API_URL=${{ vars.VITE_AP_AI_API_URL }}" \
+            --set-secrets "PREVIEW_ACCESS_PASSWORD=erp-v2-dev-preview-password:latest,GEMINI_API_KEY=erp-v2-dev-gemini-api-key:latest,INTERNAL_API_KEY=erp-v2-dev-internal-api-key:latest" \
+            --no-traffic \
+            --tag "c-${GITHUB_SHA::7}" \
+            --quiet
+      - name: 冒烟测试：候选版本必须有访问门禁
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" \
+            --format=json | jq -r --arg t "c-${GITHUB_SHA::7}" '.status.traffic[] | select(.tag==$t) | .url')
+          echo "CANDIDATE_URL=${URL}" >> "$GITHUB_ENV"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
+          echo "未带密码访问候选版本 → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then
+            echo "::error::候选版本没有启用访问门禁（预期 401），不得切换流量"; exit 1
+          fi
+      - name: 摘要
+        run: |
+          {
+            echo "## 候选版本已部署（尚未接流量）"
+            echo ""
+            echo "- 候选网址：${CANDIDATE_URL}"
+            echo "- Commit：\`${GITHUB_SHA}\`"
+            echo ""
+            echo "请用预览站密码打开候选网址，确认 **登录、员工资料载入、日结 / 财务页面** 正常后，"
+            echo "再以 \`action = promote\` 运行本工作流，把流量切到这个版本。"
+            echo ""
+            echo "### 现有版本（rollback 时使用）"
+            echo '```'
+            gcloud run revisions list --service "${SERVICE}" --region "${REGION}" --limit 10 \
+              --format="table(metadata.name, metadata.creationTimestamp, status.conditions[0].status)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  traffic:
+    name: 切换流量（${{ inputs.action }}）
+    needs: guard
+    if: inputs.action == 'promote' || inputs.action == 'rollback'
+    runs-on: ubuntu-latest
+    environment: dev-preview
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: 切换
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          if [ "${{ inputs.action }}" = "promote" ]; then
+            gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-latest --quiet
+          else
+            if [ -z "${REVISION}" ]; then echo "::error::rollback 需要填写 revision"; exit 1; fi
+            gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
+          fi
+      - name: 冒烟测试：正式预览网址必须有访问门禁
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
+          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then echo "::error::访问门禁未生效（预期 401），请立即 rollback"; exit 1; fi
+          {
+            echo "## 流量已切换（${{ inputs.action }}）"
+            gcloud run services describe "${SERVICE}" --region "${REGION}" --format="table(status.traffic[].revisionName, status.traffic[].percent)"
+          } >> "$GITHUB_STEP_SUMMARY"
