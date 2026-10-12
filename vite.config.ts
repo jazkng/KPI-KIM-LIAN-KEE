@@ -15,7 +15,18 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
-      plugins: [react(), tailwindcss()],
+      plugins: [
+        react(),
+        tailwindcss(),
+        {
+          // 把构建模式写进产物，让部署后的 server.ts 知道前端是否以 Emulator 模式构建
+          // （点开头的文件不会被 express.static 对外送出）
+          name: 'klk-build-mode',
+          generateBundle() {
+            this.emitFile({ type: 'asset', fileName: '.build-mode.json', source: JSON.stringify({ emulator: useEmulator === 'true' }) });
+          },
+        },
+      ],
       define: {
         'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(process.env.VITE_FIREBASE_API_KEY),
         'import.meta.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(process.env.VITE_FIREBASE_AUTH_DOMAIN),

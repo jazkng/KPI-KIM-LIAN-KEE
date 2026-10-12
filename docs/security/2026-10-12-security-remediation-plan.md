@@ -119,6 +119,11 @@ match /{collection}/{document=**} {
 match /queue_tickets/{id} { allow read, write: if staff() || device(); }
 ```
 
+**进入窗口前必须完成**（任何一项未完成，都不得开始窗口）：
+- 在 Emulator 中演练全流程：把 KNOWN GAP 测试改为 `assertFails`，并补上「`epoch` 1 身份被拒」「旧 PIN 登录被拒」「已登录员工也读不到 `employee_secrets`」三组测试，全部通过。
+- E2 已在两个 V1 部署上线并稳定。
+- 已安排好每位员工领取临时 PIN 的时间。
+
 **窗口内的步骤**（非营业时段，一次完成）：
 1. 确认紧急整改计划 CHG-01 的备份为最新。
    并在发布 Rules **之前**，用一个匿名身份建立一个持续监听（例如监听 `employees` 集合），作为第 4 步的验证工具。
@@ -132,7 +137,6 @@ match /queue_tickets/{id} { allow read, write: if staff() || device(); }
    - 所以发布后至少等待 **15 分钟**，并确认第 1 步建立的匿名监听已收到「权限被拒」而断开，才继续。如果没有断开，停止流程，不产生任何 PIN。
 5. 由负责人执行服务端管理指令：为每位在职员工和每台专用设备产生**一次性临时 PIN**，有效期 72 小时。哈希存入 `employee_secrets`，明文只当场打印一次，当面交给本人。
 6. 员工用临时 PIN 登录后，必须立刻设置新 PIN，新 PIN 只以哈希存储。
-7. 在 Emulator 中先演练全流程：把 KNOWN GAP 测试改为 `assertFails`，并补上「`epoch` 1 身份被拒」「旧 PIN 登录被拒」「已登录员工也读不到 `employee_secrets`」三组测试，全部通过后才进入窗口。
 
 **回退**：
 - 恢复上一版 Rules，并把 `ACCEPT_LEGACY_PIN` 改回 `true`。
