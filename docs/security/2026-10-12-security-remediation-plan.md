@@ -94,29 +94,61 @@ Emulator 复现结果（实际运行）：未登录 → 读写被拒；匿名身
 - **前提条件（待核实）**：服务端需要能签发 Custom Token 的服务账号，也就是在运行时服务账号上授予 `roles/iam.serviceAccountTokenCreator`，并授予 Firestore 访问权限。
   - AI Studio 管理的 Cloud Run 未必允许调整服务账号。
   - 如果不行，就把认证接口放到同一个 GCP 项目中的独立小型 Cloud Run 服务（例如 `klk-auth`，做法与现有 `ap-ai-service` 相同）。这也只是增加一个服务，不需要第二个 Firebase 项目。
-- **对员工的影响**：PIN 不变。上线后每台设备需要重新登录一次。
+- **对员工的影响**：此阶段 PIN 不变，上线后每台设备需要重新登录一次。PIN 的全员重设在 E3 窗口进行。
 
-### E3 · 收紧 Firestore Rules（E2 在两个 V1 部署都上线并稳定后）
+### E3 · 切换窗口：收紧 Rules + 作废全部旧 PIN 与旧身份（在 E2 于两个 V1 部署都上线并稳定后）
+
+**为什么必须在同一个窗口完成：**
+- 旧 PIN 在 E3 之前对外公开可读，必须视为已经外泄。只收紧 Rules 而不作废旧 PIN，取得旧 PIN 的人仍可经 `/api/auth/login` 拿到被新 Rules 信任的员工身份。
+- 新 PIN 必须在新 Rules 生效**之后**才产生。否则新 PIN（即使是哈希）在旧 Rules 下仍可被匿名读取，并离线穷举。
+- 在 E2 至 E3 之间签发的身份，可能落入持有旧 PIN 的人手中，也要一并作废。
+
+**规则草案**：用 `epoch` claim 一次作废全部旧身份。
 
 ```
-function staff()  { return request.auth != null && request.auth.token.emp is string; }
-function device() { return request.auth != null && request.auth.token.device is string; }
+function staff()  { return request.auth != null && request.auth.token.emp is string    && request.auth.token.epoch == 2; }
+function device() { return request.auth != null && request.auth.token.device is string && request.auth.token.epoch == 2; }
 
-match /{document=**} { allow read, write: if staff(); }   // 先挡住匿名身份
+// 注意：Firestore 只要有任一条 allow 成立就放行，所以通配规则必须「排除」秘密集合，
+//       单独写一条 if false 无法覆盖通配规则。
+match /{collection}/{document=**} {
+  allow read, write: if staff() && collection != 'employee_secrets';  // 挡住匿名身份与 epoch 1 的旧身份
+}
+// employee_secrets（PIN 哈希）没有任何 allow → 客户端一律拒绝，只有服务端（Admin SDK）可访问
 // 专用设备只放行它需要的集合（清单在实作时从 DeviceScreenPortal 盘点）
 match /queue_tickets/{id} { allow read, write: if staff() || device(); }
 ```
 
-- 先在 Emulator 中把 `tests/rules` 里的 KNOWN GAP 测试改为 `assertFails`，所有测试通过后，再由负责人在控制台发布。
-- **回退**：在 Firebase Console 的 Rules 历史版本中一键恢复上一版。规则改动不会动到数据。
-- 完成 E3 后，P1 和 P5 对外部攻击者关闭。剩下的是「已登录员工能看到不该看的资料」，由 E4 和 V2 处理。
+**窗口内的步骤**（非营业时段，一次完成）：
+1. 确认紧急整改计划 CHG-01 的备份为最新。
+2. 发布新 Rules。从这一刻起，匿名身份和所有 `epoch` 不等于 2 的旧身份都被拒绝。
+3. 服务端切换设置：
+   - 停止接受旧 PIN（`ACCEPT_LEGACY_PIN=false`）；
+   - 改为只签发 `epoch: 2` 的身份；
+   - 对所有用户执行 `revokeRefreshTokens`。
+4. 由负责人执行服务端管理指令：为每位在职员工和每台专用设备产生**一次性临时 PIN**，有效期 72 小时。哈希存入 `employee_secrets`，明文只当场打印一次，当面交给本人。
+5. 员工用临时 PIN 登录后，必须立刻设置新 PIN，新 PIN 只以哈希存储。
+6. 在 Emulator 中先演练全流程：把 KNOWN GAP 测试改为 `assertFails`，并补上「`epoch` 1 身份被拒」「旧 PIN 登录被拒」「已登录员工也读不到 `employee_secrets`」三组测试，全部通过后才进入窗口。
 
-### E4 · PIN 存储与内部权限（并入 V2，但优先做）
+**回退**：
+- 恢复上一版 Rules，并把 `ACCEPT_LEGACY_PIN` 改回 `true`。
+- 旧的 `employees.pin` 字段在 E4 之前不删除，所以回退后旧 PIN 立即可用。
+- ⚠️ 回退等于重新打开漏洞，只在营业被阻断时使用。
 
-- 把 PIN 从 `employees` 移到 `employee_secrets/{id}`，只保存 PBKDF2 或 scrypt 哈希。Rules 设为 `allow read, write: if false`，只有服务端能访问。
-- 渐进迁移：登录成功时把明文 PIN 改写为哈希，迁移完成后再删除 `employees.pin`。迁移前先做备份。
-- 取消默认 PIN `8888` / `0000`。新员工改用一次性临时 PIN，首次登录必须更改。
-- 设备账号的 PIN 哈希同样迁移到只有服务端可读的集合。
+**结果**：完成 E3 后：
+- 外部攻击者无法再通过匿名身份读写数据库（P1、P5）；
+- 外泄的旧 PIN 和窗口前签发的身份全部失效。
+
+剩下的「已登录员工能看到不该看的资料」，由 E4 和 V2 处理。
+
+### E4 · 清理旧 PIN 与内部权限（E3 稳定后，并入 V2 优先做）
+
+- 所有员工都完成新 PIN 设置并稳定运行后，删除 `employees` 中的旧 `pin` 字段。
+  - 删除前另做一次备份导出；
+  - 这一步不可逆，需要单独批准。
+- 取消默认 PIN `8888` / `0000`。新员工一律使用一次性临时 PIN，首次登录必须更改。
+- 删除旧 `device_accounts` 中的 PIN 哈希字段（已在 E3 移入 `employee_secrets` 或同等的服务端专用集合）。
+- 开始按角色细分 Rules（见第三部分）。
 
 ---
 
