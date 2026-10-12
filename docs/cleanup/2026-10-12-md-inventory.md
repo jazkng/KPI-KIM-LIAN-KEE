@@ -1,7 +1,7 @@
 # Markdown 文件清理清单
 
 - 日期：2026-10-12
-- 状态：**只是清单，没有删除、移动或修改任何文件**。实际清理需负责人批准后，在独立 PR 中进行，并且只在 `develop-v2` 上做，不动 `main`。
+- 状态：**已执行**（负责人于 2026-10-12 批准，在独立的文档清理 PR 中完成，只合并到 `develop-v2`，不动 `main`）。执行结果见文末。
 - 范围：仓库内全部 14 个 `.md` 文件（不含 `node_modules`）。
 
 ## 总表
@@ -20,7 +20,7 @@
 | `components/features/supplier/README.md` | 2026-07-07 | **保留（需补充）** | 漏列 `BatchStockLinkModal.tsx`、`BatchSupplierCodeModal.tsx` | 补上这两个文件的说明 |
 | `README.md` | 2026-10-12 | **合并（重写）** | 仍是 AI Studio 自动生成的模板：只提到 `GEMINI_API_KEY`，使用 `npm install`（实际以 `bun.lock` 为准），没有 Firebase、Emulator、测试、分支说明 | 重写为项目首页：简介、快速开始（引用 `CLAUDE.md` 的命令）、文档索引。保留 AI Studio App 链接作为 V1 参考 |
 | `ANDROID_APK_BUILD.md` | 2026-10-12 | **保留并移入 `docs/android/`** | 当前有效的 APK 打包步骤，与 `twa-manifest.json`（`com.kimliankee.erp` → `service-5174.ai.studio`）一致 | 移到 `docs/android/apk-build.md`；网域切换到 `erp.kimliankee.app` 时需重新打包，在文中加注 |
-| `ANDROID_TWA_SETUP.md` | 2026-07-28 | **合并后建议删除** | 与 `ANDROID_APK_BUILD.md` 大部分重复，而且内容与现状冲突：描述「主管版」APK（包名 `com.kimliankee.erp.supervisor`、入口 `/?portal=boss`），但代码里没有 `portal=boss` 的路由逻辑，网址也写成占位的「正式 Cloud Run 域名」 | 把仍然有用的部分（PWABuilder 打包方式、员工 PWA 与 APK 分流的概念）并入 `docs/android/apk-build.md` 的「附录」，然后删除。若主管版 APK 仍是需求，改记为 V2 待办 |
+| `ANDROID_TWA_SETUP.md` | 2026-07-28 | **合并后建议删除** | 与 `ANDROID_APK_BUILD.md` 大部分重复，部分内容已过时：要求修改 `public/.well-known/assetlinks.json`（该文件实际不会被送出，由 `server.ts` 依 `TWA_PACKAGES` 动态产生），网址也写成占位的「正式 Cloud Run 域名」。（初版清单误称代码中没有 `portal=boss` 逻辑；实际 `App.tsx` 已实现，会直接打开老板 PIN 登录画面） | 把仍然有效的内容全部并入 `docs/android/apk-build.md`，逐节核对后删除 |
 | `# 御膳智控 ERP — 风格统一 + 代码清理.md` | 2026-07-28 | **归档** | 7 月份一次性交付说明（对应 commit `841c1f8`），文中要求在 AI Studio 手动删除的 26 个文件在 GitHub 上已经不存在。文件名以 `# ` 开头并含空格，许多工具和命令行处理不便 | 移到 `docs/archive/2026-07-28-style-unify-cleanup.md`，并在文首注明「历史记录，已完成」 |
 
 ## 待确认事项
@@ -33,3 +33,21 @@
 
 - 清理只在 `develop-v2` 进行，不改 `main`，所以不影响 V1，也不影响 AI Studio 的同步。
 - 将来 V2 合并回 `main` 时，这些移动和删除会一并带过去。在此之前，如果 AI Studio 再次向 `main` 导出这些旧文件，也只影响 `main`。
+
+## 执行结果（2026-10-12）
+
+| 文件 | 动作 |
+| --- | --- |
+| `ANDROID_APK_BUILD.md` | 移到 `docs/android/apk-build.md`（保留 Git 历史），并与下一项合并、补充现状 |
+| `ANDROID_TWA_SETUP.md` | 有效内容全部并入 `docs/android/apk-build.md`，**已删除**。逐节去向见该文档附录「来源对照」；唯一舍弃的做法是「修改 `public/.well-known/assetlinks.json`」，因为它不会生效 |
+| `# 御膳智控 ERP — 风格统一 + 代码清理.md` | 移到 `docs/archive/2026-07-28-style-unify-cleanup.md`，文首加上归档说明 |
+| `README.md` | 重写为项目首页：简介、快速开始、项目结构、文档索引 |
+| `components/features/ap/README.md` | 补上 `PayablesOverview.tsx`、`VendorConfigModal.tsx` |
+| `components/features/supplier/README.md` | 补上 `BatchStockLinkModal.tsx`、`BatchSupplierCodeModal.tsx` |
+| `ap-ai-service/README.md` | 新增：接口、会改动 Drive 的操作、环境变量名称、本机运行注意事项 |
+| `.gitignore` | 加入 `*.keystore`、`*.jks`，防止 APK 签名密钥被提交（仓库历史中从未提交过） |
+
+仍待负责人确认的事项，已写在 `docs/android/apk-build.md` 第零节和 `ap-ai-service/README.md`：
+- 实际在用的 APK 是哪一支，keystore 是否已备份；
+- `ap-ai-service` 的部署方式。
+
