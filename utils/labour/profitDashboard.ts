@@ -70,7 +70,13 @@ const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 export const buildProfitSnapshot = (
     pnl: MonthlyPnLInputs,
     labour: EmployeeLabourCost[],
-    opts: { daysInMonth: number; elapsedDays: number; settlementDays: number },
+    opts: {
+        daysInMonth: number;
+        elapsedDays: number;
+        settlementDays: number;
+        /** 兼职工资（parttime_* 支出）：不在薪资单 details 里，要从排除的薪资类支出中取回 */
+        partTimeWages?: number;
+    },
 ): ProfitSnapshot => {
     const reasons: string[] = [];
 
@@ -108,7 +114,9 @@ export const buildProfitSnapshot = (
         const value = Number(amount) || 0;
         const group = categorizeExpense(cat);
         if (group === 'COGS') cogs += value;
-        else if (group === 'DELIVERY_COST') delivery += value;
+        // 平台抽佣与广告（PLATFORM_COMM_* / PLATFORM_ADS_*，由日结算出）不含 PLATFORM_FEE 字样，
+        // categorizeExpense 会归为 OPEX；它们随外送营业额变动，必须算变动成本
+        else if (group === 'DELIVERY_COST' || cat.toUpperCase().startsWith('PLATFORM_')) delivery += value;
         else if (group === 'OPEX') opex += value;
         else if (group === 'LABOR') {
             if (NON_PAYROLL_LABOUR.some(k => cat.toUpperCase().includes(k))) otherLabour += value;
@@ -136,6 +144,10 @@ export const buildProfitSnapshot = (
         if (estimated.length) reasons.push(`${estimated.length} 位员工本月尚未发薪，按底薪与法定供款推算`);
         if (missing.length) reasons.push(`${missing.length} 位员工人事档案没有底薪，未计入`);
     }
+    const partTime = Math.max(0, Math.min(Number(opts.partTimeWages) || 0, excludedLabour));
+    otherLabour += partTime;
+    excludedLabour -= partTime;
+    if (partTime > 0) reasons.push(`兼职工资 RM ${partTime.toFixed(2)} 不在薪资单里，已计入人工成本`);
     if (excludedLabour > 0) {
         reasons.push(`损益中的薪资类支出 RM ${excludedLabour.toFixed(2)} 与薪资是同一笔钱，已排除，不重复计算`);
     }
@@ -168,7 +180,7 @@ export const buildProfitSnapshot = (
             status: payrollStatus,
             note: `${settled.length} 人已发薪、${estimated.length} 人推算、${missing.length} 人缺底薪`,
         },
-        otherLabour: { key: 'other_labour', label: '其他人事支出（员工餐、宿舍）', amount: round2(otherLabour), status: 'SETTLED' },
+        otherLabour: { key: 'other_labour', label: '其他人事支出（兼职工资、员工餐、宿舍）', amount: round2(otherLabour), status: 'SETTLED' },
         labourCost,
         otherFixedCosts: { key: 'opex', label: '其他经营费用（租金、水电等）', amount: round2(opex), status: otherFixedStatus },
         excludedLabourExpenses: round2(excludedLabour),
