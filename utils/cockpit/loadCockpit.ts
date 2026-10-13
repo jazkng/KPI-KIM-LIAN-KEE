@@ -11,7 +11,22 @@ import { buildMonthLabourCosts, summariseReviewedAttendance } from '../labour/la
 import { buildCockpit, dailyRevenueFromSettlements, type CockpitResult } from './cockpitMetrics';
 import { addDays, daysInMonth, type Period } from './periods';
 
-export const loadCockpit = async (
+const TIMEOUT_MS = 25000;
+
+/** 读取逾时就报错，不让画面无限转圈 */
+const withTimeout = <T,>(promise: Promise<T>, ms = TIMEOUT_MS): Promise<T> =>
+    Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('读取逾时，请检查网络')), ms)),
+    ]);
+
+export const loadCockpit = (
+    period: Period,
+    today: string,
+    accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+): Promise<CockpitResult> => withTimeout(loadCockpitInner(period, today, accountingMode));
+
+const loadCockpitInner = async (
     period: Period,
     today: string,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',

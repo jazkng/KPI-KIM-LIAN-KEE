@@ -196,10 +196,14 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         : coverage.missingDays.length > 0
             ? 'INCOMPLETE'
             : 'CONFIRMED';
+    // 「今天」还没日结是正常的，不算缺漏，另外注明
+    const pastMissing = coverage.missingDays.filter(d => d !== input.today);
+    const todayPending = coverage.missingDays.includes(input.today);
     const revenueStatusNote =
         revenueStatus === 'CONFIRMED' ? `${coverage.settled} 天日结都已提交`
             : revenueStatus === 'PENDING_CLOSE' ? (futureOnly ? '期间尚未开始' : '今天尚未日结')
-                : coverage.settled === 0 ? '期间内没有任何日结' : `缺 ${coverage.missingDays.length} 天日结：${coverage.missingDays.slice(0, 5).join('、')}${coverage.missingDays.length > 5 ? '…' : ''}`;
+                : coverage.settled === 0 && !pastMissing.length ? '期间内没有任何日结'
+                    : `缺 ${pastMissing.length} 天日结：${pastMissing.slice(0, 5).join('、')}${pastMissing.length > 5 ? '…' : ''}${todayPending ? '（另：今天尚未日结）' : ''}`;
     kpis.revenue = {
         key: 'revenue',
         label: '营业额',
@@ -385,18 +389,18 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
 
     kpis.monthRevenue = {
         key: 'monthRevenue',
-        label: '本月累计营业额',
+        label: monthFinished ? `${month} 整月营业额` : '本月累计营业额',
         value: monthRevenue,
         unit: 'RM',
         status: monthSettledDays === 0 ? 'INCOMPLETE' : monthSettledDays >= monthElapsed ? (monthFinished ? 'CONFIRMED' : 'PENDING_CLOSE') : 'INCOMPLETE',
         statusNote: monthNote,
-        basis: ['本月 1 日至今所有日结，口径同「营业额」', '以日期范围查询整月日结（不受「最近 30 笔」限制）'],
+        basis: [monthFinished ? `${month} 整月所有日结，口径同「营业额」` : '本月 1 日至今所有日结，口径同「营业额」', '以日期范围查询整月日结（不受「最近 30 笔」限制）'],
         sources: settlementSources,
         rows: [{ label: '日均（已日结天数）', amount: monthSettledDays ? round2(monthRevenue / monthSettledDays) : 0 }],
     };
     kpis.projectedProfit = {
         key: 'projectedProfit',
-        label: '预计月底利润',
+        label: monthFinished ? `${month} 月底利润` : '预计月底利润',
         value: projectedProfit,
         unit: 'RM',
         status: projectedProfit === null ? 'INCOMPLETE' : monthStatus === 'CONFIRMED' ? 'CONFIRMED' : 'ESTIMATED',
@@ -474,7 +478,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
 
     // ── 预警（基础规则；完整预警中心在 PR E）──
     const alerts: CockpitResult['alerts'] = [];
-    if (coverage.missingDays.filter(d => d !== input.today).length > 0) {
+    if (pastMissing.length > 0) {
         alerts.push({ level: 'HIGH', title: '有营业日未提交日结', detail: revenueStatusNote, kpi: 'revenue' });
     }
     if (projectedProfit !== null && projectedProfit < 0 && !monthFinished) {

@@ -19,7 +19,7 @@ const MODAL_REFETCH_COOLDOWN_MS = 60 * 1000;
 
 // Import Modals so we can open them directly from the Priority Dashboard
 import { canUseBossTarget } from '../utils/bossPortalAccess';
-import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 interface BossPriorityDashboardProps {
     currentEmployee: Employee;
@@ -28,7 +28,7 @@ interface BossPriorityDashboardProps {
     onLogout?: () => void;
 }
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 
 const normalizeDateOnly = (value: unknown): string => {
     const datePart = String(value || '').split('T')[0];
@@ -668,6 +668,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             'ORG': <OrgChart onClose={close} />,
             'REPORTS': <FinancialReport onClose={close} />,
             'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
+            'BOSS_COCKPIT': <BossCockpit onClose={close} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
@@ -758,6 +759,20 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                     </div>
                 ) : (
                     <>
+                        {/* ═══ 经营驾驶舱入口（利润、保本、人工、食材，同财务报表口径）═══ */}
+                        {canUse('BOSS_COCKPIT') && (
+                            <button
+                                onClick={() => setActiveModal('BOSS_COCKPIT')}
+                                className="mb-4 flex min-h-[64px] w-full items-center gap-3 rounded-2xl bg-stone-900 px-4 py-3 text-left text-white shadow-sm active:bg-stone-800"
+                            >
+                                <Gauge size={22} className="shrink-0 text-[#FFD200]" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-base font-black">经营驾驶舱</span>
+                                    <span className="block truncate text-xs font-medium text-white/70">实际与预估利润 · 保本营业额 · 人工与食材成本</span>
+                                </span>
+                                <ChevronRight size={18} className="shrink-0 text-white/60" />
+                            </button>
+                        )}
                         {/* ═══ 第一排：经营日报（左，大）＋ 本月 / 应付账款（右）═══ */}
                         <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
                             {dailyReportSummary && (() => {

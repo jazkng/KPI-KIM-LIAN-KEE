@@ -1,5 +1,5 @@
 import { db } from '../firebaseConfig';
-import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
+import { collection, getDocs, getDocsFromServer, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
 import { 
     Employee, SettlementRecord, ExpenseItem, RecurringBill, 
     BillPaymentRecord, StockItem, Supplier, PurchaseOrder, 
@@ -2023,11 +2023,12 @@ export class DataManager {
     }> {
         const start = startDate;
         const end = `${endDate}T23:59:59`;
+        // 一律向伺服器读取：离线时宁可报错，也不要用不完整的本机快取算出「看似正常」的利润
         const [setSnap, billSnap, expByTime, expByPayment] = await Promise.all([
-            getDocs(query(collection(db, 'settlements'), where('date', '>=', start), where('date', '<=', end))),
-            getDocs(query(collection(db, 'bill_payments'), where('date', '>=', start), where('date', '<=', end))),
-            getDocs(query(collection(db, 'standalone_expenses'), where('time', '>=', start), where('time', '<=', end))),
-            getDocs(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', start), where('paymentDate', '<=', end))),
+            getDocsFromServer(query(collection(db, 'settlements'), where('date', '>=', start), where('date', '<=', end))),
+            getDocsFromServer(query(collection(db, 'bill_payments'), where('date', '>=', start), where('date', '<=', end))),
+            getDocsFromServer(query(collection(db, 'standalone_expenses'), where('time', '>=', start), where('time', '<=', end))),
+            getDocsFromServer(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', start), where('paymentDate', '<=', end))),
         ]);
         const expenses = new Map<string, ExpenseItem>();
         [...expByTime.docs, ...expByPayment.docs].forEach(d => expenses.set(d.id, { id: d.id, ...d.data() } as ExpenseItem));

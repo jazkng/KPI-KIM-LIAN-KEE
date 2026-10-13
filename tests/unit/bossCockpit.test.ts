@@ -164,6 +164,16 @@ describe('驾驶舱 KPI 与资料状态', () => {
         expect(r.kpis.revenue.status).toBe('PENDING_CLOSE');
         expect(r.alerts.find(a => a.kpi === 'revenue')).toBeUndefined();
     });
+    it('本月有漏日结且今天未日结：缺漏只列过去的日子，今天另外注明', () => {
+        const period = resolvePeriod('THIS_MONTH', '2026-10-03');
+        const r = buildCockpit(inputsFor(period, '2026-10-03', [cost('7001', 2600)]));
+        expect(r.kpis.revenue.statusNote).toBe('缺 1 天日结：2026-10-02（另：今天尚未日结）');
+    });
+    it('看上个月时，标签写该月而不是「本月」「预计」', () => {
+        const r = buildCockpit(inputsFor(resolvePeriod('LAST_MONTH', '2026-10-15'), '2026-10-15', [cost('7001', 2600)]));
+        expect(r.kpis.monthRevenue.label).toBe('2026-09 整月营业额');
+        expect(r.kpis.projectedProfit.label).toBe('2026-09 月底利润');
+    });
     it('预计月底利润一律标为预估（月份未结束）', () => {
         const period = resolvePeriod('THIS_MONTH', '2026-09-20');
         const r = buildCockpit(inputsFor(period, '2026-09-20', [cost('7001', 2600)]));
