@@ -1973,6 +1973,21 @@ export class DataManager {
         await setDoc(doc(db, 'attendance', record.id), record);
         DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新
     }
+    /**
+     * FACE3000 审核导入：主管处理完所有异常后，一次写入考勤记录与一笔导入记录（审计用）。
+     * - 考勤记录沿用现有 attendance 格式与 ID（同员工同营业日会覆盖上一次导入的结果，不会重复）。
+     * - 导入记录只存统计与主管决定的数量，不存打卡时间明细。
+     * - 每批最多 400 笔，避开 Firestore 单批 500 笔上限。
+     */
+    static async saveAttendanceImport(records: AttendanceRecord[], batchInfo: Record<string, unknown> & { id: string }): Promise<void> {
+        for (let i = 0; i < records.length; i += 400) {
+            const batch = writeBatch(db);
+            records.slice(i, i + 400).forEach(rec => batch.set(doc(db, 'attendance', rec.id), rec));
+            await batch.commit();
+        }
+        await setDoc(doc(db, 'attendance_import_batches', batchInfo.id), batchInfo);
+        DataManager.clearCacheKeys(['attendance_']);
+    }
     static async deleteAttendance(id: string): Promise<void> {
         await deleteDoc(doc(db, 'attendance', id));
         DataManager.clearCacheKeys(['attendance_']);   // 👑 同上

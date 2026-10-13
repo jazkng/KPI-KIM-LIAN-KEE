@@ -16,9 +16,12 @@ import {
 } from '../../utils/dataManager';
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
+import { FaceImportReview } from './attendance/FaceImportReview';
 
 interface AttendanceConsoleProps {
     onClose: () => void;
+    /** 目前登入的人（用来记录考勤审核主管；没有时会要求输入姓名） */
+    currentEmployee?: Employee | null;
 }
 const DEFAULT_LOCAL_REST = 4;
 const DEFAULT_FOREIGN_REST = 2;
@@ -956,7 +959,7 @@ const EmployeeMonthlySheetModal: React.FC<{
 // ============================================================
 // MAIN COMPONENT 
 // ============================================================
-export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose }) => {
+export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, currentEmployee }) => {
     const [staffList, setStaffList] = useState<Employee[]>([]);
     const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
     const [dailyRoster, setDailyRoster] = useState<Record<string, RosterStatus>>({}); 
@@ -993,6 +996,9 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     
     // 👑 人脸打卡机导入状态
     const [isFaceImportOpen, setIsFaceImportOpen] = useState(false);
+    // FACE3000 Excel：改走「审核后导入」流程（异常须主管确认，见 attendance/FaceImportReview）
+    const [faceReviewFile, setFaceReviewFile] = useState<File | null>(null);
+    const [isFaceReviewOpen, setIsFaceReviewOpen] = useState(false);
     const [isParsing, setIsParsing] = useState(false);
     const [parseError, setParseError] = useState<string | null>(null);
     const [importPreviews, setImportPreviews] = useState<any[]>([]);
@@ -1163,6 +1169,17 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const handleFileChangeLocal = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // FACE3000-U 的 Excel 汇出档：不再直接写入，改为先审核异常
+        if (/\.xlsx?$/i.test(file.name)) {
+            setIsFaceImportOpen(false);
+            setImportPreviews([]);
+            setParseError(null);
+            setFaceReviewFile(file);
+            setIsFaceReviewOpen(true);
+            e.target.value = '';
+            return;
+        }
 
         setIsParsing(true);
         setParseError(null);
@@ -2512,6 +2529,17 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             )}
 
             {/* === FACE ATTENDANCE IMPORT MODAL === */}
+            {isFaceReviewOpen && (
+                <FaceImportReview
+                    employees={importStaffList.length ? importStaffList : staffList}
+                    shiftSettings={shiftSettings}
+                    currentEmployee={currentEmployee}
+                    initialFile={faceReviewFile}
+                    onClose={() => { setIsFaceReviewOpen(false); setFaceReviewFile(null); }}
+                    onSaved={() => { loadData(selectedDate); }}
+                />
+            )}
+
             {isFaceImportOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[320] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
