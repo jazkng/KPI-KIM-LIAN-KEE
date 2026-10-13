@@ -337,7 +337,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               onClick={handleLogoutClick}
               title={st('logout', lang)}
               className="flex items-center gap-1.5 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ml-1.5 shrink-0"
-              style={{ minHeight: '38px' }}
+              style={{ minHeight: '44px' }}
             >
               <LogOut size={13} className="text-red-500 shrink-0" />
               <span className="text-[10px] font-extrabold uppercase">
@@ -405,7 +405,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               <button
                 onClick={handleLogoutClick}
                 title={st('logout', lang)}
-                className="flex items-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 hover:text-white px-2.5 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-sm"
+                className="flex min-h-[44px] items-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 hover:text-white px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-sm"
               >
                 <LogOut size={13} className="text-red-400 shrink-0" />
                 <span className="text-[10px] font-extrabold uppercase tracking-wider">
@@ -541,21 +541,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               {/* Roster & Times list */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">{st('position', lang)}</p>
+                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('position', lang)}</p>
                   <p className="font-bold text-xs text-[#111111]">
                     {st(employee.role, lang)}
                   </p>
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">{st('workHours', lang)}</p>
+                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('workHours', lang)}</p>
                   <p className="font-bold text-xs text-[#111111] font-mono">
                     {todayShiftTimes.checkInStr} - {todayShiftTimes.checkOutStr}
                   </p>
                 </div>
 
                 <div className="space-y-1 col-span-2">
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">{st('status', lang)}</p>
+                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('status', lang)}</p>
                   <div className="flex items-center gap-2 pt-0.5">
                     {todayRosterStatus === 'OFF' ? (
                       <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
@@ -1270,7 +1270,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
         {/* TODAY */}
         <button 
           onClick={() => setActiveTab('TODAY')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 shrink-0 ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
             activeTab === 'TODAY' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
           }`}
           style={{ minHeight: '44px' }}
@@ -1278,13 +1278,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'TODAY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
             <ClipboardList size={16} className={activeTab === 'TODAY' ? 'text-amber-600' : ''} />
           </div>
-          <span className={`text-[8.5px] font-black tracking-wider ${activeTab === 'TODAY' ? 'text-amber-600' : ''}`}>{st('todayWorkspace', lang)}</span>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'TODAY' ? 'text-amber-600' : ''}`}>{st('todayWorkspace', lang)}</span>
         </button>
 
         {/* ROSTER */}
         <button 
           onClick={() => setActiveTab('ROSTER')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 shrink-0 ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
             activeTab === 'ROSTER' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
           }`}
           style={{ minHeight: '44px' }}
@@ -1292,13 +1292,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'ROSTER' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
             <Calendar size={16} className={activeTab === 'ROSTER' ? 'text-amber-600' : ''} />
           </div>
-          <span className={`text-[8.5px] font-black tracking-wider ${activeTab === 'ROSTER' ? 'text-amber-600' : ''}`}>{st('schedule', lang)}</span>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'ROSTER' ? 'text-amber-600' : ''}`}>{st('schedule', lang)}</span>
         </button>
 
         {/* HANDBOOK */}
         <button 
           onClick={() => setActiveTab('HANDBOOK')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 shrink-0 ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
             activeTab === 'HANDBOOK' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
           }`}
           style={{ minHeight: '44px' }}
@@ -1306,13 +1306,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'HANDBOOK' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
             <BookOpen size={16} className={activeTab === 'HANDBOOK' ? 'text-amber-600' : ''} />
           </div>
-          <span className={`text-[8.5px] font-black tracking-wider ${activeTab === 'HANDBOOK' ? 'text-amber-600' : ''}`}>{st('handbook', lang)}</span>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'HANDBOOK' ? 'text-amber-600' : ''}`}>{st('handbook', lang)}</span>
         </button>
 
         {/* PROFILE */}
         <button 
           onClick={() => setActiveTab('PROFILE')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 shrink-0 ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
             activeTab === 'PROFILE' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
           }`}
           style={{ minHeight: '44px' }}
@@ -1320,7 +1320,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'PROFILE' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
             <User size={16} className={activeTab === 'PROFILE' ? 'text-amber-600' : ''} />
           </div>
-          <span className={`text-[8.5px] font-black tracking-wider ${activeTab === 'PROFILE' ? 'text-amber-600' : ''}`}>{st('me', lang)}</span>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'PROFILE' ? 'text-amber-600' : ''}`}>{st('me', lang)}</span>
         </button>
 
       </div>

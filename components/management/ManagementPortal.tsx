@@ -631,7 +631,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                         <span className={`text-xl transition-all ${isSelected ? 'scale-110' : 'opacity-40'}`}>
                                             {tab.icon}
                                         </span>
-                                        <span className={`text-[9px] font-black tracking-wider transition-colors ${isSelected ? 'text-amber-600' : 'text-stone-400'}`}>
+                                        <span className={`text-[11px] leading-tight max-w-full truncate font-black transition-colors ${isSelected ? 'text-amber-600' : 'text-stone-400'}`}>
                                             {tab.label}
                                         </span>
                                     </button>
