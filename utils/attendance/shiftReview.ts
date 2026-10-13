@@ -203,19 +203,28 @@ const buildDay = (
 
     const sched = scheduleFor(businessDate, settings, shiftGroup);
     const exceptions: ReviewException[] = [];
-    const add = (type: ExceptionType, message: string, minutesValue?: number) =>
-        exceptions.push({ key: key(type), type, deviceNo, businessDate, message, minutes: minutesValue, resolution: resolutions[key(type)] });
+    // override：null = 强制视为未处理；不传 = 用主管的决定
+    const add = (type: ExceptionType, message: string, minutesValue?: number, override?: null) =>
+        exceptions.push({
+            key: key(type), type, deviceNo, businessDate, message, minutes: minutesValue,
+            resolution: override === null ? undefined : resolutions[key(type)],
+        });
 
     const incomplete = kept.length % 2 === 1;
     const segments: WorkSegment[] = [];
     for (let i = 0; i + 1 < kept.length; i += 2) segments.push({ inMin: kept[i], outMin: kept[i + 1] });
 
     if (incomplete) {
+        // 补上的时间没有让打卡变成双数（例如与现有打卡相隔 5 分钟内被当成重复）→ 视为未处理
+        const addedButStillOdd = missing?.action === 'ADD_TIME';
         add(
             'MISSING_PUNCH',
-            isLastDay
-                ? `打卡 ${kept.length} 次（单数）。这是区间最后一天，下班卡可能在下个月的档案里；请补上时间或判定不算出勤`
-                : `打卡 ${kept.length} 次（单数），缺上班或下班卡；请补上时间或判定不算出勤`,
+            (addedButStillOdd ? `补上的 ${missing.time} 无效（与现有打卡太近或仍为单数），请重新输入。` : '') +
+                (isLastDay
+                    ? `打卡 ${kept.length} 次（单数）。这是区间最后一天，下班卡可能在下个月的档案里；请补上时间或判定不算出勤`
+                    : `打卡 ${kept.length} 次（单数），缺上班或下班卡；请补上时间或判定不算出勤`),
+            undefined,
+            addedButStillOdd ? null : undefined,
         );
     }
 
@@ -386,7 +395,8 @@ export const buildAttendanceRecords = (
                 status: late && early ? 'LATE_AND_EARLY' : late ? 'COMPLETED_LATE' : early ? 'EARLY_OUT' : 'COMPLETED',
                 source: 'face_machine',
                 notes: `FACE3000 审核导入 (机器编号 ${r.deviceNo})${notes ? ` | ${notes}` : ''}`,
-                allTimes: day.punches,
+                // 沿用原本的 HH:mm 格式（不加「+1」），跨午夜由 clockIn / clockOut 表示
+                allTimes: day.punches.map(p => p.replace(/\+\d+$/, '')),
                 lateExcused: day.lateMinutes > 0 && day.lateExcused ? true : undefined,
                 approvedOtMinutes: day.approvedOtMinutes || undefined,
                 importBatchId: meta.batchId,
@@ -397,4 +407,27 @@ export const buildAttendanceRecords = (
     });
     // Firestore 不接受 undefined 栏位
     return records.map(rec => JSON.parse(JSON.stringify(rec)) as AttendanceRecord);
+};
+
+/**
+ * 重新导入时要移除的旧打卡机记录：同一批员工、同一区间内，以前导入过（ID 以 `_face` 结尾），
+ * 但这次审核后不再有记录的日子（判定不算出勤，或旧版按日历日导入时把凌晨下班卡存成另一天）。
+ * 只处理打卡机导入的记录，APP 打卡记录一律不动。
+ */
+export const findStaleFaceRecords = (
+    review: ReviewResult,
+    newRecords: AttendanceRecord[],
+    existing: AttendanceRecord[],
+): AttendanceRecord[] => {
+    const employeeIds = new Set(review.employees.map(r => r.employee!.id));
+    const keep = new Set(newRecords.map(r => r.id));
+    return existing.filter(
+        rec =>
+            typeof rec.id === 'string' &&
+            rec.id.endsWith('_face') &&
+            employeeIds.has(rec.employeeId) &&
+            rec.date >= review.periodStart &&
+            rec.date <= review.periodEnd &&
+            !keep.has(rec.id),
+    );
 };

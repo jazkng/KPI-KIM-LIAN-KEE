@@ -8,15 +8,16 @@
 // ============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Loader2, X } from 'lucide-react';
-import type { Employee, PayrollRecord } from '../../../types';
+import type { AttendanceRecord, Employee, PayrollRecord } from '../../../types';
 import { DataManager, type AttendanceShiftSettings } from '../../../utils/dataManager';
 import { loadXLSX } from '../../../utils/lazyLibs';
-import { parseFace3000Workbook, type Face3000Import, type SheetRows } from '../../../utils/attendance/face3000';
+import { isCalendarMonth, parseFace3000Workbook, type Face3000Import, type SheetRows } from '../../../utils/attendance/face3000';
 import {
     ALLOWED_ACTIONS,
     DEFAULT_REVIEW_OPTIONS,
     buildAttendanceRecords,
     buildReview,
+    findStaleFaceRecords,
     type ExceptionType,
     type Resolution,
     type ReviewEmployee,
@@ -30,6 +31,10 @@ interface Props {
     shiftSettings: AttendanceShiftSettings;
     currentEmployee?: Employee | null;
     initialFile?: File | null;
+    /** 已解析好的资料（例如由 PDF 转来），一样要经过审核 */
+    initialData?: Face3000Import | null;
+    /** 预先对应好的机器编号 → 员工 ID（PDF 以姓名对应的结果） */
+    initialManualMatches?: Record<string, string>;
     onClose: () => void;
     onSaved?: () => void;
 }
@@ -52,18 +57,21 @@ const ACTION_LABEL: Record<Resolution['action'], string> = {
 };
 
 const hours = (min: number) => (min / 60).toFixed(1);
+
 const rm = (n: number) => `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const isDone = (ex: ReviewException) =>
     !!ex.resolution && ALLOWED_ACTIONS[ex.type].includes(ex.resolution.action) && (ex.resolution.action !== 'EXCUSE' || !!ex.resolution.note?.trim());
 
-export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, currentEmployee, initialFile, onClose, onSaved }) => {
-    const [data, setData] = useState<Face3000Import | null>(null);
-    const [fileName, setFileName] = useState('');
+export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, currentEmployee, initialFile, initialData, initialManualMatches, onClose, onSaved }) => {
+    const [data, setData] = useState<Face3000Import | null>(initialData || null);
+    const [fileName, setFileName] = useState(initialData ? 'PDF 报表' : '');
+    // 同一次审核重试时沿用同一个导入记录 ID
+    const [batchId, setBatchId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
-    const [manualMatches, setManualMatches] = useState<Record<string, string>>({});
+    const [manualMatches, setManualMatches] = useState<Record<string, string>>(initialManualMatches || {});
     const [cutoff, setCutoff] = useState(DEFAULT_REVIEW_OPTIONS.businessDayCutoff);
     const [otThreshold, setOtThreshold] = useState(DEFAULT_REVIEW_OPTIONS.otThresholdMinutes);
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -163,23 +171,40 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
             }
         })();
         if (!records) return;
+        setBusy('检查既有记录…');
+        let stale: AttendanceRecord[];
+        try {
+            DataManager.clearCacheKeys(['attendance_']);
+            const months = [...new Set([data.periodStart.slice(0, 7), data.periodEnd.slice(0, 7)])];
+            const existing = (await Promise.all(months.map(m => DataManager.getAttendanceByMonth(m)))).flat();
+            stale = findStaleFaceRecords(review, records, existing);
+        } catch (e) {
+            setError(`读取既有考勤失败，未写入任何资料：${(e as Error).message}`);
+            setBusy(null);
+            return;
+        }
+        setBusy(null);
         const ok = window.confirm(
             `确认导入 ${review.employees.length} 位员工、${records.length} 笔考勤记录？\n\n` +
                 `区间：${data.periodStart} ~ ${data.periodEnd}\n` +
-                '同员工同营业日之前导入的打卡机记录会被这次结果取代。',
+                '同员工同营业日之前导入的打卡机记录会被这次结果取代。' +
+                (stale.length
+                    ? `\n另有 ${stale.length} 笔旧的打卡机记录（这次判定不算出勤，或旧版导入存错日子）会移除，内容先完整备份在导入记录中。`
+                    : ''),
         );
         if (!ok) return;
         setBusy('写入中…');
         try {
-            const batchId = `face_${data.periodStart}_${Date.now()}`;
-            const stamped = records.map(r => ({ ...r, importBatchId: batchId }));
+            const id = batchId || `face_${data.periodStart}_${Date.now()}`;
+            setBatchId(id);
+            const stamped = records.map(r => ({ ...r, importBatchId: id }));
             const decisions: Record<string, number> = {};
             review.employees.forEach(e => e.days.forEach(d => d.exceptions.forEach(ex => {
                 const k = `${ex.type}:${ex.resolution?.action}`;
                 decisions[k] = (decisions[k] || 0) + 1;
             })));
-            await DataManager.saveAttendanceImport(stamped, {
-                id: batchId,
+            await DataManager.saveAttendanceImport(stamped, stale, {
+                id,
                 source: 'FACE3000_XLS',
                 fileName,
                 periodStart: data.periodStart,
@@ -197,7 +222,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
             setSavedCount(stamped.length);
             onSaved?.();
         } catch (e) {
-            setError(`写入失败：${(e as Error).message}`);
+            setError(`写入失败：${(e as Error).message}。可以再按一次「确认导入」重试：同样的记录会覆盖，不会重复。`);
         } finally {
             setBusy(null);
         }
@@ -333,7 +358,14 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                                     </div>
                                 </>
                             ) : (
-                                <LabourPanel month={data.periodStart.slice(0, 7)} employees={employees} review={review} />
+                                isCalendarMonth(data.periodStart, data.periodEnd) ? (
+                                    <LabourPanel month={data.periodStart.slice(0, 7)} employees={employees} review={review} />
+                                ) : (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                        这份档案的区间是 {data.periodStart} ~ {data.periodEnd}，不是完整的一个月。
+                                        薪资与营业额都以月计，混在一起会算错，所以只在「1 号到月底」的档案计算人工成本。考勤审核与导入不受影响。
+                                    </div>
+                                )
                             )}
                         </>
                     )}

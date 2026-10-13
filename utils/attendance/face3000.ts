@@ -185,3 +185,42 @@ export const parseFace3000Workbook = (sheets: Record<string, SheetRows>): Face30
     sorted.forEach(e => e.punches.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)));
     return { periodStart: period.start, periodEnd: period.end, employees: sorted, warnings };
 };
+
+/**
+ * 旧的 PDF 报表解析结果（每位员工、每一天一列，机器已按班次排好）→ 原始打卡。
+ * 同一列里时间变小代表过了午夜（例如 14:39 → 01:00），这些打卡算下一个日历日，
+ * 之后由 shiftReview 依营业日分界归回当天的班。
+ * PDF 也必须经过同样的审核，不能直接写入。
+ */
+export const fromDailyRows = (
+    month: string,
+    people: { deviceNo: string; name: string; rows: { day: number; times: string[] }[] }[],
+): Face3000Import => {
+    const [y, m] = month.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const employees: Face3000Employee[] = people.map(p => {
+        const punches: Face3000Punch[] = [];
+        p.rows.forEach(row => {
+            if (row.day < 1 || row.day > lastDay) return;
+            const base = toIsoDate(y, m, row.day);
+            let offset = 0;
+            let prev = -1;
+            row.times.flatMap(t => parsePunchCell(t)).forEach(time => {
+                const minute = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+                if (prev >= 0 && minute < prev) offset = 1;
+                prev = minute;
+                punches.push({ date: addDays(base, offset), time });
+            });
+        });
+        punches.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+        return { deviceNo: p.deviceNo, name: p.name, department: '', punches };
+    });
+    return { periodStart: toIsoDate(y, m, 1), periodEnd: toIsoDate(y, m, lastDay), employees, warnings: [] };
+};
+
+/** 区间是否刚好是一个日历月（1 号到月底） */
+export const isCalendarMonth = (start: string, end: string): boolean => {
+    if (start.slice(0, 7) !== end.slice(0, 7) || !start.endsWith('-01')) return false;
+    const [y, m] = start.split('-').map(Number);
+    return Number(end.slice(8, 10)) === new Date(y, m, 0).getDate();
+};

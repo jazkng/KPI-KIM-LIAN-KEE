@@ -4,11 +4,12 @@ import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
 import type { Employee } from '../../types';
 import { DEFAULT_ATTENDANCE_SETTINGS } from '../../utils/dataManager';
-import { parseFace3000Workbook, parsePeriod, parsePunchCell, type SheetRows } from '../../utils/attendance/face3000';
+import { fromDailyRows, isCalendarMonth, parseFace3000Workbook, parsePeriod, parsePunchCell, type SheetRows } from '../../utils/attendance/face3000';
 import {
     buildAttendanceRecords,
     buildReview,
     businessMinuteToIso,
+    findStaleFaceRecords,
     matchEmployee,
     toBusinessPunch,
     type Resolution,
@@ -180,5 +181,61 @@ describe('buildReview（营业日、配对、异常）', () => {
     it('写入时间以马来西亚时区计算，不受浏览器时区影响', () => {
         expect(businessMinuteToIso('2026-09-01', 15 * 60)).toBe('2026-09-01T07:00:00.000Z');
         expect(businessMinuteToIso('2026-09-01', 1440 + 60)).toBe('2026-09-01T17:00:00.000Z');
+    });
+});
+
+describe('Codex 审核修正', () => {
+    const load = (cells: Record<number, string>, no = '9001') =>
+        parseFace3000Workbook({ Logs: makeLogs(PERIOD, 30, [{ no, name: 'A', dept: 'BOH', cells }]) });
+
+    it('补上的时间被当成重复（5 分钟内）时，漏打卡仍算未处理，不能导入', () => {
+        const key = '9001|2026-09-07|MISSING_PUNCH';
+        const r = buildReview(load({ 7: '15:00\n' }), [emp('9001')], { shiftSettings: SETTINGS }, { [key]: { action: 'ADD_TIME', time: '15:02' } });
+        expect(r.openExceptionCount).toBe(1);
+        expect(r.employees[0].days[0].exceptions[0].message).toMatch(/无效/);
+        expect(() => buildAttendanceRecords(r, { batchId: 'b', reviewedBy: 'S', reviewedAt: 'x' })).toThrow();
+    });
+
+    it('allTimes 维持原本的 HH:mm 格式（不加 +1）', () => {
+        const r = buildReview(load({ 1: '15:05\n', 2: '00:58\n' }), [emp('9001')], { shiftSettings: SETTINGS });
+        const [rec] = buildAttendanceRecords(r, { batchId: 'b', reviewedBy: 'S', reviewedAt: 'x' });
+        expect(rec.allTimes).toEqual(['15:05', '00:58']);
+        expect(r.employees[0].days[0].punches).toEqual(['15:05', '00:58+1']);
+    });
+
+    it('重新导入：只移除同员工、同区间、打卡机导入且这次没有的旧记录；APP 打卡与其他人不动', () => {
+        const key = '9001|2026-09-07|MISSING_PUNCH';
+        const r = buildReview(load({ 7: '15:00\n', 10: '15:00\n', 11: '01:00\n' }), [emp('9001'), emp('9002')], { shiftSettings: SETTINGS }, { [key]: { action: 'MARK_ABSENT' } });
+        const records = buildAttendanceRecords(r, { batchId: 'b', reviewedBy: 'S', reviewedAt: 'x' });
+        const old = (id: string, employeeId: string, date: string) => ({ id, employeeId, date } as any);
+        const stale = findStaleFaceRecords(r, records, [
+            old('attendance_9001_2026-09-07_face', '9001', '2026-09-07'), // 这次判定不算出勤 → 移除
+            old('attendance_9001_2026-09-11_face', '9001', '2026-09-11'), // 旧版把凌晨下班卡存成隔天 → 移除
+            old('attendance_9001_2026-09-10_face', '9001', '2026-09-10'), // 这次有 → 覆盖，不移除
+            old('2026-09-12_9001', '9001', '2026-09-12'),                   // APP 打卡 → 不动
+            old('attendance_9002_2026-09-07_face', '9002', '2026-09-07'),   // 不在这次档案的人 → 不动
+            old('attendance_9001_2026-08-31_face', '9001', '2026-08-31'),   // 区间外 → 不动
+        ]);
+        expect(stale.map(s => s.id)).toEqual(['attendance_9001_2026-09-07_face', 'attendance_9001_2026-09-11_face']);
+    });
+
+    it('PDF 每日列转成原始打卡：时间变小代表跨午夜，算下一个日历日', () => {
+        const data = fromDailyRows('2026-09', [{ deviceNo: '9001', name: 'A', rows: [{ day: 1, times: ['14:39', '01:00'] }, { day: 30, times: ['15:00', '00:30'] }] }]);
+        expect(data.periodEnd).toBe('2026-09-30');
+        expect(data.employees[0].punches).toEqual([
+            { date: '2026-09-01', time: '14:39' },
+            { date: '2026-09-02', time: '01:00' },
+            { date: '2026-09-30', time: '15:00' },
+            { date: '2026-10-01', time: '00:30' },
+        ]);
+        const r = buildReview(data, [emp('9001')], { shiftSettings: SETTINGS });
+        expect(r.employees[0].days.map(d => [d.businessDate, d.workedMinutes])).toEqual([['2026-09-01', 621], ['2026-09-30', 570]]);
+    });
+
+    it('人工成本只算完整日历月', () => {
+        expect(isCalendarMonth('2026-09-01', '2026-09-30')).toBe(true);
+        expect(isCalendarMonth('2026-02-01', '2026-02-28')).toBe(true);
+        expect(isCalendarMonth('2026-09-26', '2026-10-25')).toBe(false);
+        expect(isCalendarMonth('2026-09-01', '2026-09-15')).toBe(false);
     });
 });

@@ -1974,18 +1974,45 @@ export class DataManager {
         DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新
     }
     /**
-     * FACE3000 审核导入：主管处理完所有异常后，一次写入考勤记录与一笔导入记录（审计用）。
-     * - 考勤记录沿用现有 attendance 格式与 ID（同员工同营业日会覆盖上一次导入的结果，不会重复）。
-     * - 导入记录只存统计与主管决定的数量，不存打卡时间明细。
-     * - 每批最多 400 笔，避开 Firestore 单批 500 笔上限。
+     * FACE3000 审核导入：主管处理完所有异常后才呼叫。
+     * 步骤（任何一步失败都可以原样重试，结果相同、不会重复）：
+     *   1. 先写导入记录，状态 PENDING，列出要写入与要移除的记录 ID；
+     *   2. 把要移除的旧打卡机记录完整备份到导入记录底下（replaced 子集合），可据此还原；
+     *   3. 分批写入新记录、移除旧记录（每批最多 400 笔，避开 Firestore 500 笔上限）；
+     *   4. 导入记录改为 COMPLETED。
+     * 考勤记录沿用现有 attendance 格式与 ID；导入记录只存统计，不存打卡明细。
      */
-    static async saveAttendanceImport(records: AttendanceRecord[], batchInfo: Record<string, unknown> & { id: string }): Promise<void> {
-        for (let i = 0; i < records.length; i += 400) {
+    static async saveAttendanceImport(
+        records: AttendanceRecord[],
+        staleRecords: AttendanceRecord[],
+        batchInfo: Record<string, unknown> & { id: string },
+    ): Promise<void> {
+        const batchRef = doc(db, 'attendance_import_batches', batchInfo.id);
+        await setDoc(batchRef, {
+            ...batchInfo,
+            status: 'PENDING',
+            recordIds: records.map(r => r.id),
+            removedIds: staleRecords.map(r => r.id),
+            startedAt: new Date().toISOString(),
+        });
+        const attempt = Date.now();
+        for (let i = 0; i < staleRecords.length; i += 100) {
+            await setDoc(doc(db, 'attendance_import_batches', batchInfo.id, 'replaced', `${attempt}_${i / 100}`), {
+                records: staleRecords.slice(i, i + 100),
+            });
+        }
+        const ops: ({ type: 'set'; rec: AttendanceRecord } | { type: 'delete'; id: string })[] = [
+            ...records.map(rec => ({ type: 'set' as const, rec })),
+            ...staleRecords.map(rec => ({ type: 'delete' as const, id: rec.id })),
+        ];
+        for (let i = 0; i < ops.length; i += 400) {
             const batch = writeBatch(db);
-            records.slice(i, i + 400).forEach(rec => batch.set(doc(db, 'attendance', rec.id), rec));
+            ops.slice(i, i + 400).forEach(op =>
+                op.type === 'set' ? batch.set(doc(db, 'attendance', op.rec.id), op.rec) : batch.delete(doc(db, 'attendance', op.id)),
+            );
             await batch.commit();
         }
-        await setDoc(doc(db, 'attendance_import_batches', batchInfo.id), batchInfo);
+        await updateDoc(batchRef, { status: 'COMPLETED', completedAt: new Date().toISOString() });
         DataManager.clearCacheKeys(['attendance_']);
     }
     static async deleteAttendance(id: string): Promise<void> {
