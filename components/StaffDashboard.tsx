@@ -10,13 +10,13 @@ import { ROLE_SOP_DETAILS, MODULE_SYSTEM_TASKS, MODULE_DEFINITIONS } from './con
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES } from '../constants/staff';
 import { DataManager, DEFAULT_ATTENDANCE_SETTINGS, getTargetShiftForDate } from '../utils/dataManager';
 import { mapRoleToCode, getChineseRoleName } from './utils';
-import { KitchenAlertNotifier } from './features/kitchen/KitchenAlertNotifier';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { NotificationCenter } from './ui/NotificationCenter';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { AIOperationsAssistant, ManagerDashboard, KitchenAlertModule } from './lazyModules';
+import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
+import { withoutRetiredModules } from '../utils/retiredModules';
 
 import { 
   st, 
@@ -108,8 +108,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const [monthlyRosterData, setMonthlyRosterData] = useState<Record<string, Record<string, string>>>({});
   const [monthlyNotes, setMonthlyNotes] = useState<Record<string, string>>({});
 
+  // 已停用的模组（厨房通知）不显示；员工资料原样保留
   const workModules: AppModule[] = sortNavigationItems(
-    allowedModules || [],
+    withoutRetiredModules(allowedModules),
     moduleKey => moduleKey,
   );
   
@@ -288,14 +289,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     }
   };
 
-  const kitchenAlertNotifier = workModules.includes('KITCHEN_ALERT') ? (
-    <KitchenAlertNotifier
-      employee={employee}
-      lang={lang}
-      disabled={selectedModule === 'KITCHEN_ALERT'}
-      onOpen={() => setSelectedModule('KITCHEN_ALERT')}
-    />
-  ) : null;
 
   // SOP Task categorizations
   const openingSops = sopItems.filter(item => item.id.startsWith('start_'));
@@ -316,7 +309,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     
     return (
       <div className="fixed inset-0 bg-[#F6F7FB] z-[999] overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-        {kitchenAlertNotifier}
         {/* Top return bar */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm z-50 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
           <button 
@@ -349,9 +341,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
         {/* The active tool view */}
         <div className="p-1">
-          {selectedModule === 'KITCHEN_ALERT' ? (
-            <KitchenAlertModule employee={employee} lang={lang} />
-          ) : (
+          {(
+
             <ManagerDashboard 
                 allowedModules={displayModules} 
                 initialTab={modInfo?.tab as any} 
@@ -371,7 +362,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#F6F7FB] font-sans pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 relative text-[#111111]">
-      {kitchenAlertNotifier}
       
       {/* ────────────────────────────────────────────────────────────────────────
           HEADER BRANDING & IDENT Zone (safe-area adapted)

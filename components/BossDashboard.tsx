@@ -3,7 +3,7 @@ import {
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, BellRing, Lock
+    FileText, Calculator, Star, Search, Lock
 } from 'lucide-react';
 import { Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
@@ -40,7 +40,6 @@ type CardConfig = {
 const BOSS_CARDS: CardConfig[] = [
     { id: "daily_report", title: "经营日报", sub: "DAILY REPORT", icon: FileBarChart, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'MODAL', target: 'DAILY_REPORT' },
     { id: "settlement", title: "每日结算", sub: "SETTLEMENT", icon: Calculator, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'SETTLEMENT' },
-    { id: "kitchen_alert", title: "厨房通知", sub: "KITCHEN ALERT", icon: BellRing, colorClass: "bg-red-50", iconColor: "text-red-500", actionType: 'NAVIGATE', target: 'KITCHEN_ALERT' },
     { id: "queue", title: "排队叫号", sub: "QUEUE TV", icon: Armchair, colorClass: "bg-amber-50", iconColor: "text-amber-600", actionType: 'NAVIGATE', target: 'QUEUE' },
     { id: "logwrite", title: "运营日志", sub: "ADD LOG", icon: PenTool, colorClass: "bg-orange-50", iconColor: "text-orange-500", actionType: 'NAVIGATE', target: 'LOGBOOK' },
     { id: "logview", title: "日志查询", sub: "VIEW", icon: BookOpen, colorClass: "bg-emerald-50", iconColor: "text-emerald-500", actionType: 'NAVIGATE', target: 'LOGBOOK_VIEW', alertKey: 'logs', alertColor: 'bg-blue-500' },
