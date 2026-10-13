@@ -26,16 +26,26 @@ const RELOAD_KEY = 'klk_chunk_reload_at';
 /**
  * 下载模块失败时的处理：
  * 通常是部署了新版本、而这个页面还是旧版（旧档名已不存在）→ 自动重新载入一次取得新版。
- * 60 秒内已经重新载入过（例如真的断网）就不再重试，把错误交给 AppErrorBoundary 显示。
+ * 60 秒内已经重新载入过（例如真的断网），或无法保存重载标记，就不再重试，把错误交给 AppErrorBoundary 显示。
  */
 const loadWithReloadOnce = async <M,>(loader: () => Promise<M>): Promise<M> => {
     try {
         return await loader();
     } catch (error) {
-        let last = 0;
-        try { last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0; } catch {}
-        if (Date.now() - last > 60_000) {
-            try { sessionStorage.setItem(RELOAD_KEY, String(Date.now())); } catch {}
+        // 只有在「重载标记确实存得下来」时才重新载入；
+        // sessionStorage 被禁用（私密模式、受管控 WebView）时直接显示错误，避免无限重载。
+        let shouldReload = false;
+        try {
+            const last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+            if (Date.now() - last > 60_000) {
+                const stamp = String(Date.now());
+                sessionStorage.setItem(RELOAD_KEY, stamp);
+                shouldReload = sessionStorage.getItem(RELOAD_KEY) === stamp;
+            }
+        } catch {
+            shouldReload = false;
+        }
+        if (shouldReload) {
             window.location.reload();
             return new Promise<M>(() => {}); // 等待重新载入，不显示错误
         }

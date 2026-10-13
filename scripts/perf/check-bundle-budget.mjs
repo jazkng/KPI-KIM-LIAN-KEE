@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const MAIN_BUDGET_KB = 350;          // 首屏主程序上限（目前约 197 KB；拆分前约 4,043 KB）
+const INITIAL_BUDGET_KB = 1300;  // 首屏全部 JS（入口 + 静态预载的 vendor chunk）上限（目前约 1,154 KB）
 const MUST_BE_SEPARATE = [           // 这些大型模块必须是独立的按需载入档
   'FinancialReport', 'HRSystem', 'AccountsPayableModule', 'SettlementModule',
   'BossDashboard', 'StaffDashboard', 'ManagementPortal',
@@ -32,8 +33,19 @@ if (!entry) throw new Error('找不到入口 JS');
 const files = readdirSync(join(outDir, 'assets'));
 const mainKb = statSync(join(outDir, 'assets', entry)).size / 1024;
 
+// 首屏会下载的全部 JS：入口 + HTML 里 modulepreload 的静态依赖（vendor-react、vendor-firebase…）
+const preloads = [...html.matchAll(/<link rel="modulepreload"[^>]*href="\/assets\/([^"]+\.js)"/g)].map(m => m[1]);
+const initialFiles = [...new Set([entry, ...preloads])];
+const initialKb = initialFiles.reduce((sum, f) => sum + statSync(join(outDir, 'assets', f)).size / 1024, 0);
+
 let failed = false;
 console.log(`首屏主程序 ${entry}: ${mainKb.toFixed(0)} KB（上限 ${MAIN_BUDGET_KB} KB）`);
+console.log(`首屏全部 JS ${initialFiles.length} 个档案: ${initialKb.toFixed(0)} KB（上限 ${INITIAL_BUDGET_KB} KB）`);
+for (const f of initialFiles) console.log(`  - ${f}: ${(statSync(join(outDir, 'assets', f)).size / 1024).toFixed(0)} KB`);
+if (initialKb > INITIAL_BUDGET_KB) {
+  console.error(`❌ 首屏全部 JS 超过上限。请检查是否新增了静态导入的大型套件（应改为按需载入）。`);
+  failed = true;
+}
 if (mainKb > MAIN_BUDGET_KB) {
   console.error(`❌ 首屏主程序超过上限。请确认新增的大型模块是否经由 components/lazyModules.tsx 按需载入。`);
   failed = true;
