@@ -18,23 +18,8 @@ import { needsReplenishment } from '../utils/unitConversion';
 const MODAL_REFETCH_COOLDOWN_MS = 60 * 1000;
 
 // Import Modals so we can open them directly from the Priority Dashboard
-import { HRSystem } from './features/HRSystem';
-import { MenuManagement } from './features/MenuManagement';
-import { RecurringBillsModule } from './features/RecurringBillsModule';
-import { OrgChart } from './features/OrgChart';
-import { FinancialReport } from './features/FinancialReport';
-import { AttendanceConsole } from './features/AttendanceConsole';
-import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
-import { TreasuryModule } from './features/TreasuryModule'; 
-import { WarrantyModule } from './features/WarrantyModule'; 
-import { EventsPlanningModule } from './features/EventsPlanningModule';
-import { PriceMonitorModule } from './features/PriceMonitorModule'; 
-import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule';
-import { TranslationManager } from './features/TranslationManager'; 
-import { SelfInvoiceModule } from './features/SelfInvoiceModule';
-import { DailyBusinessReportModal } from './features/DailyBusinessReportModal';
-import { AIOperationsAssistant } from './features/AIOperationsAssistant';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 interface BossPriorityDashboardProps {
     currentEmployee: Employee;

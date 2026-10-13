@@ -6,22 +6,6 @@ import {
     FileText, Calculator, Star, Search, BellRing, Lock
 } from 'lucide-react';
 import { Employee } from '../types';
-import { HRSystem } from './features/HRSystem';
-import { MenuManagement } from './features/MenuManagement';
-import { RecurringBillsModule } from './features/RecurringBillsModule';
-import { OrgChart } from './features/OrgChart';
-import { FinancialReport } from './features/FinancialReport';
-import { AttendanceConsole } from './features/AttendanceConsole';
-import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
-import { TreasuryModule } from './features/TreasuryModule'; 
-import { WarrantyModule } from './features/WarrantyModule'; 
-import { EventsPlanningModule } from './features/EventsPlanningModule';
-import { PriceMonitorModule } from './features/PriceMonitorModule'; 
-import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule';
-import { TranslationManager } from './features/TranslationManager'; 
-import { SelfInvoiceModule } from './features/SelfInvoiceModule';
-import { DailyBusinessReportModal } from './features/DailyBusinessReportModal';
-import { AIOperationsAssistant } from './features/AIOperationsAssistant';
 import { DataManager } from '../utils/dataManager';
 import { needsReplenishment } from '../utils/unitConversion';
 import {
@@ -31,6 +15,7 @@ import {
 } from '../constants/moduleNavigation';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
