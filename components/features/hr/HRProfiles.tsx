@@ -137,7 +137,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
         },
         {
             title: '日常运营 (Daily Operations)',
-            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'KITCHEN_ALERT', 'STAFF_CASH'] as AppModule[],
+            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'ONLINE_ORDERS', 'KITCHEN_ALERT', 'STAFF_CASH'] as AppModule[],
             color: 'bg-blue-50 text-blue-700 border-blue-100'
         },
         {

@@ -31,6 +31,7 @@ export const BOSS_TARGET_MODULE_MAP: Record<string, AppModule> = {
     BILLS: 'BILLS',
     TREASURY: 'TREASURY',
     REPORTS: 'REPORTS',
+    ONLINE_ORDERS: 'ONLINE_ORDERS',
     // 人事
     HR: 'HR_FILES',
     ATTENDANCE: 'ATTENDANCE_CONSOLE',

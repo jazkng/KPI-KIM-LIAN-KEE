@@ -198,12 +198,36 @@ PENDING_CONFIRMATION ─接单→ ACCEPTED ─开始备餐→ PREPARING ─完�
 
 - **入口**：新增「网站订单」模块，延续现有模块的按需载入方式。依权限显示给楼面、柜台和管理层。
 - **新单通知**：有新订单时，楼面设备与管理层显示提醒并播放声音，沿用现有 `notificationSound`。
-- **厨房端**：接单后，在厨房屏显示「网站订单出单」，按品项列出。
-  - 与现有「厨房急单」（`kitchen_alerts`，用于催菜、漏单、做错）**分开**，避免混淆。
+- **厨房端**：厨房屏与旧 Kitchen Alert 已在 V2 停用，**不使用** `kitchen_alerts`。备餐进度（开始备餐 → 备餐完成）在订单中心内管理。
 - **店员操作**：接单、拒单（须选原因）、开始备餐、备餐完成、顾客取走、取消（须填原因）、标记已收款（须填 POS 单号）。
   - 每个操作都写入审计记录：谁、何时、从什么状态到什么状态、原因。
 - **权限**：订单的建立只能由公开 API 的服务端执行；状态变更只能由已登录的员工身份执行。
   - 依赖紧急整改计划 CHG-05、CHG-06 完成后的身份与 Rules，详见第 8 节。
+
+### 6.1 ERP 读取的订单字段（与网站方协调）
+
+ERP 订单中心（`components/features/orders/OnlineOrderCenter.tsx`）只读写下列字段。网站服务端建立 `online_orders/{orderId}` 时须写齐「网站写入」各项；其余字段由 ERP 店员操作写入，网站只读。
+
+| 字段 | 类型 | 写入方 | 说明 |
+|---|---|---|---|
+| `orderNo` | string | 网站 | 顾客与店员看的单号，例 `W-261013-001` |
+| `businessDate` | string `YYYY-MM-DD` | 网站 | 马来西亚时间，营业日切点同日结规则。**订单中心只按此字段查询**（`where businessDate ==`），缺少就看不到订单 |
+| `status` | 第 5 节订单状态 | 网站建立为 `PENDING_CONFIRMATION`；之后由 ERP 交易更新（顾客取消、逾时由网站服务端交易更新） | |
+| `paymentStatus` | `UNPAID` / `PAID_AT_COUNTER` / `WAIVED` | 网站建立为 `UNPAID`；之后只由 ERP 更新 | |
+| `lines[]` | `{ itemId, variantId, itemName, variantLabel, optionLabels[], quantity, unitPriceSen, lineTotalSen, note? }` | 网站 | 下单当下的快照，ERP 不重算 |
+| `totals` | `{ subtotalSen, serviceChargeSen, serviceTaxSen, discountSen, roundingSen, totalSen }` | 网站 | 整数（sen），只作对账参考 |
+| `customer` | `{ name, phone }` | 网站 | ERP 默认只显示电话末 4 码 |
+| `pickup` | `{ type: 'ASAP' } \| { type: 'SCHEDULED', time: ISO 8601 }` | 网站 | |
+| `orderNote` | string? | 网站 | |
+| `createdAt` | ISO 8601 string | 网站 | 列表排序用 |
+| `updatedAt` | ISO 8601 string | 双方 | 每次变更都更新 |
+| `reason` | string? | ERP | 拒单 / 取消原因，可显示给顾客 |
+| `posReceiptNo`、`paidAt` | string? | ERP | 标记已在 POS 收款时写入（单号已正规化：大写、去空白） |
+| `waivedReason` | string? | ERP | 免单原因（只限管理层） |
+
+- ERP 每次操作都在**同一个交易**内：重新读取订单 → 验证来源状态 → 更新订单 → 新增 `online_order_events`；标记收款时同时建立 `online_order_pos_receipts/{门店}_{营业日}_{POS单号}`，已存在就整笔拒绝。
+- 网站服务端更新订单（顾客取消、逾时）也必须用交易并检查来源状态，避免与店员操作互相覆盖。
+- 需要的复合索引：无（单一字段 `businessDate` 等值查询，在客户端排序）。
 
 ## 7. 营收与 StoreHub / POS
 
@@ -212,7 +236,7 @@ PENDING_CONFIRMATION ─接单→ ACCEPTED ─开始备餐→ PREPARING ─完�
   - 网站订单单数、取消率、平均备餐时间；
   - 对账：以 `posReceiptNo` 对照 POS 记录，找出「已取餐但未结账」的订单。
 - **POS 单号一对一**：标记 `PAID_AT_COUNTER` 时，在同一个交易内建立 `online_order_pos_receipts/{receiptKey}`。
-  - `receiptKey` 由门店、营业日、正规化后的 POS 单号组成（去空白、转大写），例如 `KLK1_2026-10-13_R00123`。
+  - `receiptKey` 由门店、营业日、正规化后的 POS 单号组成（去空白、转大写），例如 `KEPONG_2026-10-13_R00123`。
   - 文件已存在时拒绝（`409 POS_RECEIPT_ALREADY_USED`），一张 POS 单只能对应一张网站订单。
 - 报表若需要「网站渠道营业额」，只能以去重后的 `online_order_pos_receipts` 为准，金额取自 POS 记录，不用订单快照。须标注「来自 POS」，不得与日结金额相加。
 

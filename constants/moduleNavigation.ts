@@ -43,6 +43,7 @@ export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     SETTLEMENT: { category: 'OPERATIONS', order: 10 },
     DAILY_REPORT: { category: 'OPERATIONS', order: 15 },
     KITCHEN_ALERT: { category: 'OPERATIONS', order: 20 },
+    ONLINE_ORDERS: { category: 'OPERATIONS', order: 25 },
     QUEUE_MANAGER: { category: 'OPERATIONS', order: 30 },
     QUEUE: { category: 'OPERATIONS', order: 30 },
     LOGBOOK: { category: 'OPERATIONS', order: 40 },
