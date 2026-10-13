@@ -63,7 +63,10 @@ beforeEach(async () => {
         await setDoc(doc(db, 'employee_secrets/020'), { pinHash: 'h', pinSalt: 's' });
         await setDoc(doc(db, 'device_accounts/device_kitchen1'), { name: 'Kitchen', screens: ['KITCHEN_ALERT'] });
         await setDoc(doc(db, 'device_accounts/device_queue1'), { name: 'Queue', screens: ['QUEUE_DISPLAY'] });
-        await setDoc(doc(db, 'kitchen_alerts/a1'), { status: 'OPEN', isActive: true, storeId: 'KEPONG', message: 'x' });
+        await setDoc(doc(db, 'kitchen_alerts/a1'), { status: 'NEW', isActive: true, storeId: 'KEPONG', message: 'x' });
+        await setDoc(doc(db, 'kitchen_alerts/done'), { status: 'RESOLVED', isActive: false, storeId: 'KEPONG', message: 'x' });
+        await setDoc(doc(db, 'kitchen_alerts/other'), { status: 'NEW', isActive: true, storeId: 'OTHER', message: 'x' });
+        await setDoc(doc(db, 'employees/030'), { id: '030', name: 'Head', orgLevel: 'DEPARTMENT_HEAD', role: 'Head Chef' });
         await setDoc(doc(db, 'queue_tickets/t1'), { status: 'WAITING', number: 1 });
         await setDoc(doc(db, 'attendance_import_batches/b1'), { status: 'COMPLETED' });
     });
@@ -79,7 +82,9 @@ describe('CHG-06 草案：V1 员工照常使用（不论层级）', () => {
         await assertSucceeds(getDoc(doc(db, `${c}/seed`)));
         await assertSucceeds(setDoc(doc(db, `${c}/new-doc`), { by: '020' }));
         await assertSucceeds(updateDoc(doc(db, `${c}/seed`), { touched: true }));
-        await assertSucceeds(deleteDoc(doc(db, `${c}/new-doc`)));
+        // 删除员工资料只限老板 / 系统管理员（V1 删除员工只在老板模式），其余集合照常
+        if (c === 'employees') await assertFails(deleteDoc(doc(db, `${c}/new-doc`)));
+        else await assertSucceeds(deleteDoc(doc(db, `${c}/new-doc`)));
     });
 
     it('V1 典型流程：Counter 员工做日结、管理层替他人打卡、HR 改他人资料、员工改自己语言', async () => {
@@ -115,19 +120,34 @@ describe('CHG-06 草案：秘密集合', () => {
 });
 
 describe('CHG-06 草案：专用设备只碰需要的东西', () => {
+    const ACK = { status: 'ACKNOWLEDGED', isActive: true, acknowledgedById: 'KITCHEN_DISPLAY', acknowledgedByName: 'K', acknowledgedAt: 'now', updatedAt: 'now' };
+    const RESOLVE = { status: 'RESOLVED', isActive: false, resolvedById: 'KITCHEN_DISPLAY', resolvedByName: 'K', resolvedAt: 'now', resolutionNote: null, updatedAt: 'now' };
+
     it('厨房屏：读提醒、确认、完成可以；改内容、新增、删除不行', async () => {
         const db = as.kitchen();
         await assertSucceeds(getDoc(doc(db, 'kitchen_alerts/a1')));
-        await assertSucceeds(updateDoc(doc(db, 'kitchen_alerts/a1'), {
-            status: 'ACKNOWLEDGED', isActive: true, acknowledgedById: 'KITCHEN_DISPLAY', acknowledgedByName: 'K', acknowledgedAt: 'now', updatedAt: 'now',
-        }));
-        await assertSucceeds(updateDoc(doc(db, 'kitchen_alerts/a1'), {
-            status: 'RESOLVED', isActive: false, resolvedById: 'KITCHEN_DISPLAY', resolvedByName: 'K', resolvedAt: 'now', resolutionNote: null, updatedAt: 'now',
-        }));
+        await assertSucceeds(updateDoc(doc(db, 'kitchen_alerts/a1'), ACK));
+        await assertSucceeds(updateDoc(doc(db, 'kitchen_alerts/a1'), RESOLVE));
         await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { message: 'changed' }));
-        await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { status: 'OPEN' }));
-        await assertFails(setDoc(doc(db, 'kitchen_alerts/new'), { status: 'OPEN' }));
+        await assertFails(setDoc(doc(db, 'kitchen_alerts/new'), { status: 'NEW', storeId: 'KEPONG' }));
         await assertFails(deleteDoc(doc(db, 'kitchen_alerts/a1')));
+    });
+
+    it('厨房屏：状态只能往前走，已完成的不能改回、不能反复改写处理人', async () => {
+        const db = as.kitchen();
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/done'), ACK));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/done'), { ...RESOLVE, resolvedByName: 'X' }));
+        await assertSucceeds(updateDoc(doc(db, 'kitchen_alerts/a1'), ACK));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { ...ACK, acknowledgedByName: 'X' }));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { status: 'NEW' }));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { ...RESOLVE, message: 'changed' }));
+    });
+
+    it('厨房屏只能处理自己门店的提醒，也不能把提醒改到别的门店', async () => {
+        const db = as.kitchen();
+        await assertFails(getDoc(doc(db, 'kitchen_alerts/other')));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/other'), ACK));
+        await assertFails(updateDoc(doc(db, 'kitchen_alerts/a1'), { ...ACK, storeId: 'OTHER' }));
     });
 
     it('厨房屏不能看排队，排队屏不能看厨房', async () => {
@@ -164,5 +184,43 @@ describe('CHG-06 草案：考勤导入记录（PR #12，V2 新集合）', () => 
         await assertFails(setDoc(doc(as.deptHead(), path), { records: [1] }));
         await assertFails(deleteDoc(doc(as.owner(), path)));
         await assertFails(getDoc(doc(as.crew(), path)));
+    });
+});
+
+describe('CHG-06 草案：员工不能替自己或别人升级权限（claims 来源受保护）', () => {
+    it('CREW 不能把自己改成老板、系统管理员、改入口或取消只读', async () => {
+        const db = as.crew();
+        await assertFails(updateDoc(doc(db, 'employees/020'), { orgLevel: 'OWNER' }));
+        await assertFails(updateDoc(doc(db, 'employees/020'), { systemRole: 'SYSTEM_ADMIN' }));
+        await assertFails(updateDoc(doc(db, 'employees/020'), { portalRoleOverride: 'BOSS' }));
+        await assertFails(updateDoc(doc(db, 'employees/020'), { readOnlyAccess: false }));
+    });
+
+    it('部门主管也不能升级自己或别人；老板与系统管理员可以', async () => {
+        await assertFails(updateDoc(doc(as.deptHead(), 'employees/030'), { orgLevel: 'OWNER' }));
+        await assertFails(updateDoc(doc(as.deptHead(), 'employees/020'), { orgLevel: 'DEPARTMENT_HEAD' }));
+        await assertSucceeds(updateDoc(doc(as.owner(), 'employees/020'), { orgLevel: 'TEAM_LEAD' }));
+        const sa = env.authenticatedContext('emp-002', staffClaims('002', 'DEPARTMENT_HEAD', { sa: true })).firestore();
+        await assertSucceeds(updateDoc(doc(sa, 'employees/020'), { systemRole: 'STANDARD_USER' }));
+    });
+
+    it('V1 的 HR 画面整份重存（权限栏位值不变）照常可以；改职位名称、警告记录也可以', async () => {
+        const db = as.deptHead();
+        await assertSucceeds(setDoc(doc(db, 'employees/030'), { id: '030', name: 'Head 2', orgLevel: 'DEPARTMENT_HEAD', role: 'Executive Chef' }));
+        await assertSucceeds(updateDoc(doc(as.crew(), 'employees/030'), { warningHistory: ['late'] }));
+    });
+
+    it('新增员工：一般员工只能建立非管理层；建立老板或系统管理员只限老板', async () => {
+        await assertSucceeds(setDoc(doc(as.deptHead(), 'employees/040'), { id: '040', orgLevel: 'CREW' }));
+        await assertSucceeds(setDoc(doc(as.deptHead(), 'employees/041'), { id: '041' }));
+        await assertFails(setDoc(doc(as.crew(), 'employees/042'), { id: '042', orgLevel: 'OWNER' }));
+        await assertFails(setDoc(doc(as.deptHead(), 'employees/043'), { id: '043', orgLevel: 'BRANCH_MANAGER' }));
+        await assertFails(setDoc(doc(as.crew(), 'employees/044'), { id: '044', systemRole: 'SYSTEM_ADMIN' }));
+        await assertSucceeds(setDoc(doc(as.owner(), 'employees/045'), { id: '045', orgLevel: 'BRANCH_MANAGER' }));
+    });
+
+    it('只有老板 / 系统管理员能删除员工资料', async () => {
+        await assertFails(deleteDoc(doc(as.deptHead(), 'employees/020')));
+        await assertSucceeds(deleteDoc(doc(as.owner(), 'employees/020')));
     });
 });

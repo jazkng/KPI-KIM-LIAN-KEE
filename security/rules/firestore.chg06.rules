@@ -40,19 +40,43 @@ service cloud.firestore {
       return staff() && request.auth.token.lvl in ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT', 'DEPARTMENT_HEAD'];
     }
 
+    // 老板或系统管理员：唯一能改变「会影响登录权限」栏位的人
+    function privileged() {
+      return staff() && (request.auth.token.lvl == 'OWNER' || request.auth.token.sa == true);
+    }
+    // employees 中决定 claims 的栏位（CHG-05 服务端只依这些栏位签发 lvl / sa / portal / ro）
+    function claimFields() {
+      return ['orgLevel', 'systemRole', 'portalRoleOverride', 'readOnlyAccess'];
+    }
+    function grantsPrivilege(d) {
+      return d.get('orgLevel', 'CREW') in ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT', 'DEPARTMENT_HEAD']
+        || d.get('systemRole', 'STANDARD_USER') == 'SYSTEM_ADMIN'
+        || d.get('portalRoleOverride', null) != null;
+    }
+
     // 只有服务端（Admin SDK，不受规则限制）能访问的集合；客户端一律拒绝
     function serverOnly(collection) {
       return collection in ['employee_secrets', 'device_secrets', 'auth_rate_limits'];
     }
     // 下面有专门规则的集合，通配规则不放行
     function hasOwnRules(collection) {
-      return collection in ['device_accounts', 'attendance_import_batches'];
+      return collection in ['employees', 'device_accounts', 'kitchen_alerts', 'attendance_import_batches'];
     }
 
     // ---- 1. 员工：V1 现有全部集合照常读写（与今天相同，只是必须是新身份）----
     // 注意：Firestore 只要任一条 allow 成立就放行，所以秘密集合必须在这里「排除」。
     match /{collection}/{document=**} {
       allow read, write: if staff() && !serverOnly(collection) && !hasOwnRules(collection);
+    }
+
+    // ---- 1b. 员工资料：照常读写，但不能替自己或别人升级权限 ----
+    // V1 只在老板 / 系统管理员模式下显示这些栏位为可编辑（HRProfiles.tsx:1648-1649），所以不影响 V1。
+    match /employees/{id} {
+      allow read: if staff();
+      allow create: if privileged() || (staff() && !grantsPrivilege(request.resource.data));
+      allow update: if privileged()
+        || (staff() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(claimFields()));
+      allow delete: if privileged();
     }
 
     // ---- 2. 专用设备 ----
@@ -64,15 +88,31 @@ service cloud.firestore {
     match /queue_tickets/{id} {
       allow read: if hasScreen('QUEUE_DISPLAY');
     }
-    // 厨房屏：读取提醒；只能「确认」或「完成」，不能新增、删除或改其他栏位
+    // 厨房提醒：员工照常读写；厨房屏只能处理自己门店的提醒，且状态只能往前走
+    //   NEW → ACKNOWLEDGED（确认）；NEW / ACKNOWLEDGED → RESOLVED（完成）
+    //   不能新增、删除、改提醒内容，也不能改已完成或已取消的提醒
+    function sameStore() {
+      return resource.data.storeId == request.auth.token.store
+        && request.resource.data.storeId == resource.data.storeId;
+    }
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
     match /kitchen_alerts/{id} {
-      allow read: if hasScreen('KITCHEN_ALERT');
-      allow update: if hasScreen('KITCHEN_ALERT')
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-             'status', 'isActive', 'updatedAt', 'serverUpdatedAt',
-             'acknowledgedById', 'acknowledgedByName', 'acknowledgedAt',
-             'resolvedById', 'resolvedByName', 'resolvedAt', 'resolutionNote'])
-        && request.resource.data.status in ['ACKNOWLEDGED', 'RESOLVED'];
+      allow read, write: if staff();
+      allow read: if hasScreen('KITCHEN_ALERT') && resource.data.storeId == request.auth.token.store;
+      allow update: if hasScreen('KITCHEN_ALERT') && sameStore() && (
+        (resource.data.status == 'NEW'
+          && request.resource.data.status == 'ACKNOWLEDGED'
+          && request.resource.data.isActive == true
+          && changed().hasOnly(['status', 'isActive', 'updatedAt', 'serverUpdatedAt',
+                                'acknowledgedById', 'acknowledgedByName', 'acknowledgedAt']))
+        || (resource.data.status in ['NEW', 'ACKNOWLEDGED']
+          && request.resource.data.status == 'RESOLVED'
+          && request.resource.data.isActive == false
+          && changed().hasOnly(['status', 'isActive', 'updatedAt', 'serverUpdatedAt',
+                                'resolvedById', 'resolvedByName', 'resolvedAt', 'resolutionNote']))
+      );
     }
 
     // ---- 3. 设备户口：员工（HR 设备户口画面）可管理；设备只能读自己那一份 ----

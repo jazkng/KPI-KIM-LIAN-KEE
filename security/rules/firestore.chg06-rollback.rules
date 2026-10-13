@@ -1,0 +1,23 @@
+rules_version = '2';
+// =============================================================================
+// CHG-06 紧急回滚规则（未部署）
+// -----------------------------------------------------------------------------
+// 用途：CHG-06 窗口后若营业被阻断，用这份取代「恢复历史版本」。
+//   - 与 CHG-06 之前的 V1 规则相同：任何 Firebase 身份（含匿名）都能读写 V1 集合，
+//     所以旧版 V1（匿名登录）可以照常运作；
+//   - 但新的 PIN 哈希（employee_secrets、device_secrets）仍然只有服务端能读，
+//     不会因为回滚而外泄给匿名身份。
+// ⚠️ 回滚等于重新打开「匿名可读写营业资料」的漏洞，只在营业被阻断时使用，
+//    问题排除后应尽快重新发布 CHG-06 规则。
+// 测试：tests/rules/chg06.rules.test.ts（「紧急回滚规则」一组）。
+// =============================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function serverOnly(collection) {
+      return collection in ['employee_secrets', 'device_secrets', 'auth_rate_limits'];
+    }
+    match /{collection}/{document=**} {
+      allow read, write: if request.auth != null && !serverOnly(collection);
+    }
+  }
+}
