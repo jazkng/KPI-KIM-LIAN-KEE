@@ -1,0 +1,98 @@
+rules_version = '2';
+// =============================================================================
+// CHG-06 规则草案（未部署）· 金莲记 ERP
+// -----------------------------------------------------------------------------
+// ⚠️ 这是草案，只在 Emulator 测试（tests/rules/chg06.rules.test.ts）。
+//    正式规则仍是仓库根目录的 firestore.rules。发布须负责人批准，并按
+//    docs/security/2026-10-13-chg05-chg06-permission-plan.md 的窗口步骤执行。
+//
+// 设计原则：「身份门槛」，不是「角色门槛」。
+//   V1 的功能权限由 allowedModules 在前端控制（例如 Counter 员工可做日结、
+//   有 HR 模组的人可改员工资料）。若在规则里按角色限制这些集合，V1 会立刻坏掉。
+//   所以这一版只做三件事：
+//     1. 只接受 CHG-05 签发、epoch 2 的员工身份或专用设备身份；
+//        匿名身份、没有 claims 的身份、epoch 1 的旧身份一律拒绝。
+//     2. 专用设备（厨房、排队屏）只能碰它需要的集合与栏位。
+//     3. 新的秘密集合与 V2 新集合（V1 不会用到）按需收紧。
+//   按角色细分财务、人事写入，留到 V2 取代对应的 V1 画面之后（见方案第 6 节）。
+//
+// Claims（由 CHG-05 的服务端签发）：
+//   员工：emp（员工 ID）、lvl（组织层级）、portal、ro、sa、epoch
+//   设备：device（device_xxx）、screens（['KITCHEN_ALERT'|'QUEUE_DISPLAY']）、store、epoch
+// =============================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function epochOk() {
+      return request.auth != null && request.auth.token.epoch == 2;
+    }
+    function staff() {
+      return epochOk() && request.auth.token.emp is string && request.auth.token.emp.size() > 0;
+    }
+    function device() {
+      return epochOk() && request.auth.token.device is string && request.auth.token.screens is list;
+    }
+    function hasScreen(screen) {
+      return device() && screen in request.auth.token.screens;
+    }
+    // 管理层以上（与 V1 utils/orgAccess.ts 的层级一致）
+    function manager() {
+      return staff() && request.auth.token.lvl in ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT', 'DEPARTMENT_HEAD'];
+    }
+
+    // 只有服务端（Admin SDK，不受规则限制）能访问的集合；客户端一律拒绝
+    function serverOnly(collection) {
+      return collection in ['employee_secrets', 'device_secrets', 'auth_rate_limits'];
+    }
+    // 下面有专门规则的集合，通配规则不放行
+    function hasOwnRules(collection) {
+      return collection in ['device_accounts', 'attendance_import_batches'];
+    }
+
+    // ---- 1. 员工：V1 现有全部集合照常读写（与今天相同，只是必须是新身份）----
+    // 注意：Firestore 只要任一条 allow 成立就放行，所以秘密集合必须在这里「排除」。
+    match /{collection}/{document=**} {
+      allow read, write: if staff() && !serverOnly(collection) && !hasOwnRules(collection);
+    }
+
+    // ---- 2. 专用设备 ----
+    // App 启动读取门店设定（Logo）
+    match /config/store {
+      allow read: if device();
+    }
+    // 排队屏：只读排队号码
+    match /queue_tickets/{id} {
+      allow read: if hasScreen('QUEUE_DISPLAY');
+    }
+    // 厨房屏：读取提醒；只能「确认」或「完成」，不能新增、删除或改其他栏位
+    match /kitchen_alerts/{id} {
+      allow read: if hasScreen('KITCHEN_ALERT');
+      allow update: if hasScreen('KITCHEN_ALERT')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'status', 'isActive', 'updatedAt', 'serverUpdatedAt',
+             'acknowledgedById', 'acknowledgedByName', 'acknowledgedAt',
+             'resolvedById', 'resolvedByName', 'resolvedAt', 'resolutionNote'])
+        && request.resource.data.status in ['ACKNOWLEDGED', 'RESOLVED'];
+    }
+
+    // ---- 3. 设备户口：员工（HR 设备户口画面）可管理；设备只能读自己那一份 ----
+    // PIN 哈希在 CHG-05 后移到 device_secrets（只有服务端能访问）
+    match /device_accounts/{id} {
+      allow read: if staff() || (device() && request.auth.token.device == id);
+      allow write: if staff();
+    }
+
+    // ---- 4. V2 新集合：考勤导入记录（PR #12）----
+    // V1 不使用，收紧不影响 V1。只有管理层以上能建立与完成；不可删除，保留审计。
+    match /attendance_import_batches/{batchId} {
+      allow read: if staff();
+      allow create, update: if manager();
+      allow delete: if false;
+      match /replaced/{chunkId} {
+        allow read: if manager();
+        allow create: if manager();
+        allow update, delete: if false;
+      }
+    }
+  }
+}
