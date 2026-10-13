@@ -36,8 +36,14 @@ describe('estimateEmployeeCost（雇主成本与员工自付分开）', () => {
         expect(c.employerEpf + c.employerSocso + c.employerEis).toBe(0);
     });
 
-    it('已批准加班：月薪 ÷ 26 ÷ 8 × 1.5', () => {
+    it('加班默认不计入成本（规则待确认），只注明时数', () => {
         const c = estimateEmployeeCost(emp('3', { basicSalary: 2600 }), { ...FULL_MONTH, approvedOtMinutes: 120 }, { month: '2026-09' });
+        expect(c.overtime).toBe(0);
+        expect(c.notes.join('')).toMatch(/2\.0 小时.*未计入/);
+    });
+
+    it('负责人确认规则后才可开启：月薪 ÷ 26 ÷ 8 × 1.5', () => {
+        const c = estimateEmployeeCost(emp('3', { basicSalary: 2600 }), { ...FULL_MONTH, approvedOtMinutes: 120 }, { month: '2026-09', includeOvertime: true });
         expect(c.overtime).toBe(37.5);
     });
 

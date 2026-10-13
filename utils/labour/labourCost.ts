@@ -5,7 +5,8 @@
 //   - 底薪与 EPF / SOCSO / EIS / LINDUNG 一律沿用薪资模块的设定与算法
 //     （utils/payroll/statutory.ts，与 HRPayroll 同一份），不另写一套。
 //   - 「员工扣款」与「雇主成本」分开：
-//       雇主人工成本 = 应发薪资（底薪 + 已批准加班 + 固定津贴）+ 雇主 EPF + 雇主 SOCSO + 雇主 EIS
+//       雇主人工成本 = 应发薪资（底薪 + 固定津贴）+ 雇主 EPF + 雇主 SOCSO + 雇主 EIS
+//       （已批准加班暂不计入：加班规则待负责人确认；已发薪资里的加班照实计入）
 //       员工 EPF / SOCSO / EIS / LINDUNG 已经包含在应发薪资里，只是从员工那边扣，不能再加一次。
 //   - 该月已有薪资记录（已发放）的员工，以实际薪资为准；其余才用考勤推算，并标为「估算」。
 //   - 损益里的薪资类支出（SALARY、EPF、SOCSO…）不再计入「其他固定成本」，避免重复计算。
@@ -33,8 +34,13 @@ export interface AttendanceSummary {
 
 export interface LabourCostOptions {
     month: string; // YYYY-MM
-    /** 加班倍数，默认 1.5（马来西亚雇佣法令） */
+    /** 加班倍数，默认 1.5（马来西亚雇佣法令）。只在 includeOvertime 为 true 时使用 */
     otMultiplier?: number;
+    /**
+     * 是否把已批准加班计入人工成本。默认 false：
+     * 负责人尚未确认实际班表与加班计算规则，加班费不自动计算、不计入成本。
+     */
+    includeOvertime?: boolean;
     /** 月薪员工换算时薪：月薪 ÷ 26 天 ÷ 8 小时（雇佣法令算法） */
     workingDaysPerMonth?: number;
     normalHoursPerDay?: number;
@@ -97,7 +103,10 @@ export const estimateEmployeeCost = (
             notes.push('当月入职或离职，实际底薪以薪资模块按比例计算为准');
         }
     }
-    const overtime = hourlyRate * otMultiplier * (worked.approvedOtMinutes / 60);
+    const overtime = options.includeOvertime ? hourlyRate * otMultiplier * (worked.approvedOtMinutes / 60) : 0;
+    if (!options.includeOvertime && worked.approvedOtMinutes > 0) {
+        notes.push(`已批准加班 ${(worked.approvedOtMinutes / 60).toFixed(1)} 小时，加班规则待确认，未计入成本`);
+    }
     const allowance = monthlyAllowance(emp);
     const gross = basic + overtime + allowance;
 

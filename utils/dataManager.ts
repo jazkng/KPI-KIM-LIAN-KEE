@@ -1974,17 +1974,15 @@ export class DataManager {
         DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新
     }
     /**
-     * FACE3000 审核导入：主管处理完所有异常后才呼叫。
-     * 步骤（任何一步失败都可以原样重试，结果相同、不会重复）：
-     *   1. 先写导入记录，状态 PENDING，列出要写入与要移除的记录 ID；
-     *   2. 把要移除的旧打卡机记录完整备份到导入记录底下（replaced 子集合），可据此还原；
-     *   3. 分批写入新记录、移除旧记录（每批最多 400 笔，避开 Firestore 500 笔上限）；
-     *   4. 导入记录改为 COMPLETED。
-     * 考勤记录沿用现有 attendance 格式与 ID；导入记录只存统计，不存打卡明细。
+     * FACE3000 审核结果：主管处理完所有异常、按下确认后才呼叫。
+     * ⚠️ 只写入 V2 专用集合，不碰 V1：
+     *   - attendance_reviews/{review_<员工ID>_<营业日>}：审核后的班次（同一天重新审核会以最新结果取代）
+     *   - attendance_import_batches/{id}：这次审核的统计与审核人
+     * 不写入、不覆盖、不删除现有 attendance（V1 考勤），所以不影响薪资、迟到扣款与历史资料。
+     * 失败可原样重试：同样的 ID 会覆盖，不会重复。
      */
-    static async saveAttendanceImport(
+    static async saveAttendanceReview(
         records: AttendanceRecord[],
-        staleRecords: AttendanceRecord[],
         batchInfo: Record<string, unknown> & { id: string },
     ): Promise<void> {
         const batchRef = doc(db, 'attendance_import_batches', batchInfo.id);
@@ -1992,28 +1990,24 @@ export class DataManager {
             ...batchInfo,
             status: 'PENDING',
             recordIds: records.map(r => r.id),
-            removedIds: staleRecords.map(r => r.id),
             startedAt: new Date().toISOString(),
         });
-        const attempt = Date.now();
-        for (let i = 0; i < staleRecords.length; i += 100) {
-            await setDoc(doc(db, 'attendance_import_batches', batchInfo.id, 'replaced', `${attempt}_${i / 100}`), {
-                records: staleRecords.slice(i, i + 100),
-            });
-        }
-        const ops: ({ type: 'set'; rec: AttendanceRecord } | { type: 'delete'; id: string })[] = [
-            ...records.map(rec => ({ type: 'set' as const, rec })),
-            ...staleRecords.map(rec => ({ type: 'delete' as const, id: rec.id })),
-        ];
-        for (let i = 0; i < ops.length; i += 400) {
+        for (let i = 0; i < records.length; i += 400) {
             const batch = writeBatch(db);
-            ops.slice(i, i + 400).forEach(op =>
-                op.type === 'set' ? batch.set(doc(db, 'attendance', op.rec.id), op.rec) : batch.delete(doc(db, 'attendance', op.id)),
-            );
+            records.slice(i, i + 400).forEach(rec => batch.set(doc(db, 'attendance_reviews', rec.id), rec));
             await batch.commit();
         }
         await updateDoc(batchRef, { status: 'COMPLETED', completedAt: new Date().toISOString() });
-        DataManager.clearCacheKeys(['attendance_']);
+        DataManager.clearCacheKeys(['attendance_reviews_']);
+    }
+    /** 某月已审核的打卡机考勤（V2 专用，与 V1 attendance 分开） */
+    static async getAttendanceReviewsByMonth(month: string): Promise<AttendanceRecord[]> {
+        return DataManager.runWithCache(`attendance_reviews_${month}`, async () => {
+            const q = query(collection(db, 'attendance_reviews'),
+                where('date', '>=', `${month}-01`), where('date', '<=', `${month}-31`));
+            const snap = await getDocs(q);
+            return snap.docs.map(d => d.data() as AttendanceRecord);
+        });
     }
     static async deleteAttendance(id: string): Promise<void> {
         await deleteDoc(doc(db, 'attendance', id));

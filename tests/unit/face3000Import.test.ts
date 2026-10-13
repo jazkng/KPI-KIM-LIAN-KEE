@@ -9,7 +9,6 @@ import {
     buildAttendanceRecords,
     buildReview,
     businessMinuteToIso,
-    findStaleFaceRecords,
     matchEmployee,
     toBusinessPunch,
     type Resolution,
@@ -147,7 +146,7 @@ describe('buildReview（营业日、配对、异常）', () => {
 
         const ok = buildReview(data, [emp('9001')], { shiftSettings: SETTINGS }, { [late.key]: { action: 'EXCUSE', note: '主管批准换班' } });
         const [rec] = buildAttendanceRecords(ok, { batchId: 'b1', reviewedBy: '主管', reviewedAt: '2026-10-01T00:00:00Z' });
-        expect(rec).toMatchObject({ id: 'attendance_9001_2026-09-08_face', status: 'COMPLETED', lateExcused: true, source: 'face_machine', importBatchId: 'b1' });
+        expect(rec).toMatchObject({ id: 'review_9001_2026-09-08', status: 'COMPLETED', lateExcused: true, source: 'face_machine', importBatchId: 'b1' });
 
         const confirmed = buildReview(data, [emp('9001')], { shiftSettings: SETTINGS }, { [late.key]: { action: 'CONFIRM' } });
         const [rec2] = buildAttendanceRecords(confirmed, { batchId: 'b1', reviewedBy: '主管', reviewedAt: 'x' });
@@ -201,22 +200,6 @@ describe('Codex 审核修正', () => {
         const [rec] = buildAttendanceRecords(r, { batchId: 'b', reviewedBy: 'S', reviewedAt: 'x' });
         expect(rec.allTimes).toEqual(['15:05', '00:58']);
         expect(r.employees[0].days[0].punches).toEqual(['15:05', '00:58+1']);
-    });
-
-    it('重新导入：只移除同员工、同区间、打卡机导入且这次没有的旧记录；APP 打卡与其他人不动', () => {
-        const key = '9001|2026-09-07|MISSING_PUNCH';
-        const r = buildReview(load({ 7: '15:00\n', 10: '15:00\n', 11: '01:00\n' }), [emp('9001'), emp('9002')], { shiftSettings: SETTINGS }, { [key]: { action: 'MARK_ABSENT' } });
-        const records = buildAttendanceRecords(r, { batchId: 'b', reviewedBy: 'S', reviewedAt: 'x' });
-        const old = (id: string, employeeId: string, date: string) => ({ id, employeeId, date } as any);
-        const stale = findStaleFaceRecords(r, records, [
-            old('attendance_9001_2026-09-07_face', '9001', '2026-09-07'), // 这次判定不算出勤 → 移除
-            old('attendance_9001_2026-09-11_face', '9001', '2026-09-11'), // 旧版把凌晨下班卡存成隔天 → 移除
-            old('attendance_9001_2026-09-10_face', '9001', '2026-09-10'), // 这次有 → 覆盖，不移除
-            old('2026-09-12_9001', '9001', '2026-09-12'),                   // APP 打卡 → 不动
-            old('attendance_9002_2026-09-07_face', '9002', '2026-09-07'),   // 不在这次档案的人 → 不动
-            old('attendance_9001_2026-08-31_face', '9001', '2026-08-31'),   // 区间外 → 不动
-        ]);
-        expect(stale.map(s => s.id)).toEqual(['attendance_9001_2026-09-07_face', 'attendance_9001_2026-09-11_face']);
     });
 
     it('PDF 每日列转成原始打卡：时间变小代表跨午夜，算下一个日历日', () => {

@@ -3,12 +3,13 @@
 // ----------------------------------------------------------------------------
 // 流程：选档 → 解析 Logs 原始打卡 → 以员工编号对应 ERP 员工 → 营业日配对（跨午夜）
 //      → 列出异常（漏打卡、迟到、早退、加班、过长班次）→ 主管逐项或批量处理
-//      → 全部处理完才能「确认导入」→ 人工成本、人工成本率、保本营业额
-// 选档与预览只在浏览器内处理，不会写入任何资料；只有按下「确认导入」才写入。
+//      → 全部处理完才能「确认审核」→ 人工成本、人工成本率、保本营业额
+// 选档与预览只在浏览器内处理，不会写入任何资料；只有按下「确认审核」才储存，
+// 而且只存入 V2 的 attendance_reviews，不写入、不覆盖、不删除 V1 的 attendance，不影响薪资。
 // ============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Loader2, X } from 'lucide-react';
-import type { AttendanceRecord, Employee, PayrollRecord } from '../../../types';
+import type { Employee, PayrollRecord } from '../../../types';
 import { DataManager, type AttendanceShiftSettings } from '../../../utils/dataManager';
 import { loadXLSX } from '../../../utils/lazyLibs';
 import { isCalendarMonth, parseFace3000Workbook, type Face3000Import, type SheetRows } from '../../../utils/attendance/face3000';
@@ -17,7 +18,6 @@ import {
     DEFAULT_REVIEW_OPTIONS,
     buildAttendanceRecords,
     buildReview,
-    findStaleFaceRecords,
     type ExceptionType,
     type Resolution,
     type ReviewEmployee,
@@ -171,26 +171,10 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
             }
         })();
         if (!records) return;
-        setBusy('检查既有记录…');
-        let stale: AttendanceRecord[];
-        try {
-            DataManager.clearCacheKeys(['attendance_']);
-            const months = [...new Set([data.periodStart.slice(0, 7), data.periodEnd.slice(0, 7)])];
-            const existing = (await Promise.all(months.map(m => DataManager.getAttendanceByMonth(m)))).flat();
-            stale = findStaleFaceRecords(review, records, existing);
-        } catch (e) {
-            setError(`读取既有考勤失败，未写入任何资料：${(e as Error).message}`);
-            setBusy(null);
-            return;
-        }
-        setBusy(null);
         const ok = window.confirm(
-            `确认导入 ${review.employees.length} 位员工、${records.length} 笔考勤记录？\n\n` +
+            `确认 ${review.employees.length} 位员工、${records.length} 天的审核结果？\n\n` +
                 `区间：${data.periodStart} ~ ${data.periodEnd}\n` +
-                '同员工同营业日之前导入的打卡机记录会被这次结果取代。' +
-                (stale.length
-                    ? `\n另有 ${stale.length} 笔旧的打卡机记录（这次判定不算出勤，或旧版导入存错日子）会移除，内容先完整备份在导入记录中。`
-                    : ''),
+                '审核结果只存入 V2（考勤审核记录），不会改动现有考勤、迟到扣款、薪资或加班费。',
         );
         if (!ok) return;
         setBusy('写入中…');
@@ -203,7 +187,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                 const k = `${ex.type}:${ex.resolution?.action}`;
                 decisions[k] = (decisions[k] || 0) + 1;
             })));
-            await DataManager.saveAttendanceImport(stamped, stale, {
+            await DataManager.saveAttendanceReview(stamped, {
                 id,
                 source: 'FACE3000_XLS',
                 fileName,
@@ -222,7 +206,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
             setSavedCount(stamped.length);
             onSaved?.();
         } catch (e) {
-            setError(`写入失败：${(e as Error).message}。可以再按一次「确认导入」重试：同样的记录会覆盖，不会重复。`);
+            setError(`储存失败：${(e as Error).message}。可以再按一次「确认审核」重试：同样的记录会覆盖，不会重复。`);
         } finally {
             setBusy(null);
         }
@@ -233,7 +217,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
             <div className="flex max-h-[96vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white text-gray-900 shadow-2xl md:max-w-5xl md:rounded-2xl">
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 p-4">
                     <div>
-                        <h3 className="flex items-center gap-2 text-lg font-black"><FileSpreadsheet size={20} /> FACE3000 考勤审核导入</h3>
+                        <h3 className="flex items-center gap-2 text-lg font-black"><FileSpreadsheet size={20} /> FACE3000 考勤预览与审核</h3>
                         <p className="text-[11px] font-bold text-gray-500">
                             {data ? `${fileName} · ${data.periodStart} ~ ${data.periodEnd}` : '选择打卡机汇出的 .XLS 档（含 Summary、Logs）'}
                         </p>
@@ -252,7 +236,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                             />
                             <FileSpreadsheet size={32} className="text-emerald-600" />
                             <span className="text-sm font-black">点击选择 FACE3000-U 考勤档</span>
-                            <span className="text-[11px] font-bold text-gray-400">档案只在这台装置上解析，按「确认导入」之前不会写入任何资料</span>
+                            <span className="text-[11px] font-bold text-gray-400">档案只在这台装置上解析，按「确认审核」之前不会储存任何资料；确认后也只存入 V2，不改动现有考勤与薪资</span>
                         </label>
                     )}
 
@@ -374,7 +358,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                 {review && (
                     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 p-4">
                         {savedCount !== null ? (
-                            <span className="flex items-center gap-2 text-sm font-black text-emerald-700"><CheckCircle2 size={16} /> 已导入 {savedCount} 笔考勤记录</span>
+                            <span className="flex items-center gap-2 text-sm font-black text-emerald-700"><CheckCircle2 size={16} /> 已储存 {savedCount} 天的审核结果（未改动现有考勤与薪资）</span>
                         ) : (
                             <>
                                 {!currentEmployee && (
@@ -394,7 +378,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                                     onClick={handleSave}
                                     className="min-h-[44px] rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-gray-300"
                                 >
-                                    确认导入
+                                    确认审核
                                 </button>
                             </>
                         )}
@@ -583,7 +567,7 @@ const LabourPanel: React.FC<{ month: string; employees: Employee[]; review: NonN
                 </label>
             </div>
             <p className="text-[11px] text-gray-500">
-                雇主人工成本 = 应发薪资（底薪 + 已批准加班 + 固定津贴）+ 雇主 EPF / SOCSO / EIS。员工自付的 EPF / SOCSO / EIS / LINDUNG（合计 {rm(analysis.employeeDeductions)}）已含在应发薪资内，不重复计算。已发放的薪资以实际数字为准。
+                雇主人工成本 = 应发薪资（底薪 + 固定津贴）+ 雇主 EPF / SOCSO / EIS。已批准加班规则待确认，暂不计入（已发薪资里的加班照实计入）。员工自付的 EPF / SOCSO / EIS / LINDUNG（合计 {rm(analysis.employeeDeductions)}）已含在应发薪资内，不重复计算。已发放的薪资以实际数字为准。
             </p>
             <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <table className="w-full text-xs">

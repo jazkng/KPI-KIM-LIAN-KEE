@@ -687,9 +687,8 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     }
 
     // 👑 自动计算迟到扣款 (单日>10min 扣1小时 + 月累积>60min 再扣1小时)
-    // 主管在 FACE3000 审核导入时已豁免的迟到（lateExcused）不扣款
     const empAttendance = monthAttendance.filter(
-      (r) => r.employeeId === emp.id && r.lateExcused !== true,
+      (r) => r.employeeId === emp.id,
     );
     const lateCalc = calculateLatePenalty(historicalBasic, empAttendance);
     const actualPenaltyAmount = enableAttendanceDeduction ? getDeductedLatePenalty(lateCalc.amount, latePenaltyMode) : 0;

@@ -364,8 +364,9 @@ export const businessMinuteToIso = (businessDate: string, minute: number): strin
 };
 
 /**
- * 审核完成后要写入的考勤记录（沿用现有 attendance 格式与 ID，V1 读得懂）。
- * 只在所有异常处理完毕后才可呼叫；不算出勤的日子不写入。
+ * 审核完成后的考勤记录（沿用 attendance 的资料格式，方便日后比对）。
+ * 只存入 V2 专用的 attendance_reviews，不写入 V1 的 attendance，不影响薪资。
+ * 只在所有异常处理完毕后才可呼叫；不算出勤的日子不存。
  */
 export const buildAttendanceRecords = (
     review: ReviewResult,
@@ -385,7 +386,7 @@ export const buildAttendanceRecords = (
                 .map(ex => `${ex.type}:${ex.resolution?.action}${ex.resolution?.note ? `(${ex.resolution.note})` : ''}`)
                 .join('; ');
             records.push({
-                id: `attendance_${emp.id}_${day.businessDate}_face`,
+                id: `review_${emp.id}_${day.businessDate}`,
                 employeeId: emp.id,
                 employeeName: emp.name,
                 date: day.businessDate,
@@ -409,25 +410,3 @@ export const buildAttendanceRecords = (
     return records.map(rec => JSON.parse(JSON.stringify(rec)) as AttendanceRecord);
 };
 
-/**
- * 重新导入时要移除的旧打卡机记录：同一批员工、同一区间内，以前导入过（ID 以 `_face` 结尾），
- * 但这次审核后不再有记录的日子（判定不算出勤，或旧版按日历日导入时把凌晨下班卡存成另一天）。
- * 只处理打卡机导入的记录，APP 打卡记录一律不动。
- */
-export const findStaleFaceRecords = (
-    review: ReviewResult,
-    newRecords: AttendanceRecord[],
-    existing: AttendanceRecord[],
-): AttendanceRecord[] => {
-    const employeeIds = new Set(review.employees.map(r => r.employee!.id));
-    const keep = new Set(newRecords.map(r => r.id));
-    return existing.filter(
-        rec =>
-            typeof rec.id === 'string' &&
-            rec.id.endsWith('_face') &&
-            employeeIds.has(rec.employeeId) &&
-            rec.date >= review.periodStart &&
-            rec.date <= review.periodEnd &&
-            !keep.has(rec.id),
-    );
-};
