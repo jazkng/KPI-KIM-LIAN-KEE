@@ -99,6 +99,10 @@ export const LabourProfitDashboard: React.FC<Props> = ({ onClose }) => {
                 daysInMonth,
                 elapsedDays: isFuture ? 0 : isCurrent ? today.getDate() : daysInMonth,
                 settlementDays,
+                // 兼职工资（与财务报表相同：业务发生制看账单日期）
+                partTimeWages: data.raw.standaloneExpenses
+                    .filter(e => String(e.id || '').startsWith('parttime_') && String(e.time || '').slice(0, 7) === month)
+                    .reduce((sum, e) => sum + Math.max(0, (Number((e as any).totalBillAmount || e.amount) || 0) - (Number((e as any).creditNote) || 0)), 0),
             }),
         };
     }, [data, month]);

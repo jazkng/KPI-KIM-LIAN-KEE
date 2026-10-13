@@ -103,4 +103,17 @@ describe('buildProfitSnapshot（人工成本率、保本、预估利润）', () 
         const s = buildProfitSnapshot(pnl({ INGREDIENT_MEAT: 1, RENT: 1 }), labour, { daysInMonth: 30, elapsedDays: 30, settlementDays: 27 });
         expect(s.reasons.join('|')).toMatch(/已过 30 天，只有 27 天日结/);
     });
+    it('平台抽佣与广告（PLATFORM_COMM_* / PLATFORM_ADS_*）算变动成本，不算固定费用', () => {
+        const pnl = { month: '2026-09', costByCategory: { INGREDIENT_MEAT: 1000, PLATFORM_COMM_GRAB: 300, PLATFORM_ADS_GRAB: 50, RENT: 2000 }, platformGross: { grab: 2000, shopee: 0, panda: 0, lalamove: 0 }, inStoreSales: 8000, laborByDept: {}, hasData: true };
+        const snap = buildProfitSnapshot(pnl, [], { daysInMonth: 30, elapsedDays: 30, settlementDays: 30 });
+        expect(snap.variableCosts.amount).toBe(1350);
+        expect(snap.otherFixedCosts.amount).toBe(2000);
+    });
+    it('兼职工资不在薪资单里：从排除的薪资类支出中取回，计入人工成本', () => {
+        const pnl = { month: '2026-09', costByCategory: { SALARY: 900, INGREDIENT_MEAT: 1000, RENT: 2000 }, platformGross: { grab: 0, shopee: 0, panda: 0, lalamove: 0 }, inStoreSales: 10000, laborByDept: {}, hasData: true };
+        const snap = buildProfitSnapshot(pnl, [], { daysInMonth: 30, elapsedDays: 30, settlementDays: 30, partTimeWages: 400 });
+        expect(snap.otherLabour.amount).toBe(400);
+        expect(snap.excludedLabourExpenses).toBe(500);
+        expect(snap.reasons.join()).toContain('兼职工资 RM 400.00');
+    });
 });
