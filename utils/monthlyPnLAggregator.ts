@@ -33,7 +33,7 @@ export interface MonthlyPnLInputs {
 const num = (v: any): number => Number(v) || 0;
 
 /** 照抄 FinancialReport.categorizeExpense —— 分类规则必须跟画面一致 */
-const categorizeExpense = (category: string): string => {
+export const categorizeExpense = (category: string): string => {
     const c = category?.toUpperCase() || 'OTHER';
     if (['TRANSFER', 'FUND', 'ADJUSTMENT', 'SALES'].some(k => c.includes(k))) return 'IGNORE';
     if (c.includes('DIVIDEND')) return 'DIVIDEND';

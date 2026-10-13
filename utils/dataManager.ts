@@ -2000,6 +2000,32 @@ export class DataManager {
         await updateDoc(batchRef, { status: 'COMPLETED', completedAt: new Date().toISOString() });
         DataManager.clearCacheKeys(['attendance_reviews_']);
     }
+    /**
+     * 一个月的损益原始资料（只读）：日结、账单付款、独立支出。
+     * 与财务报表「多月份导出」相同的查询方式，只按日期范围读取，不读整个集合。
+     */
+    static async getMonthPnLRaw(month: string): Promise<{
+        settlements: SettlementRecord[];
+        billPayments: BillPaymentRecord[];
+        standaloneExpenses: ExpenseItem[];
+    }> {
+        const [y, m] = month.split('-').map(Number);
+        const start = `${month}-01`;
+        const end = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}T23:59:59`;
+        const [setSnap, billSnap, expByTime, expByPayment] = await Promise.all([
+            getDocs(query(collection(db, 'settlements'), where('date', '>=', start), where('date', '<=', end))),
+            getDocs(query(collection(db, 'bill_payments'), where('date', '>=', start), where('date', '<=', end))),
+            getDocs(query(collection(db, 'standalone_expenses'), where('time', '>=', start), where('time', '<=', end))),
+            getDocs(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', start), where('paymentDate', '<=', end))),
+        ]);
+        const expenses = new Map<string, ExpenseItem>();
+        [...expByTime.docs, ...expByPayment.docs].forEach(d => expenses.set(d.id, { id: d.id, ...d.data() } as ExpenseItem));
+        return {
+            settlements: setSnap.docs.map(d => ({ id: d.id, ...d.data() }) as SettlementRecord),
+            billPayments: billSnap.docs.map(d => ({ id: d.id, ...d.data() }) as BillPaymentRecord),
+            standaloneExpenses: [...expenses.values()],
+        };
+    }
     /** 某月已审核的打卡机考勤（V2 专用，与 V1 attendance 分开） */
     static async getAttendanceReviewsByMonth(month: string): Promise<AttendanceRecord[]> {
         return DataManager.runWithCache(`attendance_reviews_${month}`, async () => {

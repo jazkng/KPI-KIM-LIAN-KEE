@@ -31,6 +31,8 @@ export const BOSS_TARGET_MODULE_MAP: Record<string, AppModule> = {
     BILLS: 'BILLS',
     TREASURY: 'TREASURY',
     REPORTS: 'REPORTS',
+    // 人工成本与盈利：与财务报表同一个权限（含薪资与营业额资料）
+    LABOUR_PROFIT: 'REPORTS',
     // 人事
     HR: 'HR_FILES',
     ATTENDANCE: 'ATTENDANCE_CONSOLE',

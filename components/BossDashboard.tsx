@@ -15,7 +15,7 @@ import {
 } from '../constants/moduleNavigation';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
-import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
@@ -56,6 +56,7 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "bills", title: "经常性支出", sub: "RECURRING EXPENSES", icon: Banknote, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'BILLS', alertKey: 'bills' },
     { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
     { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
+    { id: "labour_profit", title: "人工成本与盈利", sub: "LABOUR & PROFIT", icon: TrendingUp, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'LABOUR_PROFIT' },
     { id: "staff_cash", title: "兼职与预支", sub: "PART-TIME & ADVANCE", icon: Banknote, colorClass: "bg-emerald-50", iconColor: "text-emerald-700", actionType: 'NAVIGATE', target: 'STAFF_CASH' },
     { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
     { id: "attendance", title: "考勤管理", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
@@ -391,6 +392,7 @@ export const BossDashboard: React.FC<{
             'BILLS': <RecurringBillsModule onClose={close} />,
             'ORG': <OrgChart onClose={close} />,
             'REPORTS': <FinancialReport onClose={close} />,
+            'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
