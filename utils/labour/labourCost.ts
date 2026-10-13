@@ -314,3 +314,17 @@ export const buildMonthLabourCosts = (
     });
     return result.sort((a, b) => b.employerCost - a.employerCost);
 };
+
+/** 审核后的考勤（V2 attendance_reviews）→ 每位员工的出勤汇总 */
+export const summariseReviewedAttendance = (
+    records: { employeeId: string; durationMinutes?: number; approvedOtMinutes?: number }[],
+): Record<string, AttendanceSummary> => {
+    const out: Record<string, AttendanceSummary> = {};
+    records.forEach(r => {
+        const s = (out[r.employeeId] ||= { daysWorked: 0, workedMinutes: 0, approvedOtMinutes: 0 });
+        s.daysWorked += 1;
+        s.workedMinutes += Number(r.durationMinutes) || 0;
+        s.approvedOtMinutes += Number(r.approvedOtMinutes) || 0;
+    });
+    return out;
+};

@@ -2010,8 +2010,19 @@ export class DataManager {
         standaloneExpenses: ExpenseItem[];
     }> {
         const [y, m] = month.split('-').map(Number);
-        const start = `${month}-01`;
-        const end = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}T23:59:59`;
+        return DataManager.getPnLRawRange(`${month}-01`, `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`);
+    }
+    /**
+     * 任意日期区间（YYYY-MM-DD，含头含尾）的日结、账单付款与独立支出。
+     * 只按日期范围查询，不读整个集合；不写入任何资料。
+     */
+    static async getPnLRawRange(startDate: string, endDate: string): Promise<{
+        settlements: SettlementRecord[];
+        billPayments: BillPaymentRecord[];
+        standaloneExpenses: ExpenseItem[];
+    }> {
+        const start = startDate;
+        const end = `${endDate}T23:59:59`;
         const [setSnap, billSnap, expByTime, expByPayment] = await Promise.all([
             getDocs(query(collection(db, 'settlements'), where('date', '>=', start), where('date', '<=', end))),
             getDocs(query(collection(db, 'bill_payments'), where('date', '>=', start), where('date', '<=', end))),

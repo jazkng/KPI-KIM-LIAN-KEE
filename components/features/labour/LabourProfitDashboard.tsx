@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Loader2, X } from 'lucide-react';
 import type { AttendanceRecord, Employee, PayrollRecord } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { aggregateMonth } from '../../../utils/monthlyPnLAggregator';
-import { buildMonthLabourCosts, type AttendanceSummary } from '../../../utils/labour/labourCost';
+import { buildMonthLabourCosts, summariseReviewedAttendance as summarise } from '../../../utils/labour/labourCost';
 import { buildProfitSnapshot, DATA_STATUS_LABEL, type DataStatus, type ProfitLine } from '../../../utils/labour/profitDashboard';
 
 interface Props {
@@ -33,18 +33,6 @@ const StatusChip: React.FC<{ status: DataStatus }> = ({ status }) => (
 const currentMonth = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-};
-
-/** 审核后的考勤（V2 attendance_reviews）→ 每位员工的出勤汇总 */
-const summarise = (records: AttendanceRecord[]): Record<string, AttendanceSummary> => {
-    const out: Record<string, AttendanceSummary> = {};
-    records.forEach(r => {
-        const s = (out[r.employeeId] ||= { daysWorked: 0, workedMinutes: 0, approvedOtMinutes: 0 });
-        s.daysWorked += 1;
-        s.workedMinutes += Number(r.durationMinutes) || 0;
-        s.approvedOtMinutes += Number(r.approvedOtMinutes) || 0;
-    });
-    return out;
 };
 
 export const LabourProfitDashboard: React.FC<Props> = ({ onClose }) => {

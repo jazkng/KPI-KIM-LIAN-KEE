@@ -62,9 +62,41 @@ export const aggregateMonth = (
     month: string,
     data: MonthlyRawData,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+): MonthlyPnLInputs =>
+    aggregateWith(month, d => !!d && String(d).slice(0, 7) === month, p => p === month, data, accountingMode);
+
+/**
+ * 任意日期区间（YYYY-MM-DD，含头含尾）的同口径汇总，给老板经营驾驶舱用。
+ * 营业额、平台抽佣、支出分类与 aggregateMonth 完全相同（同一段程序）。
+ * 薪资是按月记录：只计入「整个月都在区间内」的月份；其余月份由呼叫端另行按天数估算。
+ */
+export const aggregateRange = (
+    start: string,
+    end: string,
+    data: MonthlyRawData,
+    accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+): MonthlyPnLInputs => {
+    const inRange = (d?: string) => {
+        const day = String(d || '').slice(0, 10);
+        return !!day && day >= start && day <= end;
+    };
+    const fullMonthInRange = (m?: string) => {
+        if (!m) return false;
+        const [y, mo] = m.split('-').map(Number);
+        const last = `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}`;
+        return `${m}-01` >= start && last <= end;
+    };
+    return aggregateWith(`${start}~${end}`, inRange, fullMonthInRange, data, accountingMode);
+};
+
+const aggregateWith = (
+    month: string,
+    inMonth: (d?: string) => boolean,
+    payrollMonthIncluded: (m?: string) => boolean,
+    data: MonthlyRawData,
+    accountingMode: 'ACCRUAL' | 'CASH',
 ): MonthlyPnLInputs => {
     const { settlements, standaloneExpenses, billPayments, payrollRecords, employees } = data;
-    const inMonth = (d?: string) => !!d && String(d).slice(0, 7) === month;
 
     const cost: Record<string, number> = {};
     const bdown = { grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0 };
@@ -182,7 +214,7 @@ export const aggregateMonth = (
 
     const laborByDept: Record<string, number> = {};
     payrollRecords.forEach((p: any) => {
-        if (p?.month !== month) return;
+        if (!payrollMonthIncluded(p?.month)) return;
         if (p?.status === 'POSTED') {
             addCost(netPayFromDetails(p), 'PAYROLL');
             if (p.isStatutoryPaid) addCost(num(p.totalGovtPay), 'EPF_SOCSO');
