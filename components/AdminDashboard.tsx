@@ -9,23 +9,9 @@ import { mt } from '../constants/managementTranslations';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { needsReplenishment } from '../utils/unitConversion';
 import { sortNavigationItems } from '../constants/moduleNavigation';
+import { SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, KitchenAlertModule, StaffCashModule } from './lazyModules';
 
 // --- NEW GENERIC IMPORTS ---
-import { SettlementModule } from './features/SettlementModule';
-import { RosterModule } from './features/RosterModule';
-import { LogbookModule } from './features/LogbookModule';
-import { InventoryModule } from './features/inventory/InventoryModule';
-import { SOPInspection } from './features/SOPInspection';
-import { QueueManager } from './features/QueueManager';
-import { SupplierModule } from './features/supplier/SupplierModule';
-import { AttendanceConsole } from './features/AttendanceConsole';
-import { ProcurementModule } from './features/ProcurementModule';
-import { MenuManagement } from './features/MenuManagement'; 
-import { EmployeeAssessmentModule } from './features/EmployeeAssessmentModule'; // NEW IMPORT
-import { AccountsPayableModule } from './features/ap/AccountsPayableModule';
-import { SelfInvoiceModule } from './features/SelfInvoiceModule';
-import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
-import { StaffCashModule } from './features/staffcash/StaffCashModule';
 
 const defaultBossEmployee: Employee = {
     id: 'BOSS_TEMP',

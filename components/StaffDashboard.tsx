@@ -10,15 +10,13 @@ import { ROLE_SOP_DETAILS, MODULE_SYSTEM_TASKS, MODULE_DEFINITIONS } from './con
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES } from '../constants/staff';
 import { DataManager, DEFAULT_ATTENDANCE_SETTINGS, getTargetShiftForDate } from '../utils/dataManager';
 import { mapRoleToCode, getChineseRoleName } from './utils';
-import { AIOperationsAssistant } from './features/AIOperationsAssistant';
-import { ManagerDashboard } from './AdminDashboard';
-import { KitchenAlertModule } from './features/kitchen/KitchenAlertModule';
 import { KitchenAlertNotifier } from './features/kitchen/KitchenAlertNotifier';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { NotificationCenter } from './ui/NotificationCenter';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { AIOperationsAssistant, ManagerDashboard, KitchenAlertModule } from './lazyModules';
 
 import { 
   st, 

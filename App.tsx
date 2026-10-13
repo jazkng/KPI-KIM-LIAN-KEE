@@ -2,21 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { PortalRole, Employee, DeviceScreen } from './types';
 import { Login } from './components/Login';
-import { BossDashboard } from './components/BossDashboard';
-import { BossPriorityDashboard } from './components/BossPriorityDashboard';
-import { ManagerDashboard } from './components/AdminDashboard';
-import { StaffDashboard } from './components/StaffDashboard';
-import { ManagementPortal } from './components/management/ManagementPortal';
-import { DeviceScreenPortal } from './components/features/device/DeviceScreenPortal';
 import { LogOut, Settings, User, Sparkles, Target, Layout } from 'lucide-react';
-import { StoreConfigModal } from './components/features/StoreConfigModal';
-import { AIOperationsAssistant } from './components/features/AIOperationsAssistant';
-import { WhatsNewModal } from './components/ui/WhatsNewModal';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
 import { NotificationCenter } from './components/ui/NotificationCenter';
+import { BossDashboard, BossPriorityDashboard, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal } from './components/lazyModules';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
 // 与 ManagerDashboard 的 initialTab prop 类型保持一致

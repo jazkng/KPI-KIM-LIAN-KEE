@@ -4,7 +4,6 @@ import {
     CheckCircle2, LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
 } from 'lucide-react';
 import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
-import { ManagerDashboard } from '../AdminDashboard';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
 import { MODULE_DEFINITIONS } from '../constants';
 import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
@@ -12,6 +11,7 @@ import { mt, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../con
 import { DataManager } from '../../utils/dataManager';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { NotificationCenter } from '../ui/NotificationCenter';
+import { ManagerDashboard } from '../lazyModules';
 
 interface ManagementPortalProps {
     employee: Employee;
