@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { MenuItem } from '../../types';
+import { INITIAL_MENU_ITEMS } from '../../constants/menu';
 import {
   buildPublicMenu,
+  parseOptionSurchargeSen,
   priceOrder,
   roundToNearestFiveSen,
   toSen,
@@ -57,6 +59,63 @@ describe('buildPublicMenu（公开菜单）', () => {
 
   it('可由设定标记暂停供应的菜', () => {
     expect(buildPublicMenu(MENU, new Set(['soup']))[1].available).toBe(false);
+  });
+});
+
+describe('加价选项与无效规格（防止少收钱）', () => {
+  const ITEMS: MenuItem[] = [
+    { id: 'pork', name: '猪肉', category: 'C', options: ['少辣', '加生蛋 (+RM1.00)', '加面底 (+RM11.00)'], variants: [{ label: '标准', price: 10, cost: 0 }] },
+    { id: 'set', name: '套餐', category: 'C', options: ['2位以上每位加RM1.50'], variants: [{ label: '标准', price: 30, cost: 0 }] },
+    { id: 'single', name: '单一规格', category: 'C', options: [], variants: [{ label: 'S', price: 8, cost: 0 }, { label: 'M', price: 0, cost: 0 }, { label: 'L', price: -1, cost: 0 }] },
+    { id: 'zero', name: '全部 0 元', category: 'C', options: [], variants: [{ label: 'S', price: 0, cost: 0 }] },
+  ];
+  const menu = buildPublicMenu(ITEMS);
+
+  it('解析「(+RMx.xx)」加价；无法确定的加价说明回 null', () => {
+    expect(parseOptionSurchargeSen('加生蛋 (+RM1.00)')).toBe(100);
+    expect(parseOptionSurchargeSen('加面底 (+RM11.00)')).toBe(1100);
+    expect(parseOptionSurchargeSen('少辣')).toBe(0);
+    expect(parseOptionSurchargeSen('2位以上每位加RM1.50')).toBeNull();
+  });
+
+  it('加价选项计入单价', () => {
+    expect(menu[0].optionGroups[0].choices.map(c => c.priceDeltaSen)).toEqual([0, 100, 1100]);
+    const r = priceOrder(menu, [{ itemId: 'pork', variantId: 'pork:标准', quantity: 2, optionChoiceIds: [menu[0].optionGroups[0].choices[1].id, menu[0].optionGroups[0].choices[2].id] }], NO_FEES);
+    if (!r.ok) throw new Error('should price');
+    expect(r.order.lines[0].unitPriceSen).toBe(1000 + 100 + 1100);
+    expect(r.order.totalSen).toBe(4400);
+  });
+
+  it('有无法计价的加价说明时，整道菜不开放', () => {
+    expect(menu[1].available).toBe(false);
+    expect(menu[1].optionGroups).toEqual([]);
+  });
+
+  it('价格不是正数的规格不公开；ID 不受过滤影响', () => {
+    expect(menu[2].variants).toEqual([{ id: 'single:s', label: 'S', priceSen: 800 }]);
+    expect(menu[3].available).toBe(false);
+    const r = priceOrder(menu, [{ itemId: 'single', variantId: 'single:m', quantity: 1 }], NO_FEES);
+    expect(r.ok).toBe(false);
+  });
+
+  it('定价时再次检查：被篡改为 0 元或负加价的菜单一律拒绝', () => {
+    const tampered = JSON.parse(JSON.stringify(menu));
+    tampered[2].variants[0].priceSen = 0;
+    const r1 = priceOrder(tampered, [{ itemId: 'single', variantId: 'single:s', quantity: 1 }], NO_FEES);
+    if (r1.ok === false) expect(r1.errors[0].code).toBe('ITEM_UNAVAILABLE'); else throw new Error('should reject');
+    tampered[0].optionGroups[0].choices[1].priceDeltaSen = -100;
+    const r2 = priceOrder(tampered, [{ itemId: 'pork', variantId: 'pork:标准', quantity: 1, optionChoiceIds: [tampered[0].optionGroups[0].choices[1].id] }], NO_FEES);
+    if (r2.ok === false) expect(r2.errors[0].code).toBe('ITEM_UNAVAILABLE'); else throw new Error('should reject');
+  });
+
+  it('现有菜单：所有开放的选项，名称含金额者都有对应加价', () => {
+    for (const item of buildPublicMenu(INITIAL_MENU_ITEMS)) {
+      if (!item.available) continue;
+      for (const v of item.variants) expect(v.priceSen).toBeGreaterThan(0);
+      for (const c of item.optionGroups.flatMap(g => g.choices)) {
+        if (/RM\s*\d/i.test(c.label)) expect(c.priceDeltaSen).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

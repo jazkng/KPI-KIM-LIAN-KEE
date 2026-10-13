@@ -37,7 +37,7 @@
 | 选项 ID | `<itemId>:opt:<选项名称 slug>` |
 | 订单 ID（`orderId`） | 服务器产生的随机 ID，不可猜测 |
 | 订单号（`orderNo`） | 给人看的号码，例如 `W-251013-007`（W + 营业日 + 当日流水号）。以 Firestore 交易产生，与现有排队号码同样的做法 |
-| 查询凭证（`publicToken`） | 32 字元随机字串，只在提交成功时回传一次。查询和取消都必须同时带上订单 ID 与凭证，防止他人逐号查看订单 |
+| 查询凭证（`publicToken`） | 由服务端以密钥计算：`HMAC-SHA256(ORDER_TOKEN_SECRET, orderId)`，Base64URL 编码。提交成功时回传；同一个幂等键重送时可以重新算出同一个凭证（见 4.3）。查询和取消都必须同时带上订单 ID 与凭证，防止他人逐号查看订单。**凭证只放在请求标头 `X-Order-Token`，不得放在网址里**（网址会进入存取日志、浏览器历史和分享链接），服务端日志须遮蔽此标头。密钥存于 Secret Manager，不进代码库 |
 | 营业日 | 马来西亚时间，凌晨 4 点前归前一天，与 ERP 现有规则相同 |
 
 ## 4. 接口
@@ -69,7 +69,10 @@
 ```
 
 - 只输出白名单栏位。成本、配方、做法、视频等内部资料**绝不出现**，单元测试已验证。
-- 现有菜单的选项没有价格，转为不加价的选项组。将来若要「加价选项」，会在菜单新增可选栏位，不改动现有栏位。
+- 现有菜单的选项是文字。名称结尾标示「(+RMx.xx)」的，例如「加生蛋 (+RM1.00)」，解析为加价 `priceDeltaSen`；没有标示的不加价。
+- 名称提到金额但无法确定怎么计价的（例如「2位以上每位加RM1.50」），整道菜标为 `available: false`，宁可不开放也不少收钱。
+  - 将来会在菜单新增可选的结构化加价栏位，不改动现有栏位。
+- 价格不是正数的规格（例如菜单管理里预设为 0 元的 M / L 规格）不会公开。定价时服务端会再检查一次。
 - 服务费与服务税费率**由负责人决定**，默认 0。
 
 ### 4.2 `POST /api/public/v1/orders/quote` — 试算（不建立订单）
@@ -122,10 +125,16 @@
 }
 ```
 
+- **幂等**：`Idempotency-Key` 为网站产生的 UUID。服务端在**同一个 Firestore 交易**内：读取 `online_order_idempotency/{key}` → 若不存在，建立订单、事件和幂等记录。
+  - 幂等记录保存 `orderId`，以及请求指纹 `requestHash`：正规化后请求内容的 SHA-256，不含 `turnstileToken`。
+  - 同一个键、指纹相同：回传第一次的结果，`publicToken` 由 `orderId` 重新计算，所以回应遗失后重送也能拿回凭证。
+  - 同一个键、指纹不同：回 `422 IDEMPOTENCY_KEY_REUSED`，不建立新订单。
 - `priceChanged: true`：网站送来的 `clientMenuVersion` 与当前菜单不同，金额可能有变。订单**照样建立**，以服务器金额为准，网站须提示顾客。
 - 是否改为「价格变动时拒绝提交并要求重新确认」，见第 9 节待决事项。
 
-### 4.4 `GET /api/public/v1/orders/{orderId}?token={publicToken}` — 查询订单
+### 4.4 `GET /api/public/v1/orders/{orderId}` — 查询订单
+
+请求标头：`X-Order-Token: {publicToken}`（不得放在查询字串）
 
 回应 `200`：订单号、状态、付款状态、品项快照、金额、取餐时间，以及给顾客看的拒单或取消原因。
 
@@ -133,7 +142,7 @@
 
 ### 4.5 `POST /api/public/v1/orders/{orderId}/cancel` — 顾客取消
 
-请求：`{ "token": "…", "reason": "选填" }`
+请求标头：`X-Order-Token: {publicToken}`；请求内容：`{ "reason": "选填" }`
 
 - 只有在 `PENDING_CONFIRMATION`（店员尚未接单）时可以取消，其他状态回 `409 CANNOT_CANCEL`。
 
@@ -151,6 +160,7 @@
 | 409 | `CANNOT_CANCEL` | 订单已被接单，不能取消 |
 | 400 | `PROMO_NOT_SUPPORTED` | v0.1 尚未开放优惠码 |
 | 403 | `TURNSTILE_FAILED` | 防机器人验证失败 |
+| 422 | `IDEMPOTENCY_KEY_REUSED` | 同一个幂等键配上不同的请求内容 |
 | 404 | `ORDER_NOT_FOUND` | 订单不存在，或凭证不符（两者回同一个错误，防止探测） |
 | 429 | `RATE_LIMITED` | 请求太频繁 |
 
@@ -176,6 +186,14 @@ PENDING_CONFIRMATION ─接单→ ACCEPTED ─开始备餐→ PREPARING ─完�
 
 - 网站只能读取付款状态，永远不能修改。
 
+### 状态变更必须原子化
+
+- 每一次状态或付款状态变更（顾客取消、店员接单、逾时等），都在**同一个 Firestore 交易**内完成：
+  1. 读取订单，确认当前状态等于预期的来源状态，且这个转换合法；
+  2. 写入新状态；
+  3. 新增对应的 `online_order_events` 记录。
+- 来源状态不符（例如顾客取消与店员接单同时发生）时，后到的一方回 `409`，并重新读取订单，不会互相覆盖。
+
 ## 6. ERP 订单中心（店员端）
 
 - **入口**：新增「网站订单」模块，延续现有模块的按需载入方式。依权限显示给楼面、柜台和管理层。
@@ -193,7 +211,10 @@ PENDING_CONFIRMATION ─接单→ ACCEPTED ─开始备餐→ PREPARING ─完�
 - `online_orders` 的金额**不计入**任何营收、日结或损益报表，只用于：
   - 网站订单单数、取消率、平均备餐时间；
   - 对账：以 `posReceiptNo` 对照 POS 记录，找出「已取餐但未结账」的订单。
-- 报表若需要「网站渠道营业额」，一律以已标记 `PAID_AT_COUNTER` 且有 POS 单号的订单为准，并标注「来自 POS」，不得与日结金额相加。
+- **POS 单号一对一**：标记 `PAID_AT_COUNTER` 时，在同一个交易内建立 `online_order_pos_receipts/{receiptKey}`。
+  - `receiptKey` 由门店、营业日、正规化后的 POS 单号组成（去空白、转大写），例如 `KLK1_2026-10-13_R00123`。
+  - 文件已存在时拒绝（`409 POS_RECEIPT_ALREADY_USED`），一张 POS 单只能对应一张网站订单。
+- 报表若需要「网站渠道营业额」，只能以去重后的 `online_order_pos_receipts` 为准，金额取自 POS 记录，不用订单快照。须标注「来自 POS」，不得与日结金额相加。
 
 ## 8. 数据模型（全部为新集合，不改动现有集合）
 
@@ -201,12 +222,16 @@ PENDING_CONFIRMATION ─接单→ ACCEPTED ─开始备餐→ PREPARING ─完�
 | --- | --- | --- |
 | `online_orders/{orderId}` | 订单主档：品项快照、金额、状态、付款状态、顾客姓名与电话、`publicTokenHash`（只存哈希） | 只有员工可读；只有服务端可建立 |
 | `online_order_events/{eventId}` | 审计记录（只增不改）：`orderId`、`from`、`to`、`actor`、`at`、`reason` | 员工可读；只能新增 |
-| `online_order_idempotency/{key}` | 防重复提交：`key → orderId`，24 小时后失效 | 只有服务端可访问 |
+| `online_order_idempotency/{key}` | 防重复提交：`orderId`、`requestHash`、`createdAt`，24 小时后失效 | 只有服务端可访问 |
+| `online_order_pos_receipts/{receiptKey}` | POS 单号与网站订单一对一对应：`orderId`、`markedBy`、`markedAt` | 员工可读；只能经由标记收款的交易建立 |
 | `online_order_counters/{businessDate}` | 当日订单流水号 | 只有服务端可访问 |
 | `config/online_ordering` | 是否接单、费率、取餐前置时间、无人接单逾时、暂停供应的菜 | 管理层可写 |
 
 - **个资保留**：订单完成 90 天后，把电话改为遮罩形式（例如 `+6012****789`）。这个提议需负责人确认，执行属于批量修改，须单独批准。
-- ⚠️ **上线前置条件**：在 CHG-06（收紧 Rules）完成之前，Firestore 对匿名身份完全开放，顾客电话会被任何人读取。因此**真实顾客订单必须等 CHG-05、CHG-06 完成后才能开放**。在此之前只在 Emulator 和预览站内测。
+- ⚠️ **上线前置条件**：在 CHG-06（收紧 Rules）完成之前，Firestore 对匿名身份完全开放，顾客电话会被任何人读取。因此**真实顾客订单必须等 CHG-05、CHG-06 完成后才能开放**。
+- 在此之前，订单写入功能**只在 Emulator（`demo-klk-erp`）测试**。
+- 预览站 `dev.kimliankee.app` 连接正式数据库，**不得**用来建立测试订单，也不得存放测试顾客资料。
+- 安全前置条件完成后，预览站只用于负责人的真实营运验收。
 
 ## 9. 待决事项
 

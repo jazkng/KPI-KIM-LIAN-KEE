@@ -21,7 +21,7 @@ export interface PublicMenuVariant {
 export interface PublicOptionChoice {
     id: string;
     label: string;
-    /** 加价（仙）。现有菜单的选项没有价格，一律为 0 */
+    /** 加价（仙），由选项名称中的「(+RMx.xx)」解析；没有标示则为 0 */
     priceDeltaSen: number;
 }
 
@@ -69,34 +69,59 @@ const uniqueIds = (base: string[]): string[] => {
     });
 };
 
+/** 选项名称结尾的固定加价，例如「加生蛋 (+RM1.00)」 */
+const SURCHARGE_SUFFIX = /\(\s*\+\s*RM\s*(\d+(?:\.\d{1,2})?)\s*\)\s*$/i;
+/** 名称里出现金额（例如「2位以上每位加RM1.50」）但不是上面那种固定加价，服务器无法可靠计价 */
+const MENTIONS_MONEY = /RM\s*\d/i;
+
+/**
+ * 解析选项加价。
+ * - `加生蛋 (+RM1.00)` → 100 仙
+ * - 没有金额 → 0
+ * - 有金额但格式无法确定（按人数加价等）→ null，整道菜暂不开放网上点单，避免少收钱
+ */
+export const parseOptionSurchargeSen = (label: string): number | null => {
+    const text = String(label || '');
+    const match = text.match(SURCHARGE_SUFFIX);
+    if (match) return toSen(Number(match[1]));
+    return MENTIONS_MONEY.test(text) ? null : 0;
+};
+
+const isPositiveSen = (sen: number) => Number.isInteger(sen) && sen > 0;
+
 /**
  * 由 ERP 菜单产生公开菜单。
  * 只挑选公开栏位（白名单），不使用「删除内部栏位」的方式，避免日后新增内部栏位时意外外流。
+ * 以下情况整道菜或该规格不开放，宁可不卖也不卖错价：
+ * - 价格不是正数的规格（例如菜单管理里预设为 0 的 M / L 规格）不公开；
+ * - 选项含有无法计价的加价说明时，整道菜标为不供应。
  */
 export const buildPublicMenu = (items: MenuItem[], unavailableItemIds: ReadonlySet<string> = new Set()): PublicMenuItem[] =>
     items.map(item => {
         const options = Array.isArray(item.options) ? item.options.filter(o => String(o || '').trim()) : [];
-        const variants = item.variants || [];
-        const variantIds = uniqueIds(variants.map(v => variantIdFor(item.id, v.label)));
+        const allVariants = Array.isArray(item.variants) ? item.variants : [];
+        // 先以全部规格计算 ID，再过滤，日后补上价格时 ID 不变
+        const variantIds = uniqueIds(allVariants.map(v => variantIdFor(item.id, v.label)));
+        const variants = allVariants
+            .map((v, i) => ({ id: variantIds[i], label: v.label, priceSen: toSen(v.price) }))
+            .filter(v => isPositiveSen(v.priceSen));
         const choiceIds = uniqueIds(options.map(o => `${item.id}:opt:${slugify(o)}`));
+        const surcharges = options.map(parseOptionSurchargeSen);
+        const hasUnpriceableOption = surcharges.some(sen => sen === null);
         return {
             id: item.id,
             name: item.name,
             category: item.category,
             ...(item.image ? { image: item.image } : {}),
-            available: !unavailableItemIds.has(item.id) && Array.isArray(item.variants) && item.variants.length > 0,
-            variants: variants.map((v, i) => ({
-                id: variantIds[i],
-                label: v.label,
-                priceSen: toSen(v.price),
-            })),
-            optionGroups: options.length
+            available: !unavailableItemIds.has(item.id) && variants.length > 0 && !hasUnpriceableOption,
+            variants,
+            optionGroups: options.length && !hasUnpriceableOption
                 ? [{
                     id: `${item.id}:options`,
                     label: '选项',
                     minSelect: 0,
                     maxSelect: options.length,
-                    choices: options.map((o, i) => ({ id: choiceIds[i], label: o, priceDeltaSen: 0 })),
+                    choices: options.map((o, i) => ({ id: choiceIds[i], label: o, priceDeltaSen: surcharges[i] as number })),
                 }]
                 : [],
         };
@@ -188,6 +213,7 @@ export const priceOrder = (menu: PublicMenuItem[], lines: OrderLineRequest[], se
         if (!item.available) { errors.push({ code: 'ITEM_UNAVAILABLE', lineIndex, message: `${item.name} 目前不供应` }); return; }
         const variant = item.variants.find(v => v.id === line.variantId);
         if (!variant) { errors.push({ code: 'VARIANT_NOT_FOUND', lineIndex, message: `${item.name} 没有这个规格` }); return; }
+        if (!isPositiveSen(variant.priceSen)) { errors.push({ code: 'ITEM_UNAVAILABLE', lineIndex, message: `${item.name} 目前不供应` }); return; }
         const quantity = line.quantity;
         if (!Number.isInteger(quantity) || quantity < 1 || quantity > ORDER_LIMITS.maxQuantityPerLine) {
             errors.push({ code: 'INVALID_QUANTITY', lineIndex, message: `数量必须是 1 到 ${ORDER_LIMITS.maxQuantityPerLine} 的整数` });
@@ -209,6 +235,9 @@ export const priceOrder = (menu: PublicMenuItem[], lines: OrderLineRequest[], se
         for (const id of choiceIds) {
             const choice = item.optionGroups.flatMap(g => g.choices).find(c => c.id === id);
             if (!choice) { errors.push({ code: 'OPTION_NOT_FOUND', lineIndex, message: '选项不存在' }); optionError = true; break; }
+            if (!Number.isInteger(choice.priceDeltaSen) || choice.priceDeltaSen < 0) {
+                errors.push({ code: 'ITEM_UNAVAILABLE', lineIndex, message: `${item.name} 目前不供应` }); optionError = true; break;
+            }
             chosen.push(choice);
         }
         if (optionError) return;
