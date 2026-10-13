@@ -518,6 +518,11 @@ ${JSON.stringify(contextData, null, 2)}
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    // 不存在的 JS/CSS 等资源回 404，绝不回首页 HTML：
+    // 否则旧版页面请求已被新部署替换的模块时，会拿到 HTML 当作 JS（Service Worker 还会把它缓存起来）
+    app.use('/assets', (_req, res) => {
+      res.status(404).type('text/plain').send('Not found');
+    });
     app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
