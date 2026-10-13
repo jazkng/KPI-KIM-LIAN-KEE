@@ -71,11 +71,14 @@ service cloud.firestore {
 
     // ---- 1b. 员工资料：照常读写，但不能替自己或别人升级权限 ----
     // V1 只在老板 / 系统管理员模式下显示这些栏位为可编辑（HRProfiles.tsx:1648-1649），所以不影响 V1。
+    // 文件内的 id 必须等于文件 ID（V1 一律以 employee.id 作为文件 ID），防止冒用别人的员工编号
     match /employees/{id} {
       allow read: if staff();
-      allow create: if privileged() || (staff() && !grantsPrivilege(request.resource.data));
-      allow update: if privileged()
-        || (staff() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(claimFields()));
+      allow create: if request.resource.data.get('id', id) == id
+        && (privileged() || (staff() && !grantsPrivilege(request.resource.data)));
+      allow update: if request.resource.data.get('id', id) == id
+        && (privileged()
+            || (staff() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(claimFields())));
       allow delete: if privileged();
     }
 

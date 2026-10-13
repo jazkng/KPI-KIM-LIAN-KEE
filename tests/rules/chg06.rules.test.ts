@@ -219,6 +219,13 @@ describe('CHG-06 草案：员工不能替自己或别人升级权限（claims �
         await assertSucceeds(setDoc(doc(as.owner(), 'employees/045'), { id: '045', orgLevel: 'BRANCH_MANAGER' }));
     });
 
+    it('文件内的 id 必须等于文件 ID：不能冒用系统管理员编号 002 或改掉自己的编号', async () => {
+        await assertFails(setDoc(doc(as.crew(), 'employees/050'), { id: '002', orgLevel: 'CREW' }));
+        await assertFails(updateDoc(doc(as.crew(), 'employees/020'), { id: '002' }));
+        await assertFails(updateDoc(doc(as.owner(), 'employees/020'), { id: '002' }));
+        await assertSucceeds(setDoc(doc(as.deptHead(), 'employees/051'), { id: '051', orgLevel: 'CREW' }));
+    });
+
     it('只有老板 / 系统管理员能删除员工资料', async () => {
         await assertFails(deleteDoc(doc(as.deptHead(), 'employees/020')));
         await assertSucceeds(deleteDoc(doc(as.owner(), 'employees/020')));

@@ -50,6 +50,16 @@ describe('CHG-06 紧急回滚规则', () => {
         }
     });
 
+    it('匿名身份不能改写决定登录权限的栏位，也不能冒用编号；但旧版 V1 的一般写入照常', async () => {
+        const db = anonymous();
+        await assertFails(setDoc(doc(db, 'employees/020'), { orgLevel: 'OWNER' }, { merge: true }));
+        await assertFails(setDoc(doc(db, 'employees/020'), { systemRole: 'SYSTEM_ADMIN' }, { merge: true }));
+        await assertFails(setDoc(doc(db, 'employees/030'), { id: '002' }));
+        await assertFails(setDoc(doc(db, 'employees/031'), { id: '031', orgLevel: 'OWNER' }));
+        await assertSucceeds(setDoc(doc(db, 'employees/020'), { preferredLanguage: 'en', pin: '5678' }, { merge: true }));
+        await assertSucceeds(setDoc(doc(db, 'employees/032'), { id: '032', orgLevel: 'CREW' }));
+    });
+
     it('未登录仍然被拒', async () => {
         await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'employees/020')));
     });

@@ -6,10 +6,11 @@ rules_version = '2';
 //   - 与 CHG-06 之前的 V1 规则相同：任何 Firebase 身份（含匿名）都能读写 V1 集合，
 //     所以旧版 V1（匿名登录）可以照常运作；
 //   - 但新的 PIN 哈希（employee_secrets、device_secrets）仍然只有服务端能读，
-//     不会因为回滚而外泄给匿名身份。
+//     不会因为回滚而外泄给匿名身份；
+//   - 员工资料中决定登录权限的栏位（orgLevel 等）仍受保护，匿名身份不能自我升级。
 // ⚠️ 回滚等于重新打开「匿名可读写营业资料」的漏洞，只在营业被阻断时使用，
 //    问题排除后应尽快重新发布 CHG-06 规则。
-// 测试：tests/rules/chg06.rules.test.ts（「紧急回滚规则」一组）。
+// 测试：tests/rules/chg06-rollback.rules.test.ts。
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -17,7 +18,31 @@ service cloud.firestore {
       return collection in ['employee_secrets', 'device_secrets', 'auth_rate_limits'];
     }
     match /{collection}/{document=**} {
-      allow read, write: if request.auth != null && !serverOnly(collection);
+      allow read, write: if request.auth != null && !serverOnly(collection) && collection != 'employees';
+    }
+
+    // 员工资料：旧版 V1 照常读写（语言、HR 资料、首次改 PIN），
+    // 但决定登录权限的栏位只有带老板 / 系统管理员 claims 的身份能改，匿名身份不能自我升级。
+    // 回滚期间服务端只签发 CHG-06 规则不接受的身份（见方案第 9 节），所以即使旧 PIN 被改，
+    // 也拿不到能在重新收紧后继续使用的身份。
+    function privileged() {
+      return request.auth != null && (request.auth.token.lvl == 'OWNER' || request.auth.token.sa == true);
+    }
+    function claimFields() {
+      return ['orgLevel', 'systemRole', 'portalRoleOverride', 'readOnlyAccess'];
+    }
+    function grantsPrivilege(d) {
+      return d.get('orgLevel', 'CREW') in ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT', 'DEPARTMENT_HEAD']
+        || d.get('systemRole', 'STANDARD_USER') == 'SYSTEM_ADMIN'
+        || d.get('portalRoleOverride', null) != null;
+    }
+    match /employees/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.get('id', id) == id
+        && (privileged() || !grantsPrivilege(request.resource.data));
+      allow update: if request.auth != null && request.resource.data.get('id', id) == id
+        && (privileged() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(claimFields()));
+      allow delete: if privileged();
     }
   }
 }
