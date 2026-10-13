@@ -49,7 +49,16 @@ dev.kimliankee.app ──(Cloudflare DNS, DNS only)──▶ Cloud Run 服务 er
 
 ## 4. 部署、验收与回滚
 
-GitHub → Actions → **Deploy dev preview** → Run workflow（分支 `develop-v2`）：
+本工作流只放在 `develop-v2`，**不放进 `main`**。GitHub 对不在默认分支上的手动工作流有两个限制：
+- 工作流要先运行过一次才会出现在 Actions 列表中。本文件修改后合并进 `develop-v2` 时，会自动运行一次「登记」，只执行分支检查，不会部署。
+- 网页上的「Run workflow」按钮可能不会出现。因此请用 GitHub CLI 触发（Cloud Shell 通常已内置 `gh`，可用 `gh --version` 确认；第一次使用先执行 `gh auth login`）：
+
+```bash
+gh workflow run deploy-dev-preview.yml -R jazkng/KPI-KIM-LIAN-KEE --ref develop-v2 -f action=deploy
+gh run list -R jazkng/KPI-KIM-LIAN-KEE --workflow deploy-dev-preview.yml --limit 3   # 查看运行状态与网址
+# promote / rollback：
+gh workflow run deploy-dev-preview.yml -R jazkng/KPI-KIM-LIAN-KEE --ref develop-v2 -f action=promote -f revision=<候选 revision>
+```
 
 | action | 做什么 |
 | --- | --- |
