@@ -11,6 +11,12 @@
 name: Deploy dev preview
 
 on:
+  # 本工作流不在默认分支 main 上，GitHub 只有在它「至少运行过一次」后才会登记它。
+  # 这个 push 触发只在 develop-v2 上「本文件本身被修改」时运行，用来完成登记：
+  # 此时没有 action 输入，只会执行「分支检查」，CI / 部署 / 切换流量全部跳过，不会部署任何东西。
+  push:
+    branches: [develop-v2]
+    paths: [.github/workflows/deploy-dev-preview.yml]
   workflow_dispatch:
     inputs:
       action:
