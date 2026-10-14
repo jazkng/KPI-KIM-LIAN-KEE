@@ -7,6 +7,7 @@ import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
+import { currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
 import { NotificationCenter } from './components/ui/NotificationCenter';
 import { BossDashboard, BossPriorityDashboard, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal, preloadHomeFor } from './components/lazyModules';
 
@@ -167,7 +168,25 @@ export default function App() {
         safeStorage.remove('kepong_erp_session_role');
         DataManager.clearAllCache();
         safeStorage.remove('kepong_erp_session_employee');
+        // CHG-05：服务端登录时一并登出 Firebase 身份
+        void serverAuthEnabled.then(enabled => { if (enabled) void serverSignOut(); });
     }, []);
+
+    // CHG-05：服务端登录开通时，只有 Firebase 身份的员工编号与本机记住的员工相同，才恢复登录状态；
+    //         旧装置（只有匿名身份或没有身份）一律回到登录页
+    useEffect(() => {
+        if (!currentEmployee?.id) return;
+        let alive = true;
+        serverAuthEnabled.then(async enabled => {
+            if (!enabled || !alive) return;
+            const signedIn = await currentSignedInEmployeeId();
+            if (alive && signedIn !== currentEmployee.id) {
+                console.log('🔐 Session has no matching server identity. Returning to login.');
+                handleLogout();
+            }
+        });
+        return () => { alive = false; };
+    }, [currentEmployee?.id, handleLogout]);
 
     // Cloud session synchronization and status checking callback
     const syncEmployeePermissions = useCallback((employeeId: string, currentEmpLocal: Employee) => {
