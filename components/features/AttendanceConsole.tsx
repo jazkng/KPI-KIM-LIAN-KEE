@@ -1,4 +1,5 @@
 import { html2canvas, loadJsPDF, loadPdfjs, loadXLSX } from '../../utils/lazyLibs';
+import { serverAuthEnabled, verifyEmployeePin } from '../../utils/auth/serverAuth';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     Clock, LogIn, Search, CheckCircle2, AlertCircle, Calendar, X, 
@@ -456,11 +457,23 @@ const ComplianceReportModal: React.FC<{ isOpen: boolean; onClose: () => void; st
 // ============================================================
 // SECURITY PIN MODAL
 // ============================================================
-const SecurityPinModal: React.FC<{ isOpen: boolean; onClose: () => void; onSuccess: () => void; employeeName: string; targetPin: string; }> = ({ isOpen, onClose, onSuccess, employeeName, targetPin }) => {
+const SecurityPinModal: React.FC<{ isOpen: boolean; onClose: () => void; onSuccess: () => void; employeeName: string; employeeId: string; targetPin: string; }> = ({ isOpen, onClose, onSuccess, employeeName, employeeId, targetPin }) => {
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
+    const [checking, setChecking] = useState(false);
     useEffect(() => { if (isOpen) { setPin(''); setError(''); } }, [isOpen]);
-    const handleVerify = () => { if (pin === targetPin) { onSuccess(); onClose(); } else { setError('Wrong PIN'); setPin(''); } };
+    const handleVerify = async () => {
+        // CHG-05b：服务端登录开通时 PIN 由服务端比对（浏览器读不到也不比对 PIN）
+        if (await serverAuthEnabled) {
+            if (checking) return;
+            setChecking(true);
+            const r = await verifyEmployeePin(employeeId, pin).catch(e => ({ ok: false, error: (e as Error).message }));
+            setChecking(false);
+            if (r.ok) { onSuccess(); onClose(); } else { setError(r.error || 'Wrong PIN'); setPin(''); }
+            return;
+        }
+        if (pin === targetPin) { onSuccess(); onClose(); } else { setError('Wrong PIN'); setPin(''); }
+    };
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
@@ -2427,7 +2440,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, c
             </div>
 
             {/* Modals */}
-            <SecurityPinModal isOpen={securityModalOpen} onClose={() => setSecurityModalOpen(false)} onSuccess={executeClockAction} employeeName={pendingAction?.employee.name || ''} targetPin={pendingAction?.employee.pin || '0000'} />
+            <SecurityPinModal isOpen={securityModalOpen} onClose={() => setSecurityModalOpen(false)} onSuccess={executeClockAction} employeeName={pendingAction?.employee.name || ''} employeeId={pendingAction?.employee.id || ''} targetPin={pendingAction?.employee.pin || '0000'} />
             {editingRecord && <EditRecordModal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} record={editingRecord} onSave={saveEditedRecord} />}
             <RollCallModal isOpen={showRollCall} onClose={() => setShowRollCall(false)} staffList={currentDateStaffList} todayRecords={todayRecords} dateStr={selectedDate} onUpdate={async () => {
                 const freshAttendance = await DataManager.getAttendanceByDate(selectedDate);

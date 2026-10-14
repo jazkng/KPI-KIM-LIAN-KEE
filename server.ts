@@ -19,6 +19,7 @@ import { evaluateAndPush, getPushSettings, initPushAdmin, isDeviceRegistered, mo
 import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 import { initFirebaseAdmin } from "./server/firebaseAdmin";
 import { mountAuthRoutes } from "./server/auth/authService";
+import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -310,13 +311,15 @@ ${JSON.stringify(contextData, null, 2)}
     if (!limit.allowed) return res.status(429).json({ error: "操作太频繁，请 1 分钟后再试。" });
     next();
   });
-  mountAuthRoutes(app, {
+  const authOptions = {
     enabled: authEnabled,
     epoch: Number(process.env.AUTH_EPOCH || 1),
     acceptLegacyPin: process.env.ACCEPT_LEGACY_PIN !== "false",
     mirrorLegacyPin: process.env.MIRROR_LEGACY_PIN !== "false",
     getIp: getTrustedClientIp,
-  });
+  };
+  mountAuthRoutes(app, authOptions);
+  mountDeviceAuthRoutes(app, authOptions);
 
   // 📣 手机推送（PR E2a）
   if (pushAvailable) initPushAdmin(isEmulatorMode);

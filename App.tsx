@@ -140,11 +140,17 @@ export default function App() {
 
     // Load store config branding logos
     useEffect(() => {
-        DataManager.getConfig().then(cfg => {
+        let alive = true;
+        serverAuthEnabled.then(async enabled => {
+            // CHG-05：服务端登录模式下，登录前没有 Firebase 身份，不读 Firestore（登录页 Logo 由服务端名单提供）
+            if (enabled && !(await currentSignedInEmployeeId())) return;
+            const cfg = await DataManager.getConfig();
+            if (!alive) return;
             if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
             if (cfg?.headerLogoUrl) setHeaderLogo(cfg.headerLogoUrl);
         }).catch(err => console.error('Failed to load branding logos:', err));
-    }, [isConfigOpen]);
+        return () => { alive = false; };
+    }, [isConfigOpen, currentEmployee?.id]);
 
     // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
     const checkVersion = useCallback(() => {
