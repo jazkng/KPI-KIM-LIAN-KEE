@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { DataManager } from '../../utils/dataManager';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
+import type { EvidenceItem } from '../../utils/cockpit/advisorEvidence';
 
 function normalizeInventoryForAI(item: any) {
   const currentQtyBase = Number(
@@ -71,9 +72,26 @@ function normalizeInventoryForAI(item: any) {
   };
 }
 
+/**
+ * 驾驶舱「AI 经营顾问」模式（PR F）：只用驾驶舱算好的证据清单回答，
+ * 服务端核对每一点的引用与数字，核对不过的删除。没有传入时维持原本的 AI 助手行为。
+ */
+export interface AdvisorMode {
+    periodLabel: string;
+    evidence: EvidenceItem[];
+    onOpenKpi?: (key: string) => void;
+}
+
 interface AIAssistantProps {
     isOpen: boolean;
     onClose: () => void;
+    advisor?: AdvisorMode;
+}
+
+interface AdvisorPoint {
+    kind: 'finding' | 'action' | 'gap';
+    text: string;
+    refs: string[];
 }
 
 interface ChatMessage {
@@ -81,9 +99,18 @@ interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
     timestamp: Date;
+    points?: AdvisorPoint[];
+    rejected?: { text: string; reason: string }[];
 }
 
-export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose }) => {
+const ADVISOR_PRESETS = [
+    { label: '📌 本期经营重点', text: '请总结本期最重要的经营情况：利润、营业额与保本进度。' },
+    { label: '⚠️ 最该先处理的事', text: '根据预警与资料完整性，我最该先处理哪 3 件事？' },
+    { label: '💸 成本结构', text: '本期人工与食材成本的情况如何？哪些数字还只是预估？' },
+    { label: '🧩 资料缺口', text: '目前哪些资料不完整，会影响数字的准确度？' },
+];
+
+export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, advisor }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -105,7 +132,9 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 {
                     id: 'welcome',
                     role: 'assistant',
-                    text: '您好！我是您的 **AI 经营助手**。\n\n我可以根据当前已接入的数据，协助检查：\n\n• 今日营业与结算摘要\n• 厨房、吧台及通用库存\n• 低库存与安全库存风险\n• 当日日志及异常记录\n• 最近资金转账记录\n\n尚未接入的分析会明确标记为“待接入”，不会推测或编造金额。',
+                    text: advisor
+                        ? `您好！我是 **AI 经营顾问**。\n\n我只根据驾驶舱「${advisor.periodLabel}」已算好的 ${advisor.evidence.length} 项指标、预警与资料完整性回答。每一点都会标出依据编号，点编号可以看原始数字；系统核对不出依据的说法会被删除。`
+                        : '您好！我是您的 **AI 经营助手**。\n\n我可以根据当前已接入的数据，协助检查：\n\n• 今日营业与结算摘要\n• 厨房、吧台及通用库存\n• 低库存与安全库存风险\n• 当日日志及异常记录\n• 最近资金转账记录\n\n尚未接入的分析会明确标记为“待接入”，不会推测或编造金额。',
                     timestamp: new Date()
                 }
             ]);
@@ -327,7 +356,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
     };
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !advisor) {
             loadSystemContext();
         }
     }, [isOpen]);
@@ -352,6 +381,41 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
         };
         setMessages(prev => [...prev, userMsg]);
         setLoading(true);
+
+        if (advisor) {
+            try {
+                const response = await fetch('/api/ai/cockpit-advisor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: textToSend,
+                        periodLabel: advisor.periodLabel,
+                        evidence: advisor.evidence.map(({ id, label, value, note }) => ({ id, label, value, note })),
+                    }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || `Server status ${response.status}`);
+                const points: AdvisorPoint[] = Array.isArray(data.points) ? data.points : [];
+                setMessages(prev => [...prev, {
+                    id: Math.random().toString(),
+                    role: 'assistant',
+                    text: points.length ? '' : '没有可以核对依据的回答。请换个问法，或先补齐资料。',
+                    timestamp: new Date(),
+                    points,
+                    rejected: Array.isArray(data.rejected) ? data.rejected : [],
+                }]);
+            } catch (err: any) {
+                setMessages(prev => [...prev, {
+                    id: Math.random().toString(),
+                    role: 'assistant',
+                    text: `⚠️ **无法取得回答**：${err.message || '请稍后再试'}`,
+                    timestamp: new Date(),
+                }]);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
 
         try {
             // Send to secure server proxy
@@ -422,18 +486,18 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h3 className="font-extrabold text-white text-base tracking-wide">AI 智控脑库</h3>
+                                <h3 className="font-extrabold text-white text-base tracking-wide">{advisor ? 'AI 经营顾问' : 'AI 智控脑库'}</h3>
                                 <span className="bg-gradient-to-r from-stone-700 to-stone-900 text-[#FFD200] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm border border-[#FFD200]/30 font-mono">BETA</span>
                             </div>
                             <p className="text-[10px] text-stone-400 font-mono tracking-widest mt-0.5 uppercase flex items-center gap-1">
                                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                {dataLoading ? 'SYNCING DATABASE...' : 'REAL-TIME ERP SECURED'}
+                                {advisor ? `依据驾驶舱 · ${advisor.periodLabel} · 只读` : dataLoading ? 'SYNCING DATABASE...' : 'REAL-TIME ERP SECURED'}
                             </p>
                         </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
-                        <button 
+                        {!advisor && <button 
                             onClick={loadSystemContext}
                             style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
                             className="w-11 h-11 flex items-center justify-center bg-stone-900/60 hover:bg-stone-800 active:scale-95 text-stone-400 hover:text-[#FFD200] border border-stone-800/50 rounded-full transition-all"
@@ -441,7 +505,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             disabled={dataLoading}
                         >
                             <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin text-[#FFD200]' : ''}`} />
-                        </button>
+                        </button>}
                         <button 
                             onClick={onClose}
                             style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
@@ -453,13 +517,13 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 </div>
 
                 {/* Database Sync Status Indicator */}
-                <div className="bg-[#050506] px-5 py-2 text-[10px] text-stone-500 font-mono flex items-center justify-between border-b border-stone-900/40 shrink-0 select-none relative z-10">
+                {!advisor && <div className="bg-[#050506] px-5 py-2 text-[10px] text-stone-500 font-mono flex items-center justify-between border-b border-stone-900/40 shrink-0 select-none relative z-10">
                     <span className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${systemContext ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}`}></span>
                         数据中心连通性: {systemContext ? `${systemContext.fetchTime}` : '等候校准...'}
                     </span>
                     <span className="text-[#FFD200]/70 font-bold">Gemini 智力引擎 active 🌐</span>
-                </div>
+                </div>}
 
                 {/* Error Banner */}
                 {error && (
@@ -472,7 +536,13 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                 {/* Message Log Canvas */}
                 <div className="flex-grow overflow-y-auto p-5 space-y-5 bg-stone-950/30 relative z-10">
                     {/* Data Sync Status Card */}
-                    <div className="bg-stone-900/80 border border-stone-800/80 rounded-2xl p-4 shadow-md space-y-3 mb-4 shrink-0">
+                    {advisor ? (
+                        <div className="bg-stone-900/80 border border-stone-800/80 rounded-2xl p-4 text-[11px] leading-relaxed text-stone-300 mb-4">
+                            <div className="text-xs font-black text-stone-200 flex items-center gap-1.5 mb-1"><Sparkles size={14} className="text-[#FFD200]" /> 依据范围</div>
+                            驾驶舱「{advisor.periodLabel}」：{advisor.evidence.filter(e => e.id.startsWith('K')).length} 项指标、{advisor.evidence.filter(e => e.id.startsWith('A')).length} 条预警、{advisor.evidence.filter(e => e.id.startsWith('I')).length} 项资料完整性、{advisor.evidence.filter(e => e.id.startsWith('M')).length} 项当月结构。
+                            AI 只能引用这些数字；不能读取或修改资料库。
+                        </div>
+                    ) : <div className="bg-stone-900/80 border border-stone-800/80 rounded-2xl p-4 shadow-md space-y-3 mb-4 shrink-0">
                         <div className="flex items-center justify-between border-b border-stone-800/50 pb-2">
                             <span className="text-xs font-black text-stone-200 tracking-wide flex items-center gap-1.5">
                                 <Sparkles size={14} className="text-[#FFD200]" />
@@ -522,7 +592,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                                 </ul>
                             </div>
                         </div>
-                    </div>
+                    </div>}
 
                     {messages.map((msg) => (
                         <div 
@@ -545,6 +615,12 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                                       ? 'bg-gradient-to-r from-[#FFD200] to-[#E5A93C] text-black font-extrabold rounded-tr-none'
                                       : 'bg-stone-900/90 border border-stone-900/85 text-stone-100 rounded-tl-none whitespace-pre-wrap'
                                 }`}>
+                                    {msg.points && msg.points.length > 0 && advisor && (
+                                        <AdvisorAnswer points={msg.points} rejected={msg.rejected || []} evidence={advisor.evidence} onOpenKpi={advisor.onOpenKpi} />
+                                    )}
+                                    {!msg.points?.length && msg.rejected && msg.rejected.length > 0 && advisor && (
+                                        <RejectedList rejected={msg.rejected} />
+                                    )}
                                     {/* Handle bold text markdown manually with high-contrast formatting */}
                                     {msg.text.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className={`font-black ${msg.role === 'user' ? 'text-black underline decoration-stone-900' : 'text-[#FFD200]'}`}>{part}</strong> : part)}
                                 </div>
@@ -577,6 +653,20 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             <Sparkles size={12} className="text-[#FFD200]" />
                             <span className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block">智能决策预设 (Thumb actions)</span>
                         </div>
+                        {advisor ? (
+                        <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-none snap-x">
+                            {ADVISOR_PRESETS.map(p => (
+                                <button
+                                    key={p.label}
+                                    onClick={() => handlePreset(p.text)}
+                                    style={{ minHeight: '38px', WebkitTapHighlightColor: 'transparent' }}
+                                    className="snap-start shrink-0 bg-stone-900 hover:bg-[#1E2E24] active:scale-95 text-xs text-emerald-300 font-extrabold px-3.5 py-2 rounded-xl border border-stone-800/80 transition-all"
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+                        ) : (
                         <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-none snap-x">
                             <button
                                 onClick={() => handlePreset('📊 帮我分析今日的餐饮经营与对账，检查营业额（salesTotal）与各结算方式对账状况。')}
@@ -644,6 +734,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                                 <Lock size={10} /> 应付账款 · 待接入
                             </button>
                         </div>
+                        )}
                     </div>
                 )}
 
@@ -678,7 +769,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder={isListening ? "话筒静候中..." : "提问例如: 本月库存缺口最大的是什么？"}
+                            placeholder={isListening ? "话筒静候中..." : advisor ? "提问例如：为什么利润还是预估？" : "提问例如: 本月库存缺口最大的是什么？"}
                             disabled={loading || isListening}
                             className="bg-transparent flex-grow font-extrabold text-xs md:text-sm text-stone-100 outline-none placeholder:text-stone-600 py-1"
                         />
@@ -726,3 +817,60 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
     );
 };
 
+
+const KIND_LABEL: Record<AdvisorPoint['kind'], string> = { finding: '观察', action: '可考虑', gap: '资料缺口' };
+const KIND_STYLE: Record<AdvisorPoint['kind'], string> = {
+    finding: 'bg-sky-900/60 text-sky-200',
+    action: 'bg-emerald-900/60 text-emerald-200',
+    gap: 'bg-amber-900/60 text-amber-200',
+};
+
+const AdvisorAnswer: React.FC<{ points: AdvisorPoint[]; rejected: { text: string; reason: string }[]; evidence: EvidenceItem[]; onOpenKpi?: (key: string) => void }> = ({ points, rejected, evidence, onOpenKpi }) => {
+    const [open, setOpen] = useState<string | null>(null);
+    const byId = new Map(evidence.map(e => [e.id, e]));
+    return (
+        <div className="space-y-3 whitespace-normal">
+            <ul className="space-y-3">
+                {points.map((p, i) => (
+                    <li key={i}>
+                        <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[10px] font-black ${KIND_STYLE[p.kind]}`}>{KIND_LABEL[p.kind]}</span>
+                        {p.text}
+                        <span className="mt-1 flex flex-wrap gap-1">
+                            {p.refs.map(r => (
+                                <button
+                                    key={r}
+                                    onClick={() => setOpen(open === `${i}:${r}` ? null : `${i}:${r}`)}
+                                    className="min-h-[28px] rounded-md border border-[#FFD200]/30 bg-[#FFD200]/10 px-2 font-mono text-[11px] font-bold text-[#FFD200]"
+                                    aria-label={`依据 ${r}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
+                        </span>
+                        {p.refs.map(r => open === `${i}:${r}` && byId.get(r) && (
+                            <div key={r} className="mt-1.5 rounded-lg border border-stone-700 bg-stone-950/70 p-2 text-[11px] text-stone-300">
+                                <div className="font-black text-stone-100">{r} · {byId.get(r)!.label}</div>
+                                <div className="font-mono text-[#FFD200]">{byId.get(r)!.value}</div>
+                                {byId.get(r)!.note && <div className="mt-0.5 text-stone-400">{byId.get(r)!.note}</div>}
+                                {byId.get(r)!.kpiKey && onOpenKpi && (
+                                    <button onClick={() => onOpenKpi(byId.get(r)!.kpiKey!)} className="mt-1 min-h-[32px] font-bold text-sky-300 underline">查看指标明细</button>
+                                )}
+                            </div>
+                        ))}
+                    </li>
+                ))}
+            </ul>
+            {rejected.length > 0 && <RejectedList rejected={rejected} />}
+            <p className="text-[10px] text-stone-500">每一点都已由系统核对引用与数字；点编号查看原始依据。AI 不能修改任何资料。</p>
+        </div>
+    );
+};
+
+const RejectedList: React.FC<{ rejected: { text: string; reason: string }[] }> = ({ rejected }) => (
+    <details className="rounded-lg border border-stone-800 bg-stone-950/50 p-2 text-[11px] text-stone-400">
+        <summary className="cursor-pointer font-bold">已删除 {rejected.length} 条核对不到依据的说法</summary>
+        <ul className="mt-1 list-disc space-y-1 pl-4">
+            {rejected.map((r, i) => <li key={i}><span className="line-through">{r.text}</span>（{r.reason}）</li>)}
+        </ul>
+    </details>
+);
