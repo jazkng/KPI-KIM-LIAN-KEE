@@ -8,7 +8,7 @@ import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
 import { NotificationCenter } from './components/ui/NotificationCenter';
-import { BossDashboard, BossPriorityDashboard, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal } from './components/lazyModules';
+import { BossDashboard, BossPriorityDashboard, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal, preloadHomeFor } from './components/lazyModules';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
 // 与 ManagerDashboard 的 initialTab prop 类型保持一致
@@ -128,6 +128,14 @@ export default function App() {
     const [bossActiveModal, setBossActiveModal] = useState<string>('NONE');
     const [customLogo,      setCustomLogo]      = useState<string>('');
     const [headerLogo,      setHeaderLogo]      = useState<string>('');
+
+    // ⚡ iOS 性能：停在登录画面时，稍候在背景先下载登录后的首页模块（不读写资料）。
+    //    延后 2.5 秒，避免与登录画面本身、员工名单读取抢频宽。
+    useEffect(() => {
+        if (currentUser) return;
+        const timer = window.setTimeout(() => { void preloadHomeFor(portalMode); }, 2500);
+        return () => window.clearTimeout(timer);
+    }, [currentUser, portalMode]);
 
     // Load store config branding logos
     useEffect(() => {

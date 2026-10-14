@@ -23,7 +23,6 @@ import {
     DeviceAccountService,
 } from '../../../utils/deviceAccountService';
 import { QueueDisplay } from '../../QueueDisplay';
-import { KitchenAlertDisplay } from '../kitchen/KitchenAlertDisplay';
 
 const SESSION_STORAGE_KEY = 'klk_device_session_v2';
 
@@ -38,9 +37,10 @@ const SCREEN_META: Record<DeviceScreen, {
     shortLabel: string;
     Icon: typeof ChefHat;
 }> = {
+    // 已在 V2 停用：保留名称只为了辨识旧设备户口
     KITCHEN_ALERT: {
-        label: '厨房急单荧幕',
-        shortLabel: '厨房急单',
+        label: '厨房急单荧幕（已停用）',
+        shortLabel: '厨房急单（停用）',
         Icon: ChefHat,
     },
     QUEUE_DISPLAY: {
@@ -82,7 +82,7 @@ const updateModeUrl = (screen: DeviceScreen) => {
 export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requestedScreen }) => {
     const [status, setStatus] = useState<PortalStatus>('CHECKING');
     const [session, setSession] = useState<DeviceSession | null>(null);
-    const [activeScreen, setActiveScreen] = useState<DeviceScreen>(requestedScreen || 'KITCHEN_ALERT');
+    const [activeScreen, setActiveScreen] = useState<DeviceScreen>(requestedScreen || 'QUEUE_DISPLAY');
     const [deviceCode, setDeviceCode] = useState('');
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
@@ -323,7 +323,7 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
     }
 
     if (status === 'LOGIN') {
-        const requestedMeta = SCREEN_META[requestedScreen || 'KITCHEN_ALERT'];
+        const requestedMeta = SCREEN_META[requestedScreen || 'QUEUE_DISPLAY'];
         return (
             <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-4 py-8 safe-area-top safe-area-bottom">
                 <div className="w-full max-w-lg rounded-[2rem] bg-white text-[#111111] p-6 md:p-9 shadow-2xl border border-white/10">
@@ -441,7 +441,19 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
 
     return (
         <div className="relative min-h-screen">
-            {activeScreen === 'KITCHEN_ALERT' ? <KitchenAlertDisplay /> : <QueueDisplay />}
+            {activeScreen === 'KITCHEN_ALERT' ? (
+                // 厨房急单荧幕已在 V2 停用；资料与设备户口保留，只是不再显示
+                <div className="flex min-h-screen items-center justify-center bg-[#111111] px-6 text-center text-white">
+                    <div className="max-w-md space-y-3">
+                        <ChefHat size={48} className="mx-auto text-stone-500" />
+                        <p className="text-xl font-black">厨房急单荧幕已停用</p>
+                        <p className="text-sm text-stone-400">此功能在 ERP V2 不再提供。若这台设备也能显示等待／叫号，请在下方切换；否则请联络负责人。</p>
+                        {session.allowedScreens.includes('QUEUE_DISPLAY') && (
+                            <button onClick={() => setActiveScreen('QUEUE_DISPLAY')} className="mt-2 min-h-12 rounded-2xl bg-[#FFD200] px-5 font-black text-[#111111]">切换到等待／叫号荧幕</button>
+                        )}
+                    </div>
+                </div>
+            ) : <QueueDisplay />}
 
             {!connectionOnline && (
                 <div className="fixed top-[max(env(safe-area-inset-top),0.5rem)] left-1/2 -translate-x-1/2 z-[600] rounded-full bg-red-700 text-white px-4 py-2 text-xs font-black shadow-xl flex items-center gap-2">

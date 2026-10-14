@@ -371,10 +371,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const cfg = await DataManager.getConfig();
+            // 门店设定（Logo）与员工名单同时读取，不再一前一后等待；任一失败的处理与原本相同
+            const [cfg, list] = await Promise.all([DataManager.getConfig(), DataManager.getEmployees()]);
             if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
 
-            const list = await DataManager.getEmployees();
             const activeList = list.filter(e => e.status !== 'TERMINATED' && e.isArchived !== true);
             const hasOwner = list.some(e => e.role.includes('Owner') || ['001', '002', '003', '004'].includes(e.id));
             if (list.length === 0) {

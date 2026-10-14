@@ -24,6 +24,7 @@ import { primarySkillScore } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
 import type { StarLevel } from '../../../constants/skillCatalog';
+import { withoutRetiredModules } from '../../../utils/retiredModules';
 
 const ABILITY_TIERS = [
     { label: 'SSS', score: 100, desc: '卓越传奇 (Legendary)', color: 'bg-amber-100 text-amber-800 border-amber-300 ring-amber-500', icon: Trophy },
@@ -137,7 +138,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
         },
         {
             title: '日常运营 (Daily Operations)',
-            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'KITCHEN_ALERT', 'STAFF_CASH'] as AppModule[],
+            modules: ['SETTLEMENT', 'ATTENDANCE_CONSOLE', 'ROSTER','ROSTER_KITCHEN', 'LOGBOOK', 'SOP_INSPECT', 'QUEUE_MANAGER', 'STAFF_CASH'] as AppModule[],
             color: 'bg-blue-50 text-blue-700 border-blue-100'
         },
         {
@@ -1914,41 +1915,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                         <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
                                             <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
-                                            <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{form.allowedModules?.map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
+                                            <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
                                             
-                                            {/* 🟢 新增：通知厨房专属快捷权限配置 */}
-                                            <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                                                <div className="min-w-0 pr-2">
-                                                    <span className="text-xs font-black text-gray-700 block">通知厨房功能权限 (Kitchen Alert)</span>
-                                                    <span className="text-[10px] font-bold text-gray-400 block truncate">允许该员工发送和处理厨房紧急通知</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    disabled={!isEditing}
-                                                    onClick={() => {
-                                                        const current = form.allowedModules || [];
-                                                        const hasAlert = current.includes('KITCHEN_ALERT');
-                                                        let nextModules;
-                                                        if (hasAlert) {
-                                                            nextModules = current.filter(m => m !== 'KITCHEN_ALERT');
-                                                        } else {
-                                                            nextModules = [...current, 'KITCHEN_ALERT'];
-                                                        }
-                                                        setForm({
-                                                            ...form,
-                                                            allowedModules: nextModules,
-                                                            hasKitchenAlertPermission: !hasAlert
-                                                        });
-                                                    }}
-                                                    className={`min-h-[44px] md:min-h-0 h-8 px-3 rounded-xl text-[10px] font-black transition-colors ${
-                                                        (form.allowedModules || []).includes('KITCHEN_ALERT')
-                                                            ? 'bg-[#FFD200] text-[#111111]'
-                                                            : 'bg-gray-100 text-gray-400'
-                                                    } ${!isEditing ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}`}
-                                                >
-                                                    {(form.allowedModules || []).includes('KITCHEN_ALERT') ? '已开启 / Enabled' : '未开启 / Disabled'}
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
 
