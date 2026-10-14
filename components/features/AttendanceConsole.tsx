@@ -16,9 +16,13 @@ import {
 } from '../../utils/dataManager';
 import { AttendanceSettingsModal } from './AttendanceSettingsModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
+import { FaceImportReview } from './attendance/FaceImportReview';
+import { fromDailyRows, type Face3000Import } from '../../utils/attendance/face3000';
 
 interface AttendanceConsoleProps {
     onClose: () => void;
+    /** 目前登入的人（用来记录考勤审核主管；没有时会要求输入姓名） */
+    currentEmployee?: Employee | null;
 }
 const DEFAULT_LOCAL_REST = 4;
 const DEFAULT_FOREIGN_REST = 2;
@@ -956,7 +960,7 @@ const EmployeeMonthlySheetModal: React.FC<{
 // ============================================================
 // MAIN COMPONENT 
 // ============================================================
-export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose }) => {
+export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, currentEmployee }) => {
     const [staffList, setStaffList] = useState<Employee[]>([]);
     const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
     const [dailyRoster, setDailyRoster] = useState<Record<string, RosterStatus>>({}); 
@@ -993,6 +997,11 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     
     // 👑 人脸打卡机导入状态
     const [isFaceImportOpen, setIsFaceImportOpen] = useState(false);
+    // FACE3000 Excel：改走「审核后导入」流程（异常须主管确认，见 attendance/FaceImportReview）
+    const [faceReviewFile, setFaceReviewFile] = useState<File | null>(null);
+    const [isFaceReviewOpen, setIsFaceReviewOpen] = useState(false);
+    const [faceReviewData, setFaceReviewData] = useState<Face3000Import | null>(null);
+    const [faceReviewMatches, setFaceReviewMatches] = useState<Record<string, string>>({});
     const [isParsing, setIsParsing] = useState(false);
     const [parseError, setParseError] = useState<string | null>(null);
     const [importPreviews, setImportPreviews] = useState<any[]>([]);
@@ -1000,7 +1009,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
     const [importStaffList, setImportStaffList] = useState<Employee[]>([]);
     // 🟢 这份报表要导入到哪个月 (自动从报表认出, 认不到就用当前月, 可手动改)
     const [importTargetMonth, setImportTargetMonth] = useState<string>("");
-    const [isSavingImport, setIsSavingImport] = useState(false);
+    const [isSavingImport] = useState(false);
     
     // Monthly Sheet States & Loaders
     const [selectedMonthlyEmployee, setSelectedMonthlyEmployee] = useState<Employee | null>(null);
@@ -1121,48 +1130,22 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         return match || null;
     };
 
-    const constructPunchTimesLocal = (
-        dateStr: string,
-        firstTime: string,
-        lastTime: string,
-    ) => {
-        const [inH, inM] = firstTime.split(":").map(Number);
-        const clockInISO = `${dateStr}T${String(inH).padStart(2, "0")}:${String(inM).padStart(2, "0")}:00`;
-
-        let clockOutISO = "";
-        let durationMinutes = 0;
-        if (lastTime && lastTime !== firstTime) {
-            const [outH, outM] = lastTime.split(":").map(Number);
-            const clockInVal = inH * 60 + inM;
-            const clockOutVal = outH * 60 + outM;
-
-            if (clockOutVal < clockInVal) {
-                // 跨凌晨班
-                const nextDate = new Date(`${dateStr}T00:00:00`);
-                nextDate.setDate(nextDate.getDate() + 1);
-                const nextDateStr = nextDate.toISOString().split("T")[0];
-                clockOutISO = `${nextDateStr}T${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}:00`;
-            } else {
-                clockOutISO = `${dateStr}T${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}:00`;
-            }
-            durationMinutes = Math.max(
-                0,
-                Math.floor(
-                    (new Date(clockOutISO).getTime() - new Date(clockInISO).getTime()) /
-                    60000,
-                ),
-            );
-        } else {
-            clockOutISO = clockInISO;
-            durationMinutes = 0;
-        }
-
-        return { clockInISO, clockOutISO, durationMinutes };
-    };
-
     const handleFileChangeLocal = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // FACE3000-U 的 Excel 汇出档：不再直接写入，改为先审核异常
+        if (/\.xlsx?$/i.test(file.name)) {
+            setIsFaceImportOpen(false);
+            setImportPreviews([]);
+            setParseError(null);
+            setFaceReviewData(null);
+            setFaceReviewMatches({});
+            setFaceReviewFile(file);
+            setIsFaceReviewOpen(true);
+            e.target.value = '';
+            return;
+        }
 
         setIsParsing(true);
         setParseError(null);
@@ -1860,64 +1843,30 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
         }
     };
 
+    /**
+     * PDF 报表：不再直接写入，转成原始打卡后进入同一个审核流程
+     * （漏打卡、迟到、早退、加班都要主管处理完才能导入）。
+     */
     const handleSaveImportLocal = async () => {
         const selectedPreviews = importPreviews.filter((p) => p.selected && p.systemEmployee);
         if (selectedPreviews.length === 0) {
             alert("⚠️ 请选择至少一个有效匹配的员工进行导入");
             return;
         }
-
-        setIsSavingImport(true);
-        try {
-            let totalSaved = 0;
-            for (const preview of selectedPreviews) {
-                const emp = preview.systemEmployee;
-                const targetMonth =
-                    importTargetMonth || preview.sourceMonth || selectedDate.slice(0, 7);
-                for (const row of preview.rawRows) {
-                    const dateStr = `${targetMonth}-${String(row.day).padStart(2, "0")}`;
-                    const times = row.times;
-                    if (times.length === 0) continue;
-
-                    const firstTime = times[0];
-                    const lastTime = times[times.length - 1];
-                    const { clockInISO, clockOutISO, durationMinutes } =
-                        constructPunchTimesLocal(dateStr, firstTime, lastTime);
-
-                    const calc = getAttendanceStatus(clockInISO, clockOutISO, dateStr, shiftSettings, emp.shiftGroup || 1);
-                    const status = calc.status;
-
-                    const record: AttendanceRecord = {
-                        id: `attendance_${emp.id}_${dateStr}_face`, // 🤖 独立后缀保存，绝对安全
-                        employeeId: emp.id,
-                        employeeName: emp.name,
-                        date: dateStr,
-                        clockIn: clockInISO,
-                        clockOut: clockOutISO,
-                        durationMinutes: durationMinutes,
-                        status: status,
-                        source: "face_machine",
-                        notes: `人脸打卡机导入 (工号: ${preview.scannerId || "N/A"})`,
-                        allTimes: times, // 保存所有打卡时间
-                    };
-
-                    await DataManager.saveAttendance(record);
-                    totalSaved++;
-                }
-            }
-
-            alert(
-                `🎉 成功导入了 ${selectedPreviews.length} 名员工，共 ${totalSaved} 条打卡记录！\n导入月份：${importTargetMonth || selectedDate.slice(0, 7)}\n系统已自动覆盖合并。`,
-            );
-            setIsFaceImportOpen(false);
-            setImportPreviews([]);
-            await loadData(selectedDate);
-        } catch (err) {
-            console.error("Error saving import", err);
-            alert("❌ 保存打卡记录失败：" + (err as Error).message);
-        } finally {
-            setIsSavingImport(false);
-        }
+        const targetMonth = importTargetMonth || selectedPreviews[0].sourceMonth || selectedDate.slice(0, 7);
+        const people = selectedPreviews.map((p) => ({
+            deviceNo: String(p.scannerId || `name:${p.scannerName}`),
+            name: p.scannerName,
+            rows: p.rawRows as { day: number; times: string[] }[],
+        }));
+        const matches: Record<string, string> = {};
+        people.forEach((person, i) => { matches[person.deviceNo] = selectedPreviews[i].systemEmployee.id; });
+        setFaceReviewData(fromDailyRows(targetMonth, people));
+        setFaceReviewMatches(matches);
+        setFaceReviewFile(null);
+        setIsFaceImportOpen(false);
+        setImportPreviews([]);
+        setIsFaceReviewOpen(true);
     };
 
     const initiateClockAction = (employee: Employee, type: 'IN' | 'OUT') => { 
@@ -2512,6 +2461,19 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose })
             )}
 
             {/* === FACE ATTENDANCE IMPORT MODAL === */}
+            {isFaceReviewOpen && (
+                <FaceImportReview
+                    employees={importStaffList.length ? importStaffList : staffList}
+                    shiftSettings={shiftSettings}
+                    currentEmployee={currentEmployee}
+                    initialFile={faceReviewFile}
+                    initialData={faceReviewData}
+                    initialManualMatches={faceReviewMatches}
+                    onClose={() => { setIsFaceReviewOpen(false); setFaceReviewFile(null); setFaceReviewData(null); setFaceReviewMatches({}); }}
+                    onSaved={() => { loadData(selectedDate); }}
+                />
+            )}
+
             {isFaceImportOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[320] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] md:max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
