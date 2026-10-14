@@ -2,6 +2,9 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { initFirebaseAdmin } from "./server/firebaseAdmin";
+import { mountAuthRoutes } from "./server/auth/authService";
+import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
 import {
   inferContentType,
   localizeRecord,
@@ -93,11 +96,40 @@ const getClientIp = (req: express.Request): string => {
   return req.ip || req.socket.remoteAddress || 'unknown';
 };
 
+// X-Forwarded-For 的最左边可由客户端伪造；Cloud Run 的前端会把真实来源 IP 附加在最右边（限次用）
+const getTrustedClientIp = (req: express.Request): string => {
+  const forwarded = req.headers['x-forwarded-for'];
+  const list = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded || '').split(',').map(v => v.trim()).filter(Boolean);
+  return list[list.length - 1] || req.socket.remoteAddress || 'unknown';
+};
+const authLimitStore = new Map<string, RateLimitInfo>();
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));
+
+  // 🔐 CHG-05 服务端登录（与 V2 develop-v2 相同的模组）：预设关闭。
+  //    只有设定 AUTH_SERVER_ENABLED=true 才开放；关闭时前端照旧使用原本的登录方式，行为完全不变。
+  //    开放前须负责人批准：服务账号可签发 Custom Token、可读写 Firestore（方案 S5）。
+  const authEnabled = process.env.AUTH_SERVER_ENABLED === "true";
+  if (authEnabled) initFirebaseAdmin(false);
+  app.use("/api/auth", (req, res, next) => {
+    if (req.method === "GET" && req.path === "/config") return next();
+    const limit = checkRateLimit(getTrustedClientIp(req), authLimitStore, 30);
+    if (!limit.allowed) return res.status(429).json({ error: "操作太频繁，请 1 分钟后再试。" });
+    next();
+  });
+  const authOptions = {
+    enabled: authEnabled,
+    epoch: Number(process.env.AUTH_EPOCH || 1),
+    acceptLegacyPin: process.env.ACCEPT_LEGACY_PIN !== "false",
+    mirrorLegacyPin: process.env.MIRROR_LEGACY_PIN !== "false",
+    getIp: getTrustedClientIp,
+  };
+  mountAuthRoutes(app, authOptions);
+  mountDeviceAuthRoutes(app, authOptions);
 
   // Secure API endpoint for querying app data context with Gemini
   app.post("/api/gemini/chat", async (req, res) => {

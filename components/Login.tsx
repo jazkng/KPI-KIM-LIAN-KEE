@@ -3,6 +3,7 @@ import { PortalRole, Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { DEFAULT_STAFF } from '../constants/staff';
 import { getPortalRole } from '../utils/orgAccess';
+import { bossLogin, changePinWithToken, fetchRoster, loginWithPin, serverAuthEnabled, type LoginResult } from '../utils/auth/serverAuth';
 import { APP_VERSION } from '../constants/versionHistory';
 import { Lock, User, ShieldCheck, Zap, Delete, Unlock, ArrowLeft, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
 
@@ -190,6 +191,7 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
         '6 DIGITS REQUIRED': '新 PIN 必须输入 6 位数字。',
         'INVALID PIN': '这个 PIN 不可使用，请设置其他号码。',
         'MISMATCH': '两次输入的 PIN 不一致。',
+        'LOCKED': '尝试次数过多，请 15 分钟后再试。',
     };
     const displayError = errorText[error] || error;
     const title = isIdStep
@@ -364,11 +366,25 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
   const [isLoading, setIsLoading] = useState(true);
   const [isSystemEmpty, setIsSystemEmpty] = useState(false);
   const [customLogo, setCustomLogo] = useState<string>('');
+  // 🔐 CHG-05：服务端登录开通时，PIN 只送到服务端比对；登录前不读 Firestore
+  const [serverMode, setServerMode] = useState(false);
+  const [changeToken, setChangeToken] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            if (await serverAuthEnabled) {
+                setServerMode(true);
+                const roster = await fetchRoster();
+                if (roster.logoUrl) setCustomLogo(roster.logoUrl);
+                // V1 没有「找不到负责人」画面：服务端模式下一律显示「请负责人执行管理指令」，不提供网页初始化
+                if (roster.empty || !roster.hasOwner) setIsSystemEmpty(true);
+                // 名单只有编号、姓名、职位、头像，没有 PIN
+                else setEmployees(roster.employees as unknown as Employee[]);
+                return;
+            }
             const cfg = await DataManager.getConfig();
             if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
 
@@ -458,8 +474,26 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
       else { setError('USER NOT FOUND'); } 
   };
 
-  const handleSubmitPin = () => {
+  /** 服务端登录的结果 → 画面 */
+  const applyServerResult = (r: LoginResult, onMustChange: (token: string) => void) => {
+      if (r.kind === 'OK') { performLogin(r.employee); return; }
+      if (r.kind === 'MUST_CHANGE') { onMustChange(r.changeToken); return; }
+      if (r.kind === 'LOCKED') setError('LOCKED');
+      else if (r.kind === 'DENIED') setError('ACCESS DENIED');
+      else setError(r.message);
+  };
+
+  const handleSubmitPin = async () => {
       if (!targetEmployee) return;
+      if (serverMode) {
+          if (busy) return;
+          setBusy(true);
+          const r = await loginWithPin(targetEmployee.id, enteredPin);
+          setBusy(false);
+          setEnteredPin('');
+          applyServerResult(r, token => { setChangeToken(token); setStep('CHANGE_PIN'); setChangePinStep('NEW'); setNewPin(''); setConfirmPin(''); });
+          return;
+      }
       const actualPin = targetEmployee.pin || (targetEmployee.role.includes('Owner') ? '8888' : '0000'); 
       if (enteredPin === actualPin) {
           if (enteredPin === '0000' && !targetEmployee.role.includes('Owner')) {
@@ -476,6 +510,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
           setChangePinStep('CONFIRM');
       } else {
           if (confirmPin !== newPin) { setError('MISMATCH'); setConfirmPin(''); return; }
+          if (serverMode) {
+              if (busy) return;
+              setBusy(true);
+              const r = await changePinWithToken(changeToken, confirmPin);
+              setBusy(false);
+              if (r.kind === 'ERROR' && r.message === 'INVALID PIN') { setError('INVALID PIN'); setNewPin(''); setConfirmPin(''); setChangePinStep('NEW'); return; }
+              if (r.kind === 'DENIED' || (r.kind === 'ERROR' && /凭证/.test(r.message))) {
+                  // 凭证过期：回到 PIN 步骤重新登录
+                  setError(r.kind === 'ERROR' ? r.message : 'ACCESS DENIED'); setStep('PIN'); setEnteredPin(''); return;
+              }
+              applyServerResult(r, () => setError('ACCESS DENIED'));
+              return;
+          }
           if (targetEmployee) {
               const updatedEmp = { ...targetEmployee, pin: confirmPin };
               await DataManager.saveEmployee(updatedEmp);
@@ -490,7 +537,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
       setGateState('ENTERING');
   };
 
-  const handleBossDirectLogin = () => {
+  const handleBossDirectLogin = async () => {
+      if (serverMode) {
+          if (busy) return;
+          setBusy(true);
+          const r = await bossLogin(bossPassword);
+          setBusy(false);
+          if (r.kind === 'DENIED') { setError('WRONG PIN'); return; }
+          if (r.kind === 'LOCKED') { setError('尝试次数过多，请 30 分钟后再试。'); return; }
+          // 首次登录 / 临时 PIN：老板入口没有改 PIN 步骤，请从员工入口以编号登录后设定
+          applyServerResult(r, () => setError('请从员工入口以员工编号登录，并设定新的 6 位 PIN'));
+          return;
+      }
       const boss = employees.find(e => getPortalRole(e) === PortalRole.BOSS && e.pin === bossPassword);
       if (boss) performLogin(boss); else setError('WRONG PIN');
   };
@@ -614,8 +672,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
               <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
                 <ShieldCheck size={42} className="mx-auto text-[#650707]" />
                 <h2 className="mt-4 text-xl font-black">系统尚未初始化</h2>
-                <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人建立初始员工资料。</p>
-                <button onClick={handleFirstRunInit} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">初始化系统</button>
+                {serverMode ? (
+                  <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人在伺服器执行一次性管理指令，建立第一位老板。网页上不提供初始化。</p>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人建立初始员工资料。</p>
+                    <button onClick={handleFirstRunInit} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">初始化系统</button>
+                  </>
+                )}
               </div>
             ) : step === 'SELECT' ? (
               <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 md:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">

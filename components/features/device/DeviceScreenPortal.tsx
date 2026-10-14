@@ -22,6 +22,7 @@ import {
     DeviceAccountAuthError,
     DeviceAccountService,
 } from '../../../utils/deviceAccountService';
+import { currentSignedInDeviceId, deviceLogin, fetchLoginDevices, serverAuthEnabled, serverSignOut } from '../../../utils/auth/serverAuth';
 import { QueueDisplay } from '../../QueueDisplay';
 import { KitchenAlertDisplay } from '../kitchen/KitchenAlertDisplay';
 
@@ -106,6 +107,8 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
 
     const clearSession = useCallback((reason = '') => {
         safeStorage.remove();
+        // CHG-05b：服务端登录时一并登出设备身份
+        void serverAuthEnabled.then(enabled => { if (enabled) void serverSignOut(); });
         setSession(null);
         setMenuOpen(false);
         setPin('');
@@ -123,6 +126,11 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
         setStatus('CHECKING');
         setErrorMessage('');
         try {
+            // CHG-05b：服务端登录开通时，Firebase 设备身份必须就是本机记住的设备，否则重新登录
+            if (await serverAuthEnabled && (await currentSignedInDeviceId()) !== savedSession.deviceId) {
+                clearSession('请重新登录设备');
+                return;
+            }
             const account = await DeviceAccountService.validateSession(savedSession);
             const refreshedSession: DeviceSession = {
                 ...savedSession,
@@ -152,7 +160,9 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
     useEffect(() => {
         if (status !== 'LOGIN') return;
         setLoadingDevices(true);
-        const unsubscribe = DeviceAccountService.subscribeDeviceAccounts(
+        let cancelled = false;
+        let unsubscribe: (() => void) | null = null;
+        const subscribeLegacy = () => DeviceAccountService.subscribeDeviceAccounts(
             devices => {
                 const active = devices.filter(d => d.status === 'ACTIVE');
                 setAllDevices(active);
@@ -166,7 +176,16 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
                 }
             }
         );
-        return unsubscribe;
+        void serverAuthEnabled.then(enabled => {
+            if (cancelled) return;
+            if (!enabled) { unsubscribe = subscribeLegacy(); return; }
+            // CHG-05b：登录前不读 Firestore，名单由服务端提供（不含 PIN 哈希）
+            fetchLoginDevices('KEPONG')
+                .then(devices => { if (!cancelled) setAllDevices(devices); })
+                .catch(err => console.error('Failed to load devices:', err))
+                .finally(() => { if (!cancelled) setLoadingDevices(false); });
+        });
+        return () => { cancelled = true; unsubscribe?.(); };
     }, [status]);
 
     // 👑 用 ref 保存最新 session。effect 若直接依赖 session 物件，
@@ -269,7 +288,9 @@ export const DeviceScreenPortal: React.FC<DeviceScreenPortalProps> = ({ requeste
         setSubmitting(true);
         setErrorMessage('');
         try {
-            const nextSession = await DeviceAccountService.authenticate(deviceCode, pin);
+            const nextSession = (await serverAuthEnabled)
+                ? await deviceLogin(deviceCode, pin)
+                : await DeviceAccountService.authenticate(deviceCode, pin);
             safeStorage.set(nextSession);
             enterScreen(nextSession, requestedScreen);
             setPin('');

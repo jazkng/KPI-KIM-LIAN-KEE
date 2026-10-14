@@ -57,6 +57,25 @@ export const auth: Auth = createAuthProxy<Auth>(
 );
 
 /**
+ * 🔐 CHG-05：服务端登录是否开通（伺服器 /api/auth/config）。
+ * 开通时登录前不建立匿名身份，登录由服务端签发的身份完成；读不到设定（离线、旧伺服器）一律视为未开通。
+ */
+export const serverAuthEnabled: Promise<boolean> = (async () => {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return false;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch('/api/auth/config', { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.enabled === true;
+  } catch {
+    return false;
+  }
+})();
+
+/**
  * 👑 匿名身份守卫 (Anonymous Identity Guard)
  * ---------------------------------------------------------------
  * 目的：让 firestore.rules 可以要求 request.auth != null，
@@ -79,6 +98,9 @@ export const authReady: Promise<boolean> = (async () => {
       );
     });
     if (hasExisting) return true;
+
+    // CHG-05：服务端登录开通时不建立匿名身份，等员工或设备登录后由服务端签发身份。
+    if (await serverAuthEnabled) return false;
 
     // 第一次使用这台设备 —— 建立一个新的匿名身份
     await signInAnonymously(auth);
