@@ -84,7 +84,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         'AP',
         'SELF_INVOICE',
         'STAFF_CASH',
-        'KITCHEN_ALERT'
+        // 厨房通知（KITCHEN_ALERT）已在 V2 停用
     ], []);
 
     const handleNavigateToModule = (modKey: string) => {

@@ -5,8 +5,8 @@
 > 本文件供 OpenAI Codex 读取；Claude Code 读取内容相同的 `CLAUDE.md`。修改规则时请两份一起更新。
 
 ## 绝对禁止（未经负责人在对话中明确批准）
-- 合并或推送到 `main`；发布 V2 正式版；修改 V1 两个 AI Studio 部署（`kimliankee-epr.ai.studio`、`service-5174.ai.studio`）。
-- 修改 Cloudflare DNS、正式 Firebase 的 Security Rules / Auth 设置 / 索引、Cloud Run、付款设置。
+- 合并或推送到 `main`；发布 V2 正式版（`dev.kimliankee.app` 预览站的自动部署已获批准，不在此限）；修改 V1 两个 AI Studio 部署（`kimliankee-epr.ai.studio`、`service-5174.ai.studio`）。
+- 修改 Cloudflare DNS、正式 Firebase 的 Security Rules / Auth 设置 / 索引、Cloud Run（预览服务 `erp-v2-dev` 的自动部署除外）、付款设置。
 - 对正式 Firestore **自行执行**批量删除、批量改写、破坏性迁移（删除或改名字段、改变字段格式、重写历史记录）。
 - 让自动化测试（单元测试、Rules 测试、CI）连接正式 Firestore；自动化测试只能用 Emulator（`demo-klk-erp`）或 Mock。
 - `git push --force` 到共享分支；跳过审核；修改分支保护；删除他人分支。
@@ -19,6 +19,12 @@
 - 正常开发流程可以使用现有数据库。**高风险变更**（批量写入、修改、删除，迁移，删除或改名字段，改动财务历史、日结、审计日志，修改 Rules、索引、Auth）必须：先备份并确认可用 → 说明影响与回滚 → 取得负责人批准 → 才可执行。
 - **V1 必须能读懂 V2 写入的数据**：只新增可选字段或新集合，不删除、不改名、不改变既有字段的类型。改动写入路径的 PR 要附「V1 兼容性说明」。
 - 不在正式数据库中建立测试订单、测试交易。新功能先在 Emulator 中测通，再由负责人在预览站验收。
+
+## 快速迭代（负责人 2026-10-14 决定，详见规范第 11 条）
+- 完成且 CI 通过的 PR，检查依赖与冲突后尽快合并到 `develop-v2`，不要长期留在 Draft。
+- 合并后自动部署 `dev.kimliankee.app`。部署前跑 CI 并验证访问门禁，失败自动回滚。
+- 按功能逐个发布。涉及真实写入、付款、订单权限、迁移的功能，未通过安全检查前可先发布界面，但禁用操作。
+- 有阻碍（批量写入、财务缺口、权限风险）的 PR 明确列出阻碍，不强行合并。
 
 ## 分支
 - `develop-v2`：V2 整合分支，只接受 PR。

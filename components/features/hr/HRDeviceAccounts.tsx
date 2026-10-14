@@ -37,12 +37,7 @@ const SCREEN_OPTIONS: Array<{
     description: string;
     Icon: typeof ChefHat;
 }> = [
-    {
-        id: 'KITCHEN_ALERT',
-        label: '厨房急单荧幕',
-        description: '接收楼面催菜、注意事项和已解决通知',
-        Icon: ChefHat,
-    },
+    // 厨房急单荧幕（KITCHEN_ALERT）已在 V2 停用，不再提供；既有设备户口与资料原样保留
     {
         id: 'QUEUE_DISPLAY',
         label: '等待／叫号荧幕',
@@ -81,8 +76,8 @@ const createEmptyForm = (): DeviceFormState => ({
     location: '',
     pin: '',
     confirmPin: '',
-    allowedScreens: ['KITCHEN_ALERT'],
-    defaultScreen: 'KITCHEN_ALERT',
+    allowedScreens: ['QUEUE_DISPLAY'],
+    defaultScreen: 'QUEUE_DISPLAY',
     notes: '',
 });
 
@@ -393,7 +388,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                     {[
                         { label: '全部设备', value: stats.total, Icon: MonitorSmartphone, color: 'text-gray-900', bg: 'bg-white' },
                         { label: '已启用', value: stats.active, Icon: ShieldCheck, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-                        { label: '厨房荧幕', value: stats.kitchen, Icon: ChefHat, color: 'text-amber-700', bg: 'bg-amber-50' },
+                        { label: '厨房荧幕（已停用）', value: stats.kitchen, Icon: ChefHat, color: 'text-amber-700', bg: 'bg-amber-50' },
                         { label: '已停用', value: stats.disabled, Icon: ShieldOff, color: 'text-gray-500', bg: 'bg-gray-100' },
                     ].map(item => (
                         <div key={item.label} className={`${item.bg} rounded-2xl border p-4 shadow-sm`}>

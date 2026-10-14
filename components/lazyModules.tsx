@@ -121,5 +121,4 @@ export const SOPInspection = lazyNamed(() => import('./features/SOPInspection'),
 export const QueueManager = lazyNamed(() => import('./features/QueueManager'), 'QueueManager');
 export const SupplierModule = lazyNamed(() => import('./features/supplier/SupplierModule'), 'SupplierModule');
 export const ProcurementModule = lazyNamed(() => import('./features/ProcurementModule'), 'ProcurementModule');
-export const KitchenAlertModule = lazyNamed(() => import('./features/kitchen/KitchenAlertModule'), 'KitchenAlertModule');
 export const StaffCashModule = lazyNamed(() => import('./features/staffcash/StaffCashModule'), 'StaffCashModule');
