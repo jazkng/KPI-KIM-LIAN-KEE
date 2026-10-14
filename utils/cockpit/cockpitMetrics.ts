@@ -179,6 +179,23 @@ const settlementCoverage = (period: Period, dailyRevenue: Record<string, number>
     return { expected: expected.length, settled: settled.length, missingDays };
 };
 
+export interface MonthBaseline {
+    month: string;
+    daysInMonth: number;
+    settledDays: number;
+    /** 照日均推估的整月营业额 */
+    projectedRevenue: number;
+    foodRate: number;
+    platformRate: number;
+    /** 人工总成本（不含 OT）与 OT */
+    labourExOt: number;
+    ot: number;
+    rent: number;
+    otherFixed: number;
+    /** 计入人工成本的员工人数（换算人均人工成本用） */
+    headcount: number;
+}
+
 export interface CockpitResult {
     period: Period;
     accountingMode: 'ACCRUAL' | 'CASH';
@@ -193,7 +210,14 @@ export interface CockpitResult {
     /** 数据完整性检查清单 */
     integrity: { label: string; ok: boolean; detail: string }[];
     /** 给进一步分析（人工效益等）用的期间数字 */
-    extras: { grossProfit: number; partTime: number; otherLabour: number; dailyRevenue: Record<string, number> };
+    extras: {
+        grossProfit: number;
+        partTime: number;
+        otherLabour: number;
+        dailyRevenue: Record<string, number>;
+        /** 期末所在月份的实际结构（保本模拟器的起点） */
+        monthBaseline: MonthBaseline;
+    };
     /** 由 loadCockpit 附上：人工成本明细、员工、薪资记录（只在记忆体中，供分析页使用） */
     context?: {
         labourByMonth: MonthLabour[];
@@ -564,7 +588,29 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         alerts,
         briefing,
         missingDays: coverage.missingDays,
-        extras: { grossProfit, partTime, otherLabour: round2(costs.otherLabour), dailyRevenue: input.dailyRevenue },
+        extras: {
+            grossProfit,
+            partTime,
+            otherLabour: round2(costs.otherLabour),
+            dailyRevenue: input.dailyRevenue,
+            monthBaseline: (() => {
+                const ot = round2(input.monthLabour.reduce((sum, c) => sum + (c.overtime || 0), 0));
+                const rent = round2(monthCosts.rows.opex.filter(r => r.label.toUpperCase().includes('RENT')).reduce((sum, r) => sum + r.amount, 0));
+                return {
+                    month,
+                    daysInMonth: dim,
+                    settledDays: monthSettledDays,
+                    projectedRevenue: round2(projectedRevenue),
+                    foodRate: monthRevenue > 0 ? monthCosts.food / monthRevenue : 0,
+                    platformRate: monthRevenue > 0 ? monthCosts.platform / monthRevenue : 0,
+                    labourExOt: round2(monthLabourAmount - ot),
+                    ot,
+                    rent,
+                    otherFixed: round2(monthCosts.opex - rent),
+                    headcount: input.monthLabour.filter(c => c.employerCost > 0).length,
+                };
+            })(),
+        },
         integrity: [
             { label: '每日结算', ok: pastMissing.length === 0, detail: pastMissing.length ? `缺 ${pastMissing.length} 天` : `${coverage.settled} 天齐全${todayPending ? '（今天尚未日结）' : ''}` },
             ...(adj ? [{ label: '外送平台对账', ok: adj.unreconciledPlatformDays === 0, detail: adj.unreconciledPlatformDays ? `${adj.unreconciledPlatformDays} 个平台日未对账，扣款为预估` : '已全部对账或无平台营业额' }] : []),

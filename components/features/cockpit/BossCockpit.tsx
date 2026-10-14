@@ -14,6 +14,7 @@ import { COCKPIT_STATUS_LABEL, type CockpitResult, type CockpitStatus, type Kpi 
 import { loadCockpit } from '../../../utils/cockpit/loadCockpit';
 import { LabourAnalyticsSheet } from './LabourAnalyticsSheet';
 import { FoodAnalyticsSheet } from './FoodAnalyticsSheet';
+import { BreakEvenSimSheet } from './BreakEvenSimSheet';
 
 interface Props {
     onClose: () => void;
@@ -58,6 +59,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
     const [detail, setDetail] = useState<Kpi | null>(null);
     const [showLabour, setShowLabour] = useState(false);
     const [showFood, setShowFood] = useState(false);
+    const [showSim, setShowSim] = useState(false);
     const requestId = useRef(0);
 
     const period = useMemo(() => resolvePeriod(preset, today, custom), [preset, today, custom]);
@@ -203,6 +205,14 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                                 <ChevronRight size={18} className="text-stone-400" />
                             </button>
 
+                            <button
+                                onClick={() => setShowSim(true)}
+                                className="mt-2 flex min-h-[52px] w-full items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 text-left text-sm font-black active:bg-stone-50"
+                            >
+                                <span>保本模拟器<span className="block text-xs font-medium text-stone-500">调整营业额、人工、食材成本率、租金、营业天数，只模拟不保存</span></span>
+                                <ChevronRight size={18} className="text-stone-400" />
+                            </button>
+
                             <TrendChart result={result} onOpenBreakEven={() => setDetail(k.breakEvenDay)} />
 
                             <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-4" aria-label="数据完整性">
@@ -238,6 +248,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                 </div>
             </main>
 
+            {showSim && result && <BreakEvenSimSheet baseline={result.extras.monthBaseline} onClose={() => setShowSim(false)} />}
             {showFood && result && <FoodAnalyticsSheet result={result} onClose={() => setShowFood(false)} />}
             {showLabour && result && <LabourAnalyticsSheet result={result} onClose={() => setShowLabour(false)} />}
             {detail && <KpiDetailSheet kpi={detail} periodLabel={result?.period.label || ''} onClose={() => setDetail(null)} />}
