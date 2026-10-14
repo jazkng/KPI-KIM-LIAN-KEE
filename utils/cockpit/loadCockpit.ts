@@ -1,7 +1,7 @@
 // ============================================================================
 // 老板经营驾驶舱 · 资料读取（只读）
 // ----------------------------------------------------------------------------
-// 一次按日期范围读取「期间 + 期末所在整月 + 走势需要的近 14 天」的日结与支出，
+// 一次按日期范围读取「期间 + 期末所在整月 + 走势与预警需要的近 15 天」的日结与支出，
 // 薪资、员工沿用 DataManager 既有的快取；不读整个日结 / 支出集合，不写入任何资料。
 // ============================================================================
 import type { AttendanceRecord } from '../../types';
@@ -49,7 +49,9 @@ const loadCockpitInner = async (
     const monthStart = `${month}-01`;
     const monthEnd = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
     const trendStart = addDays(period.end, -13);
-    const loadStart = [period.start, monthStart, trendStart].sort()[0];
+    // 预警中心比较「近 7 天 vs 前 7 天」，今天未日结时以昨天为终点，所以多读一天
+    const alertStart = addDays(period.end, -14);
+    const loadStart = [period.start, monthStart, trendStart, alertStart].sort()[0];
     const loadEnd = [period.end, monthEnd].sort()[1];
     const labourMonths = Array.from(new Set([...period.months, month]));
 

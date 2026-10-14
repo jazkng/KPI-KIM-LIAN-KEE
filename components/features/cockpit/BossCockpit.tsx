@@ -7,7 +7,7 @@
 // 已确认 / 预估 / 资料不完整 / 等待日结月结 一律以标签标示。
 // ============================================================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, Info, Loader2, RefreshCw, Table2, X } from 'lucide-react';
+import { AlertTriangle, Bell, ChevronRight, Info, Loader2, RefreshCw, Table2, X } from 'lucide-react';
 import { getBusinessDateString } from '../../../utils/dateHelper';
 import { PERIOD_LABEL, resolvePeriod, type PeriodPreset } from '../../../utils/cockpit/periods';
 import { COCKPIT_STATUS_LABEL, type CockpitResult, type CockpitStatus, type Kpi } from '../../../utils/cockpit/cockpitMetrics';
@@ -15,6 +15,10 @@ import { loadCockpit } from '../../../utils/cockpit/loadCockpit';
 import { LabourAnalyticsSheet } from './LabourAnalyticsSheet';
 import { FoodAnalyticsSheet } from './FoodAnalyticsSheet';
 import { BreakEvenSimSheet } from './BreakEvenSimSheet';
+import { AlertCenterSheet } from './AlertCenterSheet';
+import { buildAlertCenter, loadThresholds, saveThresholds, type AlertTarget, type AlertThresholds } from '../../../utils/cockpit/alertRules';
+import { loadUnpaidPayables } from '../../../utils/cockpit/loadPayables';
+import type { PayableLike } from '../../../utils/apDueDate';
 
 interface Props {
     onClose: () => void;
@@ -60,7 +64,26 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
     const [showLabour, setShowLabour] = useState(false);
     const [showFood, setShowFood] = useState(false);
     const [showSim, setShowSim] = useState(false);
+    const [showAlerts, setShowAlerts] = useState(false);
+    const [thresholds, setThresholds] = useState<AlertThresholds>(() => loadThresholds());
+    const [payables, setPayables] = useState<{ items: PayableLike[] | null; error: string | null; loading: boolean }>({ items: null, error: null, loading: true });
     const requestId = useRef(0);
+    const payablesRequest = useRef(0);
+
+    // 未付应付账款以今天为准，与所选期间无关；打开驾驶舱与按重新整理时读取
+    const loadPayables = useCallback(() => {
+        const id = ++payablesRequest.current;
+        setPayables(p => ({ ...p, loading: true }));
+        loadUnpaidPayables()
+            .then(items => { if (id === payablesRequest.current) setPayables({ items, error: null, loading: false }); })
+            .catch(e => { if (id === payablesRequest.current) setPayables({ items: null, error: (e as Error).message || '权限或网络问题', loading: false }); });
+    }, []);
+    useEffect(() => { loadPayables(); }, [loadPayables]);
+
+    const changeThresholds = useCallback((t: AlertThresholds) => {
+        setThresholds(t);
+        saveThresholds(t);
+    }, []);
 
     const period = useMemo(() => resolvePeriod(preset, today, custom), [preset, today, custom]);
 
@@ -83,6 +106,17 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
     // 显示中的结果若不是目前选的期间（正在读取新期间），标示为旧资料
     const stale = !!result && (result.period.start !== period.start || result.period.end !== period.end || result.accountingMode !== mode);
     const k = result?.kpis;
+    const center = useMemo(
+        () => (result ? buildAlertCenter({ result, today, thresholds, payables: payables.items, payablesError: payables.error }) : null),
+        [result, today, thresholds, payables],
+    );
+    const openTarget = (target: AlertTarget) => {
+        setShowAlerts(false);
+        if (target.kind === 'kpi' && k?.[target.key]) setDetail(k[target.key]);
+        else if (target.kind === 'labour') setShowLabour(true);
+        else if (target.kind === 'food') setShowFood(true);
+        else if (target.kind === 'sim') setShowSim(true);
+    };
 
     return (
         <div className="fixed inset-0 z-[300] flex flex-col bg-stone-50 text-stone-900">
@@ -95,7 +129,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                             {result && !stale ? ` · 更新于 ${timeText(result.loadedAt)}` : ''}
                         </p>
                     </div>
-                    <button onClick={load} disabled={loading} className="min-h-[44px] min-w-[44px] rounded-xl text-stone-500 hover:bg-stone-100 disabled:opacity-40" aria-label="重新整理">
+                    <button onClick={() => { load(); loadPayables(); }} disabled={loading} className="min-h-[44px] min-w-[44px] rounded-xl text-stone-500 hover:bg-stone-100 disabled:opacity-40" aria-label="重新整理">
                         <RefreshCw size={18} className={`mx-auto ${loading ? 'animate-spin' : ''}`} />
                     </button>
                     <button onClick={onClose} className="min-h-[44px] min-w-[44px] rounded-xl text-stone-500 hover:bg-stone-100" aria-label="关闭">
@@ -147,12 +181,12 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                     {/* 读取失败时不显示上一个期间的结果，避免误认为是新期间的数字 */}
                     {result && k && !(error && stale) && (
                         <div className={stale ? 'opacity-50 transition-opacity' : ''} aria-busy={stale}>
-                            {result.alerts.length > 0 && (
+                            {center && (
                                 <section className="mb-4 space-y-2" aria-label="经营预警">
-                                    {result.alerts.map((a, i) => (
+                                    {center.alerts.slice(0, 3).map(a => (
                                         <button
-                                            key={i}
-                                            onClick={() => a.kpi && k[a.kpi] && setDetail(k[a.kpi])}
+                                            key={a.id}
+                                            onClick={() => (a.target ? openTarget(a.target) : setShowAlerts(true))}
                                             className={`flex w-full items-start gap-2 rounded-xl border p-3 text-left text-sm ${a.level === 'HIGH' ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
                                         >
                                             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -163,6 +197,17 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                                             <ChevronRight size={16} className="mt-0.5 shrink-0 opacity-50" />
                                         </button>
                                     ))}
+                                    <button
+                                        onClick={() => setShowAlerts(true)}
+                                        className="flex min-h-[48px] w-full items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-left text-sm font-black active:bg-stone-50"
+                                    >
+                                        <Bell size={16} className="shrink-0 text-stone-500" />
+                                        <span className="flex-1">
+                                            预警中心 · {center.alerts.length} 条{center.alerts.length > 3 ? `（另有 ${center.alerts.length - 3} 条）` : ''}
+                                            <span className="block text-xs font-medium text-stone-500">依据、阈值设定、未检查的规则{payables.loading ? ' · 应付账款读取中' : ''}</span>
+                                        </span>
+                                        <ChevronRight size={16} className="shrink-0 text-stone-400" />
+                                    </button>
                                 </section>
                             )}
 
@@ -248,6 +293,17 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                 </div>
             </main>
 
+            {showAlerts && center && result && (
+                <AlertCenterSheet
+                    center={center}
+                    periodLabel={result.period.label}
+                    payablesLoading={payables.loading}
+                    thresholds={thresholds}
+                    onChangeThresholds={changeThresholds}
+                    onOpenTarget={openTarget}
+                    onClose={() => setShowAlerts(false)}
+                />
+            )}
             {showSim && result && <BreakEvenSimSheet baseline={result.extras.monthBaseline} onClose={() => setShowSim(false)} />}
             {showFood && result && <FoodAnalyticsSheet result={result} onClose={() => setShowFood(false)} />}
             {showLabour && result && <LabourAnalyticsSheet result={result} onClose={() => setShowLabour(false)} />}
