@@ -19,7 +19,7 @@ const MODAL_REFETCH_COOLDOWN_MS = 60 * 1000;
 
 // Import Modals so we can open them directly from the Priority Dashboard
 import { canUseBossTarget } from '../utils/bossPortalAccess';
-import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 interface BossPriorityDashboardProps {
     currentEmployee: Employee;
@@ -28,7 +28,7 @@ interface BossPriorityDashboardProps {
     onLogout?: () => void;
 }
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 
 const normalizeDateOnly = (value: unknown): string => {
     const datePart = String(value || '').split('T')[0];
@@ -198,14 +198,35 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             const todayStr = utc8.toISOString().split('T')[0];
             const yr = utc8.getFullYear();
             const mo = utc8.getMonth() + 1;
+            const pm = new Date(yr, mo - 2, 1);
+            const pmStr = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
+
+            // ⚡ iOS 性能：以下各项读取彼此独立，先同时发出，避免手机网络上一个等一个。
+            //    取用结果的顺序与错误处理维持原样（某项失败时，后续项目的结果照旧不采用）。
+            //    先挂上空的 catch，只为避免「未处理的 rejection」警告；await 时仍会抛出原错误。
+            const early = <T,>(promise: Promise<T>): Promise<T> => { promise.catch(() => undefined); return promise; };
+            const settlementsRead = early(DataManager.getSettlements());
+            const prevMonthRead = early(DataManager.getSettlements(pmStr));
+            const pendingPORead = early(DataManager.getPendingPurchaseOrderCount());
+            const stockRead = early(Promise.all([
+                DataManager.getStock('KITCHEN'),
+                DataManager.getStock('BAR'),
+                DataManager.getStock('GENERAL'),
+                DataManager.getStock('FUEL')
+            ]));
+            const rosterRead = early(DataManager.getRosterData());
+            const billsRead = early(DataManager.getRecurringBills());
+            const logsRead = early(DataManager.getRecentLogs(30));
+            const unpaidExpensesRead = early(getDocs(query(
+                collection(db, 'standalone_expenses'),
+                where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])
+            )));
 
             // 1. Fetch settlements
-            const fetchedSettlements = await DataManager.getSettlements();
+            const fetchedSettlements = await settlementsRead;
             setSettlements(fetchedSettlements);
             try {
-                const pm = new Date(yr, mo - 2, 1);
-                const pmStr = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
-                setPrevMonthSettlements(await DataManager.getSettlements(pmStr));
+                setPrevMonthSettlements(await prevMonthRead);
             } catch (e) {
                 console.warn('prev month settlements failed', e);
             }
@@ -213,16 +234,11 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             // 2. Count only purchase orders that are still waiting to be received.
             // This uses a Firestore server-side aggregation instead of downloading
             // up to 200 complete purchase-order documents.
-            const pendingPurchaseOrders = await DataManager.getPendingPurchaseOrderCount();
+            const pendingPurchaseOrders = await pendingPORead;
             setPendingPOCount(pendingPurchaseOrders);
 
             // 3. Fetch Stock and compute low stock count
-            const [kitchenStock, barStock, generalStock, fuelStock] = await Promise.all([
-                DataManager.getStock('KITCHEN'),
-                DataManager.getStock('BAR'),
-                DataManager.getStock('GENERAL'),
-                DataManager.getStock('FUEL')
-            ]);
+            const [kitchenStock, barStock, generalStock, fuelStock] = await stockRead;
             const combinedStock = [...kitchenStock, ...barStock, ...generalStock, ...fuelStock];
             const lowStockItems = combinedStock.filter(needsReplenishment);
             setLowStockCount(lowStockItems.length);
@@ -230,7 +246,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 4. Fetch Roster and compute absent count for today
             try {
-                const rosterRes = await DataManager.getRosterData();
+                const rosterRes = await rosterRead;
                 const todayRoster = rosterRes.roster?.[todayStr] || {};
                 const abCount = Object.values(todayRoster).filter((s: any) => s === 'MC' || s === 'ABSENT').length;
                 setAbsentCount(abCount);
@@ -241,7 +257,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 5. Fetch recurring bills and check due status
             try {
-                const bills = await DataManager.getRecurringBills();
+                const bills = await billsRead;
                 let dueBills = 0;
                 let dueBillsAmount = 0;
                 let overdueBills = 0;
@@ -293,7 +309,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             // The notification centre also keeps the latest 30 items, so the
             // dashboard no longer downloads 200 complete log documents.
             try {
-                const logs = await DataManager.getRecentLogs(30);
+                const logs = await logsRead;
                 const unackCount = logs.filter(log =>
                     !(log.readReceipts || []).some(receipt => receipt.employeeId === currentEmployee.id)
                 ).length;
@@ -305,11 +321,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 7. Fetch standalone expenses to get Accounts Payable (AP) statistics
             try {
-                const unpaidExpensesQuery = query(
-                    collection(db, 'standalone_expenses'),
-                    where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])
-                );
-                const expensesSnap = await getDocs(unpaidExpensesQuery);
+                const expensesSnap = await unpaidExpensesRead;
                 const apItems = expensesSnap.docs
                     .map(doc => doc.data() as ExpenseItem);
                 
@@ -667,6 +679,8 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             'BILLS': <RecurringBillsModule onClose={close} />,
             'ORG': <OrgChart onClose={close} />,
             'REPORTS': <FinancialReport onClose={close} />,
+            'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
+            'BOSS_COCKPIT': <BossCockpit onClose={close} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
@@ -757,6 +771,20 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                     </div>
                 ) : (
                     <>
+                        {/* ═══ 经营驾驶舱入口（利润、保本、人工、食材，同财务报表口径）═══ */}
+                        {canUse('BOSS_COCKPIT') && (
+                            <button
+                                onClick={() => setActiveModal('BOSS_COCKPIT')}
+                                className="mb-4 flex min-h-[64px] w-full items-center gap-3 rounded-2xl bg-stone-900 px-4 py-3 text-left text-white shadow-sm active:bg-stone-800"
+                            >
+                                <Gauge size={22} className="shrink-0 text-[#FFD200]" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-base font-black">经营驾驶舱</span>
+                                    <span className="block truncate text-xs font-medium text-white/70">实际与预估利润 · 保本营业额 · 人工与食材成本</span>
+                                </span>
+                                <ChevronRight size={18} className="shrink-0 text-white/60" />
+                            </button>
+                        )}
                         {/* ═══ 第一排：经营日报（左，大）＋ 本月 / 应付账款（右）═══ */}
                         <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
                             {dailyReportSummary && (() => {
@@ -1112,9 +1140,10 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                 {/* 快速查看：整排小方块 */}
                                 <section className={`${CARD} p-4 md:p-5`}>
                                     <CardTitle icon={<LayoutGrid size={18} />} title="快速查看" />
-                                    <div className="mt-3 grid grid-cols-1 overflow-hidden rounded-2xl border border-stone-300 divide-y divide-stone-300 sm:grid-cols-5 sm:gap-2 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0">
+                                    <div className="mt-3 grid grid-cols-1 overflow-hidden rounded-2xl border border-stone-300 divide-y divide-stone-300 sm:grid-cols-3 lg:grid-cols-6 sm:gap-2 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0">
                                         {[
                                             { label: '营业报表', target: 'REPORTS', Icon: FileBarChart, action: () => setActiveModal('REPORTS') },
+                                            { label: '人工与盈利', target: 'LABOUR_PROFIT', Icon: TrendingUp, action: () => setActiveModal('LABOUR_PROFIT') },
                                             { label: '资金状况', target: 'TREASURY', Icon: Wallet, action: () => setActiveModal('TREASURY') },
                                             { label: '成本监控', target: 'PRICE_MONITOR', Icon: TrendingUp, action: () => setActiveModal('PRICE_MONITOR') },
                                             { label: '员工表现', target: 'ASSESSMENT', Icon: Award, action: () => setActiveModal('ASSESSMENT') },

@@ -69,6 +69,8 @@ function lazyNamed<M, K extends keyof M>(
         </Suspense>
     );
     Wrapped.displayName = `Lazy(${String(name)})`;
+    /** 提前在背景下载（不渲染）；失败就算了，真正打开时仍走原本的载入与重试流程 */
+    Wrapped.preload = (): Promise<void> => loader().then(() => undefined, () => undefined);
     return Wrapped;
 }
 
@@ -79,6 +81,14 @@ export const ManagerDashboard = lazyNamed(() => import('./AdminDashboard'), 'Man
 export const StaffDashboard = lazyNamed(() => import('./StaffDashboard'), 'StaffDashboard');
 export const ManagementPortal = lazyNamed(() => import('./management/ManagementPortal'), 'ManagementPortal');
 export const DeviceScreenPortal = lazyNamed(() => import('./features/device/DeviceScreenPortal'), 'DeviceScreenPortal');
+
+/**
+ * 登录画面闲置时，先在背景下载「登录后最可能进入」的首页模块，
+ * 让输入 PIN 的时间与下载重叠，按下登入后不必再等模块下载。
+ * 只下载程序档，不读写任何资料。
+ */
+export const preloadHomeFor = (portalMode: 'STAFF' | 'BOSS'): Promise<void> =>
+    portalMode === 'BOSS' ? BossPriorityDashboard.preload() : StaffDashboard.preload();
 
 // ── 弹窗 ────────────────────────────────────────────────────────────────────
 export const StoreConfigModal = lazyNamed(() => import('./features/StoreConfigModal'), 'StoreConfigModal', <Silent />);
@@ -93,6 +103,8 @@ export const RecurringBillsModule = lazyNamed(() => import('./features/Recurring
 export const OrgChart = lazyNamed(() => import('./features/OrgChart'), 'OrgChart');
 export const FinancialReport = lazyNamed(() => import('./features/FinancialReport'), 'FinancialReport');
 export const AttendanceConsole = lazyNamed(() => import('./features/AttendanceConsole'), 'AttendanceConsole');
+export const LabourProfitDashboard = lazyNamed(() => import('./features/labour/LabourProfitDashboard'), 'LabourProfitDashboard');
+export const BossCockpit = lazyNamed(() => import('./features/cockpit/BossCockpit'), 'BossCockpit');
 export const AccountsPayableModule = lazyNamed(() => import('./features/ap/AccountsPayableModule'), 'AccountsPayableModule');
 export const TreasuryModule = lazyNamed(() => import('./features/TreasuryModule'), 'TreasuryModule');
 export const WarrantyModule = lazyNamed(() => import('./features/WarrantyModule'), 'WarrantyModule');
@@ -109,5 +121,4 @@ export const SOPInspection = lazyNamed(() => import('./features/SOPInspection'),
 export const QueueManager = lazyNamed(() => import('./features/QueueManager'), 'QueueManager');
 export const SupplierModule = lazyNamed(() => import('./features/supplier/SupplierModule'), 'SupplierModule');
 export const ProcurementModule = lazyNamed(() => import('./features/ProcurementModule'), 'ProcurementModule');
-export const KitchenAlertModule = lazyNamed(() => import('./features/kitchen/KitchenAlertModule'), 'KitchenAlertModule');
 export const StaffCashModule = lazyNamed(() => import('./features/staffcash/StaffCashModule'), 'StaffCashModule');

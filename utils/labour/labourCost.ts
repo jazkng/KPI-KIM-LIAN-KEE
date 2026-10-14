@@ -86,7 +86,8 @@ export const estimateEmployeeCost = (
     if (!rate) notes.push('人事档案没有底薪');
     const mode = emp.salaryMode || 'MONTHLY';
     const worked = attendance || { daysWorked: 0, workedMinutes: 0, approvedOtMinutes: 0 };
-    if (!attendance) notes.push('没有考勤资料');
+    // 月薪员工不需要考勤就能算底薪；日薪、时薪没有考勤就无法估算
+    if (!attendance && (emp.salaryMode === 'DAILY' || emp.salaryMode === 'HOURLY')) notes.push('没有考勤资料');
 
     let basic: number;
     let hourlyRate: number;
@@ -272,4 +273,58 @@ export const buildLabourCosts = (
         if (emp) result.push(estimateEmployeeCost(emp, summary, { month, ...options }));
     });
     return result.sort((a, b) => b.employerCost - a.employerCost);
+};
+
+/** 这个月是否在职、且参与薪资结算（与薪资模块相同的判断方向：入职在月底前、离职不早于月初） */
+export const isActiveForPayroll = (emp: Employee, month: string): boolean => {
+    if (emp.isPayrollEligible === false || emp.isArchived) return false;
+    const [y, m] = month.split('-').map(Number);
+    const monthEnd = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    if (emp.joinDate && emp.joinDate > monthEnd) return false;
+    if (emp.status === 'TERMINATED') {
+        return !!emp.terminationDate && emp.terminationDate >= `${month}-01`;
+    }
+    return true;
+};
+
+/**
+ * 老板看板用：当月全部在职员工的人工成本。
+ * - 已发放薪资（POSTED）的员工用实际数字；
+ * - 其余按底薪与法定供款推算（有审核后的考勤就用来算日薪 / 时薪）；
+ * - 同一人只算一次。
+ */
+export const buildMonthLabourCosts = (
+    month: string,
+    employees: Employee[],
+    payrollRecords: PayrollRecord[],
+    reviewedAttendance: Record<string, AttendanceSummary> = {},
+    options: Omit<LabourCostOptions, 'month'> = {},
+): EmployeeLabourCost[] => {
+    const attendance: Record<string, AttendanceSummary | undefined> = {};
+    employees.filter(e => isActiveForPayroll(e, month)).forEach(e => { attendance[e.id] = reviewedAttendance[e.id]; });
+    const payroll = payrollRecords.find(r => r.month === month && r.status === 'POSTED');
+    const paid = new Map((payroll?.details || []).map(d => [d.employeeId, d]));
+    const byId = new Map(employees.map(e => [e.id, e]));
+    const result: EmployeeLabourCost[] = [];
+    paid.forEach((detail, id) => result.push(costFromPayroll(detail, byId.get(id))));
+    Object.entries(attendance).forEach(([id, summary]) => {
+        if (paid.has(id)) return;
+        const emp = byId.get(id);
+        if (emp) result.push(estimateEmployeeCost(emp, summary, { month, ...options }));
+    });
+    return result.sort((a, b) => b.employerCost - a.employerCost);
+};
+
+/** 审核后的考勤（V2 attendance_reviews）→ 每位员工的出勤汇总 */
+export const summariseReviewedAttendance = (
+    records: { employeeId: string; durationMinutes?: number; approvedOtMinutes?: number }[],
+): Record<string, AttendanceSummary> => {
+    const out: Record<string, AttendanceSummary> = {};
+    records.forEach(r => {
+        const s = (out[r.employeeId] ||= { daysWorked: 0, workedMinutes: 0, approvedOtMinutes: 0 });
+        s.daysWorked += 1;
+        s.workedMinutes += Number(r.durationMinutes) || 0;
+        s.approvedOtMinutes += Number(r.approvedOtMinutes) || 0;
+    });
+    return out;
 };

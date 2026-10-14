@@ -298,9 +298,6 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
         if (allowedModules.includes('STAFF_CASH')) {
             list.push({ module: 'STAFF_CASH', label: lang === 'my' ? 'အချိန်ပိုင်း / ကြိုတင်ငွေ' : '兼职与预支', icon: '💵', bg: 'bg-emerald-50 border-emerald-200/80', text: 'text-emerald-700 font-extrabold' });
         }
-        if (allowedModules.includes('KITCHEN_ALERT')) {
-            list.push({ module: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: '🔔', bg: 'bg-red-50 border-red-200/80', text: 'text-red-600 font-extrabold' });
-        }
         return sortNavigationItems(list, item => item.module);
     }, [allowedModules, lang]);
 

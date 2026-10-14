@@ -222,3 +222,10 @@ describe('Codex 审核修正', () => {
         expect(isCalendarMonth('2026-09-01', '2026-09-15')).toBe(false);
     });
 });
+
+describe('确认审核写入开关', () => {
+    it('未经负责人确认（备份流程、OT / 班表规则）前保持关闭', async () => {
+        const { FACE_IMPORT_SAVE_ENABLED } = await import('../../components/features/attendance/FaceImportReview');
+        expect(FACE_IMPORT_SAVE_ENABLED).toBe(false);
+    });
+});

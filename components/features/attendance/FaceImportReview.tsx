@@ -63,6 +63,13 @@ const rm = (n: number) => `RM ${n.toLocaleString('en-MY', { minimumFractionDigit
 const isDone = (ex: ReviewException) =>
     !!ex.resolution && ALLOWED_ACTIONS[ex.type].includes(ex.resolution.action) && (ex.resolution.action !== 'EXCUSE' || !!ex.resolution.note?.trim());
 
+/**
+ * 「确认审核」写入开关。依快速迭代规则（docs/KLK_ERP_V2_RULES.md 第 11 条）：
+ * 导入、预览、异常处理先发布；写入 attendance_reviews（每月数百笔的批量写入）暂时禁用。
+ * 启用前需负责人确认：① 写入前备份与批准流程（规范第 10 条高风险变更）② OT、营业日切点与实际班表规则。
+ */
+export const FACE_IMPORT_SAVE_ENABLED = false;
+
 export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, currentEmployee, initialFile, initialData, initialManualMatches, onClose, onSaved }) => {
     const [data, setData] = useState<Face3000Import | null>(initialData || null);
     const [fileName, setFileName] = useState(initialData ? 'PDF 报表' : '');
@@ -157,6 +164,7 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
     const canSave = !!review && review.openExceptionCount === 0 && unmatchedPending === 0 && !!reviewerName.trim() && savedCount === null;
 
     const handleSave = async () => {
+        if (!FACE_IMPORT_SAVE_ENABLED) return;
         if (!review || !data || !canSave) return;
         const records = (() => {
             try {
@@ -373,9 +381,15 @@ export const FaceImportReview: React.FC<Props> = ({ employees, shiftSettings, cu
                                                 ? '请填写审核主管'
                                                 : '可以导入'}
                                 </span>
+                                {!FACE_IMPORT_SAVE_ENABLED && (
+                                    <span className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">
+                                        🔒 预览模式：确认写入暂未启用（待负责人确认备份流程与 OT / 班表规则）
+                                    </span>
+                                )}
                                 <button
-                                    disabled={!canSave || !!busy}
+                                    disabled={!FACE_IMPORT_SAVE_ENABLED || !canSave || !!busy}
                                     onClick={handleSave}
+                                    title={FACE_IMPORT_SAVE_ENABLED ? undefined : '预览模式：确认写入暂未启用'}
                                     className="min-h-[44px] rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-gray-300"
                                 >
                                     确认审核

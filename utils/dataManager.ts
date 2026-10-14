@@ -1,5 +1,5 @@
 import { db } from '../firebaseConfig';
-import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
+import { collection, getDocs, getDocsFromServer, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
 import { 
     Employee, SettlementRecord, ExpenseItem, RecurringBill, 
     BillPaymentRecord, StockItem, Supplier, PurchaseOrder, 
@@ -1818,8 +1818,7 @@ export class DataManager {
                         shiftMode: data.shiftMode || 'SINGLE'
                     };
                 }
-                const legacyRoster = await getDoc(doc(db, 'roster', 'main'));
-                const legacyNotes = await getDoc(doc(db, 'roster', 'notes'));
+                const [legacyRoster, legacyNotes] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
                 if (legacyRoster.exists()) {
                     const allRoster = legacyRoster.data() || {};
                     const allNotes = legacyNotes.exists() ? legacyNotes.data() || {} : {};
@@ -1860,8 +1859,8 @@ export class DataManager {
                 return { roster: {}, notes: {}, monthKey, rosterVersion: 2, status: 'DRAFT', revision: 0, shiftMode: 'SINGLE' };
             }
         }
-        const r = await getDoc(doc(db, 'roster', 'main'));
-        const n = await getDoc(doc(db, 'roster', 'notes'));
+        // 排班与备注两份文件同时读取（以前一前一后，手机网络上多等一轮）
+        const [r, n] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
         return { roster: r.exists() ? r.data() : {}, notes: n.exists() ? n.data() : {} };
     }
 
@@ -1999,6 +1998,50 @@ export class DataManager {
         }
         await updateDoc(batchRef, { status: 'COMPLETED', completedAt: new Date().toISOString() });
         DataManager.clearCacheKeys(['attendance_reviews_']);
+    }
+    /**
+     * 一个月的损益原始资料（只读）：日结、账单付款、独立支出。
+     * 与财务报表「多月份导出」相同的查询方式，只按日期范围读取，不读整个集合。
+     */
+    static async getMonthPnLRaw(month: string): Promise<{
+        settlements: SettlementRecord[];
+        billPayments: BillPaymentRecord[];
+        standaloneExpenses: ExpenseItem[];
+    }> {
+        const [y, m] = month.split('-').map(Number);
+        return DataManager.getPnLRawRange(`${month}-01`, `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`);
+    }
+    /**
+     * 任意日期区间（YYYY-MM-DD，含头含尾）的日结、账单付款与独立支出。
+     * 只按日期范围查询，不读整个集合；不写入任何资料。
+     */
+    static async getPnLRawRange(startDate: string, endDate: string): Promise<{
+        settlements: SettlementRecord[];
+        billPayments: BillPaymentRecord[];
+        standaloneExpenses: ExpenseItem[];
+    }> {
+        const start = startDate;
+        const end = `${endDate}T23:59:59`;
+        // 一律向伺服器读取：离线时宁可报错，也不要用不完整的本机快取算出「看似正常」的利润
+        const [setSnap, billSnap, expByTime, expByPayment] = await Promise.all([
+            getDocsFromServer(query(collection(db, 'settlements'), where('date', '>=', start), where('date', '<=', end))),
+            getDocsFromServer(query(collection(db, 'bill_payments'), where('date', '>=', start), where('date', '<=', end))),
+            getDocsFromServer(query(collection(db, 'standalone_expenses'), where('time', '>=', start), where('time', '<=', end))),
+            getDocsFromServer(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', start), where('paymentDate', '<=', end))),
+        ]);
+        const expenses = new Map<string, ExpenseItem>();
+        [...expByTime.docs, ...expByPayment.docs].forEach(d => expenses.set(d.id, { id: d.id, ...d.data() } as ExpenseItem));
+        return {
+            settlements: setSnap.docs.map(d => ({ id: d.id, ...d.data() }) as SettlementRecord),
+            billPayments: billSnap.docs.map(d => ({ id: d.id, ...d.data() }) as BillPaymentRecord),
+            standaloneExpenses: [...expenses.values()],
+        };
+    }
+    /** 依 ID 读取独立支出（只读；用来找分期付款对应的原账单） */
+    static async getStandaloneExpensesByIds(ids: string[]): Promise<ExpenseItem[]> {
+        const unique = Array.from(new Set(ids.filter(Boolean))).slice(0, 100);
+        const snaps = await Promise.all(unique.map(id => getDoc(doc(db, 'standalone_expenses', id))));
+        return snaps.filter(s => s.exists()).map(s => ({ id: s.id, ...s.data() }) as ExpenseItem);
     }
     /** 某月已审核的打卡机考勤（V2 专用，与 V1 attendance 分开） */
     static async getAttendanceReviewsByMonth(month: string): Promise<AttendanceRecord[]> {
