@@ -404,7 +404,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          )}
          {activeTab === 'ROSTER' && <RosterModule onClose={handleModuleExit} allowedModules={allowedModules} />}
          {activeTab === 'ONLINE_ORDERS' && <OnlineOrderCenter currentEmployee={currentEmployee} />}
-         {activeTab === 'ATTENDANCE_CONSOLE' && <AttendanceConsole onClose={handleModuleExit} />}
+         {activeTab === 'ATTENDANCE_CONSOLE' && <AttendanceConsole onClose={handleModuleExit} currentEmployee={currentEmployee} />}
          {activeTab === 'LOGBOOK' && <LogbookModule viewOnly={false} currentEmployee={currentEmployee} lang={lang} />}
          {activeTab === 'LOGBOOK_VIEW' && <LogbookModule viewOnly={true} currentEmployee={currentEmployee} lang={lang} />}
          {activeTab === 'PROCUREMENT' && (

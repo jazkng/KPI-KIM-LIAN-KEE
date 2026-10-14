@@ -1973,6 +1973,33 @@ export class DataManager {
         DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新
     }
     /**
+     * FACE3000 审核结果：主管处理完所有异常、按下确认后才呼叫。
+     * ⚠️ 只写入 V2 专用集合，不碰 V1：
+     *   - attendance_reviews/{review_<员工ID>_<营业日>}：审核后的班次（同一天重新审核会以最新结果取代）
+     *   - attendance_import_batches/{id}：这次审核的统计与审核人
+     * 不写入、不覆盖、不删除现有 attendance（V1 考勤），所以不影响薪资、迟到扣款与历史资料。
+     * 失败可原样重试：同样的 ID 会覆盖，不会重复。
+     */
+    static async saveAttendanceReview(
+        records: AttendanceRecord[],
+        batchInfo: Record<string, unknown> & { id: string },
+    ): Promise<void> {
+        const batchRef = doc(db, 'attendance_import_batches', batchInfo.id);
+        await setDoc(batchRef, {
+            ...batchInfo,
+            status: 'PENDING',
+            recordIds: records.map(r => r.id),
+            startedAt: new Date().toISOString(),
+        });
+        for (let i = 0; i < records.length; i += 400) {
+            const batch = writeBatch(db);
+            records.slice(i, i + 400).forEach(rec => batch.set(doc(db, 'attendance_reviews', rec.id), rec));
+            await batch.commit();
+        }
+        await updateDoc(batchRef, { status: 'COMPLETED', completedAt: new Date().toISOString() });
+        DataManager.clearCacheKeys(['attendance_reviews_']);
+    }
+    /**
      * 一个月的损益原始资料（只读）：日结、账单付款、独立支出。
      * 与财务报表「多月份导出」相同的查询方式，只按日期范围读取，不读整个集合。
      */

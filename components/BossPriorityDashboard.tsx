@@ -681,7 +681,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             'REPORTS': <FinancialReport onClose={close} />,
             'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
             'BOSS_COCKPIT': <BossCockpit onClose={close} />,
-            'ATTENDANCE': <AttendanceConsole onClose={close} />,
+            'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
                 setActiveModal('SELF_INVOICE');
