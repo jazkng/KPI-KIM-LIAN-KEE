@@ -574,7 +574,7 @@ export default function App() {
                                         <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'PRIORITY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
                                             <Target size={16} className={!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600' : ''} />
                                         </div>
-                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600 font-black' : ''}`}>重点</span>
+                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600 font-black' : ''}`}>重点</span>
                                     </button>
 
                                     {/* 全部功能 */}
@@ -592,7 +592,7 @@ export default function App() {
                                         <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
                                             <Layout size={16} className={!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600' : ''} />
                                         </div>
-                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600 font-black' : ''}`}>全部功能</span>
+                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600 font-black' : ''}`}>全部功能</span>
                                     </button>
 
                                     {/* AI智脑 */}
@@ -607,7 +607,7 @@ export default function App() {
                                         <div className={`p-1.5 rounded-lg transition-all ${isAiOpen ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
                                             <Sparkles size={16} className="text-amber-500 animate-pulse" />
                                         </div>
-                                        <span className={`text-[8.5px] tracking-wider font-extrabold ${isAiOpen ? 'text-amber-600 font-black' : ''}`}>AI智脑</span>
+                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${isAiOpen ? 'text-amber-600 font-black' : ''}`}>AI智脑</span>
                                     </button>
 
                                     {/* 我的 */}
@@ -618,7 +618,7 @@ export default function App() {
                                         <div className="p-1.5 rounded-lg active:bg-stone-100">
                                             <User size={16} />
                                         </div>
-                                        <span className="text-[8.5px] tracking-wider font-extrabold">我的</span>
+                                        <span className="text-[11px] leading-tight whitespace-nowrap font-extrabold">我的</span>
                                     </button>
                                 </>
                             ) : (

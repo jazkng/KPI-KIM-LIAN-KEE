@@ -393,19 +393,19 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                         </div>
 
                         {/* Stats Grid Matrix */}
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                             
                             {/* Absent Count Block */}
                             <div className="bg-white border border-stone-200/50 rounded-lg p-2 flex flex-col justify-between shadow-xs min-h-[54px]">
                                 <div className="flex items-center gap-1 text-stone-600">
                                     <Users size={11} className="text-amber-500 shrink-0" />
-                                    <span className="text-[9px] font-bold truncate">{mt('absent_count', lang)}</span>
+                                    <span className="text-[11px] font-bold truncate">{mt('absent_count', lang)}</span>
                                 </div>
                                 <div className="flex items-baseline gap-0.5 mt-1">
                                     <span className={`text-sm font-black font-mono ${stats.absences > 0 ? 'text-amber-600' : 'text-stone-800'}`}>
                                         {loading ? '--' : stats.absences}
                                     </span>
-                                    <span className="text-[8px] text-stone-400 truncate">{lang === 'my' ? 'ဦး' : '人'}</span>
+                                    <span className="text-[11px] text-stone-400 truncate">{lang === 'my' ? 'ဦး' : '人'}</span>
                                 </div>
                             </div>
 
@@ -413,13 +413,13 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                             <div className="bg-white border border-stone-200/50 rounded-lg p-2 flex flex-col justify-between shadow-xs min-h-[54px]">
                                 <div className="flex items-center gap-1 text-stone-600">
                                     <AlertTriangle size={11} className="text-rose-500 shrink-0" />
-                                    <span className="text-[9px] font-bold truncate">{mt('stock_shortage', lang)}</span>
+                                    <span className="text-[11px] font-bold truncate">{mt('stock_shortage', lang)}</span>
                                 </div>
                                 <div className="flex items-baseline gap-0.5 mt-1">
                                     <span className={`text-sm font-black font-mono ${stats.lowStock > 0 ? 'text-rose-600' : 'text-stone-800'}`}>
                                         {loading ? '--' : stats.lowStock}
                                     </span>
-                                    <span className="text-[8px] text-stone-400 truncate">{lang === 'my' ? 'မျိုး' : '类'}</span>
+                                    <span className="text-[11px] text-stone-400 truncate">{lang === 'my' ? 'မျိုး' : '类'}</span>
                                 </div>
                             </div>
 
@@ -427,13 +427,13 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                             <div className="bg-white border border-stone-200/50 rounded-lg p-2 flex flex-col justify-between shadow-xs min-h-[54px]">
                                 <div className="flex items-center gap-1 text-stone-600">
                                     <CheckSquare size={11} className="text-amber-600 shrink-0" />
-                                    <span className="text-[9px] font-bold truncate">{mt('pending_tasks_count', lang)}</span>
+                                    <span className="text-[11px] font-bold truncate">{mt('pending_tasks_count', lang)}</span>
                                 </div>
                                 <div className="flex items-baseline gap-0.5 mt-1">
                                     <span className={`text-sm font-black font-mono ${stats.pendingTasks > 0 ? 'text-amber-600' : 'text-stone-800'}`}>
                                         {loading ? '--' : stats.pendingTasks}
                                     </span>
-                                    <span className="text-[8px] text-stone-400 truncate">{lang === 'my' ? 'ခု' : '项'}</span>
+                                    <span className="text-[11px] text-stone-400 truncate">{lang === 'my' ? 'ခု' : '项'}</span>
                                 </div>
                             </div>
 
@@ -441,13 +441,13 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                             <div className="bg-white border border-stone-200/50 rounded-lg p-2 flex flex-col justify-between shadow-xs min-h-[54px]">
                                 <div className="flex items-center gap-1 text-stone-600">
                                     <BookOpen size={11} className="text-sky-500 shrink-0" />
-                                    <span className="text-[9px] font-bold truncate">{mt('add_log', lang)}</span>
+                                    <span className="text-[11px] font-bold truncate">{mt('add_log', lang)}</span>
                                 </div>
                                 <div className="flex items-baseline gap-0.5 mt-1">
                                     <span className="text-sm font-black font-mono text-sky-600">
                                         {loading ? '--' : stats.todayLogs}
                                     </span>
-                                    <span className="text-[8px] text-stone-400 truncate">{lang === 'my' ? 'စောင်' : '篇'}</span>
+                                    <span className="text-[11px] text-stone-400 truncate">{lang === 'my' ? 'စောင်' : '篇'}</span>
                                 </div>
                             </div>
 
@@ -462,8 +462,8 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
                             <h3 className="text-xs font-black text-stone-500 tracking-widest uppercase">{mt('quick_access', lang)}</h3>
                             <button
                                 onClick={() => setIsEditingShortcuts(true)}
-                                className="text-[10px] text-amber-700 hover:text-amber-800 font-extrabold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 px-2.5 py-0.5 rounded-full transition-all active:scale-95 outline-none"
-                                style={{ minHeight: '30px' }}
+                                className="text-xs text-amber-700 hover:text-amber-800 font-extrabold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 px-3 py-0.5 rounded-full transition-all active:scale-95 outline-none"
+                                style={{ minHeight: '44px' }}
                             >
                                 ⚙️ {lang === 'my' ? 'စိတ်ကြိုက်ပြင်ရန်' : '自定义'}
                             </button>

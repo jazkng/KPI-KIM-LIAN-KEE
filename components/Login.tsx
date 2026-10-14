@@ -602,7 +602,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
             <button
               type="button"
               onClick={() => onSwitchPortal?.('BOSS')}
-              className="rounded-full border border-stone-200 bg-white px-3 py-2 text-[10px] md:text-xs font-black text-stone-500 shadow-sm transition-colors hover:border-[#650707]/25 hover:text-[#650707]"
+              className="min-h-[44px] rounded-full border border-stone-200 bg-white px-3 py-2 text-xs font-black text-stone-500 shadow-sm transition-colors hover:border-[#650707]/25 hover:text-[#650707]"
             >
               老板登入 · Owner
             </button>
