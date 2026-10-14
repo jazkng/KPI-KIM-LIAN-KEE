@@ -112,8 +112,9 @@ export const buildFoodAnalytics = (input: FoodAnalyticsInput, stockNames: Record
             return {
                 stockId: h.stockId,
                 name: stockNames[h.stockId] || h.stockId,
-                from: round2(from.cost),
-                to: round2(to.cost),
+                // 每基础单位成本常是小数点后多位（例：每克 RM 0.025），不能四舍五入到两位
+                from: Math.round(Number(from.cost) * 1e6) / 1e6,
+                to: Math.round(Number(to.cost) * 1e6) / 1e6,
                 changePct: round2(((to.cost - from.cost) / from.cost) * 100),
                 fromDate: from.date,
                 toDate: to.date,

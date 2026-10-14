@@ -48,7 +48,7 @@ describe('食材成本双轨分析', () => {
     });
     it('品项价格变化：只有一笔价格的品项不列；涨价 20% 产生提醒', () => {
         expect(a.priceChanges).toHaveLength(1);
-        expect(a.priceChanges[0]).toMatchObject({ name: '虚构猪肉', changePct: 20 });
+        expect(a.priceChanges[0]).toMatchObject({ name: '虚构猪肉', changePct: 20, from: 0.025, to: 0.03 });
         expect(a.alerts.some(x => x.title.includes('虚构猪肉'))).toBe(true);
     });
     it('采购成本率明显高于近期平均 → 提醒', () => {
