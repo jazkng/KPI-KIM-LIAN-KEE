@@ -14,6 +14,9 @@ import {
   type TranslationTone,
 } from "./server/translationService";
 import { buildAdvisorPrompt, parseAdvisorJson, sanitizeAdvisorRequest, verifyAdvisorPoints } from "./server/cockpitAdvisor";
+import { OAuth2Client } from "google-auth-library";
+import { evaluateAndPush, getPushSettings, initPushAdmin, isDeviceRegistered, mockOutbox, registerDevice, savePushSettings, unregisterDevice } from "./server/push/pushService";
+import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -63,6 +66,7 @@ interface RateLimitInfo {
 const chatLimitStore = new Map<string, RateLimitInfo>();
 const translationLimitStore = new Map<string, RateLimitInfo>();
 const advisorLimitStore = new Map<string, RateLimitInfo>();
+const pushLimitStore = new Map<string, RateLimitInfo>();
 
 function checkRateLimit(
   ip: string,
@@ -158,8 +162,14 @@ const isEmulatorMode = (() => {
 async function startServer() {
   const app = express();
 
+  // 📣 手机推送（PR E2a）：预设关闭。只有 PUSH_ENABLED=true 且在有访问门禁的预览站或 Emulator 才开放
+  const pushAvailable = process.env.PUSH_ENABLED === "true" && (!!process.env.PREVIEW_ACCESS_PASSWORD || isEmulatorMode);
+  // Cloud Scheduler 无法输入预览站密码：只有这一个路径改由下方的 OIDC 身份验证把关（且推送必须已开启）
+  const isSchedulerCall = (req: express.Request) => pushAvailable && req.method === "POST" && req.path === "/api/push/evaluate";
+
   if (process.env.PREVIEW_ACCESS_PASSWORD) {
-    app.use(createPreviewGate(process.env.PREVIEW_ACCESS_PASSWORD));
+    const gate = createPreviewGate(process.env.PREVIEW_ACCESS_PASSWORD);
+    app.use((req, res, next) => (isSchedulerCall(req) ? next() : gate(req, res, next)));
     console.log("🔒 预览站访问门禁已启用");
   }
   const PORT = 3000;
@@ -286,6 +296,72 @@ ${JSON.stringify(contextData, null, 2)}
       res.status(502).json({ error: "AI 服务暂时无法回应，请稍后再试。" });
     }
   });
+
+  // 📣 手机推送（PR E2a）
+  if (pushAvailable) initPushAdmin(isEmulatorMode);
+  const pushGuard: express.RequestHandler = (req, res, next) => {
+    if (!pushAvailable) return res.status(503).json({ error: "手机推送尚未开通（待负责人完成 FCM 设定）。" });
+    const limit = checkRateLimit(getTrustedClientIp(req), pushLimitStore, 20);
+    if (!limit.allowed) return res.status(429).json({ error: "操作太频繁，请 1 分钟后再试。" });
+    next();
+  };
+  const pushError = (res: express.Response, error: any) => {
+    console.error("Push error:", error?.message || error);
+    res.status(500).json({ error: "推送服务暂时无法使用，请稍后再试。" });
+  };
+
+  app.get("/api/push/status", (_req, res) => {
+    res.json({ available: pushAvailable, emulator: isEmulatorMode });
+  });
+  app.post("/api/push/device-status", pushGuard, async (req, res) => {
+    const token = req.body?.token;
+    if (!isPlausibleFcmToken(token)) return res.status(400).json({ error: "装置凭证格式不正确" });
+    try { res.json({ registered: await isDeviceRegistered(token) }); } catch (e) { pushError(res, e); }
+  });
+  app.post("/api/push/register", pushGuard, async (req, res) => {
+    const token = req.body?.token;
+    if (!isPlausibleFcmToken(token)) return res.status(400).json({ error: "装置凭证格式不正确" });
+    try {
+      await registerDevice(token, String(req.body?.label || "未命名装置"), String(req.headers["user-agent"] || ""));
+      res.json({ ok: true });
+    } catch (e) { pushError(res, e); }
+  });
+  app.post("/api/push/unregister", pushGuard, async (req, res) => {
+    const token = req.body?.token;
+    if (!isPlausibleFcmToken(token)) return res.status(400).json({ error: "装置凭证格式不正确" });
+    try { await unregisterDevice(token); res.json({ ok: true }); } catch (e) { pushError(res, e); }
+  });
+  app.get("/api/push/settings", pushGuard, async (_req, res) => {
+    try { res.json(await getPushSettings()); } catch (e) { pushError(res, e); }
+  });
+  app.put("/api/push/settings", pushGuard, async (req, res) => {
+    try { res.json(await savePushSettings(req.body)); } catch (e) { pushError(res, e); }
+  });
+
+  // 定时任务入口：Emulator 模式直接执行；预览站必须带 Cloud Scheduler 的 OIDC 身份（服务账号与受众都要符合）
+  const oidcClient = new OAuth2Client();
+  app.post("/api/push/evaluate", async (req, res) => {
+    if (!pushAvailable) return res.status(503).json({ error: "手机推送尚未开通。" });
+    if (!isEmulatorMode) {
+      const audience = process.env.PUSH_EVALUATE_AUDIENCE;
+      const schedulerEmail = process.env.PUSH_SCHEDULER_SA;
+      if (!audience || !schedulerEmail) return res.status(503).json({ error: "未设定定时任务身份。" });
+      const header = String(req.headers.authorization || "");
+      if (!header.startsWith("Bearer ")) return res.status(401).json({ error: "需要身份验证" });
+      try {
+        const ticket = await oidcClient.verifyIdToken({ idToken: header.slice(7), audience });
+        const payload = ticket.getPayload();
+        if (!payload?.email_verified || payload.email !== schedulerEmail) return res.status(403).json({ error: "身份不符" });
+      } catch {
+        return res.status(401).json({ error: "身份验证失败" });
+      }
+    }
+    try { res.json(await evaluateAndPush()); } catch (e) { pushError(res, e); }
+  });
+  // 只供 Emulator 测试：查看「假装送出」的推送
+  if (isEmulatorMode) {
+    app.get("/api/push/mock-outbox", (_req, res) => res.json(mockOutbox));
+  }
 
   // Smart Localization V2: translate values while all JSON keys remain program-owned.
   app.post("/api/gemini/translate-card", async (req, res) => {

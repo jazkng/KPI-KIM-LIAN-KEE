@@ -152,3 +152,41 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// 4. 驾驶舱手机推送（PR E2a）：服务端只送 data（title / body / link），这里负责显示通知。
+//    推送内容只有条数与类别，不含金额；点通知打开老板入口。
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    const payload = event.data ? event.data.json() : {};
+    data = payload.data || payload || {};
+  } catch (e) {
+    data = {};
+  }
+  const title = typeof data.title === 'string' && data.title ? data.title : '金莲记 ERP';
+  const body = typeof data.body === 'string' && data.body ? data.body : '有新的经营预警，请打开驾驶舱查看';
+  const link = typeof data.link === 'string' && data.link.startsWith('/') ? data.link : '/?portal=boss';
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: 'klk-cockpit-alert',
+    data: { link },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || '/?portal=boss';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.navigate(link).catch(() => {});
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(link);
+    })
+  );
+});

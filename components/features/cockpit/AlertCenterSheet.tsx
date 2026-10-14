@@ -2,10 +2,11 @@
 // 老板经营驾驶舱 · 预警中心（PR E1）
 // 只读：每条预警附证据与计算方式，可跳到对应明细。
 // 阈值只存在这台装置（localStorage），不写入资料库。
-// 手机推送尚未开放：开关显示为停用，待负责人确认推送方案（FCM）后再做（PR E2）。
+// 手机推送（PR E2a）：服务端未开通时显示停用与原因；开通后可在这台装置开启。
 // ============================================================================
 import React, { useState } from 'react';
-import { AlertTriangle, BellOff, ChevronDown, ChevronRight, Settings2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Settings2, X } from 'lucide-react';
+import { PushPanel } from './PushPanel';
 import { DEFAULT_THRESHOLDS, type AlertCenter, type AlertTarget, type AlertThresholds, type CenterAlert } from '../../../utils/cockpit/alertRules';
 
 interface Props {
@@ -59,17 +60,7 @@ export const AlertCenterSheet: React.FC<Props> = ({ center, periodLabel, payable
 
                 {showSettings && <ThresholdSettings value={thresholds} onChange={onChangeThresholds} />}
 
-                <div className="mt-3 flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
-                    <BellOff size={18} className="shrink-0 text-stone-400" />
-                    <div className="min-w-0 flex-1 text-xs">
-                        <div className="font-black text-stone-700">手机推送通知</div>
-                        <div className="text-stone-500">待负责人确认推送方案（FCM）后开放；目前只在打开驾驶舱时显示</div>
-                    </div>
-                    <label className="flex shrink-0 cursor-not-allowed items-center gap-2 opacity-50">
-                        <input type="checkbox" disabled checked={false} readOnly className="h-5 w-5" aria-label="手机推送（尚未开放）" />
-                        <span className="text-xs font-bold text-stone-500">停用</span>
-                    </label>
-                </div>
+                <PushPanel thresholds={thresholds} />
 
                 {center.alerts.length === 0 && (
                     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800">

@@ -1,7 +1,9 @@
 # PR E2 · 驾驶舱手机推送 —— 设计说明（待负责人批准）
 
 > 依 CLAUDE.md「数据模型、权限、部署架构的改动：先写设计说明并获负责人批准」。
-> 本文件只是设计，**还没有任何推送程序码，也没有改动任何 Firebase / Cloud Run / GCP 设定**。
+>
+> **决定纪录（2026-10-14 负责人）：** 采用 FCM（P1）；批准新增三个推送集合与 `firebase-admin`（P5、P6）；先做 E2a。
+> P2–P4（VAPID 金钥、服务账号授权、Cloud Scheduler）**尚未批准**，没有改动任何 Firebase / Cloud Run / GCP 设定。
 
 ## 1. 目标
 在老板没有打开 ERP 的时候，把预警中心（PR E1）判断出的**高优先级预警**推送到老板手机。
@@ -103,6 +105,51 @@ erp-v2-dev  POST /api/push/evaluate
 3. **回滚：**
    - 停用 Scheduler 工作，或把 `PUSH_ENABLED` 设为 false；
    - 已建立的推送集合不影响 V1，可以保留或由负责人决定删除。
+
+## 7.1 E2a 完成状况（PR「feat(cockpit): PR E2a」）
+- `utils/cockpit/cockpitLoader.ts`：驾驶舱读取层改为注入资料来源。
+  - 浏览器用 DataManager；
+  - 服务端用 firebase-admin（`server/push/pushService.ts`）；
+  - 两边计算完全相同。Emulator 实测：服务端算出的高优先级预警与浏览器画面一致（3 条）。
+- 推送规则 `server/push/pushPolicy.ts`（纯函数，有单元测试）：
+  - 只推高优先级；
+  - 同一营业日同一条只推一次；
+  - 勿扰 22:30–08:00（马来西亚时间）；
+  - 讯息不含金额。
+- 接口：
+  - `/api/push/status`
+  - `/api/push/register`、`/api/push/unregister`、`/api/push/device-status`
+  - `/api/push/settings`（GET / PUT）
+  - `/api/push/evaluate`
+- **预设关闭：** 没有 `PUSH_ENABLED=true` 时全部回 503，预警中心显示停用与原因。
+- **`/api/push/evaluate` 的验证：**
+  - 这是唯一不经预览站密码的路径，且只在推送开启时如此；
+  - 必须带 Cloud Scheduler 的 OIDC 身份，服务账号与受众都要符合；
+  - 未设定身份时回 503。
+- `public/sw.js` 新增 `push` / `notificationclick`，与现有 Service Worker 共用。
+
+## 7.2 E2b 开通步骤（待负责人批准 P2–P4 后执行）
+1. Firebase Console 产生网页推送金钥（P2）。公钥以 GitHub 变数 `VITE_FCM_VAPID_KEY` 提供，这是**建置时**变数：
+   - 要在 `deploy-dev-preview.yml` 加上 `--build-arg`；
+   - `Dockerfile` 加上 `ARG`。
+2. `erp-v2-dev` 执行服务账号授权（P3）：
+   - Firestore 读取；
+   - 三个推送集合写入；
+   - FCM 发送。
+3. 建立 Cloud Scheduler（P4）：
+   - 每 30 分钟，POST `https://dev.kimliankee.app/api/push/evaluate`；
+   - OIDC 服务账号为专用的 scheduler 账号，受众为同一网址。
+4. 在 `deploy-dev-preview.yml` 的 `--set-env-vars` 加上：
+   - `PUSH_ENABLED=true`
+   - `FIREBASE_PROJECT_ID`
+   - `PUSH_EVALUATE_AUDIENCE`
+   - `PUSH_SCHEDULER_SA`
+
+   注意：`--set-env-vars` 每次部署都会整组覆盖，直接在 Cloud Run 手动设定会在下次部署时被清掉。
+5. 负责人在自己的手机上：
+   - 从主画面打开预览站；
+   - 进入预警中心 → 在这台装置开启 → 开启总开关；
+   - 等定时任务收到一次推送，即为验收。
 
 ## 8. 不在本 PR 范围
 - 推送给店长、员工（需要先有服务端登入与权限，见安全整改计划 E2 / E3）；
