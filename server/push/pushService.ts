@@ -9,7 +9,7 @@
 // 不写入、不修改任何既有集合；V1 不读取这三个集合。
 // Emulator 模式一律连本机 Emulator（demo-klk-erp），FCM 发送改为记录在记忆体，不会真的推送。
 // ============================================================================
-import { applicationDefault, getApps, initializeApp, type App } from 'firebase-admin/app';
+import { adminApp, initFirebaseAdmin, isAdminEmulator } from '../firebaseAdmin';
 import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import type { AttendanceRecord, BillPaymentRecord, Employee, ExpenseItem, PayrollRecord, SettlementRecord } from '../../types';
@@ -21,28 +21,12 @@ import { getBusinessDateString } from '../../utils/dateHelper';
 import type { PayableLike } from '../../utils/apDueDate';
 import { alertLogId, decidePush, deviceIdOf, DEFAULT_PUSH_SETTINGS, isPlausibleFcmToken, sanitizePushSettings, type PushMessage, type PushSettings } from './pushPolicy';
 
-export const EMULATOR_PROJECT_ID = 'demo-klk-erp';
-
-let app: App | null = null;
-let emulator = false;
-
-/** 初始化 firebase-admin。Emulator 模式强制连本机 Emulator，不可能碰到正式资料库 */
+/** 初始化 firebase-admin（Emulator 模式强制连本机 Emulator） */
 export const initPushAdmin = (isEmulatorMode: boolean): void => {
-    if (app) return;
-    emulator = isEmulatorMode;
-    if (isEmulatorMode) {
-        process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
-        app = getApps()[0] || initializeApp({ projectId: EMULATOR_PROJECT_ID });
-        return;
-    }
-    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-    app = getApps()[0] || initializeApp({ credential: applicationDefault(), ...(projectId ? { projectId } : {}) });
+    initFirebaseAdmin(isEmulatorMode);
 };
 
-const db = (): Firestore => {
-    if (!app) throw new Error('push admin not initialised');
-    return getFirestore(app);
-};
+const db = (): Firestore => getFirestore(adminApp());
 
 // ── 只读资料来源（与浏览器 DataManager 相同的查询）──
 export const adminCockpitSource = (): CockpitDataSource => ({
@@ -156,11 +140,11 @@ const activeDevices = async (): Promise<{ id: string; token: string }[]> => {
 export const mockOutbox: { at: string; tokens: number; message: PushMessage }[] = [];
 
 const sendToDevices = async (devices: { id: string; token: string }[], message: PushMessage) => {
-    if (emulator) {
+    if (isAdminEmulator()) {
         mockOutbox.push({ at: new Date().toISOString(), tokens: devices.length, message });
         return { success: devices.length, invalidDeviceIds: [] as string[] };
     }
-    const res = await getMessaging(app!).sendEachForMulticast({
+    const res = await getMessaging(adminApp()).sendEachForMulticast({
         tokens: devices.map(d => d.token),
         // 只送 data，由 sw.js 显示通知（与现有 Service Worker 共用，不另装 firebase-messaging-sw.js）
         data: { title: message.title, body: message.body, link: message.link },

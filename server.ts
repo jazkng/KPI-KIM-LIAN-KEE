@@ -17,6 +17,8 @@ import { buildAdvisorPrompt, parseAdvisorJson, sanitizeAdvisorRequest, verifyAdv
 import { OAuth2Client } from "google-auth-library";
 import { evaluateAndPush, getPushSettings, initPushAdmin, isDeviceRegistered, mockOutbox, registerDevice, savePushSettings, unregisterDevice } from "./server/push/pushService";
 import { isPlausibleFcmToken } from "./server/push/pushPolicy";
+import { initFirebaseAdmin } from "./server/firebaseAdmin";
+import { mountAuthRoutes } from "./server/auth/authService";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -67,6 +69,7 @@ const chatLimitStore = new Map<string, RateLimitInfo>();
 const translationLimitStore = new Map<string, RateLimitInfo>();
 const advisorLimitStore = new Map<string, RateLimitInfo>();
 const pushLimitStore = new Map<string, RateLimitInfo>();
+const authLimitStore = new Map<string, RateLimitInfo>();
 
 function checkRateLimit(
   ip: string,
@@ -295,6 +298,24 @@ ${JSON.stringify(contextData, null, 2)}
       console.error("Cockpit advisor error:", error?.message || error);
       res.status(502).json({ error: "AI 服务暂时无法回应，请稍后再试。" });
     }
+  });
+
+  // 🔐 CHG-05 服务端登录：预设关闭。AUTH_SERVER_ENABLED=true 且有预览站门禁或 Emulator 才开放；
+  //    关闭时前端照旧使用原本的登录方式（与 V1 相同）
+  const authEnabled = process.env.AUTH_SERVER_ENABLED === "true" && (!!process.env.PREVIEW_ACCESS_PASSWORD || isEmulatorMode);
+  if (authEnabled) initFirebaseAdmin(isEmulatorMode);
+  app.use("/api/auth", (req, res, next) => {
+    if (req.method === "GET" && req.path === "/config") return next();
+    const limit = checkRateLimit(getTrustedClientIp(req), authLimitStore, 30);
+    if (!limit.allowed) return res.status(429).json({ error: "操作太频繁，请 1 分钟后再试。" });
+    next();
+  });
+  mountAuthRoutes(app, {
+    enabled: authEnabled,
+    epoch: Number(process.env.AUTH_EPOCH || 1),
+    acceptLegacyPin: process.env.ACCEPT_LEGACY_PIN !== "false",
+    mirrorLegacyPin: process.env.MIRROR_LEGACY_PIN !== "false",
+    getIp: getTrustedClientIp,
   });
 
   // 📣 手机推送（PR E2a）
