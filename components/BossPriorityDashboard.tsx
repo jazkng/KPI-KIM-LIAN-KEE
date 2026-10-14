@@ -12,6 +12,7 @@ import { db } from '../firebaseConfig';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { DataManager } from '../utils/dataManager';
 import { needsReplenishment } from '../utils/unitConversion';
+import { getEffectiveAPDueDate, shiftDate } from '../utils/apDueDate';
 
 // 👑 关闭弹窗后重抓首页数据的冷却时间（毫秒）。首页一趟 fetchData 要读十几个集合，
 //    没有节流的话每关一次 Modal 就重读一次，是日常操作中最高频的 Firestore 浪费。
@@ -30,23 +31,6 @@ interface BossPriorityDashboardProps {
 
 type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 
-const normalizeDateOnly = (value: unknown): string => {
-    const datePart = String(value || '').split('T')[0];
-    return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : '';
-};
-
-const shiftDate = (dateValue: unknown, days: number): string => {
-    const datePart = normalizeDateOnly(dateValue);
-    if (!datePart) return '';
-    const [year, month, day] = datePart.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    if (!Number.isFinite(date.getTime())) return '';
-    date.setDate(date.getDate() + days);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
-
-const getEffectiveAPDueDate = (item: ExpenseItem): string =>
-    normalizeDateOnly(item.dueDate) || shiftDate(item.time, 15);
 
 const sortSettlementsNewestFirst = (records: SettlementRecord[]): SettlementRecord[] =>
     [...records].sort((a, b) => {

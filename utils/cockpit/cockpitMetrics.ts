@@ -553,7 +553,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         });
     }
 
-    // ── 预警（基础规则；完整预警中心在 PR E）──
+    // ── 预警（基础规则；预警中心 utils/cockpit/alertRules.ts 会再加上营业额下降、应付账款等规则）──
     const alerts: CockpitResult['alerts'] = [];
     if (pastMissing.length > 0) {
         alerts.push({ level: 'HIGH', title: '有营业日未提交日结', detail: revenueStatusNote, kpi: 'revenue' });
