@@ -13,6 +13,7 @@ import {
   type TranslationTargetLanguage,
   type TranslationTone,
 } from "./server/translationService";
+import { buildAdvisorPrompt, parseAdvisorJson, sanitizeAdvisorRequest, verifyAdvisorPoints } from "./server/cockpitAdvisor";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -61,6 +62,7 @@ interface RateLimitInfo {
 }
 const chatLimitStore = new Map<string, RateLimitInfo>();
 const translationLimitStore = new Map<string, RateLimitInfo>();
+const advisorLimitStore = new Map<string, RateLimitInfo>();
 
 function checkRateLimit(
   ip: string,
@@ -248,6 +250,40 @@ ${JSON.stringify(contextData, null, 2)}
     } catch (error: any) {
       console.error("Gemini API server error:", error);
       res.status(500).json({ error: error.message || "An error occurred with Gemini." });
+    }
+  });
+
+  // 🧭 驾驶舱 AI 经营顾问（PR F）
+  //    只在「有服务端访问门禁的预览站」或 Emulator 模式开放：V1 部署没有门禁，这个接口直接拒绝，
+  //    不靠前端隐藏按钮。只接受驾驶舱算好的证据清单，回答逐点核对引用与数字，核对不过的删除。
+  app.post("/api/ai/cockpit-advisor", async (req, res) => {
+    if (!process.env.PREVIEW_ACCESS_PASSWORD && !isEmulatorMode) {
+      return res.status(403).json({ error: "AI 经营顾问只在有访问门禁的 V2 预览站开放。" });
+    }
+    const limit = checkRateLimit(getTrustedClientIp(req), advisorLimitStore, 6);
+    if (!limit.allowed) {
+      return res.status(429).json({ error: "提问太频繁，请 1 分钟后再试。" });
+    }
+    const parsed = sanitizeAdvisorRequest(req.body);
+    if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: "伺服器没有设定 AI 金钥，暂时无法使用 AI 经营顾问。" });
+    }
+    try {
+      const response = await getAiClient().models.generateContent({
+        model: CHAT_MODEL,
+        contents: [{ role: "user", parts: [{ text: parsed.question }] }],
+        config: {
+          systemInstruction: buildAdvisorPrompt(parsed.periodLabel, parsed.evidence),
+          temperature: 0.2,
+          responseMimeType: "application/json",
+        },
+      });
+      const verified = verifyAdvisorPoints(parseAdvisorJson(response.text || ""), parsed.evidence);
+      res.json({ ...verified, model: CHAT_MODEL });
+    } catch (error: any) {
+      console.error("Cockpit advisor error:", error?.message || error);
+      res.status(502).json({ error: "AI 服务暂时无法回应，请稍后再试。" });
     }
   });
 

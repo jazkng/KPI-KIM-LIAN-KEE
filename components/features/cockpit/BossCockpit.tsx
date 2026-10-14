@@ -7,7 +7,7 @@
 // 已确认 / 预估 / 资料不完整 / 等待日结月结 一律以标签标示。
 // ============================================================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bell, ChevronRight, Info, Loader2, RefreshCw, Table2, X } from 'lucide-react';
+import { AlertTriangle, Bell, Bot, ChevronRight, Info, Loader2, RefreshCw, Table2, X } from 'lucide-react';
 import { getBusinessDateString } from '../../../utils/dateHelper';
 import { PERIOD_LABEL, resolvePeriod, type PeriodPreset } from '../../../utils/cockpit/periods';
 import { COCKPIT_STATUS_LABEL, type CockpitResult, type CockpitStatus, type Kpi } from '../../../utils/cockpit/cockpitMetrics';
@@ -19,6 +19,8 @@ import { AlertCenterSheet } from './AlertCenterSheet';
 import { buildAlertCenter, loadThresholds, saveThresholds, type AlertTarget, type AlertThresholds } from '../../../utils/cockpit/alertRules';
 import { loadUnpaidPayables } from '../../../utils/cockpit/loadPayables';
 import type { PayableLike } from '../../../utils/apDueDate';
+import { buildAdvisorEvidence } from '../../../utils/cockpit/advisorEvidence';
+import { AIOperationsAssistant } from '../../lazyModules';
 
 interface Props {
     onClose: () => void;
@@ -65,6 +67,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
     const [showFood, setShowFood] = useState(false);
     const [showSim, setShowSim] = useState(false);
     const [showAlerts, setShowAlerts] = useState(false);
+    const [showAdvisor, setShowAdvisor] = useState(false);
     const [thresholds, setThresholds] = useState<AlertThresholds>(() => loadThresholds());
     const [payables, setPayables] = useState<{ items: PayableLike[] | null; error: string | null; loading: boolean }>({ items: null, error: null, loading: true });
     const requestId = useRef(0);
@@ -281,7 +284,19 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                                 <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-stone-700">
                                     {result.briefing.map((line, i) => <li key={i}>{line}</li>)}
                                 </ul>
-                                <p className="mt-2 text-[11px] text-stone-400">AI 经营顾问（可追溯数据依据）将在后续版本接入；这里的每句话都来自上方指标。</p>
+                                <p className="mt-2 text-[11px] text-stone-400">这里的每句话都来自上方指标。</p>
+                                <button
+                                    onClick={() => setShowAdvisor(true)}
+                                    disabled={stale}
+                                    className="mt-3 flex min-h-[48px] w-full items-center gap-2 rounded-xl bg-stone-900 px-3 text-left text-sm font-black text-white active:bg-stone-800 disabled:opacity-40"
+                                >
+                                    <Bot size={18} className="shrink-0 text-amber-300" />
+                                    <span className="flex-1">
+                                        问 AI 经营顾问
+                                        <span className="block text-xs font-medium text-stone-300">只根据本页数字回答，每句附依据编号，核对不到的会删除</span>
+                                    </span>
+                                    <ChevronRight size={16} className="shrink-0 text-stone-400" />
+                                </button>
                             </section>
 
                             <p className="mt-4 text-[11px] leading-relaxed text-stone-400">
@@ -302,6 +317,17 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                     onChangeThresholds={changeThresholds}
                     onOpenTarget={openTarget}
                     onClose={() => setShowAlerts(false)}
+                />
+            )}
+            {showAdvisor && result && (
+                <AIOperationsAssistant
+                    isOpen
+                    onClose={() => setShowAdvisor(false)}
+                    advisor={{
+                        periodLabel: `${result.period.label}（${result.accountingMode === 'ACCRUAL' ? '业务发生制' : '现金制'}）`,
+                        evidence: buildAdvisorEvidence(result, center),
+                        onOpenKpi: key => { setShowAdvisor(false); if (k?.[key]) setDetail(k[key]); },
+                    }}
                 />
             )}
             {showSim && result && <BreakEvenSimSheet baseline={result.extras.monthBaseline} onClose={() => setShowSim(false)} />}
