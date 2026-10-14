@@ -198,14 +198,35 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             const todayStr = utc8.toISOString().split('T')[0];
             const yr = utc8.getFullYear();
             const mo = utc8.getMonth() + 1;
+            const pm = new Date(yr, mo - 2, 1);
+            const pmStr = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
+
+            // ⚡ iOS 性能：以下各项读取彼此独立，先同时发出，避免手机网络上一个等一个。
+            //    取用结果的顺序与错误处理维持原样（某项失败时，后续项目的结果照旧不采用）。
+            //    先挂上空的 catch，只为避免「未处理的 rejection」警告；await 时仍会抛出原错误。
+            const early = <T,>(promise: Promise<T>): Promise<T> => { promise.catch(() => undefined); return promise; };
+            const settlementsRead = early(DataManager.getSettlements());
+            const prevMonthRead = early(DataManager.getSettlements(pmStr));
+            const pendingPORead = early(DataManager.getPendingPurchaseOrderCount());
+            const stockRead = early(Promise.all([
+                DataManager.getStock('KITCHEN'),
+                DataManager.getStock('BAR'),
+                DataManager.getStock('GENERAL'),
+                DataManager.getStock('FUEL')
+            ]));
+            const rosterRead = early(DataManager.getRosterData());
+            const billsRead = early(DataManager.getRecurringBills());
+            const logsRead = early(DataManager.getRecentLogs(30));
+            const unpaidExpensesRead = early(getDocs(query(
+                collection(db, 'standalone_expenses'),
+                where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])
+            )));
 
             // 1. Fetch settlements
-            const fetchedSettlements = await DataManager.getSettlements();
+            const fetchedSettlements = await settlementsRead;
             setSettlements(fetchedSettlements);
             try {
-                const pm = new Date(yr, mo - 2, 1);
-                const pmStr = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
-                setPrevMonthSettlements(await DataManager.getSettlements(pmStr));
+                setPrevMonthSettlements(await prevMonthRead);
             } catch (e) {
                 console.warn('prev month settlements failed', e);
             }
@@ -213,16 +234,11 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             // 2. Count only purchase orders that are still waiting to be received.
             // This uses a Firestore server-side aggregation instead of downloading
             // up to 200 complete purchase-order documents.
-            const pendingPurchaseOrders = await DataManager.getPendingPurchaseOrderCount();
+            const pendingPurchaseOrders = await pendingPORead;
             setPendingPOCount(pendingPurchaseOrders);
 
             // 3. Fetch Stock and compute low stock count
-            const [kitchenStock, barStock, generalStock, fuelStock] = await Promise.all([
-                DataManager.getStock('KITCHEN'),
-                DataManager.getStock('BAR'),
-                DataManager.getStock('GENERAL'),
-                DataManager.getStock('FUEL')
-            ]);
+            const [kitchenStock, barStock, generalStock, fuelStock] = await stockRead;
             const combinedStock = [...kitchenStock, ...barStock, ...generalStock, ...fuelStock];
             const lowStockItems = combinedStock.filter(needsReplenishment);
             setLowStockCount(lowStockItems.length);
@@ -230,7 +246,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 4. Fetch Roster and compute absent count for today
             try {
-                const rosterRes = await DataManager.getRosterData();
+                const rosterRes = await rosterRead;
                 const todayRoster = rosterRes.roster?.[todayStr] || {};
                 const abCount = Object.values(todayRoster).filter((s: any) => s === 'MC' || s === 'ABSENT').length;
                 setAbsentCount(abCount);
@@ -241,7 +257,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 5. Fetch recurring bills and check due status
             try {
-                const bills = await DataManager.getRecurringBills();
+                const bills = await billsRead;
                 let dueBills = 0;
                 let dueBillsAmount = 0;
                 let overdueBills = 0;
@@ -293,7 +309,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             // The notification centre also keeps the latest 30 items, so the
             // dashboard no longer downloads 200 complete log documents.
             try {
-                const logs = await DataManager.getRecentLogs(30);
+                const logs = await logsRead;
                 const unackCount = logs.filter(log =>
                     !(log.readReceipts || []).some(receipt => receipt.employeeId === currentEmployee.id)
                 ).length;
@@ -305,11 +321,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
             // 7. Fetch standalone expenses to get Accounts Payable (AP) statistics
             try {
-                const unpaidExpensesQuery = query(
-                    collection(db, 'standalone_expenses'),
-                    where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])
-                );
-                const expensesSnap = await getDocs(unpaidExpensesQuery);
+                const expensesSnap = await unpaidExpensesRead;
                 const apItems = expensesSnap.docs
                     .map(doc => doc.data() as ExpenseItem);
                 

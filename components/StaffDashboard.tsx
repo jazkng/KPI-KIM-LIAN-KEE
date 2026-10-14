@@ -182,13 +182,19 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
       setLoadingAttendance(true);
       try {
         const todayStr = getBusinessDateString();
-        
+
+        // ⚡ iOS 性能：考勤、排班、班次设定三项读取同时发出；取用顺序与错误处理维持原样
+        const early = <T,>(promise: Promise<T>): Promise<T> => { promise.catch(() => undefined); return promise; };
+        const attendanceRead = early(DataManager.getAttendanceByEmployeeAndDate(employee.id, todayStr));
+        const rosterRead = early(DataManager.getRosterData());
+        const settingsRead = early(DataManager.getAttendanceSettings());
+
         // Fetch only this employee's attendance for the current business date.
-        const myAtt = await DataManager.getAttendanceByEmployeeAndDate(employee.id, todayStr);
+        const myAtt = await attendanceRead;
         setAttendanceRecord(myAtt);
 
         // Fetch Roster (3 Days)
-        const { roster, notes } = await DataManager.getRosterData();
+        const { roster, notes } = await rosterRead;
         setMonthlyNotes(notes || {});
         setMonthlyRosterData(roster || {});
 
@@ -212,7 +218,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
         setTodayRosterStatus(roster3[0]?.status || '暂无排班');
 
         // Fetch Settings & calculate shift times
-        const settings = await DataManager.getAttendanceSettings();
+        const settings = await settingsRead;
         const currentSettings = settings || DEFAULT_ATTENDANCE_SETTINGS;
         const shiftInfo = getTargetShiftForDate(todayStr, currentSettings, employee.shiftGroup || 1);
         setTodayShiftTimes({
