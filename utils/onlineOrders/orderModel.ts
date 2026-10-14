@@ -12,6 +12,16 @@
 // ============================================================================
 import type { PricedLine } from './pricing';
 
+/**
+ * 店员操作开关（接单、拒单、备餐、取餐、标记收款、免单）。
+ * 依快速迭代规则（docs/KLK_ERP_V2_RULES.md 第 11 条）：订单画面先发布，操作先禁用。
+ * 启用前必须完成：
+ *   1. 后台权限：online_orders 系列集合的正式 Rules（CHG-06）与员工身份（CHG-05）；
+ *   2. 网站订单 API 上线，且订单去重（幂等）通过验证。
+ * 负责人确认后才改为 true。
+ */
+export const ONLINE_ORDER_STAFF_ACTIONS_ENABLED = false;
+
 export type OrderStatus =
     | 'PENDING_CONFIRMATION'
     | 'ACCEPTED'

@@ -24,6 +24,7 @@ import {
     type OnlineOrder,
     type OrderStatus,
     type StaffAction,
+    ONLINE_ORDER_STAFF_ACTIONS_ENABLED,
 } from '../../../utils/onlineOrders/orderModel';
 import { performOrderAction, subscribeOrdersByBusinessDate } from '../../../utils/onlineOrders/orderService';
 
@@ -107,7 +108,7 @@ export const OnlineOrderCenter: React.FC<Props> = ({ onClose, currentEmployee })
     const tabCount = (t: (typeof TABS)[number]) => orders.filter(o => t.statuses.includes(o.status)).length;
 
     const run = async (order: OnlineOrder, action: StaffAction, input: { reason?: string; posReceiptNo?: string } = {}) => {
-        if (!actor) return;
+        if (!actor || !ONLINE_ORDER_STAFF_ACTIONS_ENABLED) return;
         setBusyId(order.id);
         setError(null);
         try {
@@ -159,6 +160,12 @@ export const OnlineOrderCenter: React.FC<Props> = ({ onClose, currentEmployee })
             </header>
 
             <main className="flex-1 space-y-3 p-4" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+                {!ONLINE_ORDER_STAFF_ACTIONS_ENABLED && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-relaxed text-amber-900">
+                        🔒 预览模式：接单、备餐、取餐、标记收款等操作暂未启用，只能查看订单。
+                        <span className="block font-medium">启用前需完成：① 后台权限（正式 Rules 与员工身份）② 网站订单 API 与订单去重验证。负责人确认后开启。</span>
+                    </div>
+                )}
                 {!actor && <div className="rounded-xl border border-stone-200 bg-white p-3 text-xs font-bold text-stone-500">目前没有登录身份，只能查看订单。</div>}
                 {summary.collectedUnpaid > 0 && (
                     <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700">
@@ -170,7 +177,7 @@ export const OnlineOrderCenter: React.FC<Props> = ({ onClose, currentEmployee })
                 {!loading && visible.length === 0 && <div className="py-10 text-center text-sm font-bold text-stone-400">这个分类没有订单</div>}
 
                 {visible.map(order => (
-                    <OrderCard key={order.id} order={order} actions={actor ? availableActions(order, actor) : []} busy={busyId === order.id} onAction={a => onAction(order, a)} />
+                    <OrderCard key={order.id} order={order} actions={actor ? availableActions(order, actor) : []} busy={busyId === order.id} locked={!ONLINE_ORDER_STAFF_ACTIONS_ENABLED} onAction={a => onAction(order, a)} />
                 ))}
 
                 <p className="pt-2 text-[11px] leading-relaxed text-stone-500">
@@ -192,7 +199,7 @@ export const OnlineOrderCenter: React.FC<Props> = ({ onClose, currentEmployee })
     );
 };
 
-const OrderCard: React.FC<{ order: OnlineOrder; actions: StaffAction[]; busy: boolean; onAction: (a: StaffAction) => void }> = ({ order, actions, busy, onAction }) => {
+const OrderCard: React.FC<{ order: OnlineOrder; actions: StaffAction[]; busy: boolean; locked?: boolean; onAction: (a: StaffAction) => void }> = ({ order, actions, busy, locked, onAction }) => {
     const [showPhone, setShowPhone] = useState(false);
     const primary = actions.filter(a => PRIMARY.includes(a));
     const secondary = actions.filter(a => !PRIMARY.includes(a));
@@ -241,12 +248,12 @@ const OrderCard: React.FC<{ order: OnlineOrder; actions: StaffAction[]; busy: bo
             {actions.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                     {primary.map(a => (
-                        <button key={a} disabled={busy} onClick={() => onAction(a)} className="min-h-[48px] flex-1 rounded-xl bg-stone-900 px-4 text-sm font-black text-white disabled:opacity-50">
+                        <button key={a} disabled={busy || locked} title={locked ? '预览模式：操作暂未启用' : undefined} onClick={() => onAction(a)} className="min-h-[48px] flex-1 rounded-xl bg-stone-900 px-4 text-sm font-black text-white disabled:opacity-50">
                             {busy ? <Loader2 size={16} className="mx-auto animate-spin" /> : ACTION_LABEL[a]}
                         </button>
                     ))}
                     {secondary.map(a => (
-                        <button key={a} disabled={busy} onClick={() => onAction(a)} className={`min-h-[48px] rounded-xl border px-4 text-sm font-bold disabled:opacity-50 ${a === 'MARK_PAID' ? 'border-emerald-300 text-emerald-800' : 'border-stone-300 text-stone-600'}`}>
+                        <button key={a} disabled={busy || locked} title={locked ? '预览模式：操作暂未启用' : undefined} onClick={() => onAction(a)} className={`min-h-[48px] rounded-xl border px-4 text-sm font-bold disabled:opacity-50 ${a === 'MARK_PAID' ? 'border-emerald-300 text-emerald-800' : 'border-stone-300 text-stone-600'}`}>
                             {ACTION_LABEL[a]}
                         </button>
                     ))}

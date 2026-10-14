@@ -80,3 +80,10 @@ describe('画面辅助', () => {
         expect(Object.keys(s)).not.toContain('revenue');
     });
 });
+
+describe('店员操作开关', () => {
+    it('未经负责人确认（CHG-05/06 与订单去重）前保持关闭', async () => {
+        const { ONLINE_ORDER_STAFF_ACTIONS_ENABLED } = await import('../../utils/onlineOrders/orderModel');
+        expect(ONLINE_ORDER_STAFF_ACTIONS_ENABLED).toBe(false);
+    });
+});
