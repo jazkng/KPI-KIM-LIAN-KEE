@@ -12,6 +12,7 @@ import { getBusinessDateString } from '../../../utils/dateHelper';
 import { PERIOD_LABEL, resolvePeriod, type PeriodPreset } from '../../../utils/cockpit/periods';
 import { COCKPIT_STATUS_LABEL, type CockpitResult, type CockpitStatus, type Kpi } from '../../../utils/cockpit/cockpitMetrics';
 import { loadCockpit } from '../../../utils/cockpit/loadCockpit';
+import { LabourAnalyticsSheet } from './LabourAnalyticsSheet';
 
 interface Props {
     onClose: () => void;
@@ -54,6 +55,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [detail, setDetail] = useState<Kpi | null>(null);
+    const [showLabour, setShowLabour] = useState(false);
     const requestId = useRef(0);
 
     const period = useMemo(() => resolvePeriod(preset, today, custom), [preset, today, custom]);
@@ -183,6 +185,14 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                                     .map(key => <KpiCard key={key} kpi={k[key]} onOpen={() => setDetail(k[key])} />)}
                             </div>
 
+                            <button
+                                onClick={() => setShowLabour(true)}
+                                className="mt-3 flex min-h-[52px] w-full items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 text-left text-sm font-black active:bg-stone-50"
+                            >
+                                <span>人工效益分析<span className="block text-xs font-medium text-stone-500">每工时营业额、部门、星期别、OT 走势、排班建议</span></span>
+                                <ChevronRight size={18} className="text-stone-400" />
+                            </button>
+
                             <TrendChart result={result} onOpenBreakEven={() => setDetail(k.breakEvenDay)} />
 
                             <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-4" aria-label="数据完整性">
@@ -218,6 +228,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                 </div>
             </main>
 
+            {showLabour && result && <LabourAnalyticsSheet result={result} onClose={() => setShowLabour(false)} />}
             {detail && <KpiDetailSheet kpi={detail} periodLabel={result?.period.label || ''} onClose={() => setDetail(null)} />}
         </div>
     );

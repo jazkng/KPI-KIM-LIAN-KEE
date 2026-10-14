@@ -123,5 +123,6 @@ const loadCockpitInner = async (
     // 另一种口径的净利（只取数字，用来说明两种口径的差异）
     const otherMode = accountingMode === 'ACCRUAL' ? 'CASH' : 'ACCRUAL';
     const otherModeNetProfit = buildCockpit(inputsFor(otherMode)).kpis.actualProfit.value;
-    return buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit });
+    const result = buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit });
+    return { ...result, context: { labourByMonth, employees, payrollRecords } };
 };

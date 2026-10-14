@@ -192,6 +192,14 @@ export interface CockpitResult {
     missingDays: string[];
     /** 数据完整性检查清单 */
     integrity: { label: string; ok: boolean; detail: string }[];
+    /** 给进一步分析（人工效益等）用的期间数字 */
+    extras: { grossProfit: number; partTime: number; otherLabour: number; dailyRevenue: Record<string, number> };
+    /** 由 loadCockpit 附上：人工成本明细、员工、薪资记录（只在记忆体中，供分析页使用） */
+    context?: {
+        labourByMonth: MonthLabour[];
+        employees: { id: string; name?: string; department?: string; role?: string }[];
+        payrollRecords: { month: string; status?: string; details?: { employeeId?: string; ot?: number }[] }[];
+    };
 }
 
 export const buildCockpit = (input: CockpitInputs): CockpitResult => {
@@ -556,6 +564,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         alerts,
         briefing,
         missingDays: coverage.missingDays,
+        extras: { grossProfit, partTime, otherLabour: round2(costs.otherLabour), dailyRevenue: input.dailyRevenue },
         integrity: [
             { label: '每日结算', ok: pastMissing.length === 0, detail: pastMissing.length ? `缺 ${pastMissing.length} 天` : `${coverage.settled} 天齐全${todayPending ? '（今天尚未日结）' : ''}` },
             ...(adj ? [{ label: '外送平台对账', ok: adj.unreconciledPlatformDays === 0, detail: adj.unreconciledPlatformDays ? `${adj.unreconciledPlatformDays} 个平台日未对账，扣款为预估` : '已全部对账或无平台营业额' }] : []),
