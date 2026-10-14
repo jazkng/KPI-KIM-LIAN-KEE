@@ -8,7 +8,8 @@ import type { AttendanceRecord } from '../../types';
 import { DataManager } from '../dataManager';
 import { aggregateMonth, aggregateRange, parentBillIdOfPayment, splitAccrualDuplicatePayments } from '../monthlyPnLAggregator';
 import { buildMonthLabourCosts, summariseReviewedAttendance } from '../labour/labourCost';
-import { buildCockpit, dailyRevenueFromSettlements, type CockpitResult } from './cockpitMetrics';
+import { buildCockpit, dailyRevenueFromSettlements, type CockpitInputs, type CockpitResult } from './cockpitMetrics';
+import { computeProfitAdjustments } from './profitAdjustments';
 import { addDays, daysInMonth, type Period } from './periods';
 
 const TIMEOUT_MS = 25000;
@@ -59,55 +60,68 @@ const loadCockpitInner = async (
         // 审核后的考勤只用于推算日薪 / 时薪员工；读不到不影响其他指标
         Promise.all(labourMonths.map(m => DataManager.getAttendanceReviewsByMonth(m).catch(() => [] as AttendanceRecord[]))),
     ]);
-    // 业务发生制：排除应付账款的分期付款列（原账单已按全额计入，否则重复扣除）
-    const parents = await loadParentBills(rawLoaded.standaloneExpenses, accountingMode);
-    const { kept, removed: duplicatePayments } = splitAccrualDuplicatePayments(rawLoaded.standaloneExpenses, accountingMode, parents);
-    const raw = { ...rawLoaded, standaloneExpenses: kept };
-    const data = { ...raw, payrollRecords, employees };
+    // 分期付款对应的原账单（只有业务发生制需要；两种口径共用一次读取）
+    const parents = await loadParentBills(rawLoaded.standaloneExpenses, 'ACCRUAL');
     const labourByMonth = labourMonths.map((m, i) => ({
         month: m,
         costs: buildMonthLabourCosts(m, employees, payrollRecords, summariseReviewedAttendance(reviews[i])),
     }));
-    const daily = dailyRevenueFromSettlements(raw.settlements);
-    // 兼职工资：与 aggregateMonth 相同的日期 / 金额规则（业务发生制看账单日，现金制看付款日且已付）
-    const partTimeIn = (start: string, end: string) => raw.standaloneExpenses.reduce((sum, e: any) => {
-        if (!String(e?.id || '').startsWith('parttime_')) return sum;
-        const date = String((accountingMode === 'ACCRUAL' ? e.time : e.paymentDate || e.time) || '').slice(0, 10);
-        if (!date || date < start || date > end) return sum;
-        if (accountingMode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return sum;
-        const amount = (Number(accountingMode === 'ACCRUAL' ? e.totalBillAmount || e.amount : e.amount) || 0) - (Number(e.creditNote) || 0);
-        return sum + Math.max(0, amount);
-    }, 0);
-    const inPeriod = raw.settlements.filter(s => {
+    const daily = dailyRevenueFromSettlements(rawLoaded.settlements);
+    const inPeriod = rawLoaded.settlements.filter(s => {
         const d = String(s.date || '').slice(0, 10);
         return d >= period.start && d <= period.end;
     });
+    // PR B 利润引擎修正（与口径无关：平台扣款、收款手续费、钱箱支出）
+    const adjustments = computeProfitAdjustments(rawLoaded.settlements, rawLoaded.standaloneExpenses, period.start, period.end);
+    const monthAdjustments = computeProfitAdjustments(rawLoaded.settlements, rawLoaded.standaloneExpenses, monthStart, monthEnd);
 
-    return buildCockpit({
-        period,
-        today,
-        accountingMode,
-        pnl: aggregateRange(period.start, period.end, data, accountingMode),
-        dailyRevenue: daily,
-        settlementTotal: inPeriod.reduce((s, x) => s + (Number(x.sales?.total) || 0), 0),
-        settlementCount: inPeriod.length,
-        partTimeWages: partTimeIn(period.start, period.end),
-        monthPartTimeWages: partTimeIn(monthStart, monthEnd),
-        excludedDuplicatePayments: duplicatePayments
-            .filter(e => { const d = String(e.time || '').slice(0, 10); return d >= period.start && d <= period.end; })
-            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
-        pettyCash: inPeriod.reduce((sum, x: any) => sum + (x.dayExpenses || []).reduce((t: number, e: any) => t + (Number(e?.amount) || 0), 0), 0),
-        labour: labourByMonth.filter(l => period.months.includes(l.month)),
-        monthPnl: aggregateMonth(month, data, accountingMode),
-        monthLabour: labourByMonth.find(l => l.month === month)?.costs || [],
-        monthDailyRevenue: Object.fromEntries(Object.entries(daily).filter(([d]) => d >= monthStart && d <= monthEnd)),
-        sourceCounts: {
-            settlements: inPeriod.length,
-            standaloneExpenses: raw.standaloneExpenses.length,
-            billPayments: raw.billPayments.length,
-            payrollRecords: payrollRecords.filter(p => labourMonths.includes(p.month)).length,
-            employees: employees.length,
-        },
-        loadedAt: new Date().toISOString(),
-    });
+    const inputsFor = (mode: 'ACCRUAL' | 'CASH'): CockpitInputs => {
+        // 业务发生制：排除应付账款的分期付款列（原账单已按全额计入，否则重复扣除）
+        const { kept, removed: duplicatePayments } = splitAccrualDuplicatePayments(rawLoaded.standaloneExpenses, mode, parents);
+        const raw = { ...rawLoaded, standaloneExpenses: kept };
+        const data = { ...raw, payrollRecords, employees };
+        // 兼职工资：与 aggregateMonth 相同的日期 / 金额规则（业务发生制看账单日，现金制看付款日且已付）
+        const partTimeIn = (start: string, end: string) => raw.standaloneExpenses.reduce((sum, e: any) => {
+            if (!String(e?.id || '').startsWith('parttime_')) return sum;
+            const date = String((mode === 'ACCRUAL' ? e.time : e.paymentDate || e.time) || '').slice(0, 10);
+            if (!date || date < start || date > end) return sum;
+            if (mode === 'CASH' && e.paymentStatus !== 'PAID' && e.paymentStatus !== 'PARTIAL') return sum;
+            const amount = (Number(mode === 'ACCRUAL' ? e.totalBillAmount || e.amount : e.amount) || 0) - (Number(e.creditNote) || 0);
+            return sum + Math.max(0, amount);
+        }, 0);
+        return {
+            period,
+            today,
+            accountingMode: mode,
+            pnl: aggregateRange(period.start, period.end, data, mode),
+            dailyRevenue: daily,
+            settlementTotal: inPeriod.reduce((s, x) => s + (Number(x.sales?.total) || 0), 0),
+            settlementCount: inPeriod.length,
+            partTimeWages: partTimeIn(period.start, period.end),
+            monthPartTimeWages: partTimeIn(monthStart, monthEnd),
+            excludedDuplicatePayments: duplicatePayments
+                .filter(e => { const d = String(e.time || '').slice(0, 10); return d >= period.start && d <= period.end; })
+                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+            pettyCash: adjustments.pettyCash,
+            adjustments,
+            monthAdjustments,
+            labour: labourByMonth.filter(l => period.months.includes(l.month)),
+            monthPnl: aggregateMonth(month, data, mode),
+            monthLabour: labourByMonth.find(l => l.month === month)?.costs || [],
+            monthDailyRevenue: Object.fromEntries(Object.entries(daily).filter(([d]) => d >= monthStart && d <= monthEnd)),
+            sourceCounts: {
+                settlements: inPeriod.length,
+                standaloneExpenses: raw.standaloneExpenses.length,
+                billPayments: raw.billPayments.length,
+                payrollRecords: payrollRecords.filter(p => labourMonths.includes(p.month)).length,
+                employees: employees.length,
+            },
+            loadedAt: new Date().toISOString(),
+        };
+    };
+
+    // 另一种口径的净利（只取数字，用来说明两种口径的差异）
+    const otherMode = accountingMode === 'ACCRUAL' ? 'CASH' : 'ACCRUAL';
+    const otherModeNetProfit = buildCockpit(inputsFor(otherMode)).kpis.actualProfit.value;
+    return buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit });
 };

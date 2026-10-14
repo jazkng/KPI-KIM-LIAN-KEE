@@ -185,6 +185,19 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
 
                             <TrendChart result={result} onOpenBreakEven={() => setDetail(k.breakEvenDay)} />
 
+                            <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-4" aria-label="数据完整性">
+                                <h3 className="text-sm font-black">数据完整性</h3>
+                                <ul className="mt-2 divide-y divide-stone-100 text-sm">
+                                    {result.integrity.map(item => (
+                                        <li key={item.label} className="flex items-start gap-2 py-2">
+                                            <span className={`mt-0.5 shrink-0 text-xs font-black ${item.ok ? 'text-emerald-700' : 'text-amber-700'}`} aria-label={item.ok ? '正常' : '需留意'}>{item.ok ? '✓' : '!'}</span>
+                                            <span className="w-24 shrink-0 font-bold text-stone-700">{item.label}</span>
+                                            <span className="min-w-0 flex-1 text-stone-600">{item.detail}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+
                             <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
                                 <h3 className="flex items-center gap-2 text-sm font-black">
                                     经营简报

@@ -20,6 +20,7 @@ import { calcBreakEven } from '../financialMetrics';
 import { categorizeExpense, type MonthlyPnLInputs } from '../monthlyPnLAggregator';
 import type { EmployeeLabourCost } from '../labour/labourCost';
 import { addDays, daysInMonth, overlapDaysWithMonth, type Period } from './periods';
+import type { ProfitAdjustments } from './profitAdjustments';
 
 export type CockpitStatus = 'CONFIRMED' | 'ESTIMATED' | 'INCOMPLETE' | 'PENDING_CLOSE';
 
@@ -84,8 +85,13 @@ export interface CockpitInputs {
     /** 兼职工资（parttime_* 支出，不在薪资单 details 里），期间内 */
     partTimeWages: number;
     monthPartTimeWages: number;
-    /** 日结钱箱现金支出（dayExpenses）合计：财务报表未计入，这里同样不计入，只列出 */
+    /** 日结钱箱现金支出（dayExpenses）合计（旧栏位；有 adjustments 时以 adjustments 为准） */
     pettyCash: number;
+    /** PR B 利润引擎修正：平台扣款、收款手续费、钱箱支出（期间 / 期末所在整月） */
+    adjustments?: ProfitAdjustments;
+    monthAdjustments?: ProfitAdjustments;
+    /** 另一种会计口径下的净利（对照业务发生制 / 现金制的差异） */
+    otherModeNetProfit?: number | null;
     /** 业务发生制下已排除的应付账款分期付款列（避免与原账单重复）；财务报表目前仍计入 */
     excludedDuplicatePayments?: number;
     sourceCounts: { settlements: number; standaloneExpenses: number; billPayments: number; payrollRecords: number; employees: number };
@@ -112,6 +118,25 @@ export const splitCosts = (costByCategory: Record<string, number>) => {
     });
     (Object.keys(rows) as (keyof typeof rows)[]).forEach(k => rows[k].sort((a, b) => b.amount - a.amount));
     return { ...out, rows };
+};
+
+/** 套用利润引擎修正：以正确的平台扣款取代财务报表算法，并计入收款手续费与钱箱支出 */
+export const applyAdjustments = (
+    costs: ReturnType<typeof splitCosts>,
+    costByCategory: Record<string, number>,
+    adj?: ProfitAdjustments,
+) => {
+    if (!adj) return { ...costs, bankFees: 0, pettyCash: 0 };
+    const computedPlatform = Object.entries(costByCategory || {})
+        .filter(([k]) => k.startsWith('PLATFORM_COMM_') || k.startsWith('PLATFORM_ADS_'))
+        .reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
+    return {
+        ...costs,
+        platform: costs.platform - computedPlatform + adj.platformCost,
+        opex: costs.opex + adj.bankFees + adj.pettyCash,
+        bankFees: adj.bankFees,
+        pettyCash: adj.pettyCash,
+    };
 };
 
 const revenueOf = (pnl: MonthlyPnLInputs) =>
@@ -165,13 +190,16 @@ export interface CockpitResult {
     alerts: { level: 'HIGH' | 'NORMAL'; title: string; detail: string; kpi?: string }[];
     briefing: string[];
     missingDays: string[];
+    /** 数据完整性检查清单 */
+    integrity: { label: string; ok: boolean; detail: string }[];
 }
 
 export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     const { period, pnl } = input;
     const kpis: Record<string, Kpi> = {};
     const revenue = revenueOf(pnl);
-    const costs = splitCosts(pnl.costByCategory);
+    const costs = applyAdjustments(splitCosts(pnl.costByCategory), pnl.costByCategory, input.adjustments);
+    const adj = input.adjustments;
     const coverage = settlementCoverage(period, input.dailyRevenue);
     const labour = labourForPeriod(period, input.labour);
     const partTime = round2(input.partTimeWages || 0);
@@ -305,7 +333,9 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     // ── 利润 ──
     const grossProfit = round2(revenue - costs.food - costs.platform);
     const netProfit = round2(grossProfit - labourTotal - costs.opex);
-    const allConfirmed = [revenueStatus, foodStatus, labourStatus].every(s => s === 'CONFIRMED') && periodFinished && costs.opex > 0;
+    // 外送平台款项未对账时，平台扣款是预估值，利润不能算「已确认」
+    const platformReconciled = !input.adjustments || input.adjustments.unreconciledPlatformDays === 0;
+    const allConfirmed = [revenueStatus, foodStatus, labourStatus].every(s => s === 'CONFIRMED') && periodFinished && costs.opex > 0 && platformReconciled;
     const profitBasis = [
         '毛利 = 营业额 − 食材采购 − 外送平台抽佣与广告',
         '净利 = 毛利 − 人工总成本 − 其他经营费用（租金、水电、杂项等）',
@@ -314,9 +344,16 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         (input.excludedDuplicatePayments || 0) > 0
             ? `已排除应付账款分期付款列 RM ${round2(input.excludedDuplicatePayments || 0).toFixed(2)}：原账单已按全额计入，避免重复扣除（财务报表目前仍会计入，与本页相差此数）`
             : '',
-        input.pettyCash > 0
-            ? `日结钱箱现金支出 RM ${round2(input.pettyCash).toFixed(2)} 没有分类，财务报表未计入损益，这里同样未计入（PR B 处理）`
-            : '期间内没有日结钱箱现金支出',
+        ...(adj
+            ? [
+                `外送平台扣款按「总额 − 实收」计算；未对账的 ${adj.unreconciledPlatformDays} 个平台日按「总额 −（净额 − 广告）」预估`,
+                adj.bankFees > 0 ? `已计入收款手续费 RM ${adj.bankFees.toFixed(2)}（${adj.bankFeeCount} 笔对账差额，TNG / 卡 / DuitNow）` : '',
+                adj.pettyCash > 0 ? `已计入日结钱箱现金支出 RM ${adj.pettyCash.toFixed(2)}（${adj.pettyCashCount} 笔，未分类，列入其他经营费用）。若同一笔也在应付账款登记，会重复，请告知` : '期间内没有日结钱箱现金支出',
+            ]
+            : [input.pettyCash > 0 ? `日结钱箱现金支出 RM ${round2(input.pettyCash).toFixed(2)} 没有分类，未计入` : '期间内没有日结钱箱现金支出']),
+        input.otherModeNetProfit !== undefined && input.otherModeNetProfit !== null
+            ? `${input.accountingMode === 'ACCRUAL' ? '现金制' : '业务发生制'}下的净利为 RM ${input.otherModeNetProfit.toFixed(2)}（差额 RM ${(input.otherModeNetProfit - netProfit).toFixed(2)}：业务发生制按账单日期计入未付账单，现金制只算已付款）`
+            : '',
     ];
     const profitBasisClean = profitBasis.filter(Boolean);
     const profitRows: KpiDetailRow[] = [
@@ -327,6 +364,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         { label: '− 人工总成本', amount: -labourTotal },
         { label: '− 其他经营费用', amount: -round2(costs.opex) },
         { label: '= 净利', amount: netProfit },
+        ...(adj ? reconciliationRows(adj, input.excludedDuplicatePayments || 0) : []),
     ];
     kpis.actualProfit = {
         key: 'actualProfit',
@@ -341,6 +379,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
                 revenueStatus !== 'CONFIRMED' ? `营业额：${revenueStatusNote}` : '',
                 labourStatus !== 'CONFIRMED' ? `人工：${kpis.labour.statusNote}` : '',
                 costs.opex === 0 ? '没有其他经营费用记录（租金、水电…）' : '',
+                !platformReconciled ? `外送平台 ${input.adjustments!.unreconciledPlatformDays} 个平台日未对账（扣款为预估）` : '',
             ].filter(Boolean).join('；'),
         basis: profitBasisClean,
         sources: [...settlementSources, ...expenseSources, ...labourSources],
@@ -373,7 +412,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     const month = period.end.slice(0, 7);
     const dim = daysInMonth(month);
     const monthRevenue = revenueOf(input.monthPnl);
-    const monthCosts = splitCosts(input.monthPnl.costByCategory);
+    const monthCosts = applyAdjustments(splitCosts(input.monthPnl.costByCategory), input.monthPnl.costByCategory, input.monthAdjustments);
     const monthLabourAmount = round2(input.monthLabour.reduce((s, c) => s + c.employerCost, 0) + monthCosts.otherLabour + (input.monthPartTimeWages || 0));
     const monthSettledDays = Object.keys(input.monthDailyRevenue).filter(d => d.startsWith(month)).length;
     const monthElapsed = input.today.slice(0, 7) === month ? Number(input.today.slice(8, 10)) : input.today.slice(0, 7) > month ? dim : 0;
@@ -493,7 +532,8 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     if (kpis.breakEvenGap.value !== null && kpis.breakEvenGap.value < 0) {
         alerts.push({ level: 'NORMAL', title: '营业额落后保本进度', detail: `落后 RM ${Math.abs(kpis.breakEvenGap.value).toFixed(2)}`, kpi: 'breakEvenGap' });
     }
-    if (input.pettyCash > 0) alerts.push({ level: 'NORMAL', title: '日结钱箱支出未计入利润', detail: `RM ${round2(input.pettyCash).toFixed(2)} 没有分类，与财务报表同样未计入`, kpi: 'actualProfit' });
+    if (!adj && input.pettyCash > 0) alerts.push({ level: 'NORMAL', title: '日结钱箱支出未计入利润', detail: `RM ${round2(input.pettyCash).toFixed(2)} 没有分类`, kpi: 'actualProfit' });
+    if (adj && adj.unreconciledPlatformDays > 0) alerts.push({ level: 'NORMAL', title: '外送平台款项尚未对账', detail: `${adj.unreconciledPlatformDays} 个平台日未对账，平台扣款为预估`, kpi: 'actualProfit' });
     if (labour.missing > 0) alerts.push({ level: 'NORMAL', title: '有员工没有底薪资料', detail: `${labour.missing} 人次未计入人工成本`, kpi: 'labour' });
     if (costs.food === 0 && revenue > 0) alerts.push({ level: 'NORMAL', title: '期间内没有食材采购记录', detail: '毛利与保本额可能失真', kpi: 'food' });
 
@@ -516,6 +556,15 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         alerts,
         briefing,
         missingDays: coverage.missingDays,
+        integrity: [
+            { label: '每日结算', ok: pastMissing.length === 0, detail: pastMissing.length ? `缺 ${pastMissing.length} 天` : `${coverage.settled} 天齐全${todayPending ? '（今天尚未日结）' : ''}` },
+            ...(adj ? [{ label: '外送平台对账', ok: adj.unreconciledPlatformDays === 0, detail: adj.unreconciledPlatformDays ? `${adj.unreconciledPlatformDays} 个平台日未对账，扣款为预估` : '已全部对账或无平台营业额' }] : []),
+            { label: '薪资', ok: labour.estimated === 0 && labour.missing === 0, detail: labour.estimated || labour.missing ? kpis.labour.statusNote : '全部以已发放薪资为准' },
+            { label: '经营费用', ok: costs.opex > 0, detail: costs.opex > 0 ? `已入账 RM ${round2(costs.opex).toFixed(2)}` : '没有租金、水电等费用记录' },
+            { label: '食材采购', ok: costs.food > 0, detail: costs.food > 0 ? `已入账 RM ${round2(costs.food).toFixed(2)}（采购口径）` : '没有食材采购记录' },
+            ...(adj ? [{ label: '日结钱箱支出', ok: true, detail: adj.pettyCash ? `已计入 RM ${adj.pettyCash.toFixed(2)}（未分类）` : '无' }] : []),
+            { label: '分期付款去重', ok: true, detail: (input.excludedDuplicatePayments || 0) > 0 ? `已排除重复 RM ${round2(input.excludedDuplicatePayments || 0).toFixed(2)}` : '无重复' },
+        ],
     };
 };
 
@@ -533,4 +582,15 @@ export const dailyRevenueFromSettlements = (settlements: { date?: string; sales?
         out[d] = (out[d] || 0) + pos + platform;
     });
     return out;
+};
+
+/** 与财务报表口径的差异（驾驶舱净利 = 财务报表口径净利 + 下列差异；人工口径另计） */
+export const reconciliationRows = (adj: ProfitAdjustments, duplicatePayments: number): KpiDetailRow[] => {
+    const rows: KpiDetailRow[] = [];
+    const platformDiff = round2(adj.platformCost - adj.platformCostReport);
+    if (platformDiff !== 0) rows.push({ label: '对账：平台扣款修正（未对账日的广告等）', amount: -platformDiff, note: `财务报表算法 RM ${adj.platformCostReport.toFixed(2)}，驾驶舱 RM ${adj.platformCost.toFixed(2)}` });
+    if (adj.bankFees) rows.push({ label: '对账：收款手续费（财务报表未计入）', amount: -adj.bankFees });
+    if (adj.pettyCash) rows.push({ label: '对账：日结钱箱支出（财务报表未计入）', amount: -adj.pettyCash });
+    if (duplicatePayments) rows.push({ label: '对账：分期付款重复（财务报表重复扣除，驾驶舱已排除）', amount: round2(duplicatePayments) });
+    return rows;
 };
