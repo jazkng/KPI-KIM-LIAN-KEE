@@ -3,7 +3,7 @@ import {
     Wallet, CalendarOff, BookOpen, ClipboardCheck, Utensils, Coffee, Package,
     Users, FileText, Truck, Armchair, Eye, CheckSquare, CreditCard, Banknote,
     Landmark, ShieldCheck, Clock, AlertTriangle, ChefHat, ShoppingCart, Flame, Award,
-    Sparkles, BellRing, TrendingUp, Layout, Target, Languages
+    ShoppingBag, Sparkles, BellRing, TrendingUp, Layout, Target, Languages
 } from 'lucide-react';
 
 export * from '../constants/suppliers';
@@ -131,6 +131,11 @@ export const MODULE_DEFINITIONS = {
     'KITCHEN_ALERT': {
         label: '厨房通知 (Kitchen Alert)', desc: '催菜、漏单、做错与重做通知', icon: BellRing, tab: 'KITCHEN_ALERT',
         guide: '1. 输入桌号和菜单单号。\n2. 选择菜品、大小、数量和通知原因。\n3. 提交后在“我的通知”查看厨房是否已接收或解决。',
+    },
+    // ── 网站订单 ──
+    'ONLINE_ORDERS': {
+        label: '网站订单 (Online Orders)', desc: '接收 kimliankee.app 顾客订单、备餐状态与 POS 收款对账', icon: ShoppingBag, tab: 'ONLINE_ORDERS',
+        guide: '1. 新订单出现在「待确认」，按接单或拒单（拒单须填原因）。\n2. 备餐：开始备餐 → 备餐完成 → 顾客取走。\n3. 顾客在柜台用 POS 结账后，按「已在 POS 收款」并填写 POS 单号。\n4. 网站订单金额不计入营业额，营业额以 POS 日结为准。',
     },
     // ── 考勤 ──
     'ATTENDANCE_CONSOLE': {

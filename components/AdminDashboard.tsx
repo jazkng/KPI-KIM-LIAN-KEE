@@ -1,7 +1,7 @@
 // components/AdminDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, Wallet } from 'lucide-react';
+import { ShoppingBag, Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, Wallet } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
@@ -9,7 +9,7 @@ import { mt } from '../constants/managementTranslations';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { needsReplenishment } from '../utils/unitConversion';
 import { sortNavigationItems } from '../constants/moduleNavigation';
-import { SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, StaffCashModule } from './lazyModules';
+import { OnlineOrderCenter, SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, StaffCashModule } from './lazyModules';
 
 // --- NEW GENERIC IMPORTS ---
 
@@ -17,7 +17,7 @@ import { SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInsp
 interface ManagerDashboardProps {
     onBack?: () => void; 
     allowedModules?: AppModule[]; 
-    initialTab?: 'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'KITCHEN_ALERT';
+    initialTab?: 'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'ONLINE_ORDERS' | 'KITCHEN_ALERT';
     isSingleMode?: boolean;
     onOpenTV?: () => void;
     currentEmployee?: Employee; 
@@ -26,7 +26,7 @@ interface ManagerDashboardProps {
 }
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allowedModules, initialTab, isSingleMode = false, onOpenTV, currentEmployee, isManagementStaff = false, lang = 'zh_en' }) => {
-  const [activeTab, setActiveTab] = useState<'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'KITCHEN_ALERT'>('SETTLEMENT');
+  const [activeTab, setActiveTab] = useState<'SETTLEMENT' | 'ROSTER' | 'LOGBOOK' | 'LOGBOOK_VIEW' | 'SOP_INSPECT' | 'INVENTORY_CHECK' | 'INVENTORY_VIEW' | 'SUPPLIER_CONTACTS' | 'QUEUE' | 'ATTENDANCE_CONSOLE' | 'PROCUREMENT' | 'MENU_MANAGEMENT' | 'ASSESSMENT' | 'AP' | 'SELF_INVOICE' | 'STAFF_CASH' | 'ONLINE_ORDERS' | 'KITCHEN_ALERT'>('SETTLEMENT');
   const [storeConfig, setStoreConfig] = useState<StoreConfig>({ 
       businessDayCutoff: 4,
       timeZoneOffset: 8,
@@ -115,6 +115,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      if (showAll || allowedModules?.includes('QUEUE_MANAGER')) {
          tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队叫号', icon: <Armchair size={18} /> });
      }
+     if (showAll || allowedModules?.includes('ONLINE_ORDERS')) {
+         tabs.push({ key: 'ONLINE_ORDERS', label: lang === 'my' ? 'အွန်လိုင်းအော်ဒါ' : '网站订单', icon: <ShoppingBag size={18} /> });
+     }
      if (showAll || allowedModules?.includes('SETTLEMENT')) {
          tabs.push({ key: 'SETTLEMENT', label: lang === 'my' ? 'နေ့စဉ်စာရင်း' : '每日结算', icon: <Calculator size={18} /> });
      }
@@ -186,6 +189,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
               case 'SOP_INSPECT': return 'SOP Inspection';
               case 'SUPPLIER_CONTACTS': return 'Supplier Contacts';
               case 'QUEUE': return 'Queue System';
+              case 'ONLINE_ORDERS': return 'Online Orders';
               case 'ATTENDANCE_CONSOLE': return 'Attendance Console';
               case 'PROCUREMENT': return 'Smart Procurement';
               case 'MENU_MANAGEMENT': return 'Menu Management';
@@ -399,6 +403,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
              />
          )}
          {activeTab === 'ROSTER' && <RosterModule onClose={handleModuleExit} allowedModules={allowedModules} />}
+         {activeTab === 'ONLINE_ORDERS' && <OnlineOrderCenter currentEmployee={currentEmployee} />}
          {activeTab === 'ATTENDANCE_CONSOLE' && <AttendanceConsole onClose={handleModuleExit} />}
          {activeTab === 'LOGBOOK' && <LogbookModule viewOnly={false} currentEmployee={currentEmployee} lang={lang} />}
          {activeTab === 'LOGBOOK_VIEW' && <LogbookModule viewOnly={true} currentEmployee={currentEmployee} lang={lang} />}

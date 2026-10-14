@@ -1142,6 +1142,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                     <CardTitle icon={<LayoutGrid size={18} />} title="快速查看" />
                                     <div className="mt-3 grid grid-cols-1 overflow-hidden rounded-2xl border border-stone-300 divide-y divide-stone-300 sm:grid-cols-3 lg:grid-cols-6 sm:gap-2 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0">
                                         {[
+                                            { label: '网站订单', target: 'ONLINE_ORDERS', Icon: ShoppingBag, action: () => onNavigate('ONLINE_ORDERS') },
                                             { label: '营业报表', target: 'REPORTS', Icon: FileBarChart, action: () => setActiveModal('REPORTS') },
                                             { label: '人工与盈利', target: 'LABOUR_PROFIT', Icon: TrendingUp, action: () => setActiveModal('LABOUR_PROFIT') },
                                             { label: '资金状况', target: 'TREASURY', Icon: Wallet, action: () => setActiveModal('TREASURY') },

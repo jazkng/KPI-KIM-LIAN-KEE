@@ -30,6 +30,7 @@ export const BOSS_TARGET_MODULE_MAP: Record<string, AppModule> = {
     BILLS: 'BILLS',
     TREASURY: 'TREASURY',
     REPORTS: 'REPORTS',
+    ONLINE_ORDERS: 'ONLINE_ORDERS',
     // 人工成本与盈利：与财务报表同一个权限（含薪资与营业额资料）
     LABOUR_PROFIT: 'REPORTS',
     // 经营驾驶舱：含利润、营业额与人工成本，与财务报表同一个权限
