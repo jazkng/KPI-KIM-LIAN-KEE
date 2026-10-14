@@ -16,6 +16,7 @@ import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
+import { currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
 import { NotificationCenter } from './components/ui/NotificationCenter';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
@@ -139,11 +140,17 @@ export default function App() {
 
     // Load store config branding logos
     useEffect(() => {
-        DataManager.getConfig().then(cfg => {
+        let alive = true;
+        serverAuthEnabled.then(async enabled => {
+            // CHG-05：服务端登录模式下，登录前没有 Firebase 身份，不读 Firestore（登录页 Logo 由服务端名单提供）
+            if (enabled && !(await currentSignedInEmployeeId())) return;
+            const cfg = await DataManager.getConfig();
+            if (!alive) return;
             if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
             if (cfg?.headerLogoUrl) setHeaderLogo(cfg.headerLogoUrl);
         }).catch(err => console.error('Failed to load branding logos:', err));
-    }, [isConfigOpen]);
+        return () => { alive = false; };
+    }, [isConfigOpen, currentEmployee?.id]);
 
     // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
     const checkVersion = useCallback(() => {
@@ -167,7 +174,25 @@ export default function App() {
         safeStorage.remove('kepong_erp_session_role');
         DataManager.clearAllCache();
         safeStorage.remove('kepong_erp_session_employee');
+        // CHG-05：服务端登录时一并登出 Firebase 身份
+        void serverAuthEnabled.then(enabled => { if (enabled) void serverSignOut(); });
     }, []);
+
+    // CHG-05：服务端登录开通时，只有 Firebase 身份的员工编号与本机记住的员工相同，才恢复登录状态；
+    //         旧装置（只有匿名身份或没有身份）一律回到登录页
+    useEffect(() => {
+        if (!currentEmployee?.id) return;
+        let alive = true;
+        serverAuthEnabled.then(async enabled => {
+            if (!enabled || !alive) return;
+            const signedIn = await currentSignedInEmployeeId();
+            if (alive && signedIn !== currentEmployee.id) {
+                console.log('🔐 Session has no matching server identity. Returning to login.');
+                handleLogout();
+            }
+        });
+        return () => { alive = false; };
+    }, [currentEmployee?.id, handleLogout]);
 
     // Cloud session synchronization and status checking callback
     const syncEmployeePermissions = useCallback((employeeId: string, currentEmpLocal: Employee) => {
