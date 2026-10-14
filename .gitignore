@@ -41,3 +41,9 @@ firestore-debug.log*
 ui-debug.log*
 .firebase/
 emulator-data/
+
+# 员工考勤 / 薪资原始档（个资）不得进入 GitHub
+*.xls
+*.XLS
+*.xlsx
+*.XLSX
