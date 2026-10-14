@@ -1818,8 +1818,7 @@ export class DataManager {
                         shiftMode: data.shiftMode || 'SINGLE'
                     };
                 }
-                const legacyRoster = await getDoc(doc(db, 'roster', 'main'));
-                const legacyNotes = await getDoc(doc(db, 'roster', 'notes'));
+                const [legacyRoster, legacyNotes] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
                 if (legacyRoster.exists()) {
                     const allRoster = legacyRoster.data() || {};
                     const allNotes = legacyNotes.exists() ? legacyNotes.data() || {} : {};
@@ -1860,8 +1859,8 @@ export class DataManager {
                 return { roster: {}, notes: {}, monthKey, rosterVersion: 2, status: 'DRAFT', revision: 0, shiftMode: 'SINGLE' };
             }
         }
-        const r = await getDoc(doc(db, 'roster', 'main'));
-        const n = await getDoc(doc(db, 'roster', 'notes'));
+        // 排班与备注两份文件同时读取（以前一前一后，手机网络上多等一轮）
+        const [r, n] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
         return { roster: r.exists() ? r.data() : {}, notes: n.exists() ? n.data() : {} };
     }
 
