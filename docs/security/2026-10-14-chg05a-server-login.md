@@ -115,3 +115,55 @@
 **开关关闭时**
 - `/api/auth/config` 回 `enabled:false`；
 - 原本的老板登录（8888）照常可用。
+
+---
+
+# CHG-05b · 设备登录、设备户口、PIN 二次确认（V2）
+
+## 完成的项目（对应方案第 3 节第 4、5、8 项）
+
+| # | 项目 | 做法 |
+|---|---|---|
+| 4 | 设备登录前读取全部设备户口（含 PIN 哈希与盐），在浏览器验证 | 改为两步：<br>① `GET /api/auth/devices`：名单不含 PIN 哈希、盐、会话；<br>② `POST /api/auth/device-login`：服务端验证 PIN，签发设备身份（uid = 设备资料编号，claims：`device`、`screens`、`store`、`epoch`）。<br>同时写入与 V1 相同的会话栏位（`sessionVersion`、`sessionHash`），设备画面沿用现有的会话检查。 |
+| 5 | 考勤主控台 PIN 打卡、排班重置在浏览器比对明文 PIN | `POST /api/auth/verify-pin`：<br>- 需要已登录员工，且是老板 / 管理层入口，或有考勤主控台 / 排班权限；<br>- 只回 `{ok}`，不签发身份；<br>- 按「被确认的员工 + IP」限次。 |
+| 8 | HR 设备户口在浏览器计算 PIN 哈希并写入 `device_accounts` | `POST /api/auth/device-admin/create`、`change-pin`、`revoke`：<br>- 需要老板入口或 `HR_FILES` 权限；<br>- 新 PIN 的 scrypt 哈希存在只有服务端能读的 `device_secrets`；<br>- 改 PIN、停用、撤销登录时，一并撤销设备的 Firebase 身份。 |
+| 7 | 设备画面从 localStorage 恢复会话 | Firebase 设备身份必须等于本机记住的设备，否则回到设备登录。 |
+
+- 服务端登录模式下，设备画面也不再建立匿名身份。
+- 员工画面在登录前不读 Firestore：门店 Logo 等员工登录后才读取。
+
+## 过渡期与 V1 相容
+- **旧设备：** V1 浏览器建立的设备 PIN 是 PBKDF2-SHA256、120,000 次迭代。服务端在 `ACCEPT_LEGACY_PIN` 开启时能验证，所以现有设备不必重设 PIN。
+- **同步写回：** 新建或改 PIN 时，服务端同时把同一格式的 PIN 写回 `device_accounts`（`MIRROR_LEGACY_PIN`），V1 设备登录照常可用。
+  - 单元测试证明：V1 浏览器算法能验证服务端写回的值。
+  - 端到端测试证明：服务端改过 PIN 的设备，关闭开关后用原本的浏览器登录照常进入荧幕。
+- **新增集合：** `device_secrets`，只由服务端写入。V1 不读取。
+
+## 测试（Emulator，虚构资料）
+
+**单元测试**（`tests/unit/deviceAuthCore.test.ts`，8 项）
+- 与 V1 浏览器 PBKDF2 双向相容；
+- 会话杂凑算法相同；
+- 设备编号与 PIN 格式；
+- 操作权限。
+
+**端到端测试**
+- 设备名单不含 PIN 哈希、盐、会话；
+- 旧格式 PIN 的设备经服务端登录，进入排队荧幕，会话版本与杂凑已写入；
+- 重新整理后仍在荧幕；
+- 伪造成另一台设备的会话 → 回到设备登录；
+- 设备 PIN 连续错 5 次 → 正确 PIN 也回 429；
+- 建立设备的权限：
+  - 未登录 401；
+  - CREW 403；
+  - 只有考勤权限的领班 403；
+  - 老板 200；
+  - 重复建立 409；
+- 新设备：`device_secrets` 为 scrypt，`device_accounts` 写回 V1 PBKDF2，可以登录；
+- 改 PIN：旧 PIN 401、新 PIN 200；
+- verify-pin：
+  - CREW 呼叫 403；
+  - 有考勤权限的领班：正确 PIN `{ok:true}`，错误 PIN `{ok:false}`；
+- 开关关闭：
+  - 原本的老板登录与 AI 智脑照常；
+  - 服务端改过 PIN 的设备用原本的浏览器登录照常进入荧幕。

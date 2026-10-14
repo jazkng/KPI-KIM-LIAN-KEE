@@ -157,3 +157,50 @@ export const newOneTimeToken = () => {
 };
 export const oneTimeTokenId = (token: string) => crypto.createHash('sha256').update(String(token)).digest('hex');
 export const PIN_CHANGE_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+// ── CHG-05b：服务端操作的权限（与 V1 画面的进入条件一致）──
+export type PrivilegedAction = 'DEVICE_ADMIN' | 'VERIFY_PIN';
+
+/** portal 由呼叫端以 V1 的 getPortalRole 算出（会从职位推断，与员工今天看到的画面一致） */
+export const canPerform = (
+    caller: { portal: 'BOSS' | 'MANAGEMENT' | 'STAFF'; allowedModules?: string[]; active: boolean },
+    action: PrivilegedAction,
+): boolean => {
+    if (!caller.active) return false;
+    const modules = new Set(caller.allowedModules || []);
+    if (action === 'DEVICE_ADMIN') return caller.portal === 'BOSS' || modules.has('HR_FILES');
+    return caller.portal === 'BOSS' || caller.portal === 'MANAGEMENT'
+        || ['ATTENDANCE_CONSOLE', 'ROSTER', 'ROSTER_KITCHEN', 'ROSTER_FLOOR'].some(m => modules.has(m));
+};
+
+// ── 设备 PIN：沿用 V1 浏览器端的 PBKDF2 格式（过渡期验证旧纪录、同步写回）──
+export const LEGACY_DEVICE_PIN_ITERATIONS = 120_000;
+
+export const legacyDevicePinCredential = (pin: string, salt = crypto.randomBytes(16)) => ({
+    pinHash: crypto.pbkdf2Sync(pin, salt, LEGACY_DEVICE_PIN_ITERATIONS, 32, 'sha256').toString('base64'),
+    pinSalt: salt.toString('base64'),
+    pinIterations: LEGACY_DEVICE_PIN_ITERATIONS,
+});
+
+export const verifyLegacyDevicePin = (pin: string, rec: { pinHash?: string; pinSalt?: string; pinIterations?: number }): boolean => {
+    if (!rec.pinHash || !rec.pinSalt || !/^\d{4,8}$/.test(pin)) return false;
+    const expected = Buffer.from(rec.pinHash, 'base64');
+    if (expected.length !== 32) return false;
+    const iterations = Number(rec.pinIterations) || LEGACY_DEVICE_PIN_ITERATIONS;
+    if (iterations < 10_000 || iterations > 2_000_000) return false;
+    const actual = crypto.pbkdf2Sync(pin, Buffer.from(rec.pinSalt, 'base64'), iterations, 32, 'sha256');
+    return crypto.timingSafeEqual(actual, expected);
+};
+
+/** 与 V1 deviceAccountService 相同的会话凭证：原值给装置，资料库只存 SHA-256（base64） */
+export const newDeviceSession = () => {
+    const token = crypto.randomBytes(32).toString('base64');
+    return { sessionToken: token, sessionHash: crypto.createHash('sha256').update(token).digest('base64') };
+};
+
+export const normalizeDeviceCode = (value: string): string | null => {
+    const code = String(value || '').trim().toUpperCase();
+    return /^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(code) ? code : null;
+};
+export const deviceDocId = (code: string) => `device_${code.toLowerCase()}`;
+export const isValidDevicePin = (pin: string) => /^\d{4,8}$/.test(pin);

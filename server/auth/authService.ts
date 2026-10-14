@@ -37,32 +37,32 @@ export interface AuthOptions {
     getIp: (req: express.Request) => string;
 }
 
-const db = (): Firestore => getFirestore(adminApp());
+export const db = (): Firestore => getFirestore(adminApp());
 
-const loadEmployees = async (): Promise<AuthEmployee[]> => {
+export const loadEmployees = async (): Promise<AuthEmployee[]> => {
     const snap = await db().collection('employees').get();
     return snap.docs.map(d => ({ ...(d.data() as AuthEmployee), id: String(d.data().id || d.id) }));
 };
 
-const loadSecret = async (id: string): Promise<EmployeeSecret | null> => {
+export const loadSecret = async (id: string): Promise<EmployeeSecret | null> => {
     const snap = await db().collection('employee_secrets').doc(id).get();
     const data = snap.data();
     return snap.exists && typeof data?.pinHash === 'string' ? { pinHash: data.pinHash, mustChange: data.mustChange === true } : null;
 };
 
 const attemptsRef = (key: string) => db().collection('auth_rate_limits').doc(key);
-const readAttempts = async (key: string): Promise<AttemptState | null> => {
+export const readAttempts = async (key: string): Promise<AttemptState | null> => {
     const snap = await attemptsRef(key).get();
     if (!snap.exists) return null;
     const d = snap.data()!;
     return { failures: Number(d.failures) || 0, windowStart: Number(d.windowStart) || 0, lockedUntil: Number(d.lockedUntil) || 0 };
 };
-const writeFailure = async (key: string, prev: AttemptState | null, limit: { maxFailures: number; windowMs: number; lockMs: number }) => {
+export const writeFailure = async (key: string, prev: AttemptState | null, limit: { maxFailures: number; windowMs: number; lockMs: number }) => {
     const next = recordFailure(prev, Date.now(), limit);
     await attemptsRef(key).set({ ...next, updatedAt: FieldValue.serverTimestamp() });
     return next;
 };
-const clearAttempts = (key: string) => attemptsRef(key).delete();
+export const clearAttempts = (key: string) => attemptsRef(key).delete();
 
 const issueToken = async (e: AuthEmployee, epoch: number) => {
     const claims = claimsFor(e, epoch);
@@ -84,6 +84,22 @@ const publicEmployee = (e: AuthEmployee) => ({ id: e.id, name: e.name || e.id, r
 
 /** V1 老板入口的判断（getPortalRole 会从职位推断层级）；claims 仍只看明确栏位 */
 const isBossPortal = (e: AuthEmployee) => getPortalRole(e as unknown as Employee) === PortalRole.BOSS;
+
+/** 验证呼叫者的员工身份（Bearer ID Token，检查撤销与 epoch），回传员工资料 */
+export const requireEmployeeCaller = async (req: express.Request, epoch: number): Promise<(AuthEmployee & { allowedModules?: string[] }) | null> => {
+    const header = String(req.headers.authorization || '');
+    if (!header.startsWith('Bearer ')) return null;
+    const decoded = await getAuth(adminApp()).verifyIdToken(header.slice(7), true).catch(() => null);
+    if (!decoded || typeof decoded.emp !== 'string' || decoded.epoch !== epoch) return null;
+    const snap = await db().collection('employees').doc(decoded.emp).get();
+    if (!snap.exists) return null;
+    return { ...(snap.data() as AuthEmployee & { allowedModules?: string[] }), id: decoded.emp };
+};
+
+export const portalOf = (e: AuthEmployee): 'BOSS' | 'MANAGEMENT' | 'STAFF' => {
+    const p = getPortalRole(e as unknown as Employee);
+    return p === PortalRole.BOSS ? 'BOSS' : p === PortalRole.MANAGEMENT ? 'MANAGEMENT' : 'STAFF';
+};
 
 export const mountAuthRoutes = (app: express.Express, opts: AuthOptions) => {
     const DENIED = { error: 'ACCESS DENIED' };

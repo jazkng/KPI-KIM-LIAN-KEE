@@ -8,7 +8,7 @@
 import { signInWithCustomToken, signOut } from 'firebase/auth';
 import { auth, serverAuthEnabled } from '../../firebaseConfig';
 import { DataManager } from '../dataManager';
-import type { Employee } from '../../types';
+import type { CreateDeviceAccountInput, DeviceAccount, DeviceSession, Employee } from '../../types';
 
 export { serverAuthEnabled };
 
@@ -85,3 +85,52 @@ export const currentSignedInEmployeeId = async (): Promise<string | null> => {
 };
 
 export const serverSignOut = () => signOut(auth).catch(() => undefined);
+
+// ── CHG-05b：设备登录、设备户口、PIN 二次确认 ──
+
+/** 以目前登录员工的 ID Token 呼叫需要权限的接口 */
+const authedPost = async (path: string, body: unknown) => {
+    const user = auth.currentUser;
+    if (!user || user.isAnonymous) throw new Error('请重新登录后再试');
+    return post(path, body, { Authorization: `Bearer ${await user.getIdToken()}` });
+};
+
+const ensureOk = (r: { status: number; data: Record<string, any> }) => {
+    if (r.status !== 200) throw new Error(r.data.error || `伺服器错误 ${r.status}`);
+    return r.data;
+};
+
+export const fetchLoginDevices = async (storeId = 'KEPONG'): Promise<DeviceAccount[]> => {
+    const res = await fetch(`/api/auth/devices?storeId=${encodeURIComponent(storeId)}`);
+    if (!res.ok) throw new Error(`devices ${res.status}`);
+    return (await res.json()).devices;
+};
+
+/** 设备登录：服务端比对 PIN，签发设备身份，并回传与原本相同格式的设备会话 */
+export const deviceLogin = async (deviceCode: string, pin: string): Promise<DeviceSession> => {
+    const r = await post('/api/auth/device-login', { deviceCode, pin });
+    const data = ensureOk(r);
+    await signInWithCustomToken(auth, data.token);
+    return data.session as DeviceSession;
+};
+
+/** 目前 Firebase 身份的设备编号（设备登录才有） */
+export const currentSignedInDeviceId = async (): Promise<string | null> => {
+    await auth.authStateReady();
+    const user = auth.currentUser;
+    if (!user || user.isAnonymous) return null;
+    const claims = (await user.getIdTokenResult().catch(() => null))?.claims;
+    return typeof claims?.device === 'string' ? claims.device : null;
+};
+
+export const adminCreateDevice = async (input: Omit<CreateDeviceAccountInput, 'createdBy'>): Promise<DeviceAccount> =>
+    ensureOk(await authedPost('/api/auth/device-admin/create', input)).device;
+export const adminChangeDevicePin = async (deviceId: string, pin: string) => { ensureOk(await authedPost('/api/auth/device-admin/change-pin', { deviceId, pin })); };
+export const adminRevokeDevice = async (deviceId: string) => { ensureOk(await authedPost('/api/auth/device-admin/revoke', { deviceId })); };
+
+/** 考勤 PIN 打卡、排班重置的二次确认：服务端比对，只回对或错 */
+export const verifyEmployeePin = async (employeeId: string, pin: string): Promise<{ ok: boolean; error?: string }> => {
+    const r = await authedPost('/api/auth/verify-pin', { employeeId, pin });
+    if (r.status === 200) return { ok: r.data.ok === true };
+    return { ok: false, error: r.data.error || `伺服器错误 ${r.status}` };
+};

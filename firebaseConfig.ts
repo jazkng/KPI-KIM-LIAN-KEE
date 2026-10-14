@@ -127,11 +127,8 @@ export const authReady: Promise<boolean> = (async () => {
     });
     if (hasExisting) return true;
 
-    // CHG-05：服务端登录开通时不建立匿名身份，等员工登录后由服务端签发身份。
-    //         专用设备画面（厨房屏 / 排队屏）的设备登录在 CHG-05b 改为服务端；在那之前仍沿用匿名身份。
-    const mode = new URLSearchParams(window.location.search).get('mode');
-    const isDeviceScreen = mode === 'device' || mode === 'kitchen';
-    if (!isDeviceScreen && await serverAuthEnabled) return false;
+    // CHG-05：服务端登录开通时不建立匿名身份，等员工或设备登录后由服务端签发身份。
+    if (await serverAuthEnabled) return false;
 
     // 第一次使用这台设备 —— 建立一个新的匿名身份
     await signInAnonymously(auth);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { serverAuthEnabled, verifyEmployeePin } from '../../../utils/auth/serverAuth';
 import { X, ShieldAlert, RefreshCw, KeyRound } from 'lucide-react';
 import { Employee, OrgLevel } from '../../../types';
 import { getOrgLevel, getOrgLevelLabel } from '../../../utils/orgAccess';
@@ -58,6 +59,14 @@ export const RosterResetDialog: React.FC<RosterResetDialogProps> = ({
 
         // Verify PIN
         setLoading(true);
+        // CHG-05b：服务端登录开通时由服务端比对管理员 PIN
+        if (await serverAuthEnabled) {
+            const r = await verifyEmployeePin(managerObj.id, pin.trim()).catch(err => ({ ok: false, error: (err as Error).message }));
+            setLoading(false);
+            if (r.ok) { onReset(managerObj.name); onClose(); }
+            else setError(r.error ? `验证失败：${r.error}` : '验证失败：授权 PIN 密码错误！');
+            return;
+        }
         setTimeout(() => {
             const expectedPin = managerObj.pin || '1234'; // fallback if somehow not set
             if (pin.trim() === expectedPin) {

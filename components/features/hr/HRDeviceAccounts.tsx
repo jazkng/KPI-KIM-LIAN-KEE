@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { DeviceAccount, DeviceAccountActor, DeviceScreen, Employee } from '../../../types';
 import { DeviceAccountService } from '../../../utils/deviceAccountService';
+import { adminChangeDevicePin, adminCreateDevice, adminRevokeDevice, serverAuthEnabled } from '../../../utils/auth/serverAuth';
 
 const noTap: React.CSSProperties = {
     WebkitTapHighlightColor: 'transparent',
@@ -262,7 +263,19 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                 }
                 validatePinFields();
                 if (form.allowedScreens.length === 0) throw new Error('请至少选择一个可使用画面');
-                await DeviceAccountService.createDeviceAccount({
+                // CHG-05b：服务端登录开通时，PIN 由服务端产生哈希并存在只有服务端能读的 device_secrets
+                const createInput = {
+                    deviceCode: form.deviceCode,
+                    deviceName: form.deviceName,
+                    storeId: form.storeId,
+                    pin: form.pin,
+                    allowedScreens: form.allowedScreens,
+                    defaultScreen: form.defaultScreen,
+                    location: form.location,
+                    notes: form.notes,
+                };
+                if (await serverAuthEnabled) await adminCreateDevice(createInput);
+                else await DeviceAccountService.createDeviceAccount({
                     deviceCode: form.deviceCode,
                     deviceName: form.deviceName,
                     storeId: form.storeId,
@@ -297,7 +310,8 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                 showNotice('success', `${editingDevice.deviceName} 的资料已更新`);
             } else if (modalMode === 'PIN' && editingDevice) {
                 validatePinFields();
-                await DeviceAccountService.changePin(editingDevice.id, form.pin, actor);
+                if (await serverAuthEnabled) await adminChangeDevicePin(editingDevice.id, form.pin);
+                else await DeviceAccountService.changePin(editingDevice.id, form.pin, actor);
                 showNotice('success', `${editingDevice.deviceName} 的 PIN 已更换，旧登录已失效`);
             }
             setModalMode(null);
@@ -324,6 +338,8 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
                 enabling ? 'ACTIVE' : 'DISABLED',
                 actor,
             );
+            // CHG-05b：停用时一并撤销设备的 Firebase 身份
+            if (!enabling && await serverAuthEnabled) await adminRevokeDevice(device.id);
             showNotice('success', enabling ? '设备户口已启用' : '设备户口已停用');
         } catch (error) {
             showNotice('error', getErrorMessage(error));
@@ -337,6 +353,7 @@ export const HRDeviceAccounts: React.FC<HRDeviceAccountsProps> = ({ currentEmplo
         try {
             setBusyDeviceId(device.id);
             await DeviceAccountService.revokeSessions(device.id, actor);
+            if (await serverAuthEnabled) await adminRevokeDevice(device.id);
             showNotice('success', `${device.deviceName} 的登录已全部撤销`);
         } catch (error) {
             showNotice('error', getErrorMessage(error));
