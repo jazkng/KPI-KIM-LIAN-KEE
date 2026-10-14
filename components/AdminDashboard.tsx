@@ -1,7 +1,7 @@
 // components/AdminDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, BellRing, Wallet } from 'lucide-react';
+import { Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, Wallet } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { getOrgLevelLabel, getOrgLevel } from '../utils/orgAccess';
@@ -9,24 +9,10 @@ import { mt } from '../constants/managementTranslations';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { needsReplenishment } from '../utils/unitConversion';
 import { sortNavigationItems } from '../constants/moduleNavigation';
-import { SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, KitchenAlertModule, StaffCashModule } from './lazyModules';
+import { SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, StaffCashModule } from './lazyModules';
 
 // --- NEW GENERIC IMPORTS ---
 
-const defaultBossEmployee: Employee = {
-    id: 'BOSS_TEMP',
-    name: '系统管理员',
-    role: 'BOSS',
-    status: 'CONFIRMED',
-    level: '1',
-    basicSalary: 0,
-    phone: '',
-    joinDate: '2026-07-15',
-    absentDays: 0,
-    gender: 'Male',
-    nationality: 'MY',
-    allowedModules: ['KITCHEN_ALERT']
-};
 
 interface ManagerDashboardProps {
     onBack?: () => void; 
@@ -131,9 +117,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      }
      if (showAll || allowedModules?.includes('SETTLEMENT')) {
          tabs.push({ key: 'SETTLEMENT', label: lang === 'my' ? 'နေ့စဉ်စာရင်း' : '每日结算', icon: <Calculator size={18} /> });
-     }
-     if (showAll || allowedModules?.includes('KITCHEN_ALERT')) {
-         tabs.push({ key: 'KITCHEN_ALERT', label: lang === 'my' ? 'မီးဖိုချောင်သတိပေးချက်' : '厨房通知', icon: <BellRing size={18} /> });
      }
      if (showAll || allowedModules?.includes('ROSTER') || allowedModules?.includes('ROSTER_KITCHEN') || allowedModules?.includes('ROSTER_FLOOR')) {
          tabs.push({ key: 'ROSTER', label: lang === 'my' ? 'အလှည့်ကျတာဝန်' : '排班管理', icon: <CalendarOff size={18} /> });
@@ -414,9 +397,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                 isStandalone={isSingleMode} // Embed if not single mode
                 onClose={onBack || handleModuleExit} // Optional: Close button
              />
-         )}
-         {activeTab === 'KITCHEN_ALERT' && (
-             <KitchenAlertModule employee={currentEmployee || defaultBossEmployee} lang={lang} />
          )}
          {activeTab === 'ROSTER' && <RosterModule onClose={handleModuleExit} allowedModules={allowedModules} />}
          {activeTab === 'ATTENDANCE_CONSOLE' && <AttendanceConsole onClose={handleModuleExit} />}
