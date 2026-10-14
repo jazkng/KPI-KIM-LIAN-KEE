@@ -33,7 +33,7 @@ export interface MonthlyPnLInputs {
 const num = (v: any): number => Number(v) || 0;
 
 /** 照抄 FinancialReport.categorizeExpense —— 分类规则必须跟画面一致 */
-const categorizeExpense = (category: string): string => {
+export const categorizeExpense = (category: string): string => {
     const c = category?.toUpperCase() || 'OTHER';
     if (['TRANSFER', 'FUND', 'ADJUSTMENT', 'SALES'].some(k => c.includes(k))) return 'IGNORE';
     if (c.includes('DIVIDEND')) return 'DIVIDEND';
@@ -62,9 +62,41 @@ export const aggregateMonth = (
     month: string,
     data: MonthlyRawData,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+): MonthlyPnLInputs =>
+    aggregateWith(month, d => !!d && String(d).slice(0, 7) === month, p => p === month, data, accountingMode);
+
+/**
+ * 任意日期区间（YYYY-MM-DD，含头含尾）的同口径汇总，给老板经营驾驶舱用。
+ * 营业额、平台抽佣、支出分类与 aggregateMonth 完全相同（同一段程序）。
+ * 薪资是按月记录：只计入「整个月都在区间内」的月份；其余月份由呼叫端另行按天数估算。
+ */
+export const aggregateRange = (
+    start: string,
+    end: string,
+    data: MonthlyRawData,
+    accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+): MonthlyPnLInputs => {
+    const inRange = (d?: string) => {
+        const day = String(d || '').slice(0, 10);
+        return !!day && day >= start && day <= end;
+    };
+    const fullMonthInRange = (m?: string) => {
+        if (!m) return false;
+        const [y, mo] = m.split('-').map(Number);
+        const last = `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}`;
+        return `${m}-01` >= start && last <= end;
+    };
+    return aggregateWith(`${start}~${end}`, inRange, fullMonthInRange, data, accountingMode);
+};
+
+const aggregateWith = (
+    month: string,
+    inMonth: (d?: string) => boolean,
+    payrollMonthIncluded: (m?: string) => boolean,
+    data: MonthlyRawData,
+    accountingMode: 'ACCRUAL' | 'CASH',
 ): MonthlyPnLInputs => {
     const { settlements, standaloneExpenses, billPayments, payrollRecords, employees } = data;
-    const inMonth = (d?: string) => !!d && String(d).slice(0, 7) === month;
 
     const cost: Record<string, number> = {};
     const bdown = { grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0 };
@@ -182,7 +214,7 @@ export const aggregateMonth = (
 
     const laborByDept: Record<string, number> = {};
     payrollRecords.forEach((p: any) => {
-        if (p?.month !== month) return;
+        if (!payrollMonthIncluded(p?.month)) return;
         if (p?.status === 'POSTED') {
             addCost(netPayFromDetails(p), 'PAYROLL');
             if (p.isStatutoryPaid) addCost(num(p.totalGovtPay), 'EPF_SOCSO');
@@ -229,6 +261,38 @@ export const aggregateMonth = (
         laborByDept,
         hasData,
     };
+};
+
+/** `pay_<账单ID>_<时间>` → 账单ID（账单ID 本身可能含底线） */
+export const parentBillIdOfPayment = (id?: string): string | null => {
+    const s = String(id || '');
+    if (!s.startsWith('pay_')) return null;
+    const last = s.lastIndexOf('_');
+    return last > 4 ? s.slice(4, last) : null;
+};
+
+/**
+ * 业务发生制下的重复付款列：应付账款第二笔以后的付款会另建 `pay_<账单ID>_<时间>`（totalBillAmount = 0），
+ * 而原账单已按全额（totalBillAmount）计入，所以这些付款列在业务发生制下会被重复计算。
+ * 只有「原账单确实有 totalBillAmount > 0」才排除；找不到原账单或旧账单没有总额时照算。
+ * 现金制下它们是真实付款，照算。aggregateMonth 本身不改（维持与财务报表相同）。
+ */
+export const splitAccrualDuplicatePayments = <T extends { id?: string; totalBillAmount?: number }>(
+    expenses: T[],
+    accountingMode: 'ACCRUAL' | 'CASH',
+    parentBills: Map<string, { totalBillAmount?: number }> = new Map(),
+): { kept: T[]; removed: T[] } => {
+    if (accountingMode !== 'ACCRUAL') return { kept: expenses, removed: [] };
+    const known = new Map(parentBills);
+    expenses.forEach(e => { if (e?.id && !known.has(e.id)) known.set(e.id, e); });
+    const kept: T[] = [];
+    const removed: T[] = [];
+    expenses.forEach(e => {
+        const parentId = parentBillIdOfPayment(e?.id);
+        const isDuplicate = !!parentId && !(Number(e?.totalBillAmount) > 0) && Number(known.get(parentId)?.totalBillAmount) > 0;
+        (isDuplicate ? removed : kept).push(e);
+    });
+    return { kept, removed };
 };
 
 /** 从起讫月份产生月份清单，例如 2026-01 ~ 2026-08 */

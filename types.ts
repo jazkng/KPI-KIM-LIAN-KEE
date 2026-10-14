@@ -135,6 +135,15 @@ export interface AttendanceRecord {
     notes?: string;
     source?: 'app' | 'face_machine';
     allTimes?: string[]; // 👑 新增：支持多段打卡时间，可存储多次进/出时间列表 (e.g. ["14:55", "18:02", "18:58", "01:15"])
+    // ── V2：FACE3000 审核导入（全部选填，V1 不读也不影响）──
+    /** 主管已豁免当天迟到：薪资不按这笔记录扣迟到款 */
+    lateExcused?: boolean;
+    /** 主管批准的加班分钟数（没批准就没有这个栏位） */
+    approvedOtMinutes?: number;
+    /** 哪一次导入写入的 */
+    importBatchId?: string;
+    reviewedBy?: string;
+    reviewedAt?: string;
 }
 
 
@@ -595,6 +604,8 @@ export interface Employee {
     isAttendanceExempt?: boolean; // 新增：免打卡标记
     isPayrollEligible?: boolean; // 新增：是否参与薪资结算 (接收薪资)
     shiftGroup?: number; // 新增：班次人群 (1 = 班次1, 2 = 班次2)
+    /** 考勤机（FACE3000-U）上的员工编号；没设定时以员工 ID 比对（V2 新增，选填） */
+    attendanceDeviceNo?: string;
 
     // 🏢 组织架构图（只影响组织图显示，不影响权限 orgLevel、薪资 / 报表用的 department）
     /** BOD / MANAGEMENT / STAFF；没设定 = 按 orgLevel 自动判断（见 utils/orgChartModel.ts） */
