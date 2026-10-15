@@ -19,6 +19,7 @@ import { addDays, daysInMonth, resolvePeriod } from '../../cockpit/periods';
 import { legacyFinancialReport, type LegacyFinancialReportResult } from './legacyFinancialReport';
 import { legacyDailyReportRange } from './legacyDailyReport';
 import { checkPayrollMonth, type PayrollMonthCheck } from './payrollFieldCheck';
+import { checkPettyCash, PETTY_CASH_MATCH_LABEL, PETTY_CASH_USE_LABEL, type PettyCashCheck, type PettyCashMatchType, type PettyCashUse } from './pettyCashCheck';
 
 export interface ReconSource extends CockpitDataSource {
     getRecurringBills(): Promise<any[]>;
@@ -78,6 +79,7 @@ export interface MonthReconciliation {
     unexplainedB: number;
     findings: ReconFinding[];
     payroll: PayrollMonthCheck | null;
+    pettyCash: PettyCashCheck;
     categories: { category: string; amount: number; financialReport: string; classicLine: string; cockpit: string; flag?: string }[];
     missingSettlementDays: string[];
 }
@@ -213,14 +215,28 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
                 .map(ch => ({ date: String(s.date).slice(0, 10), label: `${ch} 未对账，广告`, amount: num(s.sales.deliveryBreakdown[`${ch}Ads`]) }))),
     });
 
-    // 3. 钱箱支出
+    // 3. 钱箱支出：逐笔列出，并找出与兼职、预支、应付账款同金额的疑似同一笔
+    const pettyCash = checkPettyCash(settlements, standalone, start, end);
     findings.push({
         id: 'PETTY_CASH',
         title: '日结钱箱现金支出（dayExpenses）',
-        detail: '钱已经从钱箱付出，但财务报表与传统账目都没有读取这一栏；驾驶舱计入其他经营费用。若同一笔也在应付账款登记，会重复，请在明细中核对。',
+        detail: `钱已经从钱箱付出，但财务报表与传统账目都没有读取这一栏；驾驶舱计入其他经营费用。按文字粗分：${
+            (Object.keys(pettyCash.byUse) as PettyCashUse[]).filter(k => pettyCash.byUse[k].count)
+                .map(k => `${PETTY_CASH_USE_LABEL[k]} ${pettyCash.byUse[k].amount.toFixed(2)}（${pettyCash.byUse[k].count} 笔）`).join('、') || '无'}。`,
         amount: adj.pettyCash, count: adj.pettyCashCount, effectOnA: adj.pettyCash, effectOnB: adj.pettyCash,
-        records: settlements.filter(s => inMonth(s.date)).flatMap(s => (s.dayExpenses || []).filter((e: any) => num(e?.amount) > 0)
-            .map((e: any) => ({ date: String(s.date).slice(0, 10), label: e.description || e.note || e.item || e.category || '钱箱支出', amount: num(e.amount) }))),
+        records: pettyCash.entries.map(e => ({ date: e.date, label: e.text, amount: e.amount, note: PETTY_CASH_USE_LABEL[e.use] })),
+    });
+    findings.push({
+        id: 'PETTY_CASH_OVERLAP',
+        title: '钱箱支出与其他记录同金额（疑似同一笔被记两次）',
+        detail: `同一天前后 2 天内、金额完全相同的兼职工资、员工预支或应付账款记录。若确实是同一笔钱（从钱箱拿钱付，又在兼职 / 预支 / 应付账款登记），驾驶舱会重复扣除；若只是巧合同金额，则不必处理。${
+            (Object.keys(pettyCash.matched) as PettyCashMatchType[]).filter(k => pettyCash.matched[k].count)
+                .map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${pettyCash.matched[k].amount.toFixed(2)}（${pettyCash.matched[k].count} 笔）`).join('、')}`,
+        amount: pettyCash.matchedTotal, count: pettyCash.entries.filter(e => e.match).length, needsDecision: pettyCash.matchedTotal > 0,
+        records: pettyCash.entries.filter(e => e.match).map(e => ({
+            date: e.date, label: e.text, amount: e.amount,
+            note: `${PETTY_CASH_MATCH_LABEL[e.match!.type]}：${e.match!.label}（${e.match!.date}）`,
+        })),
     });
 
     // 4. 收款手续费
@@ -536,6 +552,7 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         bridgeA, bridgeB, unexplainedA, unexplainedB,
         findings,
         payroll,
+        pettyCash,
         categories,
         missingSettlementDays,
     };
@@ -570,10 +587,16 @@ export const reconciliationSummaryText = (r: MonthReconciliation): string => {
         '差异来源：',
         ...r.findings.filter(x => x.count > 0 || Math.abs(x.amount) > 0.005).map(x => `  ${x.title}：${f(x.amount)}（${x.count} 笔）${x.needsDecision ? ' ※需确认' : ''}`),
     ];
+    const pc = r.pettyCash;
+    lines.push('', `钱箱支出 ${f(pc.total)}（${pc.entries.length} 笔），按文字粗分：${
+        (Object.keys(pc.byUse) as PettyCashUse[]).map(k => `${PETTY_CASH_USE_LABEL[k]} ${f(pc.byUse[k].amount)}（${pc.byUse[k].count}）`).join('、')}`,
+    `  与其他记录同金额（±2 天）：${f(pc.matchedTotal)}；${
+        (Object.keys(pc.matched) as PettyCashMatchType[]).map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${f(pc.matched[k].amount)}（${pc.matched[k].count}）`).join('、')}`);
     if (r.payroll) {
         const t = r.payroll.totals;
         lines.push('', `薪资核对：${r.payroll.employees.length} 人，${r.payroll.mismatchCount} 人实发对不上；状态 ${r.payroll.status}，法定供款${r.payroll.isStatutoryPaid ? '已缴' : '未缴'}`,
             `  应发 ${f(t.gross)}、无薪假 ${f(t.unpaidLeave)}、已扣罚款 ${f(t.penaltyDeducted)}、未扣罚款 ${f(t.penaltyNotDeducted)}、预支扣回 ${f(t.advanceLoan)}（预支支出 ${f(r.payroll.advanceExpenses)}）、雇主供款 ${f(t.employerStatutory)}`,
+            `  其他扣款：住宿费 ${f(t.hostelFee)}、其他扣款 ${f(t.otherDeduction)}、扣回借款 ${f(t.loanRepay)}；员工法定扣款 ${f(r.payroll.employees.reduce((s, e) => s + e.employeeStatutory, 0))}`,
             `  人工（薪资单部分）：A 口径 ${f(t.asFinancialReport)}、B 口径 ${f(t.asClassic)}、C 口径 ${f(t.asCockpit)}、建议口径 ${t.proposed === null ? '无法计算（有人对不上）' : f(t.proposed)}`);
     }
     return lines.join('\n');
