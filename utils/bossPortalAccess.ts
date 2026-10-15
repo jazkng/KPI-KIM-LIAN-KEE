@@ -35,6 +35,8 @@ export const BOSS_TARGET_MODULE_MAP: Record<string, AppModule> = {
     LABOUR_PROFIT: 'REPORTS',
     // 经营驾驶舱：含利润、营业额与人工成本，与财务报表同一个权限
     BOSS_COCKPIT: 'REPORTS',
+    // 盈亏对账：只读，含利润、营业额与薪资，与财务报表同一个权限
+    PNL_RECON: 'REPORTS',
     // 人事
     HR: 'HR_FILES',
     ATTENDANCE: 'ATTENDANCE_CONSOLE',

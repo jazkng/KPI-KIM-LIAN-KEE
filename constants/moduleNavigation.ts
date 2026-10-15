@@ -72,6 +72,7 @@ export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     TREASURY: { category: 'FINANCE', order: 40 },
     REPORTS: { category: 'FINANCE', order: 50 },
     REPORT: { category: 'FINANCE', order: 50 },
+    PNL_RECON: { category: 'FINANCE', order: 55 },
 
     // 人事与组织
     HR: { category: 'PEOPLE', order: 10 },
