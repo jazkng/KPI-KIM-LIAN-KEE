@@ -146,3 +146,35 @@ describe('财务报表首页照抄：人工来源', () => {
         expect(r.labour).toBe(5532.35);
     });
 });
+
+describe('钱箱支出核对：疑似同一笔被记两次', () => {
+    it('同日同金额的兼职工资会被配对；用途按文字粗分；每笔另外的记录只配对一次', async () => {
+        const { checkPettyCash, classifyPettyCashUse } = await import('../../utils/pnl/reconciliation/pettyCashCheck');
+        const settlements = [
+            { date: '2026-09-20', dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }, { company: 'Kedai', item: '买冰', amount: 35 }] },
+            { date: '2026-09-21', dayExpenses: [{ company: '', item: '杂费', amount: 450 }] },
+        ];
+        const r = checkPettyCash(settlements, sepStandaloneExpenses, '2026-09-01', '2026-09-30');
+        expect(r.total).toBe(935);
+        expect(r.entries[0].match?.type).toBe('PART_TIME');
+        expect(r.entries[2].match).toBeUndefined(); // parttime_audit_1 已配对过
+        expect(r.matched.PART_TIME).toEqual({ amount: 450, count: 1 });
+        expect(r.byUse.LABOUR.amount).toBe(450);
+        expect(r.byUse.FOOD.amount).toBe(35);
+        expect(classifyPettyCashUse('Gas LPG 14kg')).toBe('FUEL');
+        expect(classifyPettyCashUse('修理水管')).toBe('OTHER');
+        expect(classifyPettyCashUse('矿泉水 2 箱')).toBe('FOOD');
+    });
+
+    it('对账结果与摘要包含钱箱核对；摘要不列钱箱文字内容（可能含员工姓名）', async () => {
+        const settlements = sepSettlements.map(s => s.date === '2026-09-20' ? { ...s, dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }] } : s);
+        const r = await reconcileMonth(sourceOf({ settlements }), '2026-09', '2026-10-15');
+        const f = Object.fromEntries(r.findings.map(x => [x.id, x]));
+        expect(f.PETTY_CASH_OVERLAP.amount).toBe(450);
+        expect(f.PETTY_CASH_OVERLAP.needsDecision).toBe(true);
+        const text = reconciliationSummaryText(r);
+        expect(text).toContain('与其他记录同金额');
+        expect(text).not.toContain('Ali');
+        expect(text).toContain('住宿费');
+    });
+});
