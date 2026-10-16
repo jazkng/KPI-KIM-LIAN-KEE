@@ -21,6 +21,7 @@ import { categorizeExpense, type MonthlyPnLInputs } from '../monthlyPnLAggregato
 import type { EmployeeLabourCost } from '../labour/labourCost';
 import { addDays, daysInMonth, overlapDaysWithMonth, type Period } from './periods';
 import type { ProfitAdjustments } from './profitAdjustments';
+import { PNL_STATUS_LABEL, type PnLEngineResult } from '../pnl/engine/pnlEngine';
 
 export type CockpitStatus = 'CONFIRMED' | 'ESTIMATED' | 'INCOMPLETE' | 'PENDING_CLOSE';
 
@@ -90,6 +91,13 @@ export interface CockpitInputs {
     /** PR B 利润引擎修正：平台扣款、收款手续费、钱箱支出（期间 / 期末所在整月） */
     adjustments?: ProfitAdjustments;
     monthAdjustments?: ProfitAdjustments;
+    /**
+     * 唯一盈亏引擎的结果（业务发生制）。有的话，利润、五大项、月底预测、保本都以它为准，
+     * 不再由驾驶舱自己计算（负责人 2026-10-16 决定：驾驶舱与传统账目共用同一引擎）。
+     */
+    engine?: PnLEngineResult;
+    /** 期末所在整月的引擎结果（月底预测、保本用） */
+    monthEngine?: PnLEngineResult;
     /** 另一种会计口径下的净利（对照业务发生制 / 现金制的差异） */
     otherModeNetProfit?: number | null;
     /** 业务发生制下已排除的应付账款分期付款列（避免与原账单重复）；财务报表目前仍计入 */
@@ -119,6 +127,14 @@ export const splitCosts = (costByCategory: Record<string, number>) => {
     (Object.keys(rows) as (keyof typeof rows)[]).forEach(k => rows[k].sort((a, b) => b.amount - a.amount));
     return { ...out, rows };
 };
+
+/** 引擎结果 → 驾驶舱成本结构（钱箱支出不计入；人工另由引擎给出） */
+const costsFromEngine = (e: PnLEngineResult) => ({
+    food: e.food, platform: e.platform, opex: e.opex, otherLabour: 0, excludedPayrollLike: 0, nonOperating: 0,
+    rows: { food: e.detail.food as KpiDetailRow[], platform: e.detail.platform as KpiDetailRow[], opex: e.detail.opex as KpiDetailRow[] },
+    bankFees: e.classic.costByCategory.BANK_FEE || 0,
+    pettyCash: 0,
+});
 
 /** 套用利润引擎修正：以正确的平台扣款取代财务报表算法，并计入收款手续费与钱箱支出 */
 export const applyAdjustments = (
@@ -229,13 +245,14 @@ export interface CockpitResult {
 export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     const { period, pnl } = input;
     const kpis: Record<string, Kpi> = {};
-    const revenue = revenueOf(pnl);
-    const costs = applyAdjustments(splitCosts(pnl.costByCategory), pnl.costByCategory, input.adjustments);
+    const E = input.engine;
+    const revenue = E ? E.revenue : revenueOf(pnl);
+    const costs = E ? costsFromEngine(E) : applyAdjustments(splitCosts(pnl.costByCategory), pnl.costByCategory, input.adjustments);
     const adj = input.adjustments;
     const coverage = settlementCoverage(period, input.dailyRevenue);
     const labour = labourForPeriod(period, input.labour);
     const partTime = round2(input.partTimeWages || 0);
-    const labourTotal = round2(labour.amount + costs.otherLabour + partTime);
+    const labourTotal = E ? E.labour : round2(labour.amount + costs.otherLabour + partTime);
     const periodFinished = period.end < input.today;
     const futureOnly = period.elapsedDays === 0;
 
@@ -333,7 +350,11 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
         unit: 'RM',
         status: labourStatus,
         statusNote: labourNotes.join('；') || '全部以已发放薪资为准',
-        basis: [
+        basis: E ? [
+            '唯一盈亏引擎：正职薪资以 Payroll 为准 = 应发 − 无薪假 − 已从实发扣掉的罚款（逐人核对字段）+ 雇主 EPF / SOCSO / EIS',
+            '未发薪月份按员工档案底薪与法定供款暂估；兼职工资（兼职登记）计一次；员工预支已含在应发里，不另计',
+            '独立支出里的薪资、津贴、佣金、法定供款记录以 Payroll 为准，不另计（如有，列为待核对）',
+        ] : [
             '雇主人工总成本 = 应发薪资（底薪 + 津贴 + 已发 OT / 奖金）+ 雇主 EPF + 雇主 SOCSO + 雇主 EIS',
             '员工净实领工资 ≠ 雇主总成本；员工自付的 EPF / SOCSO / EIS 已含在应发薪资内，不再加',
             '已发薪（POSTED）月份以薪资记录为准；未发薪按人事底薪与现有法定供款规则推算，不自动计入未确认的 OT',
@@ -344,7 +365,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
             partTime > 0 ? `另计兼职工资 RM ${partTime.toFixed(2)}（兼职不在薪资单 details 里，从上面排除的薪资类支出中取回）` : '',
         ].filter(Boolean),
         sources: labourSources,
-        rows: [
+        rows: E ? (E.detail.labour as KpiDetailRow[]) : [
             ...Object.entries(labour.byDept).sort((a, b) => b[1] - a[1]).map(([dept, amount]) => ({ label: `部门 ${dept}`, amount: round2(amount) })),
             ...(costs.otherLabour > 0 ? [{ label: '员工餐、宿舍', amount: round2(costs.otherLabour) }] : []),
             ...(partTime > 0 ? [{ label: '兼职工资', amount: partTime }] : []),
@@ -364,11 +385,21 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
 
     // ── 利润 ──
     const grossProfit = round2(revenue - costs.food - costs.platform);
-    const netProfit = round2(grossProfit - labourTotal - costs.opex);
+    const netProfit = E ? E.netProfit : round2(grossProfit - labourTotal - costs.opex);
     // 外送平台款项未对账时，平台扣款是预估值，利润不能算「已确认」
     const platformReconciled = !input.adjustments || input.adjustments.unreconciledPlatformDays === 0;
-    const allConfirmed = [revenueStatus, foodStatus, labourStatus].every(s => s === 'CONFIRMED') && periodFinished && costs.opex > 0 && platformReconciled;
-    const profitBasis = [
+    const allConfirmed = E
+        ? E.status === 'CONFIRMED'
+        : [revenueStatus, foodStatus, labourStatus].every(s => s === 'CONFIRMED') && periodFinished && costs.opex > 0 && platformReconciled;
+    const engineBlocking = E ? E.reasons.filter(r => r.level === 'BLOCKING') : [];
+    const fmt = (n: number) => n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const profitBasis = E ? [
+        '唯一盈亏引擎（与传统账目同一份结果）：净利 = 营业额 − 外送平台扣款 − 食材 − 人工 − 其他经营费用',
+        '口径：权责发生制。采购、杂项以应付账款 / 独立支出为准（按账单日期）；薪资以 Payroll 为准；兼职计一次；员工预支不另计',
+        '日结钱箱支出只用于钱箱核对，不计入盈亏',
+        ...E.reasons.filter(r => r.level === 'INFO').map(r => r.label),
+        ...E.excluded.map(x => `不计入：${x.label} RM ${fmt(x.amount)}`),
+    ] : [
         '毛利 = 营业额 − 食材采购 − 外送平台抽佣与广告',
         '净利 = 毛利 − 人工总成本 − 其他经营费用（租金、水电、杂项等）',
         '不计入：资本支出、押金、股东股息（非经营项目）；损益中的薪资类支出（已由人工总成本计算）',
@@ -388,7 +419,16 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
             : '',
     ];
     const profitBasisClean = profitBasis.filter(Boolean);
-    const profitRows: KpiDetailRow[] = [
+    const profitRows: KpiDetailRow[] = E ? [
+        { label: '营业额', amount: revenue },
+        { label: '− 食材（采购暂估）', amount: -E.food },
+        { label: '− 外送平台扣款', amount: -E.platform },
+        { label: '= 毛利', amount: grossProfit },
+        { label: '− 人工总成本', amount: -E.labour },
+        { label: '− 其他经营费用', amount: -E.opex },
+        { label: '= 净利', amount: netProfit },
+        ...engineBlocking.map(r => ({ label: `待核对：${r.label}`, amount: r.amount ?? 0 })),
+    ] : [
         { label: '营业额', amount: revenue },
         { label: '− 食材采购', amount: -round2(costs.food) },
         { label: '− 外送平台抽佣与广告', amount: -round2(costs.platform) },
@@ -400,13 +440,15 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     ];
     kpis.actualProfit = {
         key: 'actualProfit',
-        label: allConfirmed ? '实际利润（已确认）' : '截至目前利润（未确认）',
+        label: allConfirmed ? '实际利润（已确认）' : E ? `经营盈亏（${PNL_STATUS_LABEL.PROVISIONAL}）` : '截至目前利润（未确认）',
         value: netProfit,
         unit: 'RM',
         status: allConfirmed ? 'CONFIRMED' : revenueStatus === 'INCOMPLETE' || labourStatus === 'INCOMPLETE' ? 'INCOMPLETE' : periodFinished ? 'PENDING_CLOSE' : 'ESTIMATED',
         statusNote: allConfirmed
-            ? '期间已结束，日结、薪资、费用均已入账'
-            : [
+            ? '期间已结束，日结、薪资、费用均已入账并核对'
+            : E
+                ? engineBlocking.map(r => r.label).join('；')
+                : [
                 !periodFinished ? '期间未结束' : '',
                 revenueStatus !== 'CONFIRMED' ? `营业额：${revenueStatusNote}` : '',
                 labourStatus !== 'CONFIRMED' ? `人工：${kpis.labour.statusNote}` : '',
@@ -443,9 +485,10 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     // ── 本月累计、预计月底利润、保本（以期间末所在的月份计算） ──
     const month = period.end.slice(0, 7);
     const dim = daysInMonth(month);
-    const monthRevenue = revenueOf(input.monthPnl);
-    const monthCosts = applyAdjustments(splitCosts(input.monthPnl.costByCategory), input.monthPnl.costByCategory, input.monthAdjustments);
-    const monthLabourAmount = round2(input.monthLabour.reduce((s, c) => s + c.employerCost, 0) + monthCosts.otherLabour + (input.monthPartTimeWages || 0));
+    const ME = input.monthEngine;
+    const monthRevenue = ME ? ME.revenue : revenueOf(input.monthPnl);
+    const monthCosts = ME ? costsFromEngine(ME) : applyAdjustments(splitCosts(input.monthPnl.costByCategory), input.monthPnl.costByCategory, input.monthAdjustments);
+    const monthLabourAmount = ME ? ME.labour : round2(input.monthLabour.reduce((s, c) => s + c.employerCost, 0) + monthCosts.otherLabour + (input.monthPartTimeWages || 0));
     const monthSettledDays = Object.keys(input.monthDailyRevenue).filter(d => d.startsWith(month)).length;
     const monthElapsed = input.today.slice(0, 7) === month ? Number(input.today.slice(8, 10)) : input.today.slice(0, 7) > month ? dim : 0;
     const monthFinished = input.today.slice(0, 7) > month;
@@ -566,6 +609,7 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
     }
     if (!adj && input.pettyCash > 0) alerts.push({ level: 'NORMAL', title: '日结钱箱支出未计入利润', detail: `RM ${round2(input.pettyCash).toFixed(2)} 没有分类`, kpi: 'actualProfit' });
     if (adj && adj.unreconciledPlatformDays > 0) alerts.push({ level: 'NORMAL', title: '外送平台款项尚未对账', detail: `${adj.unreconciledPlatformDays} 个平台日未对账，平台扣款为预估`, kpi: 'actualProfit' });
+    if (E && E.cashBox.byStatus.MISSING.count > 0) alerts.push({ level: 'NORMAL', title: '费用可能遗漏', detail: `钱箱有 ${E.cashBox.byStatus.MISSING.count} 笔支出（RM ${fmt(E.cashBox.byStatus.MISSING.amount)}）找不到应付账款 / 薪资 / 预支记录`, kpi: 'actualProfit' });
     if (labour.missing > 0) alerts.push({ level: 'NORMAL', title: '有员工没有底薪资料', detail: `${labour.missing} 人次未计入人工成本`, kpi: 'labour' });
     if (costs.food === 0 && revenue > 0) alerts.push({ level: 'NORMAL', title: '期间内没有食材采购记录', detail: '毛利与保本额可能失真', kpi: 'food' });
 
@@ -617,7 +661,15 @@ export const buildCockpit = (input: CockpitInputs): CockpitResult => {
             { label: '薪资', ok: labour.estimated === 0 && labour.missing === 0, detail: labour.estimated || labour.missing ? kpis.labour.statusNote : '全部以已发放薪资为准' },
             { label: '经营费用', ok: costs.opex > 0, detail: costs.opex > 0 ? `已入账 RM ${round2(costs.opex).toFixed(2)}` : '没有租金、水电等费用记录' },
             { label: '食材采购', ok: costs.food > 0, detail: costs.food > 0 ? `已入账 RM ${round2(costs.food).toFixed(2)}（采购口径）` : '没有食材采购记录' },
-            ...(adj ? [{ label: '日结钱箱支出', ok: true, detail: adj.pettyCash ? `已计入 RM ${adj.pettyCash.toFixed(2)}（未分类）` : '无' }] : []),
+            ...(E
+                ? [{
+                    label: '钱箱核对',
+                    ok: E.cashBox.byStatus.MISSING.count + E.cashBox.byStatus.MISMATCH.count + E.cashBox.byStatus.TO_VERIFY.count === 0,
+                    detail: E.cashBox.entries.length
+                        ? `钱箱支出 RM ${fmt(E.cashBox.total)} 不计入盈亏；缺少记录 ${E.cashBox.byStatus.MISSING.count} 笔、不一致 ${E.cashBox.byStatus.MISMATCH.count} 笔、待核对 ${E.cashBox.byStatus.TO_VERIFY.count} 笔`
+                        : '期间内没有钱箱支出',
+                }]
+                : adj ? [{ label: '日结钱箱支出', ok: true, detail: adj.pettyCash ? `已计入 RM ${adj.pettyCash.toFixed(2)}（未分类）` : '无' }] : []),
             { label: '分期付款去重', ok: true, detail: (input.excludedDuplicatePayments || 0) > 0 ? `已排除重复 RM ${round2(input.excludedDuplicatePayments || 0).toFixed(2)}` : '无重复' },
         ],
     };

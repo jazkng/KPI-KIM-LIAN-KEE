@@ -162,7 +162,8 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         getStandaloneExpensesByIds: ids => source.getStandaloneExpensesByIds(ids),
     };
     const period = resolvePeriod('CUSTOM', today, { start, end });
-    const cockpit = await loadCockpitWith(cachedSource, period, today, 'ACCRUAL');
+    // 修改前的驾驶舱算法（对照用）；驾驶舱画面本身已改读唯一引擎
+    const cockpit = await loadCockpitWith(cachedSource, period, today, 'ACCRUAL', { useEngine: false });
     const rowAmount = (label: string) => -num(cockpit.kpis.actualProfit.rows.find(r => r.label === label)?.amount);
     const C: ReconLine & { status: string; statusNote: string } = {
         revenue: num(cockpit.kpis.revenue.value),

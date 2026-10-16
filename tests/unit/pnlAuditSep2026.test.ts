@@ -111,13 +111,36 @@ describe('现有算法 3：老板驾驶舱「上个月」（业务发生制）',
     };
 
     it('结果等于正确答案 32,887.65，状态不是「已确认」（15 个平台日未对账）', async () => {
-        const result = await loadCockpitWith(source, resolvePeriod('LAST_MONTH', '2026-10-15'), '2026-10-15', 'ACCRUAL');
+        // 修改前的驾驶舱算法（钱箱支出计入）
+        const result = await loadCockpitWith(source, resolvePeriod('LAST_MONTH', '2026-10-15'), '2026-10-15', 'ACCRUAL', { useEngine: false });
         const k = result.kpis;
         expect(k.revenue.value).toBe(CORRECT.revenue);
         expect(k.food.value).toBe(CORRECT.food);
         expect(k.labour.value).toBe(CORRECT.labour);
         expect(k.actualProfit.value).toBe(CORRECT.netProfit);
         expect(k.actualProfit.status).not.toBe('CONFIRMED');
+    });
+});
+
+describe('修改后：驾驶舱改读唯一盈亏引擎', () => {
+    const source: CockpitDataSource = {
+        getPnLRawRange: async () => ({ settlements: raw.settlements, billPayments: raw.billPayments, standaloneExpenses: raw.standaloneExpenses }),
+        getEmployees: async () => raw.employees,
+        getPayrollRecords: async () => raw.payrollRecords,
+        getAttendanceReviewsByMonth: async () => [],
+        getStandaloneExpensesByIds: async ids => raw.standaloneExpenses.filter(e => ids.includes(e.id)),
+    };
+    it('驾驶舱利润 = 引擎 = 传统账目；钱箱 35 不计入；状态为暂估／待核对并提示费用可能遗漏', async () => {
+        const result = await loadCockpitWith(source, resolvePeriod('LAST_MONTH', '2026-10-15'), '2026-10-15', 'ACCRUAL');
+        const k = result.kpis;
+        expect(k.actualProfit.value).toBe(32922.65);
+        expect(k.labour.value).toBe(6582.35);
+        expect(k.actualProfit.status).not.toBe('CONFIRMED');
+        expect(k.actualProfit.label).toContain('暂估／待核对');
+        expect(result.alerts.some(a => a.title === '费用可能遗漏')).toBe(true);
+        expect(result.integrity.find(i => i.label === '钱箱核对')?.ok).toBe(false);
+        // 月底预测 / 保本也用同一份引擎结果：整月已结束，预计月底利润 = 实际利润
+        expect(k.projectedProfit.value).toBe(32922.65);
     });
 });
 

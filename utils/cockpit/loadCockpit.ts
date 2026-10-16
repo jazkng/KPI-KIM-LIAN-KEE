@@ -23,6 +23,7 @@ export const browserCockpitSource: CockpitDataSource = {
     getPayrollRecords: () => DataManager.getPayrollRecords(),
     getAttendanceReviewsByMonth: month => DataManager.getAttendanceReviewsByMonth(month),
     getStandaloneExpensesByIds: ids => DataManager.getStandaloneExpensesByIds(ids),
+    getRecurringBills: () => DataManager.getRecurringBills(),
 };
 
 /** 分期付款列对应的原账单（期间外的才另外读取） */

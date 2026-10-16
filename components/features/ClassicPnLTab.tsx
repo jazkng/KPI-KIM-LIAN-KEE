@@ -34,6 +34,7 @@ import {
     LaborByDept,
 } from '../../utils/classicPnLBuilder';
 import { exportClassicPnLToExcel, downloadBlob, buildClassicPnLCsv, downloadCsv } from '../../utils/classicPnLExport';
+import { PNL_STATUS_LABEL, type PnLEngineResult } from '../../utils/pnl/engine/pnlEngine';
 
 interface ClassicPnLTabProps {
     /** 'YYYY-MM' — 跟着报表上方的日期区间走 */
@@ -64,6 +65,8 @@ interface ClassicPnLTabProps {
     currentRange: { start: string; end: string };
     /** 对照期实际日期区间 */
     prevRange: { start: string; end: string };
+    /** 唯一盈亏引擎的状态与待核对原因（有的话在最上方显示） */
+    pnlStatus?: Pick<PnLEngineResult, 'status' | 'reasons' | 'netProfit' | 'cashBox'>;
 }
 
 const fmt = (n: number) => n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -74,6 +77,7 @@ export const ClassicPnLTab: React.FC<ClassicPnLTabProps> = ({
     laborByDept, prevLaborByDept, laborDeptMeta,
     inStoreSales, prevInStoreSales, currentRange, prevRange,
     mixedSeafoodLegacyAmount = 0,
+    pnlStatus,
 }) => {
     const isFullMonth = isFullMonthRange(currentRange.start, currentRange.end);
     const prevIsFullMonth = isFullMonthRange(prevRange.start, prevRange.end);
@@ -419,8 +423,23 @@ export const ClassicPnLTab: React.FC<ClassicPnLTabProps> = ({
         );
     }
 
+    const blockingReasons = pnlStatus ? pnlStatus.reasons.filter(r => r.level === 'BLOCKING') : [];
     return (
         <div className="space-y-3">
+            {pnlStatus && (
+                <div className={`rounded-2xl border p-3 text-xs leading-relaxed ${pnlStatus.status === 'CONFIRMED' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                    <div className="font-black text-sm">
+                        经营盈亏：{PNL_STATUS_LABEL[pnlStatus.status]} · NET PROFIT RM {fmt(pnlStatus.netProfit)}
+                    </div>
+                    <div className="mt-0.5">与老板驾驶舱同一套计算（权责发生制）：采购以应付账款为准，薪资以 Payroll 为准，日结钱箱支出只用于钱箱核对、不计入。</div>
+                    {blockingReasons.length > 0 && (
+                        <ul className="mt-1 list-disc pl-4">
+                            {blockingReasons.slice(0, 6).map((r, i) => <li key={i}>{r.label}{r.amount !== undefined ? `（RM ${fmt(r.amount)}）` : ''}</li>)}
+                            {blockingReasons.length > 6 && <li>另有 {blockingReasons.length - 6} 项，详见「盈亏对账」</li>}
+                        </ul>
+                    )}
+                </div>
+            )}
             {/* ━━━━━━━ 导入 / 导出列 ━━━━━━━ */}
             <div className="bg-[#FFFFFF] rounded-2xl border border-[#E5E7EB] p-3 md:p-4">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
