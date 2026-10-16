@@ -3,7 +3,7 @@ import {
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, ShoppingBag, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, Lock, Gauge, Scale
+    FileText, Calculator, Star, Search, Lock, Gauge, Scale, ListChecks
 } from 'lucide-react';
 import { Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
@@ -15,13 +15,13 @@ import {
 } from '../constants/moduleNavigation';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
-import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, ExpenseAudit, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
 const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 mins cache
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'EXPENSE_AUDIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 type PlanningTab  = 'VOTE' | 'OKR' | 'CAMPAIGN' | 'EVENTS';
 
 type CardConfig = {
@@ -58,6 +58,7 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
     { id: "boss_cockpit", title: "经营驾驶舱", sub: "BOSS COCKPIT", icon: Gauge, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'BOSS_COCKPIT' },
     { id: "pnl_recon", title: "盈亏对账", sub: "P&L RECONCILIATION", icon: Scale, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'PNL_RECON' },
+    { id: "expense_audit", title: "杂项费用审计", sub: "EXPENSE AUDIT", icon: ListChecks, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'EXPENSE_AUDIT' },
     { id: "labour_profit", title: "人工成本与盈利", sub: "LABOUR & PROFIT", icon: TrendingUp, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'LABOUR_PROFIT' },
     { id: "staff_cash", title: "兼职与预支", sub: "PART-TIME & ADVANCE", icon: Banknote, colorClass: "bg-emerald-50", iconColor: "text-emerald-700", actionType: 'NAVIGATE', target: 'STAFF_CASH' },
     { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
@@ -397,6 +398,7 @@ export const BossDashboard: React.FC<{
             'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
             'BOSS_COCKPIT': <BossCockpit onClose={close} />,
             'PNL_RECON': <PnLReconciliation onClose={close} />,
+            'EXPENSE_AUDIT': <ExpenseAudit onClose={close} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
