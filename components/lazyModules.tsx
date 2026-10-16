@@ -107,6 +107,7 @@ export const OnlineOrderCenter = lazyNamed(() => import('./features/orders/Onlin
 export const LabourProfitDashboard = lazyNamed(() => import('./features/labour/LabourProfitDashboard'), 'LabourProfitDashboard');
 export const BossCockpit = lazyNamed(() => import('./features/cockpit/BossCockpit'), 'BossCockpit');
 export const PnLReconciliation = lazyNamed(() => import('./features/finance/PnLReconciliation'), 'PnLReconciliation');
+export const ExpenseAudit = lazyNamed(() => import('./features/finance/ExpenseAudit'), 'ExpenseAudit');
 export const AccountsPayableModule = lazyNamed(() => import('./features/ap/AccountsPayableModule'), 'AccountsPayableModule');
 export const TreasuryModule = lazyNamed(() => import('./features/TreasuryModule'), 'TreasuryModule');
 export const WarrantyModule = lazyNamed(() => import('./features/WarrantyModule'), 'WarrantyModule');
