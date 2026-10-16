@@ -198,8 +198,7 @@ const aggregateWith = (
     });
 
     // ---------- 4. 薪资（POSTED 照算；未结账按看账模式，跟画面一致）----------
-    // 人工 = 实发 + 薪资扣回的员工借款（loanRepay）：借款发出时记 STAFF_LOAN（资产，不进盈亏），
-    // 从薪水扣回时实发变少，但员工的工资并没有变少；不加回去，人工就少算了这笔还款。
+    // 人工 = 实发 + 薪资扣回的员工借款（loanRepay）+ 宿舍费（hostelFee），见 payrollWageFromDetail
     const netPayFromDetails = (p: any): number => {
         const details: any[] = Array.isArray(p?.details) ? p.details : [];
         if (details.length === 0) return num(p?.totalNetPay);
@@ -268,11 +267,12 @@ const aggregateWith = (
 };
 
 /**
- * 薪资单一个人计入 PAYROLL 的金额：实发 + 薪资扣回的员工借款。
- * 员工借款（STAFF_LOAN）发出时是资产、不是费用；每月从薪水扣回只是收回借款，工资成本照样发生。
+ * 薪资单一个人计入 PAYROLL 的金额：实发 + 薪资扣回的员工借款 + 宿舍费。
+ * - 员工借款（STAFF_LOAN）发出时是资产、不是费用；每月从薪水扣回只是收回借款，工资成本照样发生。
+ * - 宿舍费：负责人 2026-10-16 决定算人工（只是写在薪资单上，实际没有扣），不让它减少人工。
  * 预支（advanceLoan）不加：预支发放时已另记 STAFF_ADVANCE 费用，实发扣回正好抵消。
  */
-export const payrollWageFromDetail = (d: any): number => num(d?.netPay) + num(d?.loanRepay);
+export const payrollWageFromDetail = (d: any): number => num(d?.netPay) + num(d?.loanRepay) + num(d?.hostelFee);
 
 /** `pay_<账单ID>_<时间>` → 账单ID（账单ID 本身可能含底线） */
 export const parentBillIdOfPayment = (id?: string): string | null => {

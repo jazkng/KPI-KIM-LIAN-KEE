@@ -247,3 +247,12 @@ describe('员工借款从薪水扣回：工资成本不能因此变少', () => {
         expect(res.labour!.classic.payrollNet).toBe(4574.25);
     });
 });
+
+describe('宿舍费算人工（负责人决定）', () => {
+    it('薪资单写了宿舍费：传统账目薪资照全额，不因宿舍费减少', () => {
+        const payroll = [{ ...sepPayroll[0], details: sepPayroll[0].details.map((d: any) => d.employeeId === 'E1' ? { ...d, hostelFee: 150, netPay: d.netPay - 150 } : d) }];
+        const input = { ...frInput, payrollRecords: payroll as any[] };
+        expect(legacyFinancialReport(input, '2026-09-01', '2026-09-30', 'ACCRUAL').classicCostByCategory.PAYROLL).toBe(4574.25);
+        expect(aggregateMonth('2026-09', input as any, 'ACCRUAL').costByCategory.PAYROLL).toBe(4574.25);
+    });
+});

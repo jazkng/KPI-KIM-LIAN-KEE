@@ -681,7 +681,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const details: any[] = Array.isArray((p as any).details) ? (p as any).details : [];
             if (details.length === 0) return Number(p.totalNetPay || 0);
             return details.reduce((sum, d) => {
-                // 实发 + 薪资扣回的员工借款（借款发出时记 STAFF_LOAN 资产，不进盈亏；扣回不代表工资变少）
+                // 实发 + 薪资扣回的员工借款 + 宿舍费（扣回借款、宿舍费都不代表工资变少）
                 const amount = payrollWageFromDetail(d);
                 if (d?.isPaid) return sum + amount;          // 真的发出去的钱，一律算
                 const emp = employees.find(e => e.id === d?.employeeId);
