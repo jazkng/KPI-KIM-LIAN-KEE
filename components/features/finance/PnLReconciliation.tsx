@@ -1,14 +1,17 @@
 // ============================================================================
-// 盈亏对账（统一财务盈亏 PR 1）· 只读
+// 盈亏对账 · 只读
 // ----------------------------------------------------------------------------
-// 选一个月份，按「开始对账」才读取资料；把财务报表首页、传统账目、驾驶舱、经营日报
-// 对同一份资料算出的经营盈亏并列，逐项列出差异来自哪些记录。不写入任何资料。
+// 选月份（或多个月份），按按钮才读取资料；把财务报表首页、传统账目、驾驶舱（修改前）
+// 与唯一盈亏引擎（修改后）对同一份资料算出的经营盈亏并列，逐项列出差异来源、
+// 钱箱核对结果与仍待核对的项目。不写入任何资料。
 // ============================================================================
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, Copy, Loader2, X } from 'lucide-react';
 import { getBusinessDateString } from '../../../utils/dateHelper';
 import { loadReconciliation } from '../../../utils/pnl/reconciliation/loadReconciliation';
-import { reconciliationSummaryText, type MonthReconciliation, type ReconFinding } from '../../../utils/pnl/reconciliation/reconcileMonth';
+import { batchSummaryText, reconciliationSummaryText, type MonthReconciliation, type ReconFinding } from '../../../utils/pnl/reconciliation/reconcileMonth';
+import { PNL_STATUS_LABEL } from '../../../utils/pnl/engine/pnlEngine';
+import { CASH_BOX_KIND_LABEL, CASH_BOX_STATUS_LABEL, CASH_BOX_USE_LABEL, type CashBoxStatus } from '../../../utils/pnl/engine/cashBox';
 import { COCKPIT_STATUS_LABEL } from '../../../utils/cockpit/cockpitMetrics';
 
 const rm = (n: number) => `${n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -41,6 +44,43 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
+    const [mode, setMode] = useState<'MONTH' | 'BATCH'>('MONTH');
+    const [batchFrom, setBatchFrom] = useState('2026-05');
+    const [batchTo, setBatchTo] = useState(previousMonth(today));
+    const [batch, setBatch] = useState<MonthReconciliation[]>([]);
+    const [batchProgress, setBatchProgress] = useState('');
+
+    const monthList = (from: string, to: string) => {
+        const out: string[] = [];
+        let [y, m] = from.split('-').map(Number);
+        const [ty, tm] = to.split('-').map(Number);
+        while ((y < ty || (y === ty && m <= tm)) && out.length < 12) {
+            out.push(`${y}-${String(m).padStart(2, '0')}`);
+            m += 1; if (m > 12) { m = 1; y += 1; }
+        }
+        return out;
+    };
+    const runBatch = async () => {
+        setLoading(true);
+        setError('');
+        setCopied('');
+        setBatch([]);
+        const months = monthList(batchFrom, batchTo);
+        const done: MonthReconciliation[] = [];
+        try {
+            // 一个月一个月读，避免同时读太多资料
+            for (const m of months) {
+                setBatchProgress(`正在对账 ${m}（${done.length + 1} / ${months.length}）`);
+                done.push(await loadReconciliation(m, today));
+                setBatch([...done]);
+            }
+        } catch (e: any) {
+            setError(`${e?.message || '读取失败'}（已完成 ${done.length} 个月）`);
+        } finally {
+            setBatchProgress('');
+            setLoading(false);
+        }
+    };
 
     const run = async () => {
         setLoading(true);
@@ -56,7 +96,10 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
         }
     };
 
-    const summary = useMemo(() => (result ? reconciliationSummaryText(result) : ''), [result]);
+    const summary = useMemo(
+        () => (mode === 'BATCH' ? (batch.length ? batchSummaryText(batch) : '') : result ? reconciliationSummaryText(result) : ''),
+        [mode, batch, result],
+    );
     const copy = async () => {
         try {
             await navigator.clipboard.writeText(summary);
@@ -81,28 +124,53 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
                         <X size={20} className="mx-auto" />
                     </button>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm font-bold">
-                        月份
-                        <input type="month" value={month} max={today.slice(0, 7)} onChange={e => setMonth(e.target.value)} className="min-h-[40px] rounded-lg border border-stone-300 px-2 font-mono" />
-                    </label>
-                    <button onClick={run} disabled={loading || !month} className="flex min-h-[40px] items-center gap-2 rounded-full bg-stone-900 px-4 text-sm font-black text-white disabled:opacity-50">
-                        {loading && <Loader2 size={16} className="animate-spin" />} 开始对账
-                    </button>
+                <div className="mt-2 flex gap-2" role="tablist">
+                    {(['MONTH', 'BATCH'] as const).map(m => (
+                        <button key={m} role="tab" aria-selected={mode === m} onClick={() => { setMode(m); setCopied(''); }}
+                            className={`min-h-[36px] rounded-full px-4 text-sm font-black ${mode === m ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'}`}>
+                            {m === 'MONTH' ? '单月明细' : '多月修改前后'}
+                        </button>
+                    ))}
                 </div>
+                {mode === 'MONTH' ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-2 text-sm font-bold">
+                            月份
+                            <input type="month" value={month} max={today.slice(0, 7)} onChange={e => setMonth(e.target.value)} className="min-h-[40px] rounded-lg border border-stone-300 px-2 font-mono" />
+                        </label>
+                        <button onClick={run} disabled={loading || !month} className="flex min-h-[40px] items-center gap-2 rounded-full bg-stone-900 px-4 text-sm font-black text-white disabled:opacity-50">
+                            {loading && <Loader2 size={16} className="animate-spin" />} 开始对账
+                        </button>
+                    </div>
+                ) : (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1 text-sm font-bold">
+                            从 <input type="month" aria-label="开始月份" value={batchFrom} max={batchTo} onChange={e => setBatchFrom(e.target.value)} className="min-h-[40px] rounded-lg border border-stone-300 px-2 font-mono" />
+                        </label>
+                        <label className="flex items-center gap-1 text-sm font-bold">
+                            到 <input type="month" aria-label="结束月份" value={batchTo} min={batchFrom} max={today.slice(0, 7)} onChange={e => setBatchTo(e.target.value)} className="min-h-[40px] rounded-lg border border-stone-300 px-2 font-mono" />
+                        </label>
+                        <button onClick={runBatch} disabled={loading || !batchFrom || !batchTo} className="flex min-h-[40px] items-center gap-2 rounded-full bg-stone-900 px-4 text-sm font-black text-white disabled:opacity-50">
+                            {loading && <Loader2 size={16} className="animate-spin" />} 开始对账
+                        </button>
+                    </div>
+                )}
             </header>
 
             <main className="flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
                 <div className="mx-auto max-w-4xl space-y-4">
-                    {!result && !loading && !error && (
+                    {mode === 'BATCH' && (
+                        <BatchView rows={batch} progress={batchProgress} error={error} summary={summary} copied={copied} onCopy={copy} />
+                    )}
+                    {mode === 'MONTH' && !result && !loading && !error && (
                         <p className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-relaxed text-stone-600">
                             选择月份后按「开始对账」。系统会读取该月的日结、支出、固定账单、薪资与员工资料（只读，不会写入或修改任何资料），
-                            用四套现有算法各算一次经营盈亏，并列出每一项差异来自哪些记录。
-                            驾驶舱是拟采用的起点，但<strong>不当作正确答案</strong>；它自己的问题也会列出。
+                            用现有的几套算法（修改前）与唯一盈亏引擎（修改后）各算一次经营盈亏，列出每一项差异来自哪些记录，
+                            以及钱箱核对结果与仍待核对的项目。
                         </p>
                     )}
-                    {error && <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}
-                    {result && (
+                    {mode === 'MONTH' && error && <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}
+                    {mode === 'MONTH' && result && (
                         <>
                             <section className={`rounded-2xl border p-4 ${allSame ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                                 <div className="flex items-start gap-2">
@@ -123,13 +191,14 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
                             <section className="rounded-2xl border border-stone-200 bg-white p-4">
                                 <h3 className="text-sm font-black">各算法的经营盈亏</h3>
                                 <div className="mt-2">
-                                    <table className="w-full text-xs sm:text-sm">
-                                        <thead className="text-[11px] text-stone-500 sm:text-xs">
+                                    <table className="w-full text-[11px] sm:text-sm">
+                                        <thead className="text-[10px] text-stone-500 sm:text-xs">
                                             <tr>
                                                 <th className="py-1 text-left">项目</th>
                                                 <th className="text-right">A 财报首页</th>
                                                 <th className="text-right">B 传统账目</th>
                                                 <th className="text-right">C 驾驶舱</th>
+                                                <th className="text-right text-emerald-700">修改后</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -142,6 +211,10 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
                                                             <span className="hidden sm:inline">{rm(result.algorithms[k][l.key])}</span>
                                                         </td>
                                                     ))}
+                                                    <td className="whitespace-nowrap pl-2 text-right font-mono tabular-nums text-emerald-800">
+                                                        <span className="sm:hidden">{rm0(result.engine[l.key])}</span>
+                                                        <span className="hidden sm:inline">{rm(result.engine[l.key])}</span>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -157,6 +230,9 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
                                     </li>
                                 </ul>
                             </section>
+
+                            <EngineSection r={result} />
+                            <CashBoxSection r={result} />
 
                             <Bridge title="A 财务报表首页 − C 驾驶舱" rows={result.bridgeA} total={result.algorithms.A.netProfit - result.algorithms.C.netProfit} unexplained={result.unexplainedA} />
                             <Bridge title="B 传统账目 − C 驾驶舱" rows={result.bridgeB} total={result.algorithms.B.netProfit - result.algorithms.C.netProfit} unexplained={result.unexplainedB} />
@@ -210,6 +286,175 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
         </div>
     );
 };
+
+const EngineSection: React.FC<{ r: MonthReconciliation }> = ({ r }) => {
+    const E = r.engine;
+    const blocking = E.reasons.filter(x => x.level === 'BLOCKING');
+    const info = E.reasons.filter(x => x.level === 'INFO');
+    const confirmed = E.status === 'CONFIRMED';
+    return (
+        <section className={`rounded-2xl border p-4 ${confirmed ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-white'}`}>
+            <h3 className="text-sm font-black">
+                修改后 · 唯一盈亏引擎：{rm(E.netProfit)}
+                <span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] font-black ${confirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{PNL_STATUS_LABEL[E.status]}</span>
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-stone-600">
+                与修改前驾驶舱差 {signed(E.netProfit - r.algorithms.C.netProfit)}、与财务报表首页差 {signed(E.netProfit - r.algorithms.A.netProfit)}、
+                与传统账目差 {signed(E.netProfit - r.algorithms.B.netProfit)}。钱箱支出不计入；采购、杂项以应付账款为准；薪资以 Payroll 为准。
+            </p>
+            {blocking.length > 0 && (
+                <div className="mt-2">
+                    <p className="text-xs font-black text-amber-800">未解决前不能称为已确认：</p>
+                    <ul className="mt-1 space-y-1 text-xs leading-relaxed">
+                        {blocking.map((x, i) => <li key={i}>※ {x.label}{x.amount !== undefined ? `（${rm(x.amount)}）` : ''}</li>)}
+                    </ul>
+                </div>
+            )}
+            <ul className="mt-2 space-y-1 text-xs leading-relaxed text-stone-600">
+                {info.map((x, i) => <li key={i}>· {x.label}{x.amount !== undefined ? `（${rm(x.amount)}）` : ''}</li>)}
+                {E.excluded.map(x => <li key={x.label}>· 不计入：{x.label} {rm(x.amount)}</li>)}
+            </ul>
+            <details className="mt-2 text-xs">
+                <summary className="min-h-[36px] cursor-pointer font-bold text-stone-600">各项明细与来源</summary>
+                {(['revenue', 'platform', 'food', 'labour', 'opex'] as const).map(k => (
+                    <div key={k} className="mt-2">
+                        <p className="font-black">{{ revenue: '营业额', platform: '外送平台扣款', food: '食材（采购暂估）', labour: '人工', opex: '其他经营费用' }[k]}：{rm(E[k])}</p>
+                        <table className="w-full"><tbody>
+                            {E.detail[k].map(x => (
+                                <tr key={x.label} className="border-t border-stone-100">
+                                    <td className="py-0.5 font-mono">{x.label}{x.note && <span className="font-sans text-stone-500"> · {x.note}</span>}</td>
+                                    <td className="text-right font-mono">{rm(x.amount)}</td>
+                                </tr>
+                            ))}
+                        </tbody></table>
+                    </div>
+                ))}
+                {E.fallbackCategories.length > 0 && (
+                    <p className="mt-2 text-amber-800">没有对应会计科目、已归入「其他」的分类：{E.fallbackCategories.map(f => `${f.original} ${rm(f.amount)} → ${f.line || f.key}`).join('；')}</p>
+                )}
+            </details>
+        </section>
+    );
+};
+
+const STATUS_STYLE: Record<CashBoxStatus, string> = {
+    MATCHED: 'bg-emerald-100 text-emerald-800', TO_VERIFY: 'bg-amber-100 text-amber-800', MISMATCH: 'bg-red-100 text-red-800', MISSING: 'bg-stone-200 text-stone-800',
+};
+
+const CashBoxSection: React.FC<{ r: MonthReconciliation }> = ({ r }) => {
+    const cb = r.engine.cashBox;
+    const [filter, setFilter] = useState<CashBoxStatus | 'ALL'>('MISSING');
+    const rows = cb.entries.filter(e => filter === 'ALL' || e.status === filter);
+    return (
+        <section className="rounded-2xl border border-stone-200 bg-white p-4">
+            <h3 className="text-sm font-black">钱箱核对（只读）：{cb.entries.length} 笔 · {rm(cb.total)}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-stone-600">
+                钱箱支出只用于核对现金，不进盈亏。每一笔与应付账款、固定账单、兼职、预支记录对照：
+                金额、名称都相符且对方是现金付款才算「已核对」；只有金额与日期相近的列为「待核对」，不会自动当成同一笔。
+                账单日期可以早于钱箱付款日（最多 31 天）。
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+                {(['MISSING', 'MISMATCH', 'TO_VERIFY', 'MATCHED', 'ALL'] as const).map(k => (
+                    <button key={k} onClick={() => setFilter(k)} aria-pressed={filter === k}
+                        className={`min-h-[36px] rounded-full px-3 text-xs font-black ${filter === k ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-700'}`}>
+                        {k === 'ALL' ? `全部 ${cb.entries.length}` : `${CASH_BOX_STATUS_LABEL[k]} ${cb.byStatus[k].count} · ${rm0(cb.byStatus[k].amount)}`}
+                    </button>
+                ))}
+            </div>
+            <div className="mt-2 max-h-96 overflow-y-auto">
+                {rows.length === 0 ? <p className="py-3 text-xs text-stone-500">没有这类记录。</p> : (
+                    <table className="w-full text-xs">
+                        <tbody>
+                            {rows.slice(0, 300).map((e, i) => (
+                                <tr key={i} className="border-t border-stone-100 align-top">
+                                    <td className="py-1.5 pr-2 font-mono">{e.date.slice(5)}</td>
+                                    <td className="pr-2">
+                                        {e.text}
+                                        <span className={`ml-1 rounded px-1 py-0.5 text-[10px] font-black ${STATUS_STYLE[e.status]}`}>{CASH_BOX_STATUS_LABEL[e.status]}</span>
+                                        <div className="text-stone-500">
+                                            {e.match ? `${CASH_BOX_KIND_LABEL[e.match.kind]}：${e.match.name || e.match.category}（${e.match.date}，${rm(e.match.amount)}）· ` : ''}{e.note} · 用途：{CASH_BOX_USE_LABEL[e.use]}
+                                        </div>
+                                    </td>
+                                    <td className="text-right font-mono">{rm(e.amount)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+                {rows.length > 300 && <p className="mt-1 text-xs text-stone-500">另有 {rows.length - 300} 笔未列出。</p>}
+            </div>
+        </section>
+    );
+};
+
+const BatchView: React.FC<{ rows: MonthReconciliation[]; progress: string; error: string; summary: string; copied: '' | 'ok' | 'fail'; onCopy: () => void }> = ({ rows, progress, error, summary, copied, onCopy }) => (
+    <>
+        {!rows.length && !progress && !error && (
+            <p className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-relaxed text-stone-600">
+                选择起讫月份后按「开始对账」，逐月比较修改前（驾驶舱、财务报表首页、传统账目）与修改后（唯一盈亏引擎）的经营盈亏，
+                并列出每个月仍待核对的项目。只读，不写入任何资料。
+            </p>
+        )}
+        {progress && <p className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white p-4 text-sm font-bold"><Loader2 size={16} className="animate-spin" />{progress}</p>}
+        {error && <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}
+        {rows.length > 0 && (
+            <section className="rounded-2xl border border-stone-200 bg-white p-4">
+                <h3 className="text-sm font-black">修改前后经营盈亏</h3>
+                <div className="mt-2 overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-xs">
+                        <thead className="text-stone-500">
+                            <tr>
+                                <th className="py-1 text-left">月份</th>
+                                <th className="text-right">修改前·驾驶舱</th>
+                                <th className="text-right">财报首页</th>
+                                <th className="text-right">传统账目</th>
+                                <th className="text-right text-emerald-700">修改后</th>
+                                <th className="text-right">修改后−驾驶舱</th>
+                                <th className="pl-2 text-left">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map(r => (
+                                <tr key={r.month} className="border-t border-stone-100">
+                                    <td className="py-1.5 font-mono">{r.month}</td>
+                                    <td className="text-right font-mono">{rm(r.algorithms.C.netProfit)}</td>
+                                    <td className="text-right font-mono">{rm(r.algorithms.A.netProfit)}</td>
+                                    <td className="text-right font-mono">{rm(r.algorithms.B.netProfit)}</td>
+                                    <td className="text-right font-mono font-black text-emerald-800">{rm(r.engine.netProfit)}</td>
+                                    <td className="text-right font-mono">{signed(r.engine.netProfit - r.algorithms.C.netProfit)}</td>
+                                    <td className="pl-2">{PNL_STATUS_LABEL[r.engine.status]}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="mt-3 space-y-3">
+                    {rows.map(r => (
+                        <div key={r.month} className="text-xs leading-relaxed">
+                            <p className="font-black">{r.month} 仍待核对</p>
+                            <ul className="mt-0.5 space-y-0.5 text-stone-700">
+                                {r.engine.reasons.filter(x => x.level === 'BLOCKING').map((x, i) => <li key={i}>※ {x.label}{x.amount !== undefined ? `（${rm(x.amount)}）` : ''}</li>)}
+                                {!r.engine.reasons.some(x => x.level === 'BLOCKING') && <li>没有待核对项目</li>}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        )}
+        {summary && (
+            <section className="rounded-2xl border border-stone-200 bg-white p-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="flex-1 text-sm font-black">多月对账摘要（只有金额与笔数）</h3>
+                    <button onClick={onCopy} className="flex min-h-[40px] items-center gap-1 rounded-lg px-3 text-sm font-bold text-stone-600 hover:bg-stone-100">
+                        <Copy size={14} /> {copied === 'ok' ? '已复制' : '复制'}
+                    </button>
+                </div>
+                {copied === 'fail' && <p className="mt-1 text-xs text-red-600">无法自动复制，请手动选取下方文字。</p>}
+                <textarea readOnly value={summary} className="mt-2 h-56 w-full rounded-lg border border-stone-200 bg-stone-50 p-2 font-mono text-[11px]" />
+            </section>
+        )}
+    </>
+);
 
 const Bridge: React.FC<{ title: string; rows: { label: string; amount: number }[]; total: number; unexplained: number }> = ({ title, rows, total, unexplained }) => (
     <section className="rounded-2xl border border-stone-200 bg-white p-4">

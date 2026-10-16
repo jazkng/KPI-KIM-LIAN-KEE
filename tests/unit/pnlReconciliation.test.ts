@@ -147,34 +147,26 @@ describe('财务报表首页照抄：人工来源', () => {
     });
 });
 
-describe('钱箱支出核对：疑似同一笔被记两次', () => {
-    it('同日同金额的兼职工资会被配对；用途按文字粗分；每笔另外的记录只配对一次', async () => {
-        const { checkPettyCash, classifyPettyCashUse } = await import('../../utils/pnl/reconciliation/pettyCashCheck');
-        const settlements = [
-            { date: '2026-09-20', dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }, { company: 'Kedai', item: '买冰', amount: 35 }] },
-            { date: '2026-09-21', dayExpenses: [{ company: '', item: '杂费', amount: 450 }] },
-        ];
-        const r = checkPettyCash(settlements, sepStandaloneExpenses, '2026-09-01', '2026-09-30');
-        expect(r.total).toBe(935);
-        expect(r.entries[0].match?.type).toBe('PART_TIME');
-        expect(r.entries[2].match).toBeUndefined(); // parttime_audit_1 已配对过
-        expect(r.matched.PART_TIME).toEqual({ amount: 450, count: 1 });
-        expect(r.byUse.LABOUR.amount).toBe(450);
-        expect(r.byUse.FOOD.amount).toBe(35);
-        expect(classifyPettyCashUse('Gas LPG 14kg')).toBe('FUEL');
-        expect(classifyPettyCashUse('修理水管')).toBe('OTHER');
-        expect(classifyPettyCashUse('矿泉水 2 箱')).toBe('FOOD');
-    });
-
-    it('对账结果与摘要包含钱箱核对；摘要不列钱箱文字内容（可能含员工姓名）', async () => {
-        const settlements = sepSettlements.map(s => s.date === '2026-09-20' ? { ...s, dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }] } : s);
+describe('盈亏对账 · 修改后（唯一引擎）', () => {
+    it('对账结果附上引擎结果；钱箱同金额但名称对不上 → 待核对，不自动确认；摘要不含钱箱文字', async () => {
+        const settlements = sepSettlements.map(s => s.date === '2026-09-20' ? { ...s, dayExpenses: [{ company: '', item: '工资 Ali', amount: 450 }] } : s);
         const r = await reconcileMonth(sourceOf({ settlements }), '2026-09', '2026-10-15');
-        const f = Object.fromEntries(r.findings.map(x => [x.id, x]));
-        expect(f.PETTY_CASH_OVERLAP.amount).toBe(450);
-        expect(f.PETTY_CASH_OVERLAP.needsDecision).toBe(true);
+        expect(r.engine.netProfit).toBe(32922.65); // 钱箱支出不论多少，都不改变经营盈亏
+        const e = r.engine.cashBox.entries.find(x => x.date === '2026-09-20')!;
+        expect(e.status).toBe('TO_VERIFY'); // 兼职记录名称是 parttime 资料里的空白 company，对不上名称
         const text = reconciliationSummaryText(r);
-        expect(text).toContain('与其他记录同金额');
+        expect(text).toContain('修改后 · 唯一盈亏引擎');
+        expect(text).toContain('待核对');
         expect(text).not.toContain('Ali');
-        expect(text).toContain('住宿费');
+    });
+});
+
+describe('多月修改前后摘要', () => {
+    it('逐月列出修改前、修改后与待核对原因', async () => {
+        const { batchSummaryText } = await import('../../utils/pnl/reconciliation/reconcileMonth');
+        const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
+        const text = batchSummaryText([r]);
+        expect(text).toContain('2026-09 | 32,887.65 | 30,297.65 | 30,625.75 | 32,922.65 | 35.00 | 暂估／待核对');
+        expect(text).toContain('费用可能遗漏');
     });
 });

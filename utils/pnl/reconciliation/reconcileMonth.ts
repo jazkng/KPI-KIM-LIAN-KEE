@@ -19,7 +19,8 @@ import { addDays, daysInMonth, resolvePeriod } from '../../cockpit/periods';
 import { legacyFinancialReport, type LegacyFinancialReportResult } from './legacyFinancialReport';
 import { legacyDailyReportRange } from './legacyDailyReport';
 import { checkPayrollMonth, type PayrollMonthCheck } from './payrollFieldCheck';
-import { checkPettyCash, PETTY_CASH_MATCH_LABEL, PETTY_CASH_USE_LABEL, type PettyCashCheck, type PettyCashMatchType, type PettyCashUse } from './pettyCashCheck';
+import { computePnL, PNL_STATUS_LABEL, type PnLEngineResult } from '../engine/pnlEngine';
+import { CASH_BOX_KIND_LABEL, CASH_BOX_STATUS_LABEL, CASH_BOX_USE_LABEL, type CashBoxStatus, type CashBoxUse } from '../engine/cashBox';
 
 export interface ReconSource extends CockpitDataSource {
     getRecurringBills(): Promise<any[]>;
@@ -79,7 +80,8 @@ export interface MonthReconciliation {
     unexplainedB: number;
     findings: ReconFinding[];
     payroll: PayrollMonthCheck | null;
-    pettyCash: PettyCashCheck;
+    /** 唯一盈亏引擎（修改后）的结果，含钱箱核对 */
+    engine: PnLEngineResult;
     categories: { category: string; amount: number; financialReport: string; classicLine: string; cockpit: string; flag?: string }[];
     missingSettlementDays: string[];
 }
@@ -215,28 +217,13 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
                 .map(ch => ({ date: String(s.date).slice(0, 10), label: `${ch} 未对账，广告`, amount: num(s.sales.deliveryBreakdown[`${ch}Ads`]) }))),
     });
 
-    // 3. 钱箱支出：逐笔列出，并找出与兼职、预支、应付账款同金额的疑似同一笔
-    const pettyCash = checkPettyCash(settlements, standalone, start, end);
+    // 3. 钱箱支出（旧驾驶舱计入、财务报表与传统账目未计入；统一引擎不计入，只做钱箱核对）
     findings.push({
         id: 'PETTY_CASH',
         title: '日结钱箱现金支出（dayExpenses）',
-        detail: `钱已经从钱箱付出，但财务报表与传统账目都没有读取这一栏；驾驶舱计入其他经营费用。按文字粗分：${
-            (Object.keys(pettyCash.byUse) as PettyCashUse[]).filter(k => pettyCash.byUse[k].count)
-                .map(k => `${PETTY_CASH_USE_LABEL[k]} ${pettyCash.byUse[k].amount.toFixed(2)}（${pettyCash.byUse[k].count} 笔）`).join('、') || '无'}。`,
+        detail: '钱已经从钱箱付出。旧驾驶舱把它计入其他经营费用，财务报表与传统账目没有读取。依负责人决定，统一引擎不计入盈亏，只用于钱箱核对（见「钱箱核对」）。',
         amount: adj.pettyCash, count: adj.pettyCashCount, effectOnA: adj.pettyCash, effectOnB: adj.pettyCash,
-        records: pettyCash.entries.map(e => ({ date: e.date, label: e.text, amount: e.amount, note: PETTY_CASH_USE_LABEL[e.use] })),
-    });
-    findings.push({
-        id: 'PETTY_CASH_OVERLAP',
-        title: '钱箱支出与其他记录同金额（疑似同一笔被记两次）',
-        detail: `同一天前后 2 天内、金额完全相同的兼职工资、员工预支或应付账款记录。若确实是同一笔钱（从钱箱拿钱付，又在兼职 / 预支 / 应付账款登记），驾驶舱会重复扣除；若只是巧合同金额，则不必处理。${
-            (Object.keys(pettyCash.matched) as PettyCashMatchType[]).filter(k => pettyCash.matched[k].count)
-                .map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${pettyCash.matched[k].amount.toFixed(2)}（${pettyCash.matched[k].count} 笔）`).join('、')}`,
-        amount: pettyCash.matchedTotal, count: pettyCash.entries.filter(e => e.match).length, needsDecision: pettyCash.matchedTotal > 0,
-        records: pettyCash.entries.filter(e => e.match).map(e => ({
-            date: e.date, label: e.text, amount: e.amount,
-            note: `${PETTY_CASH_MATCH_LABEL[e.match!.type]}：${e.match!.label}（${e.match!.date}）`,
-        })),
+        records: [],
     });
 
     // 4. 收款手续费
@@ -527,6 +514,14 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const explainedB = bridgeB.reduce((s, x) => s + x.amount, 0);
     const unexplainedB = r2(B.netProfit - C.netProfit - explainedB);
 
+    // ── 统一引擎（修改后）：同一份资料；账单时间带时区的，前一天的也要读进来再按马来西亚日期判断 ──
+    const engineExpenses = new Map<string, any>();
+    [...(rawDayBefore.standaloneExpenses as any[]), ...standalone].forEach(e => engineExpenses.set(e.id, e));
+    const engine = computePnL({
+        settlements, standaloneExpenses: [...engineExpenses.values()], billPayments,
+        payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
+    }, start, end, today);
+
     const sample = D.days.length ? D.days[Math.floor(D.days.length / 2)] : null;
     return {
         month, start, end, loadedAt: new Date().toISOString(),
@@ -552,7 +547,7 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         bridgeA, bridgeB, unexplainedA, unexplainedB,
         findings,
         payroll,
-        pettyCash,
+        engine,
         categories,
         missingSettlementDays,
     };
@@ -587,11 +582,19 @@ export const reconciliationSummaryText = (r: MonthReconciliation): string => {
         '差异来源：',
         ...r.findings.filter(x => x.count > 0 || Math.abs(x.amount) > 0.005).map(x => `  ${x.title}：${f(x.amount)}（${x.count} 笔）${x.needsDecision ? ' ※需确认' : ''}`),
     ];
-    const pc = r.pettyCash;
-    lines.push('', `钱箱支出 ${f(pc.total)}（${pc.entries.length} 笔），按文字粗分：${
-        (Object.keys(pc.byUse) as PettyCashUse[]).map(k => `${PETTY_CASH_USE_LABEL[k]} ${f(pc.byUse[k].amount)}（${pc.byUse[k].count}）`).join('、')}`,
-    `  与其他记录同金额（±2 天）：${f(pc.matchedTotal)}；${
-        (Object.keys(pc.matched) as PettyCashMatchType[]).map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${f(pc.matched[k].amount)}（${pc.matched[k].count}）`).join('、')}`);
+    const E = r.engine;
+    const cb = E.cashBox;
+    lines.push('',
+        `【修改后 · 唯一盈亏引擎】${PNL_STATUS_LABEL[E.status]}`,
+        `营业额 ${f(E.revenue)}、平台扣款 ${f(E.platform)}、食材（采购暂估）${f(E.food)}、人工 ${f(E.labour)}、其他经营费用 ${f(E.opex)}`,
+        `经营净利 ${f(E.netProfit)}（修改前驾驶舱 ${f(C.netProfit)}，差 ${f(E.netProfit - C.netProfit)}；财务报表首页差 ${f(E.netProfit - A.netProfit)}；传统账目差 ${f(E.netProfit - B.netProfit)}）`,
+        '不计入盈亏：' + (E.excluded.map(x => `${x.label} ${f(x.amount)}`).join('、') || '无'),
+        '待核对 / 说明：',
+        ...E.reasons.map(x => `  ${x.level === 'BLOCKING' ? '※' : '·'} ${x.label}${x.amount !== undefined ? `（${f(x.amount)}）` : ''}`),
+        `钱箱核对：共 ${cb.entries.length} 笔 ${f(cb.total)}；` + (Object.keys(cb.byStatus) as CashBoxStatus[]).map(k => `${CASH_BOX_STATUS_LABEL[k]} ${cb.byStatus[k].count} 笔 ${f(cb.byStatus[k].amount)}`).join('、'),
+        '  用途粗分：' + (Object.keys(cb.byUse) as CashBoxUse[]).map(k => `${CASH_BOX_USE_LABEL[k]} ${f(cb.byUse[k].amount)}（${cb.byUse[k].count}）`).join('、'),
+        '  已对上的记录类别：' + (Object.keys(CASH_BOX_KIND_LABEL) as (keyof typeof CASH_BOX_KIND_LABEL)[])
+            .map(k => `${CASH_BOX_KIND_LABEL[k]} ${cb.entries.filter(e => e.match?.kind === k).length}`).join('、'));
     if (r.payroll) {
         const t = r.payroll.totals;
         lines.push('', `薪资核对：${r.payroll.employees.length} 人，${r.payroll.mismatchCount} 人实发对不上；状态 ${r.payroll.status}，法定供款${r.payroll.isStatutoryPaid ? '已缴' : '未缴'}`,
@@ -599,5 +602,22 @@ export const reconciliationSummaryText = (r: MonthReconciliation): string => {
             `  其他扣款：住宿费 ${f(t.hostelFee)}、其他扣款 ${f(t.otherDeduction)}、扣回借款 ${f(t.loanRepay)}；员工法定扣款 ${f(r.payroll.employees.reduce((s, e) => s + e.employeeStatutory, 0))}`,
             `  人工（薪资单部分）：A 口径 ${f(t.asFinancialReport)}、B 口径 ${f(t.asClassic)}、C 口径 ${f(t.asCockpit)}、建议口径 ${t.proposed === null ? '无法计算（有人对不上）' : f(t.proposed)}`);
     }
+    return lines.join('\n');
+};
+
+/** 多月修改前后对照摘要：只有金额、笔数与原因，不含员工姓名或钱箱手写文字 */
+export const batchSummaryText = (rows: MonthReconciliation[]): string => {
+    const f = (n: number) => n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const lines = [
+        '【盈亏对账 · 修改前后】（权责发生制；修改后 = 唯一盈亏引擎：钱箱不计入、AP 为采购正式来源、Payroll 为薪资正式来源）',
+        '月份 | 修改前·驾驶舱 | 财务报表首页 | 传统账目 | 修改后 | 修改后−驾驶舱 | 状态',
+        ...rows.map(r => `${r.month} | ${f(r.algorithms.C.netProfit)} | ${f(r.algorithms.A.netProfit)} | ${f(r.algorithms.B.netProfit)} | ${f(r.engine.netProfit)} | ${f(r.engine.netProfit - r.algorithms.C.netProfit)} | ${PNL_STATUS_LABEL[r.engine.status]}`),
+    ];
+    rows.forEach(r => {
+        const E = r.engine, cb = E.cashBox;
+        lines.push('', `${r.month}：营业额 ${f(E.revenue)}、平台 ${f(E.platform)}、食材 ${f(E.food)}、人工 ${f(E.labour)}、其他经营费用 ${f(E.opex)}`,
+            `  钱箱 ${cb.entries.length} 笔 ${f(cb.total)}：` + (Object.keys(cb.byStatus) as CashBoxStatus[]).map(k => `${CASH_BOX_STATUS_LABEL[k]} ${cb.byStatus[k].count}（${f(cb.byStatus[k].amount)}）`).join('、'),
+            ...E.reasons.filter(x => x.level === 'BLOCKING').map(x => `  ※ ${x.label}${x.amount !== undefined ? `（${f(x.amount)}）` : ''}`));
+    });
     return lines.join('\n');
 };
