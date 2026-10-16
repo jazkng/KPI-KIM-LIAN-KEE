@@ -66,6 +66,7 @@ import {
   getLindungRate,
   getHistoricalSalary,
 } from "../../../utils/payroll/statutory";
+import { partTimeSummaryFor, partTimeSummaryText } from "../../../utils/payroll/partTimeSummary";
 
 // --- INTERFACES ---
 
@@ -3725,12 +3726,12 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 </div>
               )}
 
-              {/* 🔍 这个月没列入薪资的员工 —— 不再静悄悄消失 */}
+              {/* 🔍 不在月薪名单的员工 —— 不再静悄悄消失；时薪兼职另显示当月兼职登记（只供显示，不影响薪资） */}
               {excludedEmployees.length > 0 && (
                 <details className="bg-white rounded-2xl border border-dashed border-gray-300 p-4 shadow-sm">
                   <summary className="cursor-pointer select-none flex items-center justify-between gap-2 min-h-[44px] list-none">
                     <span className="font-black text-sm text-gray-600 flex items-center gap-2">
-                      🔍 这个月没列入薪资的员工
+                      🔍 不在月薪名单的员工（不代表未付款）
                       <span className="text-[11px] font-black bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{excludedEmployees.length} 人</span>
                     </span>
                     <span className="text-[11px] font-bold text-gray-400">点开看原因 ▾</span>
@@ -3743,6 +3744,14 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                             {emp.name} <span className="text-[10px] font-mono text-gray-400">#{emp.id}</span>
                           </div>
                           <div className="text-[11px] font-bold text-gray-500 mt-0.5">{text}</div>
+                          {reason === "HOURLY" && (() => {
+                            const pt = partTimeSummaryFor(emp, partTimeExpenses);
+                            return (
+                              <div className={`text-[11px] font-black mt-1 ${pt.count === 0 ? "text-amber-700" : pt.unpaidCount > 0 ? "text-red-700" : "text-emerald-700"}`}>
+                                {partTimeSummaryText(pt)}
+                              </div>
+                            );
+                          })()}
                         </div>
                         {reason === "HOURLY" ? (
                           <button
