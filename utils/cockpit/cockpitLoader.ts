@@ -43,7 +43,7 @@ export const loadCockpitWith = async (
     period: Period,
     today: string,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
-    /** true = 改读唯一盈亏引擎（负责人在盈亏对账核对 9 月数字后，另一个 PR 才改为预设） */
+    /** false = 旧算法（只给盈亏对账画面的「修改前」对照用） */
     options: { useEngine?: boolean } = {},
 ): Promise<CockpitResult> => {
     const month = period.end.slice(0, 7);
@@ -134,7 +134,7 @@ export const loadCockpitWith = async (
         payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
         attendanceByMonth: Object.fromEntries(labourMonths.map((m, i) => [m, summariseReviewedAttendance(reviews[i])])),
     };
-    const engines = accountingMode === 'ACCRUAL' && options.useEngine === true
+    const engines = accountingMode === 'ACCRUAL' && options.useEngine !== false
         ? { engine: computePnL(engineInput, period.start, period.end, today), monthEngine: computePnL(engineInput, monthStart, monthEnd, today) }
         : {};
     const result = buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit, ...engines });
