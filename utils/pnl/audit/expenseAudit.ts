@@ -273,9 +273,11 @@ const labourCheck = (
         else notes.push(`预支：薪资单扣回 ${f2(t!.advanceLoan)}，比本月登记的 ${f2(advanceAP)} 多 ${f2(-advanceGap)}（扣回的是以前月份的预支）。那部分在发放的月份已计入人工，本月人工因此偏低 ${f2(-advanceGap)}。`);
         const stat = num(record.totalGovtPay);
         notes.push(record.isStatutoryPaid
-            ? `法定缴款 ${f2(stat)}（含员工扣款 ${f2(employeeStatutory)} + 雇主供款 ${f2(t!.employerStatutory)}）已缴，计入 STATUTORY。员工扣款本来就是应发的一部分，所以传统账目人工 = 应发 − 其他扣款 + 雇主供款，工资只计一次。`
+            ? `法定缴款 ${f2(stat)}（含员工扣款 ${f2(employeeStatutory)} + 雇主供款 ${f2(t!.employerStatutory)}）已缴，计入 STATUTORY。员工扣款本来就是应发的一部分，所以传统账目人工 = 应发 − 宿舍费 / 其他扣款 / 无薪假 / 罚款 + 雇主供款，工资只计一次。`
             : `法定缴款 ${f2(stat)} 尚未标记已缴，传统账目不计：员工法定扣款与雇主供款都没有计入，人工偏低 ${f2(stat)}。`);
-        if (otherDeductions > 0.005) notes.push(`其他扣款 ${f2(otherDeductions)}（宿舍费 ${f2(t!.hostelFee)}、其他扣款 ${f2(t!.otherDeduction)}、还款 ${f2(t!.loanRepay)}、无薪假 ${f2(t!.unpaidLeave)}、已扣罚款 ${f2(t!.penaltyDeducted)}）从人工里减掉。无薪假、罚款是真的少付工资；宿舍费、还款、其他扣款是员工付给公司的钱，是否应抵减人工需要负责人决定口径。`);
+        if (t!.loanRepay > 0.005) notes.push(`员工借款还款 ${f2(t!.loanRepay)} 从薪水扣回：借款发出时记 STAFF_LOAN（资产，不进盈亏），扣回只是收回借款，工资成本照样发生，所以传统账目的薪资 = 实发 + 借款扣回（2026-10-16 修正；以前少算这笔）。`);
+        const restDeductions = r2(otherDeductions - t!.loanRepay);
+        if (restDeductions > 0.005) notes.push(`其他扣款 ${f2(restDeductions)}（宿舍费 ${f2(t!.hostelFee)}、其他扣款 ${f2(t!.otherDeduction)}、无薪假 ${f2(t!.unpaidLeave)}、已扣罚款 ${f2(t!.penaltyDeducted)}）仍从人工里减掉。无薪假、罚款是真的少付工资；宿舍费、其他扣款是员工付给公司的钱，是否应抵减人工需要负责人决定口径。`);
         if (payNet || payStat) notes.push(`薪资付款纪录（不计入，只核对）：实发付款 ${f2(payNet)}${Math.abs(payNet - t!.netPay) > 0.05 ? `，与薪资单实发相差 ${f2(r2(payNet - t!.netPay))}` : '，与薪资单实发一致'}；缴政府 ${f2(payStat)}${Math.abs(payStat - stat) > 0.05 ? `，与薪资单相差 ${f2(r2(payStat - stat))}` : '，一致'}。`);
     }
     notes.push(`兼职（系统按工时产生）${partTimeRows.length} 笔 ${f2(partTime)}，只在应付账款计一次；手动登记的工资 ${manualSalaryRows.length} 笔 ${f2(manualSalary)}。`);

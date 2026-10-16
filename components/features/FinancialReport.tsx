@@ -8,7 +8,7 @@ import { ClassicPnLTab } from './ClassicPnLTab';
 import { LABOR_DEPT_ROLE_FALLBACK } from '../../constants/classicPnLCostMap';
 import { billPaymentCostCategory } from '../../constants/recurringBillCategoryMap';
 import { buildCategoryMargins, buildClassicPnL } from '../../utils/classicPnLBuilder';
-import { aggregateMonth, monthRange, diffCostByCategory, parentBillIdOfPayment, splitAccrualDuplicatePayments } from '../../utils/monthlyPnLAggregator';
+import { aggregateMonth, monthRange, diffCostByCategory, parentBillIdOfPayment, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../utils/monthlyPnLAggregator';
 import { exportClassicPnLMultiToExcel } from '../../utils/classicPnLMultiExport';
 import { downloadBlob } from '../../utils/classicPnLExport';
 import { CATEGORY_MARGIN_PAIRS } from '../../constants/classicPnLCostMap';
@@ -681,7 +681,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const details: any[] = Array.isArray((p as any).details) ? (p as any).details : [];
             if (details.length === 0) return Number(p.totalNetPay || 0);
             return details.reduce((sum, d) => {
-                const amount = Number(d?.netPay) || 0;
+                // 实发 + 薪资扣回的员工借款（借款发出时记 STAFF_LOAN 资产，不进盈亏；扣回不代表工资变少）
+                const amount = payrollWageFromDetail(d);
                 if (d?.isPaid) return sum + amount;          // 真的发出去的钱，一律算
                 const emp = employees.find(e => e.id === d?.employeeId);
                 if (emp) {
@@ -1568,7 +1569,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                     //    预支是当月先发出去的现金，本来就属于那个部门的人工，所以归回部门，不另外列一行。
                     //    现金实收模式：还没结账、这个人也还没发 → 净发不算（预支照算，那是已经付出去的现金）
                     const cashNotPaid = accountingMode === 'CASH' && pr.status !== 'POSTED' && !d.isPaid;
-                    const cost = (cashNotPaid ? 0 : Number(d.netPay || 0)) + Number(d.advanceLoan || 0);
+                    const cost = (cashNotPaid ? 0 : payrollWageFromDetail(d)) + Number(d.advanceLoan || 0);
                     if (!cost) return;
                     totalCount++;
 

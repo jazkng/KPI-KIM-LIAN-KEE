@@ -10,9 +10,10 @@
 //   1. 月份边界改用马来西亚日期（带时区的时间先换算），不再用 UTC 字串切日
 //   2. 业务发生制排除分期付款的第二笔以后（pay_<账单>_<时间>），原账单已按全额计入
 //   3. 固定账单付款换成与应付账款镜像相同的分类（宿舍水电、订阅、其他固定账单原本找不到科目）
+//   4. 薪资 = 实发 + 薪资扣回的员工借款（loanRepay）；借款发出时记 STAFF_LOAN 资产，扣回不减少工资成本
 // version: 'BEFORE_FIX' 重现修正前的算法，只给对账 / 修正前后比较用。
 // ============================================================================
-import { categorizeExpense, splitAccrualDuplicatePayments } from '../../monthlyPnLAggregator';
+import { categorizeExpense, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../monthlyPnLAggregator';
 import { toMalaysiaDay } from '../../dateHelper';
 import { billPaymentCostCategory } from '../../../constants/recurringBillCategoryMap';
 
@@ -182,7 +183,7 @@ export const legacyFinancialReport = (
         const details: any[] = Array.isArray(p.details) ? p.details : [];
         if (details.length === 0) return num(p.totalNetPay);
         return details.reduce((sum, d) => {
-            const amount = num(d?.netPay);
+            const amount = fixed ? payrollWageFromDetail(d) : num(d?.netPay);
             if (d?.isPaid) return sum + amount;
             const emp = employees.find(e => e.id === d?.employeeId);
             if (emp) {

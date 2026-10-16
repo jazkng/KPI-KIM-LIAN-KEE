@@ -226,3 +226,24 @@ describe('传统账目排版不变', () => {
         expect(r2(plain.netProfit - withUnmapped.netProfit)).toBe(150);
     });
 });
+
+describe('员工借款从薪水扣回：工资成本不能因此变少', () => {
+    // 员工乙 8 月借 3,000（STAFF_LOAN，资产），9 月从薪水扣回 1,000
+    const payroll = [{ ...sepPayroll[0], details: sepPayroll[0].details.map((d: any) => d.employeeId === 'E2' ? { ...d, loanRepay: 1000, netPay: d.netPay - 1000 } : d) }];
+    const input = { ...frInput, payrollRecords: payroll as any[] };
+    it('传统账目薪资 = 实发 + 借款扣回；修正前少算 1,000', () => {
+        const after = legacyFinancialReport(input, '2026-09-01', '2026-09-30', 'ACCRUAL');
+        const before = legacyFinancialReport(input, '2026-09-01', '2026-09-30', 'ACCRUAL', 'BEFORE_FIX');
+        expect(after.classicCostByCategory.PAYROLL).toBe(4574.25);
+        expect(before.classicCostByCategory.PAYROLL).toBe(3574.25);
+        expect(aggregateMonth('2026-09', input as any, 'ACCRUAL').costByCategory.PAYROLL).toBe(4574.25);
+    });
+    it('借款发出（STAFF_LOAN）不进盈亏；审计说明借款扣回', () => {
+        expect(row('x_loan').treatment).toBe('NON_OPERATING');
+        const res = auditExpenses('2026-09', data, legacyFinancialReport(input, '2026-09-01', '2026-09-30', 'ACCRUAL').classicCostByCategory,
+            { records: payroll as any[], employees: sepEmployees as any[] }, parentBills);
+        expect(res.labour!.identity!.otherDeductions).toBe(1000);
+        expect(res.labour!.notes.some(n => n.includes('借款还款 1000.00'))).toBe(true);
+        expect(res.labour!.classic.payrollNet).toBe(4574.25);
+    });
+});
