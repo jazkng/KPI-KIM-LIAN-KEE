@@ -32,7 +32,7 @@ describe('盈亏对账 · 虚构 9 月', () => {
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
         expect(r.algorithms.A.netProfit).toBe(34297.65); // 2026-10-16 起不再重复计入分期付款 4,000
         expect(r.algorithms.B.netProfit).toBe(34205.75); // 不再重复分期 +4,000；宿舍电费 300、订阅 120 改为计入
-        expect(r.algorithms.C.netProfit).toBe(32887.65);
+        expect(r.algorithms.C.netProfit).toBe(32922.65); // 旧驾驶舱算法 2026-10-16 起也不计钱箱支出
         expect(r.algorithms.B.exportNetProfit).toBe(34205.75);
         expect(r.algorithms.D.sum).toBe(26549);
         expect(r.unexplainedA).toBe(0);
@@ -51,7 +51,7 @@ describe('盈亏对账 · 虚构 9 月', () => {
         expect(f.DUP_INSTALMENT.count).toBe(1);
         expect(f.PLATFORM_UNRECONCILED.amount).toBe(300);
         expect(f.PLATFORM_UNRECONCILED.count).toBe(15);
-        expect(f.PETTY_CASH.amount).toBe(35);
+        expect(f.PETTY_CASH).toBeUndefined(); // 每日结算钱箱支出完全不纳入
         expect(f.BANK_FEE.amount).toBe(25);
         expect(f.FR_LABOUR_EXPENSES_EXCLUDED.amount).toBe(1050);
         expect(f.CLASSIC_UNMAPPED.amount).toBe(120); // 应付账款的 SUBSCRIPTION（已并入后备科目，只列出）；固定账单的宿舍电费已换成 AP 分类
@@ -148,34 +148,25 @@ describe('财务报表首页照抄：人工来源', () => {
     });
 });
 
-describe('钱箱支出核对：疑似同一笔被记两次', () => {
-    it('同日同金额的兼职工资会被配对；用途按文字粗分；每笔另外的记录只配对一次', async () => {
-        const { checkPettyCash, classifyPettyCashUse } = await import('../../utils/pnl/reconciliation/pettyCashCheck');
-        const settlements = [
-            { date: '2026-09-20', dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }, { company: 'Kedai', item: '买冰', amount: 35 }] },
-            { date: '2026-09-21', dayExpenses: [{ company: '', item: '杂费', amount: 450 }] },
-        ];
-        const r = checkPettyCash(settlements, sepStandaloneExpenses, '2026-09-01', '2026-09-30');
-        expect(r.total).toBe(935);
-        expect(r.entries[0].match?.type).toBe('PART_TIME');
-        expect(r.entries[2].match).toBeUndefined(); // parttime_audit_1 已配对过
-        expect(r.matched.PART_TIME).toEqual({ amount: 450, count: 1 });
-        expect(r.byUse.LABOUR.amount).toBe(450);
-        expect(r.byUse.FOOD.amount).toBe(35);
-        expect(classifyPettyCashUse('Gas LPG 14kg')).toBe('FUEL');
-        expect(classifyPettyCashUse('修理水管')).toBe('OTHER');
-        expect(classifyPettyCashUse('矿泉水 2 箱')).toBe('FOOD');
-    });
-
-    it('对账结果与摘要包含钱箱核对；摘要不列钱箱文字内容（可能含员工姓名）', async () => {
-        const settlements = sepSettlements.map(s => s.date === '2026-09-20' ? { ...s, dayExpenses: [{ company: '', item: '兼职 Ali 工资', amount: 450 }] } : s);
+describe('盈亏对账 · 修改后（唯一引擎）', () => {
+    it('对账结果附上引擎结果；每日结算钱箱支出不改变盈亏、不做配对；摘要不含钱箱文字', async () => {
+        const settlements = sepSettlements.map(s => s.date === '2026-09-20' ? { ...s, dayExpenses: [{ company: '', item: '工资 Ali', amount: 450 }] } : s);
         const r = await reconcileMonth(sourceOf({ settlements }), '2026-09', '2026-10-15');
-        const f = Object.fromEntries(r.findings.map(x => [x.id, x]));
-        expect(f.PETTY_CASH_OVERLAP.amount).toBe(450);
-        expect(f.PETTY_CASH_OVERLAP.needsDecision).toBe(true);
+        expect(r.engine.netProfit).toBe(32922.65);
+        expect((r.engine as any).cashBox).toBeUndefined();
         const text = reconciliationSummaryText(r);
-        expect(text).toContain('与其他记录同金额');
+        expect(text).toContain('修改后 · 唯一盈亏引擎');
+        expect(text).toContain('待核对');
         expect(text).not.toContain('Ali');
-        expect(text).toContain('住宿费');
+    });
+});
+
+describe('多月修改前后摘要', () => {
+    it('逐月列出修改前、修改后与待核对原因', async () => {
+        const { batchSummaryText } = await import('../../utils/pnl/reconciliation/reconcileMonth');
+        const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
+        const text = batchSummaryText([r]);
+        expect(text).toContain('2026-09 | 32,922.65 | 34,297.65 | 34,205.75 | 32,922.65 | 0.00 | 暂估／待核对');
+        expect(text).not.toContain('钱箱 ');
     });
 });

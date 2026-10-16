@@ -145,12 +145,12 @@ describe('驾驶舱 KPI 与资料状态', () => {
         expect(r.kpis.actualProfit.value).toBe(revenue - 850 - 100 - (2600 + 120) - 3400);
         expect(r.kpis.labour.value).toBe(2720);
     });
-    it('兼职工资计入人工（不在薪资单里），钱箱支出只列出不计入', () => {
+    it('兼职工资计入人工（不在薪资单里）；每日结算钱箱支出不计入、不提示漏账', () => {
         const period = resolvePeriod('LAST_MONTH', '2026-10-15');
         const r = buildCockpit({ ...inputsFor(period, '2026-10-15', [cost('7001', 2600)]), partTimeWages: 300, pettyCash: 45 });
         expect(r.kpis.labour.value).toBe(2600 + 120 + 300);
-        expect(r.kpis.actualProfit.basis.join()).toContain('钱箱');
-        expect(r.alerts.some(a => a.title.includes('钱箱'))).toBe(true);
+        expect(r.kpis.actualProfit.basis.join()).toContain('钱箱支出不计入');
+        expect(r.alerts.some(a => a.title.includes('钱箱'))).toBe(false);
     });
     it('没有人工资料 → 人工「资料不完整」，不使用任何预设人工金额', () => {
         const period = resolvePeriod('LAST_MONTH', '2026-10-15');
