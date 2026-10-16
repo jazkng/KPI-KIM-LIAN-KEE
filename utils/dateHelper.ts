@@ -42,3 +42,17 @@ export function getBusinessDateString(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+
+/**
+ * 账目日期 → 马来西亚日历日（YYYY-MM-DD）。
+ * 带时区的 ISO 时间（…Z / +08:00）先换成马来西亚时间再取日期；没有时区的字串（本地时间或纯日期）原样取前 10 位。
+ * 盈亏报表判断「属于哪一天 / 哪个月」一律用这个，避免 UTC 晚上 4 点后的账单被算到前一天（月底就变成上个月）。
+ */
+export function toMalaysiaDay(value: unknown): string {
+  const s = String(value || '');
+  if (/T\d{2}:\d{2}/.test(s) && /(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const t = Date.parse(s);
+    if (Number.isFinite(t)) return new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+  return s.slice(0, 10);
+}

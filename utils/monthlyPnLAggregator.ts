@@ -11,6 +11,8 @@
 
 import { SettlementRecord, ExpenseItem, PayrollRecord, Employee, BillPaymentRecord } from '../types';
 import { LABOR_DEPT_ROLE_FALLBACK } from '../constants/classicPnLCostMap';
+import { toMalaysiaDay } from './dateHelper';
+import { billPaymentCostCategory } from '../constants/recurringBillCategoryMap';
 
 export interface MonthlyRawData {
     settlements: SettlementRecord[];
@@ -63,7 +65,7 @@ export const aggregateMonth = (
     data: MonthlyRawData,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
 ): MonthlyPnLInputs =>
-    aggregateWith(month, d => !!d && String(d).slice(0, 7) === month, p => p === month, data, accountingMode);
+    aggregateWith(month, d => !!d && toMalaysiaDay(d).slice(0, 7) === month, p => p === month, data, accountingMode);
 
 /**
  * 任意日期区间（YYYY-MM-DD，含头含尾）的同口径汇总，给老板经营驾驶舱用。
@@ -77,7 +79,7 @@ export const aggregateRange = (
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
 ): MonthlyPnLInputs => {
     const inRange = (d?: string) => {
-        const day = String(d || '').slice(0, 10);
+        const day = toMalaysiaDay(d);
         return !!day && day >= start && day <= end;
     };
     const fullMonthInRange = (m?: string) => {
@@ -192,7 +194,7 @@ const aggregateWith = (
     billPayments.forEach((b: any) => {
         if (!inMonth(b?.date)) return;
         const shared = (b.costShares || []).reduce((s: number, x: any) => s + num(x.amount), 0);
-        addCost(Math.max(0, num(b.amount) - shared), b.category);
+        addCost(Math.max(0, num(b.amount) - shared), billPaymentCostCategory(b.category));
     });
 
     // ---------- 4. 薪资（POSTED 照算；未结账按看账模式，跟画面一致）----------

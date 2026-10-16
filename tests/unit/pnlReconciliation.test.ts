@@ -30,10 +30,10 @@ const sourceOf = (over: Partial<{ settlements: any[]; standalone: any[]; bills: 
 describe('盈亏对账 · 虚构 9 月', () => {
     it('三套算法的数字与审计文件一致，差额全部可以解释（未能解释 = 0）', async () => {
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
-        expect(r.algorithms.A.netProfit).toBe(30297.65);
-        expect(r.algorithms.B.netProfit).toBe(30625.75);
+        expect(r.algorithms.A.netProfit).toBe(34297.65); // 2026-10-16 起不再重复计入分期付款 4,000
+        expect(r.algorithms.B.netProfit).toBe(34205.75); // 不再重复分期 +4,000；宿舍电费 300、订阅 120 改为计入
         expect(r.algorithms.C.netProfit).toBe(32887.65);
-        expect(r.algorithms.B.exportNetProfit).toBe(30625.75);
+        expect(r.algorithms.B.exportNetProfit).toBe(34205.75);
         expect(r.algorithms.D.sum).toBe(26549);
         expect(r.unexplainedA).toBe(0);
         expect(r.unexplainedB).toBe(0);
@@ -54,7 +54,8 @@ describe('盈亏对账 · 虚构 9 月', () => {
         expect(f.PETTY_CASH.amount).toBe(35);
         expect(f.BANK_FEE.amount).toBe(25);
         expect(f.FR_LABOUR_EXPENSES_EXCLUDED.amount).toBe(1050);
-        expect(f.CLASSIC_UNMAPPED.amount).toBe(420);
+        expect(f.CLASSIC_UNMAPPED.amount).toBe(120); // 应付账款的 SUBSCRIPTION（已并入后备科目，只列出）；固定账单的宿舍电费已换成 AP 分类
+        expect(f.CLASSIC_UNMAPPED.effectOnB).toBe(0);
         expect(f.CLASSIC_STATUTORY_UNPAID.amount).toBe(958.1);
         expect(f.MISSING_SETTLEMENT.count).toBe(0);
         expect(r.payroll?.mismatchCount).toBe(0);
@@ -63,7 +64,7 @@ describe('盈亏对账 · 虚构 9 月', () => {
     it('摘要不含员工姓名', async () => {
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
         const text = reconciliationSummaryText(r);
-        expect(text).toContain('30,297.65');
+        expect(text).toContain('34,297.65');
         expect(text).not.toContain('员工甲');
         expect(text).not.toContain('员工乙');
     });

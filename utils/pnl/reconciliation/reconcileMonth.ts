@@ -131,17 +131,24 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const settlements = raw.settlements as any[];
     const standalone = raw.standaloneExpenses as any[];
     const billPayments = raw.billPayments as any[];
+    // 财务报表（2026-10-16 起）用马来西亚日期切月、业务发生制排除分期付款重复列：
+    // A / B 的输入同样要有「前一天 UTC、马来西亚日期在本月」的记录，以及期间外的原账单
+    const parents = await loadParentBillsWith(source, standalone, 'ACCRUAL');
+    const withDayBefore = new Map<string, any>();
+    [...(rawDayBefore.standaloneExpenses as any[]), ...standalone].forEach(e => withDayBefore.set(e.id, e));
+    const reportExpenses = splitAccrualDuplicatePayments([...withDayBefore.values()], 'ACCRUAL', parents).kept;
     const data = { settlements, standaloneExpenses: standalone, billPayments, payrollRecords: payrollRecords as any[], employees: employees as any[] };
+    const reportData = { ...data, standaloneExpenses: reportExpenses };
 
     // ── A ──
-    const A = legacyFinancialReport(data, start, end, 'ACCRUAL');
+    const A = legacyFinancialReport({ ...data, standaloneExpenses: [...withDayBefore.values()], parentBills: parents }, start, end, 'ACCRUAL');
 
     // ── B（画面与多月份导出）──
     const classicInput = (costByCategory: Record<string, number>, platformGross: any, inStoreSales: number, laborByDept: Record<string, number>) => buildClassicPnL({
         month, storehub: null, platformGross, costByCategory, viewMode: 'DETAILED', channelMode: 'IN_STORE',
         includeCost: true, costDetailMode: 'DETAILED', laborByDept, inStoreSales,
     } as any);
-    const agg = aggregateMonth(month, data as any, 'ACCRUAL');
+    const agg = aggregateMonth(month, reportData as any, 'ACCRUAL');
     const B = classicInput(A.classicCostByCategory, A.platformGross, A.inStoreSales, agg.laborByDept);
     const Bexport = classicInput(agg.costByCategory, agg.platformGross, agg.inStoreSales, agg.laborByDept);
 
@@ -182,22 +189,26 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const inMonth = (d: unknown) => { const x = String(d || '').split('T')[0]; return x >= start && x <= end; };
 
     // 1. 应付账款分期付款重复
-    const parents = await loadParentBillsWith(cachedSource, standalone, 'ACCRUAL');
     const { removed } = splitAccrualDuplicatePayments(standalone, 'ACCRUAL', parents);
     const dupRows = removed.filter((e: any) => inMonth(e.time) && !e.settlementId);
     const catOf = (e: any) => String(e.category || 'OTHER').toUpperCase();
     const dupOperating = dupRows.filter((e: any) => ['COGS', 'OPEX', 'DELIVERY_COST'].includes(categorizeExpense(catOf(e))));
     const sumAmt = (rows: any[]) => r2(rows.reduce((s, e: any) => s + num(e.amount), 0));
     const dupAmount = sumAmt(dupOperating);
-    // 平台类（DELIVERY_COST）的重复已反映在「平台扣款」那一行，差额桥只拆食材与经营费用
-    const dupFoodOpex = dupOperating.filter((e: any) => categorizeExpense(catOf(e)) !== 'DELIVERY_COST');
-    const dupBridge = sumAmt(dupFoodOpex);
-    const dupMappedInClassic = sumAmt(dupFoodOpex.filter((e: any) => MAPPED_CAT_KEYS.has(catOf(e))));
+    // 财务报表已用马来西亚日期：前一天 UTC、马来西亚日期在本月的食材 / 经营费用，财务报表计入、驾驶舱（只读本月区间）没有
+    const utcRows = (rawDayBefore.standaloneExpenses as any[]).filter((e: any) => {
+        const id = String(e.id || '');
+        return !standalone.some((x: any) => x.id === e.id) && !e.settlementId && inMonth(mytDateOf(e.time))
+            && !/^(payroll_|salary_|bill_sync_|recon_fee_)/.test(id) && ['COGS', 'OPEX'].includes(categorizeExpense(catOf(e)));
+    });
+    const accrualAmt = (e: any) => num(e.totalBillAmount || e.amount) - num(e.creditNote);
+    const utcIntoMonth = r2(utcRows.reduce((s2, e) => s2 + accrualAmt(e), 0));
+    const utcIntoMonthMapped = r2(utcRows.filter((e: any) => MAPPED_CAT_KEYS.has(catOf(e))).reduce((s2, e) => s2 + accrualAmt(e), 0));
     findings.push({
         id: 'DUP_INSTALMENT',
         title: '应付账款分期付款被重复计入',
-        detail: '原账单已按全额（totalBillAmount）计入；第二次以后付款另建的 pay_ 列，财务报表与传统账目又再计一次。驾驶舱与建议口径不计。',
-        amount: dupAmount, count: dupOperating.length, effectOnA: -dupAmount, effectOnB: -dupMappedInClassic,
+        detail: '原账单已按全额（totalBillAmount）计入；第二次以后付款另建的 pay_ 列。2026-10-16 起财务报表、传统账目与驾驶舱都不再重复计入，这里只列出供核对。',
+        amount: dupAmount, count: dupOperating.length, effectOnA: 0, effectOnB: 0,
         records: dupOperating.map((e: any) => ({ date: String(e.time).slice(0, 10), label: expenseLabel(e), amount: num(e.amount), note: `原账单 ${String(e.id).slice(4, String(e.id).lastIndexOf('_'))}` })),
     });
 
@@ -276,18 +287,15 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         });
     }
 
-    // 6. 传统账目：没有对应栏位而消失的分类
+    // 6. 传统账目：不在科目对照表的分类（2026-10-16 起并入后备科目计入，不再消失；这里只列出）
     const unmapped = Object.entries(A.classicCostByCategory).filter(([k, v]) =>
         Math.abs(v) > 0.005 && !MAPPED_CAT_KEYS.has(k) && !['DIVIDEND', 'ASSET', 'IGNORE'].includes(categorizeExpense(k)));
-    const dupUnmapped = sumAmt(dupFoodOpex.filter((e: any) => !MAPPED_CAT_KEYS.has(catOf(e))));
     const unmappedAmount = r2(unmapped.reduce((s, [, v]) => s + v, 0));
-    // 人工类的未对应分类在「人工类支出」那一行处理（驾驶舱多数也不计），这里只算非人工
-    const unmappedNonLabour = r2(unmapped.filter(([k]) => categorizeExpense(k) !== 'LABOR').reduce((s, [, v]) => s + v, 0));
     findings.push({
         id: 'CLASSIC_UNMAPPED',
-        title: '传统账目没有对应栏位、整笔消失的分类',
-        detail: '传统账目只加总对照表里列出的分类，其他分类不进任何一行，也不提示。建议口径：一律进「其他营运费用」并列出。',
-        amount: unmappedAmount, count: unmapped.length, effectOnB: r2(unmappedNonLabour - dupUnmapped),
+        title: '不在传统账目科目对照表的分类',
+        detail: '以前传统账目只加总对照表里的分类，其他分类整笔消失。2026-10-16 起按性质并入 INGREDIENTS / OTHER OPERATING EXPENSES / LABOUR CHARGES（该行标 ⚠），这里列出供确认是否要另设对照。',
+        amount: unmappedAmount, count: unmapped.length, effectOnB: 0,
         records: unmapped.map(([k, v]) => ({ date: month, label: k, amount: r2(v) })),
     });
 
@@ -495,7 +503,7 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const bridgeA: ReconBridgeRow[] = [
         { label: '营业额', amount: r2(A.revenue - C.revenue) },
         { label: '外送平台扣款（未对账日的广告等）', amount: r2(C.platform - A.platform) },
-        { label: '分期付款重复计入', amount: -dupBridge },
+        { label: '马来西亚日期在本月、驾驶舱没读取的前一天（UTC）记录', amount: -utcIntoMonth },
         { label: '钱箱支出未计入', amount: adj.pettyCash },
         { label: '收款手续费未计入', amount: adj.bankFees },
         { label: '人工口径不同（详见薪资核对）', amount: r2(C.labour - A.labour) },
@@ -508,7 +516,7 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         .filter(([k]) => MAPPED_CAT_KEYS.has(k))
         .reduce((s, [, v]) => s + v, 0));
     const classicLabourExpenses = r2(Object.entries(A.classicCostByCategory)
-        .filter(([k]) => categorizeExpense(k) === 'LABOR' && k !== 'PAYROLL' && k !== 'EPF_SOCSO' && MAPPED_CAT_KEYS.has(k))
+        .filter(([k]) => categorizeExpense(k) === 'LABOR' && k !== 'PAYROLL' && k !== 'EPF_SOCSO')
         .reduce((s, [, v]) => s + v, 0));
     const cockpitPayroll = r2((cockpit.context?.labourByMonth.find(l => l.month === month)?.costs || []).reduce((s, c) => s + c.employerCost, 0));
     const classicPayroll = r2(num(A.classicCostByCategory.PAYROLL) + num(A.classicCostByCategory.EPF_SOCSO));
@@ -516,10 +524,9 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const bridgeB: ReconBridgeRow[] = [
         { label: '营业额', amount: r2(B.salesTotal - C.revenue) },
         { label: '外送平台扣款', amount: r2(C.platform - classicPlatform) },
-        { label: '分期付款重复计入', amount: -dupMappedInClassic },
         { label: '钱箱支出未计入', amount: adj.pettyCash },
         { label: '收款手续费未计入', amount: adj.bankFees },
-        { label: '没有对应栏位而消失的分类', amount: r2(unmappedNonLabour - dupUnmapped) },
+        { label: '马来西亚日期在本月、驾驶舱没读取的前一天（UTC）记录', amount: -utcIntoMonthMapped },
         { label: '法定供款未缴不计', amount: statUnpaid },
         { label: '薪资：实发 vs 应发 + 雇主供款', amount: r2(cockpitPayroll - classicPayroll - statUnpaid) },
         { label: '人工类支出（兼职、员工餐、预支、津贴…）', amount: r2(C.labour - cockpitPayroll - classicLabourExpenses) },
