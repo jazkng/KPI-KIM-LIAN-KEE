@@ -4,10 +4,18 @@
 // 逐行照抄 components/features/FinancialReport.tsx（2026-10-15 版本）的 analytics useMemo
 //   :378-784（本期部分；上期比较不需要）与 :967-980（传统账目的 costByCategory）。
 // 目的只有一个：在对账画面重现财务报表「现在」算出的数字，与其他算法逐项比较。
-// 这里**不修正任何问题**——包括 57,300 后备值、分期付款重复、广告漏扣——
-// 修正放在统一引擎（PR 2）。财务报表组件本身不改。
+// 这里**不修正任何问题**——包括 57,300 后备值、广告漏扣——修正放在统一引擎（PR 2）。
+//
+// 2026-10-16 财务报表本身修了两处（杂项费用审计第二轮），这份照抄同步：
+//   1. 月份边界改用马来西亚日期（带时区的时间先换算），不再用 UTC 字串切日
+//   2. 业务发生制排除分期付款的第二笔以后（pay_<账单>_<时间>），原账单已按全额计入
+//   3. 固定账单付款换成与应付账款镜像相同的分类（宿舍水电、订阅、其他固定账单原本找不到科目）
+//   4. 薪资 = 实发 + 薪资扣回的员工借款（loanRepay）+ 宿舍费（hostelFee）；借款发出时记 STAFF_LOAN 资产，扣回不减少工资成本；宿舍费负责人决定算人工
+// version: 'BEFORE_FIX' 重现修正前的算法，只给对账 / 修正前后比较用。
 // ============================================================================
-import { categorizeExpense } from '../../monthlyPnLAggregator';
+import { categorizeExpense, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../monthlyPnLAggregator';
+import { toMalaysiaDay } from '../../dateHelper';
+import { billPaymentCostCategory } from '../../../constants/recurringBillCategoryMap';
 
 const num = (v: unknown) => Number(v) || 0;
 
@@ -40,15 +48,22 @@ export const legacyFinancialReport = (
         billPayments: any[];
         payrollRecords: any[];
         employees: any[];
+        /** 分期付款列对应、但不在读取区间内的原账单 */
+        parentBills?: Map<string, { totalBillAmount?: number }>;
     },
     startDate: string,
     endDate: string,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+    version: 'CURRENT' | 'BEFORE_FIX' = 'CURRENT',
 ): LegacyFinancialReportResult => {
-    const { settlements, standaloneExpenses, billPayments, payrollRecords, employees } = input;
+    const { settlements, billPayments, payrollRecords, employees } = input;
+    const fixed = version === 'CURRENT';
+    const standaloneExpenses = fixed
+        ? splitAccrualDuplicatePayments(input.standaloneExpenses, accountingMode, input.parentBills).kept
+        : input.standaloneExpenses;
     const isCurrentRange = (dateStr: string) => {
         if (!dateStr) return false;
-        const d = String(dateStr).split('T')[0];
+        const d = fixed ? toMalaysiaDay(dateStr) : String(dateStr).split('T')[0];
         return d >= startDate && d <= endDate;
     };
 
@@ -160,7 +175,7 @@ export const legacyFinancialReport = (
     billPayments.forEach(b => {
         const shared = (b.costShares || []).reduce((sum: number, x: any) => sum + num(x.amount), 0);
         const netAmt = Math.max(0, num(b.amount) - shared);
-        if (isCurrentRange(b.date)) addCost(netAmt, b.category, b.note || b.payee || b.companyLabel);
+        if (isCurrentRange(b.date)) addCost(netAmt, fixed ? billPaymentCostCategory(b.category) : b.category, b.note || b.payee || b.companyLabel);
     });
 
     // :670-685
@@ -168,7 +183,7 @@ export const legacyFinancialReport = (
         const details: any[] = Array.isArray(p.details) ? p.details : [];
         if (details.length === 0) return num(p.totalNetPay);
         return details.reduce((sum, d) => {
-            const amount = num(d?.netPay);
+            const amount = fixed ? payrollWageFromDetail(d) : num(d?.netPay);
             if (d?.isPaid) return sum + amount;
             const emp = employees.find(e => e.id === d?.employeeId);
             if (emp) {

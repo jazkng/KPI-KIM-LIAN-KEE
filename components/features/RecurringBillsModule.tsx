@@ -12,20 +12,8 @@ interface RecurringBillsModuleProps {
     onClose: () => void;
 }
 
-// === CATEGORY MAP: RecurringBill → AP ExpenseItem ===
-const BILL_TO_AP_CATEGORY: Record<RecurringBillCategory, string> = {
-    'RENT': 'RENT',
-    'RENT_STAFF': 'RENT_STAFF',
-    'ELECTRICITY': 'UTILITIES_ELECTRIC',
-    'WATER': 'UTILITIES_WATER',
-    'ELECTRICITY_STAFF': 'UTILITIES_ELECTRIC_STAFF',
-    'WATER_STAFF': 'UTILITIES_WATER_STAFF',
-    'INTERNET': 'INTERNET',
-    'WASTE': 'WASTE',
-    'LICENSE': 'LICENSE',
-    'SUBSCRIPTION': 'LICENSE',
-    'OTHER': 'SUPPLIES',
-};
+// === CATEGORY MAP: RecurringBill → AP ExpenseItem（共用，盈亏计入固定账单付款时用同一份）===
+import { BILL_TO_AP_CATEGORY } from '../../constants/recurringBillCategoryMap';
 
 const CATEGORY_CONFIG: Record<RecurringBillCategory, { label: string, icon: any, color: string, unit?: string, text: string }> = {
     'RENT': { label: '租金', text: 'RENT', icon: Building, color: 'bg-blue-50 text-blue-600 border-blue-200' },

@@ -19,7 +19,9 @@ import {
     LABOR_DEPT_UNASSIGNED,
     CATEGORY_MARGIN_PAIRS,
     CategoryMarginPair,
+    type ClassicCostLine,
 } from '../constants/classicPnLCostMap';
+import { categorizeExpense } from './monthlyPnLAggregator';
 
 /** 部门薪资：department 值 → 金额。key 'UNASSIGNED' 表示没填 department 的 */
 export type LaborByDept = Record<string, number>;
@@ -101,6 +103,53 @@ export interface BuildClassicPnLInput {
 
 const sumSources = (cost: CostByCategory, sources: string[]): number =>
     sources.reduce((s, k) => s + (cost[k] || 0), 0);
+
+/** 没有对应科目的分类，按性质放进现有的「其他」科目（不新增行，保留传统排版） */
+const FALLBACK_LINE: Record<string, { line: string; child?: string }> = {
+    COGS: { line: 'INGREDIENTS', child: 'ING_OTHERS' },
+    OPEX: { line: 'OTHER_OPEX' },
+    DELIVERY_COST: { line: 'OTHER_OPEX' },
+    LABOR: { line: 'LABOUR_CHARGES' },
+};
+const MAPPED_KEYS = new Set(CLASSIC_COST_LINES.flatMap(l => l.sources));
+
+/**
+ * 传统账目实际使用的科目：对照表 + 没有对应科目的分类（2026-10-16 起不再整笔消失）。
+ * 以前不在对照表的分类（例如 SUBSCRIPTION、OFFICE_SUPPLY）在财务报表首页有计入净利，传统账目却整笔不见。
+ * 现在按 categorizeExpense 的性质并入 INGREDIENTS（其他）/ OTHER OPERATING EXPENSES / LABOUR CHARGES，
+ * 并在该行的提示列出是哪些分类。转账、押金、借款、分红、资产（IGNORE / ASSET / DIVIDEND / CAPEX）照旧不计。
+ */
+/** 某个分类在传统账目进哪一行（含后备行）；不计的分类回 null */
+export const classicLineOf = (key: string): { line: ClassicCostLine; folded: boolean } | null => {
+    const direct = CLASSIC_COST_LINES.find(l => l.sources.includes(key));
+    if (direct) return { line: direct, folded: false };
+    const fb = FALLBACK_LINE[categorizeExpense(key)];
+    const line = fb && CLASSIC_COST_LINES.find(l => l.id === fb.line);
+    return line ? { line, folded: true } : null;
+};
+
+export const classicLinesFor = (costByCategory: CostByCategory): { lines: ClassicCostLine[]; folded: { key: string; lineId: string }[] } => {
+    const folded = Object.keys(costByCategory)
+        .filter(k => Math.abs(costByCategory[k] || 0) > 0.005 && !MAPPED_KEYS.has(k) && FALLBACK_LINE[categorizeExpense(k)])
+        .map(k => ({ key: k, lineId: FALLBACK_LINE[categorizeExpense(k)].line, child: FALLBACK_LINE[categorizeExpense(k)].child }));
+    if (!folded.length) return { lines: CLASSIC_COST_LINES, folded: [] };
+    const lines = CLASSIC_COST_LINES.map(l => {
+        const mine = folded.filter(x => x.lineId === l.id);
+        if (!mine.length) return l;
+        const keys = mine.map(x => x.key);
+        return {
+            ...l,
+            sources: [...l.sources, ...keys],
+            note: `${l.note ? `${l.note}。` : ''}⚠️ 含没有对应科目的分类：${keys.join('、')}`,
+            warn: true,
+            children: l.children?.map(c => {
+                const extra = mine.filter(x => x.child === c.id).map(x => x.key);
+                return extra.length ? { ...c, sources: [...c.sources, ...extra] } : c;
+            }),
+        };
+    });
+    return { lines, folded: folded.map(({ key, lineId }) => ({ key, lineId })) };
+};
 
 /** LABOUR CHARGES 各来源科目的中文名，给「记账来源拆解」用 */
 const LABOUR_SOURCE_LABEL: Record<string, string> = {
@@ -226,9 +275,10 @@ export const buildClassicPnL = (input: BuildClassicPnLInput): ClassicPnLData => 
     if (includeCost) {
         const sectionOrder: ClassicCostSection[] = ['COST', 'PERSONAL', 'SELLING', 'OPERATION', 'CAPEX'];
         const sectionSums: Record<ClassicCostSection, number> = { COST: 0, PERSONAL: 0, SELLING: 0, OPERATION: 0, CAPEX: 0 };
+        const { lines: costLines } = classicLinesFor(costByCategory);
 
         // 先算各段小计
-        CLASSIC_COST_LINES.forEach(line => {
+        costLines.forEach(line => {
             sectionSums[line.section] += sumSources(costByCategory, line.sources);
         });
 
@@ -242,7 +292,7 @@ export const buildClassicPnL = (input: BuildClassicPnLInput): ClassicPnLData => 
                 ratio: r(total),
                 isSection: true,
             });
-            CLASSIC_COST_LINES.filter(l => l.section === sec).forEach(line => {
+            costLines.filter(l => l.section === sec).forEach(line => {
                 const amt = sumSources(costByCategory, line.sources);
                 rows.push({
                     id: line.id,

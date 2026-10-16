@@ -6,8 +6,9 @@ import { DataManager } from '../../utils/dataManager';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
 import { ClassicPnLTab } from './ClassicPnLTab';
 import { LABOR_DEPT_ROLE_FALLBACK } from '../../constants/classicPnLCostMap';
+import { billPaymentCostCategory } from '../../constants/recurringBillCategoryMap';
 import { buildCategoryMargins, buildClassicPnL } from '../../utils/classicPnLBuilder';
-import { aggregateMonth, monthRange, diffCostByCategory } from '../../utils/monthlyPnLAggregator';
+import { aggregateMonth, monthRange, diffCostByCategory, parentBillIdOfPayment, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../utils/monthlyPnLAggregator';
 import { exportClassicPnLMultiToExcel } from '../../utils/classicPnLMultiExport';
 import { downloadBlob } from '../../utils/classicPnLExport';
 import { CATEGORY_MARGIN_PAIRS } from '../../constants/classicPnLCostMap';
@@ -150,6 +151,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     const [settlementRecords, setSettlementRecords] = useState<SettlementRecord[]>([]);
     const [standaloneExpenses, setStandaloneExpenses] = useState<ExpenseItem[]>([]);
     const [billPayments, setBillPayments] = useState<BillPaymentRecord[]>([]);
+    /** 分期付款列（pay_<账单>_<时间>）对应、但不在读取区间内的原账单：业务发生制要靠它判断付款列是否重复 */
+    const [parentBills, setParentBills] = useState<Map<string, ExpenseItem>>(new Map());
     const [transfers, setTransfers] = useState<FundTransfer[]>([]);
     const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
@@ -330,6 +333,9 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 expSnap1.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
                 expSnap2.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
                 const mergedExpenses = Array.from(expMap.values()) as ExpenseItem[];
+                const missingParents = [...new Set(mergedExpenses.map(e => parentBillIdOfPayment(e.id)).filter((id): id is string => !!id && !expMap.has(id)))];
+                const parents = missingParents.length ? await DataManager.getStandaloneExpensesByIds(missingParents) : [];
+                setParentBills(new Map(parents.map(b => [b.id, b])));
 
                 setSettlementRecords(setSnap.docs.map(d => ({ id: d.id, ...d.data() } as SettlementRecord)));
                 setStandaloneExpenses(mergedExpenses);
@@ -375,17 +381,19 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     const formatMoney = (amount: number) => `RM ${Number(amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
     // 👑 核心引擎
+    /**
+     * 盈亏用的独立支出：业务发生制下排除「分期付款的第二笔以后」（pay_<账单>_<时间>，totalBillAmount = 0），
+     * 因为原账单已按全额（totalBillAmount）计入，再计付款列就是同一笔费用算两次。现金制照算（是真实付款）。
+     */
+    const pnlExpenses = useMemo(
+        () => splitAccrualDuplicatePayments(standaloneExpenses, accountingMode, parentBills).kept,
+        [standaloneExpenses, parentBills, accountingMode],
+    );
+
     const analytics = useMemo(() => {
-        const isCurrentRange = (dateStr: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= startDate && d <= endDate;
-        };
-        const isPrevRange = (dateStr: string) => {
-            if (!dateStr) return false;
-            const d = dateStr.split('T')[0];
-            return d >= prevStartDate && d <= prevEndDate;
-        };
+        // 马来西亚日期判断区间（带时区的时间先换算，避免 UTC 切日把月底账单算到别月）
+        const isCurrentRange = (dateStr: string) => inDateRange(dateStr, startDate, endDate);
+        const isPrevRange = (dateStr: string) => inDateRange(dateStr, prevStartDate, prevEndDate);
 
         const rev = { cash: 0, tng: 0, debitCard: 0, creditCard: 0, amex: 0, card: 0, deliveryGross: 0, inStoreSales: 0, totalGrossRevenue: 0, variance: 0, refunds: 0 };
         const bdown = { grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0 };
@@ -630,7 +638,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             s.expenses?.forEach(e => addCostWithSplits(Number(e.amount||0), e, e.company || e.note, false, false));
         });
 
-        standaloneExpenses.forEach(e => {
+        pnlExpenses.forEach(e => {
             // 👑 2. 总账防重拦截：防止 RecurringBills 自动同步过来的账单被报表算两遍！并且跳过对账生成的手续费记账以便通过动态扣除反映
             if (e.id.startsWith('payroll_') || e.id.startsWith('salary_') || e.settlementId || e.id.startsWith('bill_sync_') || e.id.startsWith('recon_fee_')) return; 
 
@@ -651,8 +659,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const shared = (b.costShares || []).reduce((sum: number, x: any) => sum + (Number(x.amount) || 0), 0);
             const netAmt = Math.max(0, Number(b.amount || 0) - shared);
             const label = bAny.note || bAny.payee || bAny.companyLabel;
-            if (isCurrentRange(b.date)) addCost(netAmt, b.category, label, false, false);
-            else if (isPrevRange(b.date)) addCost(netAmt, b.category, label, false, true);
+            // 固定账单付款存的是固定账单分类，换成与应付账款镜像相同的分类，否则宿舍水电、订阅等找不到科目
+            const billCat = billPaymentCostCategory(b.category);
+            if (isCurrentRange(b.date)) addCost(netAmt, billCat, label, false, false);
+            else if (isPrevRange(b.date)) addCost(netAmt, billCat, label, false, true);
         });
 
         /**
@@ -671,7 +681,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const details: any[] = Array.isArray((p as any).details) ? (p as any).details : [];
             if (details.length === 0) return Number(p.totalNetPay || 0);
             return details.reduce((sum, d) => {
-                const amount = Number(d?.netPay) || 0;
+                // 实发 + 薪资扣回的员工借款 + 宿舍费（扣回借款、宿舍费都不代表工资变少）
+                const amount = payrollWageFromDetail(d);
                 if (d?.isPaid) return sum + amount;          // 真的发出去的钱，一律算
                 const emp = employees.find(e => e.id === d?.employeeId);
                 if (emp) {
@@ -1067,7 +1078,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 costAnomalies: costAnomalies.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
             }
         };
-    }, [settlementRecords, standaloneExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [settlementRecords, pnlExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
 
     // ========== 👑 经营体检指标 (Prime Cost / 盈亏平衡) ==========
     // 纯计算，用的全是 analytics 已经算好的数字，不额外读取任何资料
@@ -1311,7 +1322,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             });
         });
 
-        standaloneExpenses.forEach(e => {
+        pnlExpenses.forEach(e => {
             // 👑 3. 明细防重拦截：屏蔽 bill_sync_ 影子文件，防止点开明细弹窗看到两笔一模一样的钱
             if (e.id.startsWith('payroll_') || e.category === 'PAYROLL' || e.id.startsWith('salary_') || e.settlementId || e.id.startsWith('bill_sync_')) return;
             const docLink = (e as any).documentLink || (e as any).receiptUrl || (e as any).link || (e as any).fileUrl || '';
@@ -1361,7 +1372,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             addItem({ 
                 id: b.id, 
                 date: b.date, 
-                category: b.category, 
+                category: billPaymentCostCategory(b.category), 
                 desc: b.name, 
                 amount: Number(b.amount || 0), 
                 source: 'Bill Payment', 
@@ -1558,7 +1569,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                     //    预支是当月先发出去的现金，本来就属于那个部门的人工，所以归回部门，不另外列一行。
                     //    现金实收模式：还没结账、这个人也还没发 → 净发不算（预支照算，那是已经付出去的现金）
                     const cashNotPaid = accountingMode === 'CASH' && pr.status !== 'POSTED' && !d.isPaid;
-                    const cost = (cashNotPaid ? 0 : Number(d.netPay || 0)) + Number(d.advanceLoan || 0);
+                    const cost = (cashNotPaid ? 0 : payrollWageFromDetail(d)) + Number(d.advanceLoan || 0);
                     if (!cost) return;
                     totalCount++;
 
@@ -1733,7 +1744,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         };
 
         // 1. 独立账单 (与 analytics 同口径过滤)
-        standaloneExpenses.forEach(e => {
+        pnlExpenses.forEach(e => {
             if (e.id.startsWith('payroll_') || e.id.startsWith('salary_') || e.settlementId || e.id.startsWith('bill_sync_')) return;
             if ((e.category || '').toUpperCase() !== 'MARKETING') return;
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
@@ -1814,7 +1825,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             uncategorizedDeltaPct,
             uncategorizedCount: uncategorizedCountCur
         };
-    }, [standaloneExpenses, settlementRecords, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [pnlExpenses, settlementRecords, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
 
     // 👑 Seafood Breakdown
     const seafoodBreakdown = useMemo(() => {
@@ -1856,7 +1867,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         };
 
         // 1. Standalone bills
-        standaloneExpenses.forEach(e => {
+        pnlExpenses.forEach(e => {
             if (e.id.startsWith('payroll_') || e.id.startsWith('salary_') || e.settlementId || e.id.startsWith('bill_sync_')) return;
             if ((e.category || '').toUpperCase() !== 'INGREDIENT_SEAFOOD') return;
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
@@ -1927,7 +1938,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             uncategorizedDeltaPct,
             uncategorizedCount: uncategorizedCountCur
         };
-    }, [standaloneExpenses, settlementRecords, billPayments, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [pnlExpenses, settlementRecords, billPayments, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
 
     // 👑 Beverage Breakdown
     const beverageBreakdown = useMemo(() => {
@@ -1969,7 +1980,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         };
 
         // 1. Standalone bills
-        standaloneExpenses.forEach(e => {
+        pnlExpenses.forEach(e => {
             if (e.id.startsWith('payroll_') || e.id.startsWith('salary_') || e.settlementId || e.id.startsWith('bill_sync_')) return;
             if ((e.category || '').toUpperCase() !== 'BEVERAGE') return;
             const dateToUse = accountingMode === 'ACCRUAL' ? e.time : (e.paymentDate || e.time);
@@ -2041,7 +2052,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             uncategorizedDeltaPct,
             uncategorizedCount: uncategorizedCountCur
         };
-    }, [standaloneExpenses, settlementRecords, billPayments, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [pnlExpenses, settlementRecords, billPayments, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
 
     // 👑 同步后的 KPI 评估 (给 PDF Page 1 用)
     const syncedLaborEval = laborDeptAnalysis.laborMarginSynced > 25
@@ -2082,9 +2093,13 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             expSnap1.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
             expSnap2.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
 
+            // 业务发生制：分期付款第二笔以后的付款列不重复计入（原账单已按全额计入）
+            const allExpenses = Array.from(expMap.values()) as any[];
+            const missingParents = [...new Set(allExpenses.map(e => parentBillIdOfPayment(e.id)).filter((id): id is string => !!id && !expMap.has(id)))];
+            const parents = missingParents.length ? await DataManager.getStandaloneExpensesByIds(missingParents) : [];
             const raw = {
                 settlements: setSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[],
-                standaloneExpenses: Array.from(expMap.values()) as any[],
+                standaloneExpenses: splitAccrualDuplicatePayments(allExpenses, accountingMode, new Map(parents.map(b => [b.id, b]))).kept,
                 billPayments: billSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[],
                 payrollRecords: (payrollRecords || []) as any[],
                 employees: (employees || []) as any[],

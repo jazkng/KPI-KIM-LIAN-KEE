@@ -43,7 +43,7 @@ export interface PayrollEmployeeCheck {
     basicBelowProfileWithUnpaidLeave: boolean;
     /** 三套旧算法 / 驾驶舱各自认定的这个人的人工成本 */
     asFinancialReport: number; // 实发 + 全部法定（含员工与雇主、PCB）
-    asClassic: number;         // 实发（法定已缴才另加，这里不含）
+    asClassic: number;         // 实发 + 借款扣回 + 宿舍费（法定已缴才另加，这里不含）
     asCockpit: number;         // 应发 + 雇主供款
     /** 建议口径：应发 − 无薪假 − 已扣罚款 + 雇主供款（对不上时为 null） */
     proposed: number | null;
@@ -120,7 +120,7 @@ export const checkPayrollMonth = (
             savedTotalCost: num(d.totalCost),
             basicBelowProfileWithUnpaidLeave: profileBasic > 0 && num(d.basicSalary) < profileBasic - TOL && num(d.unpaidLeave) > 0,
             asFinancialReport: r2(netPay + employeeStatutory + employerStatutory),
-            asClassic: r2(netPay),
+            asClassic: r2(netPay + num(d.loanRepay) + num(d.hostelFee)),
             asCockpit: r2(gross + employerStatutory),
             proposed: penaltyStatus === 'MISMATCH' ? null : r2(gross - num(d.unpaidLeave) - penaltyDeducted + employerStatutory),
         };

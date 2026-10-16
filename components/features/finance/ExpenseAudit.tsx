@@ -2,15 +2,15 @@
 // 杂项费用专项审计 · 只读
 // ----------------------------------------------------------------------------
 // 选月份按「开始审计」才读取；逐笔列出该月全部应付账款 / 独立支出在传统账目的去向，
-// 与传统账目各科目核对，列出没有进入任何科目、分类可疑、钱箱有支出但 AP 可能缺失的记录。
-// 不修改任何资料、分类或盈亏算法。
+// 与传统账目各科目核对，列出没有进入任何科目、固定账单没有科目、拆分金额不符、有扣减的记录，并核对工资只计一次。
+// 不依供应商名称或关键词推测分类；分类以负责人确认为准。
+// 每日结算的钱箱支出不纳入。不修改任何资料、分类或盈亏算法。
 // ============================================================================
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, Copy, Download, Loader2, X } from 'lucide-react';
 import { getBusinessDateString } from '../../../utils/dateHelper';
 import { exportExpenseAuditExcel, expenseAuditSummaryText, loadExpenseAudit } from '../../../utils/pnl/audit/expenseAuditReport';
 import { TREATMENT_LABEL, type AuditRow, type ExpenseAuditResult, type Treatment } from '../../../utils/pnl/audit/expenseAudit';
-import { CASH_BOX_KIND_LABEL, CASH_BOX_STATUS_LABEL, CASH_BOX_USE_LABEL, type CashBoxStatus } from '../../../utils/pnl/engine/cashBox';
 import { downloadBlob } from '../../../utils/classicPnLExport';
 
 const rm = (n: number) => `${n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -27,26 +27,27 @@ const Card: React.FC<{ title: string; children: React.ReactNode; note?: string }
     </section>
 );
 
-const RowsTable: React.FC<{ rows: AuditRow[]; showSuggestion?: boolean; limit?: number }> = ({ rows, showSuggestion, limit = 200 }) => (
+const RowsTable: React.FC<{ rows: AuditRow[]; limit?: number }> = ({ rows, limit = 200 }) => (
     <div className="max-h-[28rem] overflow-auto">
         <table className="w-full min-w-[640px] text-xs">
             <thead className="sticky top-0 bg-white text-stone-500">
                 <tr>
-                    <th className="py-1 text-left">日期</th><th className="text-left">供应商 · 项目</th><th className="text-right">金额</th>
-                    <th className="pl-2 text-left">原始分类 → 传统账目科目</th>{showSuggestion && <th className="pl-2 text-left">建议</th>}<th className="pl-2 text-left">凭证</th>
+                    <th className="py-1 text-left">单据 / 付款日期</th><th className="text-left">供应商 · 项目</th><th className="text-right">金额</th>
+                    <th className="pl-2 text-left">原始分类 → 传统账目科目</th><th className="pl-2 text-left">凭证</th>
                 </tr>
             </thead>
             <tbody>
                 {rows.slice(0, limit).map(r => (
                     <tr key={r.id} className="border-t border-stone-100 align-top">
-                        <td className="py-1 pr-2 font-mono">{r.date.slice(5)}</td>
+                        <td className="py-1 pr-2 font-mono">{r.date.slice(5)}{r.paymentDate && r.paymentDate !== r.date && <div className="text-stone-500">付 {r.paymentDate.slice(5)}</div>}</td>
                         <td className="pr-2">{r.supplier || '（没有供应商）'}{r.item && <div className="text-stone-500">{r.item}</div>}</td>
-                        <td className="whitespace-nowrap text-right font-mono">{rm(r.accrualAmount)}</td>
+                        <td className="whitespace-nowrap text-right font-mono">{rm(r.accrualAmount)}{r.creditNote > 0 && <div className="text-amber-700">CN −{rm(r.creditNote)}</div>}</td>
                         <td className="pl-2">
-                            <span className="font-mono">{r.category}</span> → {r.parts.map(p => p.line || '（没有科目）').join('；')}
-                            <div className="text-stone-500">{TREATMENT_LABEL[r.treatment]}{r.duplicateInstalment ? ' · 分期付款重复计入' : ''}</div>
+                            <span className="font-mono">{r.category}</span> → {r.parts.length > 1
+                                ? <span>拆分：{r.parts.map(p => `${p.line || '（没有科目）'} ${rm(p.amount)}`).join(' + ')}{r.splitTotal !== null && Math.abs(r.splitTotal - (r.totalBillAmount || r.amount)) > 0.005 && <span className="text-amber-700">（拆分合计 {rm(r.splitTotal)} ≠ 账单 {rm(r.totalBillAmount || r.amount)}，已按比例缩放）</span>}</span>
+                                : r.parts[0]?.line || '（没有科目）'}
+                            <div className="text-stone-500">{TREATMENT_LABEL[r.treatment]}</div>
                         </td>
-                        {showSuggestion && <td className="pl-2">{r.suspicion?.suggestedCategory ? <><span className="font-mono">{r.suspicion.suggestedCategory}</span><div className="text-stone-500">{r.suspicion.reason}</div></> : r.suspicion?.reason}</td>}
                         <td className="pl-2">{r.voucher ? <a href={r.voucher} target="_blank" rel="noreferrer" className="text-blue-700 underline">单据</a> : r.invoiceRef || <span className="text-amber-700">无</span>}</td>
                     </tr>
                 ))}
@@ -66,7 +67,6 @@ export const ExpenseAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const [exporting, setExporting] = useState(false);
     const [treatmentFilter, setTreatmentFilter] = useState<Treatment | 'ALL'>('ALL');
     const [search, setSearch] = useState('');
-    const [cashFilter, setCashFilter] = useState<CashBoxStatus>('MISSING');
     const [openFocus, setOpenFocus] = useState<string | null>(null);
 
     const run = async () => {
@@ -124,7 +124,7 @@ export const ExpenseAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                         <p className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-relaxed text-stone-600">
                             选择月份后按「开始审计」。系统会读取该月全部应付账款 / 独立支出、日结与固定账单付款（只读），
                             逐笔列出原始分类与传统账目目前归入的科目，核对各科目金额，找出没有进入任何科目、分类可能不合理、
-                            以及钱箱有支出但应付账款可能缺失的记录。不会修改任何资料或分类。
+                            固定账单没有科目、拆分金额不符、有扣减的记录，并核对工资只计一次。每日结算的钱箱支出不纳入；不依供应商名称或关键词推测分类。不会修改任何资料或分类。
                         </p>
                     )}
                     {error && <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}
@@ -133,17 +133,17 @@ export const ExpenseAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                             <Card title={`总览 · ${result.month}`}>
                                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                                     {[
-                                        ['AP 笔数', String(t.count)], ['AP 原始费用总额', rm(t.apTotal)], ['已计入传统账目', rm(t.counted)], ['没有进入任何科目', rm(t.notInClassic)],
-                                        ['列在 CAPEX', rm(t.capex)], ['不计入（转账 / 押金 / 借款）', rm(t.nonOperating)], ['由日结副本计入', rm(t.viaSettlement)], ['分期付款重复计入', rm(t.duplicateInstalments)],
-                                        ['疑似分类问题', `${result.suspicious.length} 笔`], ['没有凭证（已计入）', `${t.missingVoucher} 笔`],
-                                        ['钱箱缺 AP 记录', `${result.cashBox.byStatus.MISSING.count} 笔 · ${rm(result.cashBox.byStatus.MISSING.amount)}`], ['UTC 切日计到别月', `${t.utcShifted} 笔`],
+                                        ['AP 笔数', String(t.count)], ['AP 原始费用总额', rm(t.apTotal)], ['已计入传统账目', rm(t.counted)], ['不在对照表（并入后备科目）', rm(t.folded)],
+                                        ['列在 CAPEX', rm(t.capex)], ['不计入（转账 / 押金 / 借款）', rm(t.nonOperating)], ['由日结副本计入', rm(t.viaSettlement)], ['分期付款列（不再计）', rm(t.duplicateInstalments)],
+                                        ['固定账单没有科目', `${result.unmappedBills.length} 笔`], ['拆分金额不符', `${result.splitMismatch.length} 笔`],
+                                        ['扣减（CN）', `${result.creditNoteRows.length} 笔 · ${rm(t.creditNotes)}`], ['UTC 切日跨月', `${t.utcShifted} 笔`],
                                     ].map(([k, v]) => (
                                         <div key={k} className="rounded-xl bg-stone-50 p-2"><div className="text-stone-500">{k}</div><div className="font-mono text-sm font-black">{v}</div></div>
                                     ))}
                                 </div>
                             </Card>
 
-                            <Card title="传统账目各科目核对" note="每个科目的金额 = 应付账款 + 固定账单付款 + 日结副本 + 系统计算（薪资单、平台抽佣）。差额不为 0 代表有钱没被解释。">
+                            <Card title="传统账目各科目核对" note="每个科目的金额 = 应付账款 + 固定账单付款 + 日结副本 + 系统计算（薪资单、平台抽佣）。差额不为 0 代表有钱没被解释；差额为 0 只代表来源都找得到，不代表分类正确或没有漏账。">
                                 <div className="overflow-x-auto">
                                     <table className="w-full min-w-[680px] text-xs">
                                         <thead className="text-stone-500"><tr><th className="py-1 text-left">科目</th><th className="text-right">AP</th><th className="text-right">固定账单</th><th className="text-right">日结副本</th><th className="text-right">系统计算</th><th className="text-right">传统账目</th><th className="text-right">差额</th></tr></thead>
@@ -162,49 +162,59 @@ export const ExpenseAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                                 </div>
                             </Card>
 
-                            <Card title={`没有进入任何科目：${result.notInClassic.length} 笔 · ${rm(t.notInClassic)}`} note="这些支出的分类不在传统账目的任何一行，目前整笔没有被计算。">
+                            <Card title={`分类不在科目对照表：${result.notInClassic.length} 笔 · 并入 ${rm(t.folded)}${t.notInClassic ? ` · 不计 ${rm(t.notInClassic)}` : ''}`} note="以前这些分类在传统账目整笔消失；现在按性质并入 INGREDIENTS / OTHER OPERATING EXPENSES / LABOUR CHARGES，该行会标示 ⚠。">
                                 {result.notInClassic.length ? <RowsTable rows={result.notInClassic} /> : <p className="text-xs text-stone-500">没有。</p>}
                             </Card>
 
-                            <Card title="重点类别" note="SUPPLIES、MISC_OPEX、EXPENSE、MAINTENANCE、PACKAGING、IT_SOFTWARE 等。点开看每一笔。">
+                            <Card title="杂项类别分组" note="SUPPLIES、MISC_OPEX、MAINTENANCE、PACKAGING、IT_SOFTWARE 等，只是分组列出，不代表分类有问题。点开看每一笔。">
                                 <div className="divide-y divide-stone-100">
                                     {Object.entries(result.focus).map(([k, v]) => (
                                         <div key={k} className="py-1">
                                             <button onClick={() => setOpenFocus(openFocus === k ? null : k)} className="flex min-h-[44px] w-full items-center gap-2 text-left" aria-expanded={openFocus === k}>
-                                                <span className="flex-1 text-sm font-bold"><span className="font-mono">{k}</span> · {v.count} 笔 · {rm(v.amount)}{v.rows.some(r => r.suspicion) && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-800">{v.rows.filter(r => r.suspicion).length} 笔可疑</span>}</span>
+                                                <span className="flex-1 text-sm font-bold"><span className="font-mono">{k}</span> · {v.count} 笔 · {rm(v.amount)}</span>
                                                 <ChevronDown size={16} className={`text-stone-400 ${openFocus === k ? 'rotate-180' : ''}`} />
                                             </button>
-                                            {openFocus === k && <RowsTable rows={v.rows} showSuggestion />}
+                                            {openFocus === k && <RowsTable rows={v.rows} />}
                                         </div>
                                     ))}
                                     {!Object.keys(result.focus).length && <p className="text-xs text-stone-500">这个月没有这些类别。</p>}
                                 </div>
                             </Card>
 
-                            <Card title={`疑似分类错误 / 太笼统：${result.suspicious.length} 笔`} note="依供应商与项目文字推测，只是建议；请在应付账款逐笔确认后手动修改，系统不会自动改。薪资、兼职、预支、借款不在检查范围。">
-                                {result.suspicious.length ? <RowsTable rows={result.suspicious} showSuggestion /> : <p className="text-xs text-stone-500">没有。</p>}
-                            </Card>
-
-                            <Card title={`钱箱支出对照：${result.cashBox.entries.length} 笔 · ${rm(result.cashBox.total)}`} note="钱箱支出不计入盈亏，只用来找出应付账款可能漏登的费用。只有金额相近的列为「待核对」，不自动当成同一笔。">
-                                <div className="flex flex-wrap gap-2">
-                                    {(['MISSING', 'MISMATCH', 'TO_VERIFY', 'MATCHED'] as const).map(k => (
-                                        <button key={k} onClick={() => setCashFilter(k)} aria-pressed={cashFilter === k} className={`min-h-[36px] rounded-full px-3 text-xs font-black ${cashFilter === k ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-700'}`}>
-                                            {CASH_BOX_STATUS_LABEL[k]} {result.cashBox.byStatus[k].count} · {rm(result.cashBox.byStatus[k].amount)}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="mt-2 max-h-96 overflow-y-auto">
+                            <Card title={`固定账单付款的分类不在对照表：${result.unmappedBills.length} 笔`} note="固定账单付款已按与应付账款镜像相同的分类计入；这里列出仍不在对照表、并入后备科目（或不计）的。">
+                                {result.unmappedBills.length ? (
                                     <table className="w-full text-xs"><tbody>
-                                        {result.cashBox.entries.filter(e => e.status === cashFilter).sort((a, b) => b.amount - a.amount).slice(0, 300).map((e, i) => (
-                                            <tr key={i} className="border-t border-stone-100 align-top">
-                                                <td className="py-1 pr-2 font-mono">{e.date.slice(5)}</td>
-                                                <td className="pr-2">{e.text}<div className="text-stone-500">{e.match ? `${CASH_BOX_KIND_LABEL[e.match.kind]}：${e.match.name || e.match.category}（${e.match.date}，${rm(e.match.amount)}）· ` : ''}{e.note} · 用途：{CASH_BOX_USE_LABEL[e.use]}</div></td>
-                                                <td className="whitespace-nowrap text-right font-mono">{rm(e.amount)}</td>
-                                            </tr>
+                                        {result.unmappedBills.map(b => (
+                                            <tr key={b.id} className="border-t border-stone-100"><td className="py-1 pr-2 font-mono">{b.date.slice(5)}</td><td className="pr-2">{b.name}</td><td className="font-mono">{b.category} → {b.line || '不计'}</td><td className="text-right font-mono">{rm(b.amount)}</td></tr>
                                         ))}
                                     </tbody></table>
-                                </div>
+                                ) : <p className="text-xs text-stone-500">没有。</p>}
                             </Card>
+
+                            <Card title={`拆分金额合计与账单全额不同：${result.splitMismatch.length} 笔`} note="传统账目会把账单全额（扣除 CN 后）按拆分比例分到各科目；拆分合计与账单不同时，各科目金额不是单据上的数字。">
+                                {result.splitMismatch.length ? <RowsTable rows={result.splitMismatch} /> : <p className="text-xs text-stone-500">没有。</p>}
+                            </Card>
+
+                            {result.labour && (
+                                <Card title="人工只计一次核对" note="工资以薪资单为准；员工预支是工资的一部分（发放时计入、发薪时实发已扣回），不另作费用。">
+                                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                                        {[
+                                            ['薪资实发', result.labour.classic.payrollNet], ['预支', result.labour.classic.advance], ['兼职', result.labour.classic.partTime],
+                                            ['手动工资', result.labour.classic.manualSalary], ['员工餐', result.labour.classic.staffMeal], ['津贴 / 佣金', result.labour.classic.other],
+                                            ['法定缴款', result.labour.classic.statutory], ['传统账目人工合计', result.labour.classic.total],
+                                        ].map(([k, v]) => (
+                                            <div key={k as string} className="rounded-xl bg-stone-50 p-2"><div className="text-stone-500">{k}</div><div className="font-mono text-sm font-black">{rm(v as number)}</div></div>
+                                        ))}
+                                    </div>
+                                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed">{result.labour.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+                                    {result.labour.possibleDuplicates.length > 0 && <div className="mt-2"><p className="text-xs font-bold text-amber-800">人名与月薪名单相同或相近（待确认）</p><RowsTable rows={result.labour.possibleDuplicates.map(x => x.row)} /></div>}
+                                </Card>
+                            )}
+
+                            <Card title={`扣减（credit note）：${result.creditNoteRows.length} 笔 · ${rm(t.creditNotes)}`} note="计入金额 = 账单全额 − 扣减。每一笔扣减都要有供应商的 CN / 退货凭证；系统不会判断对错。">
+                                {result.creditNoteRows.length ? <RowsTable rows={result.creditNoteRows} /> : <p className="text-xs text-stone-500">没有。</p>}
+                            </Card>
+
 
                             <Card title={`逐笔明细：${result.rows.length} 笔`}>
                                 <div className="mb-2 flex flex-wrap gap-2">
@@ -214,7 +224,7 @@ export const ExpenseAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                                         {(Object.keys(TREATMENT_LABEL) as Treatment[]).map(k => <option key={k} value={k}>{TREATMENT_LABEL[k]}</option>)}
                                     </select>
                                 </div>
-                                <RowsTable rows={filteredRows} showSuggestion limit={300} />
+                                <RowsTable rows={filteredRows} limit={300} />
                             </Card>
 
                             <Card title="修正建议">

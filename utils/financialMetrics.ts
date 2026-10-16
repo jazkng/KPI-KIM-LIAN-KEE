@@ -4,6 +4,7 @@
  * 这里只放「纯计算」：输入数字 → 输出数字，不碰 Firestore、不碰 React。
  * 好处是同一条公式全店只有一份，改一次全部报表跟着改，也方便单独验算。
  */
+import { toMalaysiaDay } from './dateHelper';
 
 // ==================================================================
 // 一、基础工具（原本散在各处、各写各的，统一收在这里）
@@ -40,7 +41,7 @@ export const formatGrowth = (v: number | null, digits = 1): string => {
 /** 日期字串（可能带 T 时间）落在 [start, end] 之内 */
 export const inDateRange = (dateStr: string, start: string, end: string): boolean => {
     if (!dateStr) return false;
-    const d = String(dateStr).split('T')[0];
+    const d = toMalaysiaDay(dateStr);
     return d >= start && d <= end;
 };
 

@@ -11,6 +11,8 @@
 
 import { SettlementRecord, ExpenseItem, PayrollRecord, Employee, BillPaymentRecord } from '../types';
 import { LABOR_DEPT_ROLE_FALLBACK } from '../constants/classicPnLCostMap';
+import { toMalaysiaDay } from './dateHelper';
+import { billPaymentCostCategory } from '../constants/recurringBillCategoryMap';
 
 export interface MonthlyRawData {
     settlements: SettlementRecord[];
@@ -63,7 +65,7 @@ export const aggregateMonth = (
     data: MonthlyRawData,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
 ): MonthlyPnLInputs =>
-    aggregateWith(month, d => !!d && String(d).slice(0, 7) === month, p => p === month, data, accountingMode);
+    aggregateWith(month, d => !!d && toMalaysiaDay(d).slice(0, 7) === month, p => p === month, data, accountingMode);
 
 /**
  * 任意日期区间（YYYY-MM-DD，含头含尾）的同口径汇总，给老板经营驾驶舱用。
@@ -77,7 +79,7 @@ export const aggregateRange = (
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
 ): MonthlyPnLInputs => {
     const inRange = (d?: string) => {
-        const day = String(d || '').slice(0, 10);
+        const day = toMalaysiaDay(d);
         return !!day && day >= start && day <= end;
     };
     const fullMonthInRange = (m?: string) => {
@@ -192,15 +194,16 @@ const aggregateWith = (
     billPayments.forEach((b: any) => {
         if (!inMonth(b?.date)) return;
         const shared = (b.costShares || []).reduce((s: number, x: any) => s + num(x.amount), 0);
-        addCost(Math.max(0, num(b.amount) - shared), b.category);
+        addCost(Math.max(0, num(b.amount) - shared), billPaymentCostCategory(b.category));
     });
 
     // ---------- 4. 薪资（POSTED 照算；未结账按看账模式，跟画面一致）----------
+    // 人工 = 实发 + 薪资扣回的员工借款（loanRepay）+ 宿舍费（hostelFee），见 payrollWageFromDetail
     const netPayFromDetails = (p: any): number => {
         const details: any[] = Array.isArray(p?.details) ? p.details : [];
         if (details.length === 0) return num(p?.totalNetPay);
         return details.reduce((sum, d) => {
-            const amount = num(d?.netPay);
+            const amount = payrollWageFromDetail(d);
             if (d?.isPaid) return sum + amount;
             const emp = employees.find(x => x.id === d?.employeeId);
             if (emp) {
@@ -231,7 +234,7 @@ const aggregateWith = (
         (p?.details || []).forEach((d: any) => {
             // 跟画面同口径：净发 + 预支（不是 totalCost）
             const cashNotPaid = accountingMode === 'CASH' && p?.status !== 'POSTED' && !d?.isPaid;
-            const c = (cashNotPaid ? 0 : num(d?.netPay)) + num(d?.advanceLoan);
+            const c = (cashNotPaid ? 0 : payrollWageFromDetail(d)) + num(d?.advanceLoan);
             if (!c) return;
             const emp = employees.find(x => x.id === d?.employeeId);
             let dept = emp?.department ? String(emp.department).toUpperCase() : '';
@@ -262,6 +265,14 @@ const aggregateWith = (
         hasData,
     };
 };
+
+/**
+ * 薪资单一个人计入 PAYROLL 的金额：实发 + 薪资扣回的员工借款 + 宿舍费。
+ * - 员工借款（STAFF_LOAN）发出时是资产、不是费用；每月从薪水扣回只是收回借款，工资成本照样发生。
+ * - 宿舍费：负责人 2026-10-16 决定算人工（只是写在薪资单上，实际没有扣），不让它减少人工。
+ * 预支（advanceLoan）不加：预支发放时已另记 STAFF_ADVANCE 费用，实发扣回正好抵消。
+ */
+export const payrollWageFromDetail = (d: any): number => num(d?.netPay) + num(d?.loanRepay) + num(d?.hostelFee);
 
 /** `pay_<账单ID>_<时间>` → 账单ID（账单ID 本身可能含底线） */
 export const parentBillIdOfPayment = (id?: string): string | null => {

@@ -86,18 +86,18 @@ describe('现有算法 2：传统账目 Classic P&L（业务发生制）', () =>
         laborByDept: agg.laborByDept, inStoreSales: agg.inStoreSales,
     } as any);
 
-    it('结果 30,625.75，比正确答案少 2,261.90', () => {
+    it('结果 30,205.75，比正确答案少 2,681.90（2026-10-16 起宿舍电费 300、订阅 120 不再消失）', () => {
         expect({
             sales: r2(classic.salesTotal), cost: r2(classic.costTotal), personal: r2(classic.personalTotal),
             selling: r2(classic.sellingTotal), operation: r2(classic.operationTotal), netProfit: r2(classic.netProfit),
-        }).toEqual({ sales: 89900, cost: 36000, personal: 5624.25, selling: 3450, operation: 14200, netProfit: 30625.75 });
-        expect(r2(classic.netProfit - CORRECT.netProfit)).toBe(-2261.9);
+        }).toEqual({ sales: 89900, cost: 36000, personal: 5624.25, selling: 3450, operation: 14620, netProfit: 30205.75 });
+        expect(r2(classic.netProfit - CORRECT.netProfit)).toBe(-2681.9);
     });
     it('逐项差异可以解释', () => {
-        expect(classic.costTotal - CORRECT.food).toBe(4000);                 // pay_ 重复
+        expect(classic.costTotal - CORRECT.food).toBe(4000);                 // pay_ 重复（aggregateMonth 本身不排除；财务报表画面与导出在呼叫前已排除）
         expect(r2(classic.personalTotal - CORRECT.labour)).toBe(-958.1);     // 法定供款未缴 → 整笔 958.10 不计
         expect(classic.sellingTotal - CORRECT.platform).toBe(-300);          // 未对账日广告
-        expect(classic.operationTotal - CORRECT.opex).toBe(-480);            // 订阅 120、宿舍电费 300 无对应栏位被丢掉；手续费 25、钱箱 35 未计
+        expect(classic.operationTotal - CORRECT.opex).toBe(-60);             // 手续费 25、钱箱 35 未计（宿舍电费 300 换成 AP 分类、订阅 120 并入 OTHER OPERATING EXPENSES）
     });
 });
 
