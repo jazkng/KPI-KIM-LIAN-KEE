@@ -13,6 +13,8 @@ import {
     FREQ_OPTIONS, TaskCompletion 
 } from './inventoryConstants';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { db } from '../../../firebaseConfig';
+import { findLinkedCatalogItems, updateSupplierLinksForDeletedStock, type LinkAction, type LinkedCatalogRef } from '../../../utils/inventory/supplierLinks';
 import { AssignModal } from './AssignModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
@@ -442,6 +444,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     const [linkedSuppliers, setLinkedSuppliers] = useState<Supplier[]>([]);
     
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    // 删除前检查：哪些供应商品项、菜谱用到这个商品
+    const [deleteCheck, setDeleteCheck] = useState<{ checking: boolean; linked: LinkedCatalogRef[]; recipes: string[] }>({ checking: false, linked: [], recipes: [] });
     const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
     const [selectedForAssign, setSelectedForAssign] = useState<Set<string>>(new Set());
@@ -1296,21 +1300,46 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         setMode('CHECK');
     };
 
-    const handleDeleteClick = () => {
+    const handleDeleteClick = async () => {
         if (!canDeactivateItem) return alert('你没有停用／删除物品的权限。');
+        if (!editingItem?.id) return;
+        const stockId = editingItem.id;
+        setDeleteCheck({ checking: true, linked: [], recipes: [] });
         setShowDeleteConfirm(true);
+        try {
+            // 读最新资料（不用画面上的缓存），列出连到这个商品的供应商品项与用到它的菜谱
+            DataManager.clearCacheKeys(['suppliers', 'menu']);
+            const [suppliers, menu] = await Promise.all([DataManager.getSuppliers(), DataManager.getMenu()]);
+            const recipes = menu
+                .filter(m => (m.variants || []).some(v => (v.recipe || []).some(ing => ing.stockId === stockId)))
+                .map(m => m.name);
+            setDeleteCheck({ checking: false, linked: findLinkedCatalogItems(suppliers, stockId), recipes });
+        } catch (error) {
+            console.error(error);
+            setShowDeleteConfirm(false);
+            setDeleteCheck({ checking: false, linked: [], recipes: [] });
+            alert('读取供应商资料失败，没有删除。请检查网络后再试。');
+        }
     };
 
-    const executeDelete = async () => {
+    const executeDelete = async (linkAction?: LinkAction, newStockId?: string) => {
         if (!canDeactivateItem) return alert('你没有停用／删除物品的权限。');
         if (!allowedScopes.includes(currentStockView)) return alert('你没有这个库存区域的权限。');
         if (editingItem && editingItem.id) {
             setIsSubmitting(true);
             try {
-                // 1. 从主库存中彻底删除
+                // 1. 先处理连到这个商品的供应商品项；失败就停下，商品不删
+                if (deleteCheck.linked.length > 0) {
+                    if (!linkAction) throw new Error('未选择供应商品项的处理方式');
+                    await updateSupplierLinksForDeletedStock(db, editingItem.id, linkAction, newStockId);
+                    DataManager.clearCacheKeys(['suppliers']);
+                    try { sessionStorage.removeItem('inventory_suppliers_cache'); } catch { /* 无痕模式 */ }
+                }
+
+                // 2. 从主库存中彻底删除
                 await DataManager.deleteStockItem(currentStockView, editingItem.id);
 
-                // 2. 防御性清理：查找并清洗所有未完成的关联任务
+                // 3. 防御性清理：查找并清洗所有未完成的关联任务
                 const affectedTasks = activeTasks.filter(t => 
                     t.items.some(i => i.stockId === editingItem?.id)
                 );
@@ -1326,7 +1355,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     }
                 }
 
-                // 3. 刷新视图
+                // 4. 刷新视图
                 await loadStock(currentStockView);
                 await loadTasks(); // 刷新任务列表以反映最新状态
                 setEditingItem(null);
@@ -2414,6 +2443,10 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             {showDeleteConfirm && canDeactivateItem && (
                 <DeleteConfirmModal
                     itemName={editingItem?.name}
+                    checking={deleteCheck.checking}
+                    linkedItems={deleteCheck.linked}
+                    recipeNames={deleteCheck.recipes}
+                    relinkOptions={items.filter(i => i.id !== editingItem?.id)}
                     onConfirm={executeDelete}
                     onCancel={() => setShowDeleteConfirm(false)}
                 />
