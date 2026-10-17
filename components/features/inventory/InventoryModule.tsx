@@ -18,6 +18,8 @@ import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
+import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
@@ -116,7 +118,7 @@ const MemoizedStockCard = React.memo(({
                     ) : (
                         <div className="font-bold text-sm text-[#111111]">{displayName}</div>
                     )}
-                    <div className="text-[10px] text-gray-400 font-mono mt-0.5">#{item.id}</div>
+                    <div className="text-[10px] text-gray-400 font-mono mt-0.5">{displayStockCode(item)}</div>
                     {assignedTo && assignedTo.length > 0 && (
                         <div className="flex items-center gap-1 mt-1">
                             <UserCheck size={10} className="text-blue-500"/>
@@ -176,7 +178,7 @@ const MemoizedStockCard = React.memo(({
                             <div className="font-black text-sm md:text-base text-[#111111] truncate">{displayName}</div>
                         )}
                         <div className="text-[10px] text-gray-400 font-mono mt-1 flex flex-col gap-0.5">
-                            <span className="bg-black/5 px-1.5 py-0.5 rounded font-bold w-fit mb-0.5">#{item.id}</span>
+                            <span className="bg-black/5 px-1.5 py-0.5 rounded font-bold w-fit mb-0.5">{displayStockCode(item)}</span>
                             <span>Min: {isDisplayMode ? `${(minLevelBase / displayToBaseRatio).toFixed(1)} ${tUnit(displayUnit)}` : `${minLevelBase} ${tUnit(baseUnit)}`}</span>
                         </div>
                     </div>
@@ -259,7 +261,7 @@ const MemoizedStockCard = React.memo(({
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[9px] text-gray-400 font-mono font-black bg-[#F6F7FB] border border-[#E5E7EB] px-1.5 py-0.5 rounded-md">
-                                    #{item.id}
+                                    {displayStockCode(item)}
                                 </span>
                                 {isCardOutOfStock && (
                                     <span className="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">
@@ -1326,7 +1328,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     const filteredItems = useMemo(() => {
         return items.filter(i => {
             if (!searchTerm) return true;
-            return i.name.toLowerCase().includes(searchTerm.toLowerCase()) || i.id.toLowerCase().includes(searchTerm.toLowerCase());
+            return matchesStockSearch(i, searchTerm);
         });
     }, [items, searchTerm]);
 
@@ -2382,6 +2384,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     onChange={setEditingItem}
                     canDelete={canDeactivateItem}
                     canSave={!editingItem.id ? canAddItem : canEditExistingItem}
+                    showInternalIds={canManageStockCodes(employee, isLegacyBossSession)}
                 />
             )}
 
@@ -2665,7 +2668,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 <tbody className="text-xs">
                                     {chunk.map((item) => (
                                         <tr key={item.id} className="border-b border-gray-200 break-inside-avoid">
-                                            <td className="p-2 text-center font-mono text-gray-500 bg-gray-50 border-r border-gray-200">{item.id}</td>
+                                            <td className="p-2 text-center font-mono text-gray-500 bg-gray-50 border-r border-gray-200">{item.stockCode || '-'}</td>
                                             <td className="p-2 font-bold text-gray-700 uppercase border-r border-gray-200">{getCategoryLabel(item.category)}</td>
                                             <td className="p-2 font-bold border-r border-gray-200">{item.name}</td>
                                             <td className="p-2 text-center uppercase font-mono text-gray-500 border-r border-gray-200">{getBaseUnit(item)}</td>

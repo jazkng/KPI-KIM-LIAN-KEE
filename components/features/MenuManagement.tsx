@@ -9,6 +9,7 @@ import {
 import { MenuItem, MenuCategory, MenuVariant, StockItem, MenuIngredient } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
+import { matchesStockSearch } from '../../utils/inventory/stockCode';
 import { useIsMobile } from '../../utils/useIsMobile';
 import {
     getBaseUnit,
@@ -3000,7 +3001,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                             {(() => {
                                 const grouped: Record<string, StockItem[]> = {};
                                 const kitchenOnly = stockItems.filter(s => {
-                                    if (stockSearch) return s.name.toLowerCase().includes(stockSearch.toLowerCase());
+                                    if (stockSearch) return matchesStockSearch(s, stockSearch);
                                     return resolveStockArea(s) === 'KITCHEN';
                                 });
                                 kitchenOnly.forEach(s => {

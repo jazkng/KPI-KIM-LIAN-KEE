@@ -2,6 +2,7 @@ import React from 'react';
 import { Package, X, Search, Box, Trash2, Link as LinkIcon } from 'lucide-react';
 import { CatalogItem, StockItem, UomOption } from '../../../types';
 import { SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
+import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
 
 interface ProductEditModalProps {
     productForm: Partial<CatalogItem>;
@@ -109,7 +110,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                         </div>
                         {stockSearchTerm && (
                             <div className="mt-2 max-h-32 overflow-y-auto bg-white border border-blue-100 rounded-xl shadow-lg absolute z-50 w-[calc(100%-3rem)] left-6">
-                                {allStockList.filter(s => s.name.toLowerCase().includes(stockSearchTerm.toLowerCase())).map(s => {
+                                {allStockList.filter(s => matchesStockSearch(s, stockSearchTerm)).map(s => {
                                     const defaultPU = s.purchaseUnits?.find(pu => pu.id === s.defaultPurchaseUnitId) || s.purchaseUnits?.[0];
                                     const toBaseRatio = defaultPU ? defaultPU.toBaseRatio : (s.displayToBaseRatio || 1);
                                     const unitName = defaultPU ? defaultPU.unitName : (s.displayUnit || s.unit || 'pcs');
@@ -141,7 +142,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                             }} 
                                             className="w-full text-left px-3 py-2.5 hover:bg-blue-50 text-xs font-bold text-gray-700 border-b border-gray-50 flex justify-between"
                                         >
-                                            {s.name} <span className="text-[9px] font-mono text-gray-400 bg-gray-100 px-1 rounded">{s.id}</span>
+                                            {s.name} <span className="text-[9px] font-mono text-gray-400 bg-gray-100 px-1 rounded">{displayStockCode(s)}</span>
                                         </button>
                                     );
                                 })}

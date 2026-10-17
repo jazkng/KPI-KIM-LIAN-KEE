@@ -27,6 +27,8 @@ interface StockEditModalProps {
     onChange: (item: Partial<StockItem>) => void;
     canDelete?: boolean;
     canSave?: boolean;
+    /** 负责人 / 系统管理员：显示内部 ID 与旧编号 */
+    showInternalIds?: boolean;
 }
 
 // Common unit conversion mapping configuration
@@ -61,7 +63,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -1155,6 +1157,33 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             </div>
                         </div>
                     </div>
+
+                    {/* 编号资料（只读）：一般员工只看到编号，内部 ID 只给负责人 / 系统管理员 */}
+                    {editingItem.id && (
+                        <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-2 text-xs">
+                            <h4 className="text-xs font-black text-gray-600 uppercase">编号 (Stock Code)</h4>
+                            <div className="flex justify-between"><span className="text-gray-500 font-bold">编号</span><span className="font-mono font-black">{editingItem.stockCode || '未编号'}</span></div>
+                            {showInternalIds && (
+                                <>
+                                    <div className="flex justify-between gap-2"><span className="text-gray-500 font-bold shrink-0">内部 ID（永不更改）</span><span className="font-mono text-gray-500 break-all text-right">{editingItem.id}</span></div>
+                                    {!!editingItem.legacyCodes?.length && (
+                                        <div className="flex justify-between gap-2"><span className="text-gray-500 font-bold shrink-0">旧编号</span><span className="font-mono text-gray-500 text-right">{editingItem.legacyCodes.join('、')}</span></div>
+                                    )}
+                                    {editingItem.stockCodeAssignedAt && (
+                                        <div className="flex justify-between gap-2"><span className="text-gray-500 font-bold shrink-0">配号</span><span className="text-gray-500 text-right">{editingItem.stockCodeAssignedAt.slice(0, 10)} · {editingItem.stockCodeAssignedBy || '-'}</span></div>
+                                    )}
+                                    {!!editingItem.nameHistory?.length && (
+                                        <div className="space-y-1 pt-1">
+                                            <div className="text-gray-500 font-bold">名称修改记录</div>
+                                            {editingItem.nameHistory.map((h, i) => (
+                                                <div key={i} className="flex justify-between gap-2 text-gray-500"><span className="truncate">{h.name}</span><span className="shrink-0">{h.changedAt.slice(0, 10)} · {h.changedBy}</span></div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
 
                     {/* Card Section 6: Supplier Links */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-3">
