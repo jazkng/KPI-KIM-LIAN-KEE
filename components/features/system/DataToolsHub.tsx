@@ -1,13 +1,13 @@
 // 数据审查中心：所有「审查 / 对账 / 资料整理」工具集中在这里（负责人 2026-10-17 要求）。
 // 每个工具沿用原本的权限：财务审查跟「财务报表」权限；库存编号整理只给负责人与系统管理员。
 import React, { useState } from 'react';
-import { X, Scale, ListChecks, Hash, ChevronRight, Lock, type LucideIcon } from 'lucide-react';
+import { X, Scale, ListChecks, Hash, SearchCheck, ChevronRight, Lock, type LucideIcon } from 'lucide-react';
 import type { Employee } from '../../../types';
 import { canUseBossTarget } from '../../../utils/bossPortalAccess';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
-import { PnLReconciliation, ExpenseAudit, StockCodeMigration } from '../../lazyModules';
+import { PnLReconciliation, ExpenseAudit, StockAudit, StockCodeMigration } from '../../lazyModules';
 
-type ToolId = 'PNL_RECON' | 'EXPENSE_AUDIT' | 'STOCK_CODES';
+type ToolId = 'PNL_RECON' | 'EXPENSE_AUDIT' | 'STOCK_AUDIT' | 'STOCK_CODES';
 
 interface ToolDef {
     id: ToolId;
@@ -22,6 +22,7 @@ interface ToolDef {
 export const DATA_TOOLS: ToolDef[] = [
     { id: 'PNL_RECON', group: '财务', title: '盈亏对账', desc: '修改前（A/B/C）与经营盈亏引擎并列，差额逐项拆解', icon: Scale, writes: false, allowed: e => canUseBossTarget(e, 'PNL_RECON') },
     { id: 'EXPENSE_AUDIT', group: '财务', title: '杂项费用审计', desc: '逐笔检查应付账款 / 独立支出在传统账目的去向', icon: ListChecks, writes: false, allowed: e => canUseBossTarget(e, 'EXPENSE_AUDIT') },
+    { id: 'STOCK_AUDIT', group: '库存', title: '库存资料审计', desc: '复制品、供应商连结断掉、采购单对不上、分类放错、菜谱 / 盘点任务指向不存在的商品', icon: SearchCheck, writes: false, allowed: e => canUseBossTarget(e, 'INVENTORY_VIEW') },
     { id: 'STOCK_CODES', group: '库存', title: '库存编号整理', desc: '全部重新连号、名称统一「中文 (English)」、未编号商品补配号、回滚', icon: Hash, writes: true, allowed: e => canManageStockCodes(e) },
 ];
 
@@ -35,6 +36,7 @@ export const DataToolsHub: React.FC<Props> = ({ currentEmployee, onClose }) => {
 
     if (open === 'PNL_RECON') return <PnLReconciliation onClose={back} />;
     if (open === 'EXPENSE_AUDIT') return <ExpenseAudit onClose={back} />;
+    if (open === 'STOCK_AUDIT') return <StockAudit onClose={back} />;
     if (open === 'STOCK_CODES') return <StockCodeMigration operatorName={currentEmployee?.name || '负责人'} onClose={back} onChanged={() => {}} />;
 
     const groups = [...new Set(DATA_TOOLS.map(t => t.group))];

@@ -1,0 +1,185 @@
+// ============================================================================
+// 库存资料审计 · 只读
+// ----------------------------------------------------------------------------
+// 找出会让收货、盘点、成本、编号出错的资料问题，只列出来，不修改任何资料。
+// 检查项目（编号计划第 2 步，docs/inventory/2026-10-17-stockcode-audit-and-plan.md）：
+//   高：同 ID 复制品、文件 ID 不一致、供应商连结断掉、未收货采购单对不上库存、编号重复 / 登记表不一致
+//   中：分类与所在区域不符、认不得的分类、菜谱 / 盘点任务指向不存在的商品、负数库存、同名商品、未编号
+//   低：供应商品项没连结库存、库存没有任何供应商、缺单位、名称格式
+// ============================================================================
+
+import { collection, getDocs, query, where, type Firestore, type Query } from 'firebase/firestore';
+import { STOCK_AREA_COLLECTION, STOCK_AREAS, areaOfCategory, type StockArea } from './stockArea';
+import { STOCK_CODE_COUNTERS_COLLECTION, STOCK_CODES_COLLECTION, nameKey, suggestStockName } from './stockCode';
+
+export type AuditSeverity = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface AuditFinding {
+    severity: AuditSeverity;
+    type: string;
+    title: string;        // 问题类别（同一类会归在一起）
+    subject: string;      // 哪个商品 / 单据
+    detail: string;       // 说明与建议处理方式
+    stockId?: string;
+}
+
+type Doc = { id: string; data: Record<string, any> };
+
+export interface StockAuditInput {
+    stock: Record<StockArea, Doc[]>;
+    suppliers: Doc[];
+    openPurchaseOrders: Doc[];
+    menu: Doc[];
+    pendingTasks: Doc[];
+    codes: Doc[];
+    hasCounters: boolean;
+    /** 每个区域在库存画面上的子分类 */
+    sections: Record<string, string[]>;
+}
+
+export const TYPE_LABEL: Record<string, string> = {
+    DUPLICATE_ID: '同一 ID 出现在多个区域（复制品）',
+    DOC_ID_MISMATCH: '文件 ID 与资料里的 id 不一致',
+    BROKEN_SUPPLIER_LINK: '供应商品项连结的库存已不存在',
+    OPEN_PO_UNRESOLVED: '未收货的采购单：品项找不到对应库存',
+    OPEN_PO_UNLINKED: '未收货的采购单：品项没连结库存（收货不会加库存）',
+    CODE_DUPLICATE: '编号重复',
+    CODE_REGISTRY_MISMATCH: '编号登记表与商品不一致',
+    AREA_MISMATCH: '分类与所在区域不符',
+    UNKNOWN_CATEGORY: '认不得的分类',
+    BROKEN_RECIPE: '菜谱用到的库存已不存在',
+    BROKEN_TASK: '盘点任务里的商品已不存在',
+    NEGATIVE_QTY: '库存数量是负数',
+    SAME_NAME: '同名商品（可能重复建立）',
+    MISSING_CODE: '还没有编号',
+    UNLINKED_CATALOG: '供应商品项没连结库存',
+    NO_SUPPLIER: '库存没有任何供应商连结',
+    MISSING_UNIT: '缺基础单位',
+    NAME_FORMAT: '名称不是「中文 (English)」',
+};
+
+const AREA_LABEL: Record<StockArea, string> = { KITCHEN: '厨房', BAR: '水吧', GENERAL: '后勤', FUEL: '燃料' };
+const SEVERITY_RANK: Record<AuditSeverity, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+export const auditStock = (input: StockAuditInput): AuditFinding[] => {
+    const out: AuditFinding[] = [];
+    const add = (severity: AuditSeverity, type: string, subject: string, detail: string, stockId?: string) =>
+        out.push({ severity, type, title: TYPE_LABEL[type] || type, subject, detail, ...(stockId ? { stockId } : {}) });
+
+    // ── 库存本身 ──
+    const byId = new Map<string, { area: StockArea; data: Record<string, any> }[]>();
+    STOCK_AREAS.forEach(area => (input.stock[area] || []).forEach(d => {
+        const id = String(d.data.id || d.id);
+        byId.set(id, [...(byId.get(id) || []), { area, data: d.data }]);
+        if (d.data.id && d.data.id !== d.id) {
+            add('HIGH', 'DOC_ID_MISMATCH', `${d.data.name || id}`, `${STOCK_AREA_COLLECTION[area]} 文件「${d.id}」里的 id 是「${d.data.id}」。写入会用 id 当文件名，可能产生另一份资料。请管理员人工处理。`, id);
+        }
+    }));
+    const label = (id: string) => { const e = byId.get(id)?.[0]; return e ? `${e.data.name || id}${e.data.stockCode ? `（${e.data.stockCode}）` : ''}` : id; };
+
+    byId.forEach((entries, id) => {
+        if (entries.length > 1) {
+            const qty = entries.map(e => `${AREA_LABEL[e.area]} ${Number(e.data.currentQtyBase ?? e.data.currentQty ?? 0)}`).join('、');
+            add('HIGH', 'DUPLICATE_ID', label(id), `同时存在于：${qty}。收货与盘点会被拦下，需决定保留哪一份。`, id);
+        }
+        const { area, data } = entries[0];
+        const catArea = areaOfCategory(data.category);
+        if (!catArea) add('MEDIUM', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category ?? '（空白）'}」系统认不得，在采购筛选、补货里可能找不到。`, id);
+        else if (catArea !== area) add('MEDIUM', 'AREA_MISMATCH', label(id), `放在${AREA_LABEL[area]}，但分类「${data.category}」属于${AREA_LABEL[catArea]}。写入仍会写回${AREA_LABEL[area]}；建议改分类或确认放置区域。`, id);
+        else if (!(input.sections[area] || []).includes(String(data.category))) add('LOW', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category}」不在${AREA_LABEL[area]}的分类清单里，库存画面可能归到「其他」。`, id);
+        const qty = Number(data.currentQtyBase ?? data.currentQty ?? 0);
+        if (qty < 0) add('MEDIUM', 'NEGATIVE_QTY', label(id), `目前数量 ${qty}。可能是盘点或收货单位换算错误。`, id);
+        if (!data.baseUnit && !data.unit) add('LOW', 'MISSING_UNIT', label(id), '没有基础单位，成本与数量换算可能出错。', id);
+        if (!data.stockCode && input.hasCounters && entries.length === 1) add('MEDIUM', 'MISSING_CODE', label(id), '已经执行过全部重新连号，这个商品还没有编号。可在「库存编号整理 → 为未编号商品配号」补上。', id);
+        const ns = suggestStockName(String(data.name || ''));
+        if (ns.suggested || ns.issue) add('LOW', 'NAME_FORMAT', label(id), ns.suggested ? `建议改成「${ns.suggested}」` : ns.issue === 'MISSING_ENGLISH' ? '缺英文名' : ns.issue === 'MISSING_CHINESE' ? '缺中文名' : '需人工命名', id);
+    });
+
+    // 同名
+    const byName = new Map<string, string[]>();
+    byId.forEach((entries, id) => { const k = nameKey(entries[0].data.name || ''); if (k) byName.set(k, [...(byName.get(k) || []), id]); });
+    byName.forEach(ids => {
+        if (ids.length < 2) return;
+        add('MEDIUM', 'SAME_NAME', ids.map(label).join(' / '), `${ids.length} 个商品名称相同，${ids.map(i => AREA_LABEL[byId.get(i)![0].area]).join('、')}。若是同一样东西，库存与成本会分散在几份里。`);
+    });
+
+    // 编号
+    const byCode = new Map<string, string[]>();
+    byId.forEach((entries, id) => { const c = entries[0].data.stockCode; if (c) byCode.set(c, [...(byCode.get(c) || []), id]); });
+    byCode.forEach((ids, code) => { if (ids.length > 1) add('HIGH', 'CODE_DUPLICATE', code, `编号 ${code} 同时用在：${ids.map(label).join('、')}`); });
+    input.codes.forEach(c => {
+        const rec = c.data;
+        const holder = byId.get(String(rec.stockId))?.[0];
+        if (rec.status === 'RETIRED') return;
+        if (!holder) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${rec.stockId}，但这个商品已不存在。`);
+        else if (holder.data.stockCode !== (rec.code || c.id)) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${label(String(rec.stockId))}，但商品上的编号是「${holder.data.stockCode || '（没有）'}」。`, String(rec.stockId));
+    });
+
+    // ── 供应商 ──
+    const linked = new Set<string>();
+    const catalogById = new Map<string, { supplier: string; item: Record<string, any> }>();
+    input.suppliers.forEach(s => {
+        const catalog: Record<string, any>[] = s.data.catalog || [];
+        const unlinked: string[] = [];
+        catalog.forEach(item => {
+            catalogById.set(String(item.id), { supplier: s.data.name || s.id, item });
+            if (!item.linkedStockId) { unlinked.push(item.name); return; }
+            linked.add(String(item.linkedStockId));
+            if (!byId.has(String(item.linkedStockId))) {
+                add('HIGH', 'BROKEN_SUPPLIER_LINK', `${s.data.name || s.id} · ${item.name}`, `连结到 ${item.linkedStockId}，但库存里没有这个商品。收货时库存不会增加。请在供应商品项重新选择连结。`);
+            }
+        });
+        if (unlinked.length && s.data.status !== 'INACTIVE') {
+            add('LOW', 'UNLINKED_CATALOG', `${s.data.name || s.id}`, `${unlinked.length} 个品项没连结库存：${unlinked.slice(0, 6).join('、')}${unlinked.length > 6 ? '…' : ''}`);
+        }
+    });
+    byId.forEach((entries, id) => {
+        if (!linked.has(id)) add('LOW', 'NO_SUPPLIER', label(id), `没有任何供应商品项连结到这个商品（市场临时采购的可以忽略）。`, id);
+    });
+
+    // ── 未收货采购单 ──
+    input.openPurchaseOrders.forEach(po => {
+        (po.data.items || []).forEach((line: Record<string, any>) => {
+            const sid = String(line.stockId || '');
+            const subject = `${po.data.supplierName || po.data.supplierId || ''} · ${po.id} · ${line.name}`;
+            const cat = catalogById.get(sid);
+            if (cat) {
+                if (!cat.item.linkedStockId) add('MEDIUM', 'OPEN_PO_UNLINKED', subject, '供应商品项没连结库存，收货后库存不会增加。');
+                else if (!byId.has(String(cat.item.linkedStockId))) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `供应商品项连结的 ${cat.item.linkedStockId} 已不存在。`);
+                return;
+            }
+            if (!byId.has(sid)) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `品项代码「${sid}」既不是供应商品项也不是库存商品，收货时库存不会增加。`);
+        });
+    });
+
+    // ── 菜谱、盘点任务 ──
+    input.menu.forEach(m => {
+        (m.data.variants || []).forEach((v: Record<string, any>) => (v.recipe || []).forEach((ing: Record<string, any>) => {
+            if (ing.stockId && !byId.has(String(ing.stockId))) {
+                add('MEDIUM', 'BROKEN_RECIPE', `${m.data.name}${v.label ? `（${v.label}）` : ''} · ${ing.stockName || ing.stockId}`, `配方用到的 ${ing.stockId} 已不存在，菜品成本会少算。请在智能菜谱重新选择食材。`);
+            }
+        }));
+    });
+    input.pendingTasks.forEach(t => {
+        const missing = (t.data.items || []).filter((i: Record<string, any>) => !byId.has(String(i.stockId)));
+        if (missing.length) add('MEDIUM', 'BROKEN_TASK', `盘点任务 ${t.id}（${t.data.assigneeName || ''}）`, `${missing.length} 个商品已不存在：${missing.slice(0, 5).map((i: any) => i.stockName).join('、')}。执行时会自动略过。`);
+    });
+
+    return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.title.localeCompare(b.title) || a.subject.localeCompare(b.subject));
+};
+
+/** 只读载入审计所需资料 */
+export const loadStockAuditInput = async (db: Firestore, sections: Record<string, string[]>): Promise<StockAuditInput> => {
+    const docs = async (q: Query): Promise<Doc[]> => (await getDocs(q)).docs.map(d => ({ id: d.id, data: d.data() }));
+    const stock = {} as Record<StockArea, Doc[]>;
+    for (const area of STOCK_AREAS) stock[area] = await docs(collection(db, STOCK_AREA_COLLECTION[area]));
+    const [suppliers, openPurchaseOrders, menu, pendingTasks, codes, counters] = await Promise.all([
+        docs(collection(db, 'suppliers')),
+        docs(query(collection(db, 'purchase_orders'), where('status', '==', 'ORDERED'))),
+        docs(collection(db, 'menu')),
+        docs(query(collection(db, 'inventory_tasks'), where('status', '==', 'PENDING'))),
+        docs(collection(db, STOCK_CODES_COLLECTION)),
+        docs(collection(db, STOCK_CODE_COUNTERS_COLLECTION)),
+    ]);
+    return { stock, suppliers, openPurchaseOrders, menu, pendingTasks, codes, hasCounters: counters.length > 0, sections };
+};
