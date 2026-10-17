@@ -19,7 +19,7 @@ import { addDays, daysInMonth, resolvePeriod } from '../../cockpit/periods';
 import { legacyFinancialReport, type LegacyFinancialReportResult } from './legacyFinancialReport';
 import { legacyDailyReportRange } from './legacyDailyReport';
 import { checkPayrollMonth, type PayrollMonthCheck } from './payrollFieldCheck';
-import { checkPettyCash, PETTY_CASH_MATCH_LABEL, PETTY_CASH_USE_LABEL, type PettyCashCheck, type PettyCashMatchType, type PettyCashUse } from './pettyCashCheck';
+import { computePnL, PNL_STATUS_LABEL, type PnLEngineResult } from '../engine/pnlEngine';
 
 export interface ReconSource extends CockpitDataSource {
     getRecurringBills(): Promise<any[]>;
@@ -79,7 +79,8 @@ export interface MonthReconciliation {
     unexplainedB: number;
     findings: ReconFinding[];
     payroll: PayrollMonthCheck | null;
-    pettyCash: PettyCashCheck;
+    /** 唯一盈亏引擎（修改后）的结果，含钱箱核对 */
+    engine: PnLEngineResult;
     categories: { category: string; amount: number; financialReport: string; classicLine: string; cockpit: string; flag?: string }[];
     missingSettlementDays: string[];
 }
@@ -167,7 +168,8 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         getStandaloneExpensesByIds: ids => source.getStandaloneExpensesByIds(ids),
     };
     const period = resolvePeriod('CUSTOM', today, { start, end });
-    const cockpit = await loadCockpitWith(cachedSource, period, today, 'ACCRUAL');
+    // 修改前的驾驶舱算法（对照用）；驾驶舱画面本身已改读唯一引擎
+    const cockpit = await loadCockpitWith(cachedSource, period, today, 'ACCRUAL', { useEngine: false });
     const rowAmount = (label: string) => -num(cockpit.kpis.actualProfit.rows.find(r => r.label === label)?.amount);
     const C: ReconLine & { status: string; statusNote: string } = {
         revenue: num(cockpit.kpis.revenue.value),
@@ -195,15 +197,6 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const dupOperating = dupRows.filter((e: any) => ['COGS', 'OPEX', 'DELIVERY_COST'].includes(categorizeExpense(catOf(e))));
     const sumAmt = (rows: any[]) => r2(rows.reduce((s, e: any) => s + num(e.amount), 0));
     const dupAmount = sumAmt(dupOperating);
-    // 财务报表已用马来西亚日期：前一天 UTC、马来西亚日期在本月的食材 / 经营费用，财务报表计入、驾驶舱（只读本月区间）没有
-    const utcRows = (rawDayBefore.standaloneExpenses as any[]).filter((e: any) => {
-        const id = String(e.id || '');
-        return !standalone.some((x: any) => x.id === e.id) && !e.settlementId && inMonth(mytDateOf(e.time))
-            && !/^(payroll_|salary_|bill_sync_|recon_fee_)/.test(id) && ['COGS', 'OPEX'].includes(categorizeExpense(catOf(e)));
-    });
-    const accrualAmt = (e: any) => num(e.totalBillAmount || e.amount) - num(e.creditNote);
-    const utcIntoMonth = r2(utcRows.reduce((s2, e) => s2 + accrualAmt(e), 0));
-    const utcIntoMonthMapped = r2(utcRows.filter((e: any) => MAPPED_CAT_KEYS.has(catOf(e))).reduce((s2, e) => s2 + accrualAmt(e), 0));
     findings.push({
         id: 'DUP_INSTALMENT',
         title: '应付账款分期付款被重复计入',
@@ -224,30 +217,6 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
             .flatMap(s => (['grab', 'panda', 'shopee'] as const)
                 .filter(ch => typeof s.reconStatus?.[ch] !== 'number' && num(s.sales?.deliveryBreakdown?.[`${ch}Ads`]) > 0)
                 .map(ch => ({ date: String(s.date).slice(0, 10), label: `${ch} 未对账，广告`, amount: num(s.sales.deliveryBreakdown[`${ch}Ads`]) }))),
-    });
-
-    // 3. 钱箱支出：逐笔列出，并找出与兼职、预支、应付账款同金额的疑似同一笔
-    const pettyCash = checkPettyCash(settlements, standalone, start, end);
-    findings.push({
-        id: 'PETTY_CASH',
-        title: '日结钱箱现金支出（dayExpenses）',
-        detail: `钱已经从钱箱付出，但财务报表与传统账目都没有读取这一栏；驾驶舱计入其他经营费用。按文字粗分：${
-            (Object.keys(pettyCash.byUse) as PettyCashUse[]).filter(k => pettyCash.byUse[k].count)
-                .map(k => `${PETTY_CASH_USE_LABEL[k]} ${pettyCash.byUse[k].amount.toFixed(2)}（${pettyCash.byUse[k].count} 笔）`).join('、') || '无'}。`,
-        amount: adj.pettyCash, count: adj.pettyCashCount, effectOnA: adj.pettyCash, effectOnB: adj.pettyCash,
-        records: pettyCash.entries.map(e => ({ date: e.date, label: e.text, amount: e.amount, note: PETTY_CASH_USE_LABEL[e.use] })),
-    });
-    findings.push({
-        id: 'PETTY_CASH_OVERLAP',
-        title: '钱箱支出与其他记录同金额（疑似同一笔被记两次）',
-        detail: `同一天前后 2 天内、金额完全相同的兼职工资、员工预支或应付账款记录。若确实是同一笔钱（从钱箱拿钱付，又在兼职 / 预支 / 应付账款登记），驾驶舱会重复扣除；若只是巧合同金额，则不必处理。${
-            (Object.keys(pettyCash.matched) as PettyCashMatchType[]).filter(k => pettyCash.matched[k].count)
-                .map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${pettyCash.matched[k].amount.toFixed(2)}（${pettyCash.matched[k].count} 笔）`).join('、')}`,
-        amount: pettyCash.matchedTotal, count: pettyCash.entries.filter(e => e.match).length, needsDecision: pettyCash.matchedTotal > 0,
-        records: pettyCash.entries.filter(e => e.match).map(e => ({
-            date: e.date, label: e.text, amount: e.amount,
-            note: `${PETTY_CASH_MATCH_LABEL[e.match!.type]}：${e.match!.label}（${e.match!.date}）`,
-        })),
     });
 
     // 4. 收款手续费
@@ -503,8 +472,6 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const bridgeA: ReconBridgeRow[] = [
         { label: '营业额', amount: r2(A.revenue - C.revenue) },
         { label: '外送平台扣款（未对账日的广告等）', amount: r2(C.platform - A.platform) },
-        { label: '马来西亚日期在本月、驾驶舱没读取的前一天（UTC）记录', amount: -utcIntoMonth },
-        { label: '钱箱支出未计入', amount: adj.pettyCash },
         { label: '收款手续费未计入', amount: adj.bankFees },
         { label: '人工口径不同（详见薪资核对）', amount: r2(C.labour - A.labour) },
     ];
@@ -524,15 +491,21 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const bridgeB: ReconBridgeRow[] = [
         { label: '营业额', amount: r2(B.salesTotal - C.revenue) },
         { label: '外送平台扣款', amount: r2(C.platform - classicPlatform) },
-        { label: '钱箱支出未计入', amount: adj.pettyCash },
         { label: '收款手续费未计入', amount: adj.bankFees },
-        { label: '马来西亚日期在本月、驾驶舱没读取的前一天（UTC）记录', amount: -utcIntoMonthMapped },
         { label: '法定供款未缴不计', amount: statUnpaid },
         { label: '薪资：实发 vs 应发 + 雇主供款', amount: r2(cockpitPayroll - classicPayroll - statUnpaid) },
         { label: '人工类支出（兼职、员工餐、预支、津贴…）', amount: r2(C.labour - cockpitPayroll - classicLabourExpenses) },
     ];
     const explainedB = bridgeB.reduce((s, x) => s + x.amount, 0);
     const unexplainedB = r2(B.netProfit - C.netProfit - explainedB);
+
+    // ── 统一引擎（修改后）：同一份资料；账单时间带时区的，前一天的也要读进来再按马来西亚日期判断 ──
+    const engineExpenses = new Map<string, any>();
+    [...(rawDayBefore.standaloneExpenses as any[]), ...standalone].forEach(e => engineExpenses.set(e.id, e));
+    const engine = computePnL({
+        settlements, standaloneExpenses: [...engineExpenses.values()], billPayments,
+        payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
+    }, start, end, today);
 
     const sample = D.days.length ? D.days[Math.floor(D.days.length / 2)] : null;
     return {
@@ -559,7 +532,7 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
         bridgeA, bridgeB, unexplainedA, unexplainedB,
         findings,
         payroll,
-        pettyCash,
+        engine,
         categories,
         missingSettlementDays,
     };
@@ -594,11 +567,14 @@ export const reconciliationSummaryText = (r: MonthReconciliation): string => {
         '差异来源：',
         ...r.findings.filter(x => x.count > 0 || Math.abs(x.amount) > 0.005).map(x => `  ${x.title}：${f(x.amount)}（${x.count} 笔）${x.needsDecision ? ' ※需确认' : ''}`),
     ];
-    const pc = r.pettyCash;
-    lines.push('', `钱箱支出 ${f(pc.total)}（${pc.entries.length} 笔），按文字粗分：${
-        (Object.keys(pc.byUse) as PettyCashUse[]).map(k => `${PETTY_CASH_USE_LABEL[k]} ${f(pc.byUse[k].amount)}（${pc.byUse[k].count}）`).join('、')}`,
-    `  与其他记录同金额（±2 天）：${f(pc.matchedTotal)}；${
-        (Object.keys(pc.matched) as PettyCashMatchType[]).map(k => `${PETTY_CASH_MATCH_LABEL[k]} ${f(pc.matched[k].amount)}（${pc.matched[k].count}）`).join('、')}`);
+    const E = r.engine;
+    lines.push('',
+        `【修改后 · 唯一盈亏引擎】${PNL_STATUS_LABEL[E.status]}`,
+        `营业额 ${f(E.revenue)}、平台扣款 ${f(E.platform)}、食材（采购暂估）${f(E.food)}、人工 ${f(E.labour)}、其他经营费用 ${f(E.opex)}`,
+        `经营净利 ${f(E.netProfit)}（修改前驾驶舱 ${f(C.netProfit)}，差 ${f(E.netProfit - C.netProfit)}；财务报表首页差 ${f(E.netProfit - A.netProfit)}；传统账目差 ${f(E.netProfit - B.netProfit)}）`,
+        '不计入盈亏：' + (E.excluded.map(x => `${x.label} ${f(x.amount)}`).join('、') || '无'),
+        '待核对 / 说明：',
+        ...E.reasons.map(x => `  ${x.level === 'BLOCKING' ? '※' : '·'} ${x.label}${x.amount !== undefined ? `（${f(x.amount)}）` : ''}`));
     if (r.payroll) {
         const t = r.payroll.totals;
         lines.push('', `薪资核对：${r.payroll.employees.length} 人，${r.payroll.mismatchCount} 人实发对不上；状态 ${r.payroll.status}，法定供款${r.payroll.isStatutoryPaid ? '已缴' : '未缴'}`,
@@ -606,5 +582,21 @@ export const reconciliationSummaryText = (r: MonthReconciliation): string => {
             `  其他扣款：住宿费 ${f(t.hostelFee)}、其他扣款 ${f(t.otherDeduction)}、扣回借款 ${f(t.loanRepay)}；员工法定扣款 ${f(r.payroll.employees.reduce((s, e) => s + e.employeeStatutory, 0))}`,
             `  人工（薪资单部分）：A 口径 ${f(t.asFinancialReport)}、B 口径 ${f(t.asClassic)}、C 口径 ${f(t.asCockpit)}、建议口径 ${t.proposed === null ? '无法计算（有人对不上）' : f(t.proposed)}`);
     }
+    return lines.join('\n');
+};
+
+/** 多月修改前后对照摘要：只有金额、笔数与原因，不含员工姓名或钱箱手写文字 */
+export const batchSummaryText = (rows: MonthReconciliation[]): string => {
+    const f = (n: number) => n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const lines = [
+        '【盈亏对账 · 修改前后】（权责发生制；修改后 = 唯一盈亏引擎：每日结算钱箱支出不计入、AP 为采购正式来源、Payroll 为薪资正式来源）',
+        '月份 | 修改前·驾驶舱 | 财务报表首页 | 传统账目 | 修改后 | 修改后−驾驶舱 | 状态',
+        ...rows.map(r => `${r.month} | ${f(r.algorithms.C.netProfit)} | ${f(r.algorithms.A.netProfit)} | ${f(r.algorithms.B.netProfit)} | ${f(r.engine.netProfit)} | ${f(r.engine.netProfit - r.algorithms.C.netProfit)} | ${PNL_STATUS_LABEL[r.engine.status]}`),
+    ];
+    rows.forEach(r => {
+        const E = r.engine;
+        lines.push('', `${r.month}：营业额 ${f(E.revenue)}、平台 ${f(E.platform)}、食材 ${f(E.food)}、人工 ${f(E.labour)}、其他经营费用 ${f(E.opex)}`,
+            ...E.reasons.filter(x => x.level === 'BLOCKING').map(x => `  ※ ${x.label}${x.amount !== undefined ? `（${f(x.amount)}）` : ''}`));
+    });
     return lines.join('\n');
 };

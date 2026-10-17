@@ -11,6 +11,7 @@ import { buildMonthLabourCosts, summariseReviewedAttendance } from '../labour/la
 import { buildCockpit, dailyRevenueFromSettlements, type CockpitInputs, type CockpitResult } from './cockpitMetrics';
 import { computeProfitAdjustments } from './profitAdjustments';
 import { addDays, daysInMonth, type Period } from './periods';
+import { computePnL } from '../pnl/engine/pnlEngine';
 
 /** 驾驶舱需要的只读资料来源 */
 export interface CockpitDataSource {
@@ -19,6 +20,8 @@ export interface CockpitDataSource {
     getPayrollRecords(): Promise<PayrollRecord[]>;
     getAttendanceReviewsByMonth(month: string): Promise<AttendanceRecord[]>;
     getStandaloneExpensesByIds(ids: string[]): Promise<ExpenseItem[]>;
+    /** 固定账单设定（检查当月有没有漏入账用；没有提供就不检查） */
+    getRecurringBills?(): Promise<any[]>;
 }
 
 /** 分期付款列对应的原账单（期间外的才另外读取） */
@@ -40,6 +43,8 @@ export const loadCockpitWith = async (
     period: Period,
     today: string,
     accountingMode: 'ACCRUAL' | 'CASH' = 'ACCRUAL',
+    /** true = 改读唯一盈亏引擎（负责人在盈亏对账核对 9 月数字后，另一个 PR 才改为预设） */
+    options: { useEngine?: boolean } = {},
 ): Promise<CockpitResult> => {
     const month = period.end.slice(0, 7);
     const monthStart = `${month}-01`;
@@ -47,16 +52,18 @@ export const loadCockpitWith = async (
     const trendStart = addDays(period.end, -13);
     // 预警中心比较「近 7 天 vs 前 7 天」，今天未日结时以昨天为终点，所以多读一天
     const alertStart = addDays(period.end, -14);
-    const loadStart = [period.start, monthStart, trendStart, alertStart].sort()[0];
+    // 多读前一天：带时区的账单时间要换成马来西亚日期再判断属于哪一天
+    const loadStart = addDays([period.start, monthStart, trendStart, alertStart].sort()[0], -1);
     const loadEnd = [period.end, monthEnd].sort()[1];
     const labourMonths = Array.from(new Set([...period.months, month]));
 
-    const [rawLoaded, employees, payrollRecords, reviews] = await Promise.all([
+    const [rawLoaded, employees, payrollRecords, reviews, recurringBills] = await Promise.all([
         source.getPnLRawRange(loadStart, loadEnd),
         source.getEmployees(),
         source.getPayrollRecords(),
         // 审核后的考勤只用于推算日薪 / 时薪员工；读不到不影响其他指标
         Promise.all(labourMonths.map(m => source.getAttendanceReviewsByMonth(m).catch(() => [] as AttendanceRecord[]))),
+        source.getRecurringBills ? source.getRecurringBills().catch(() => [] as any[]) : Promise.resolve([] as any[]),
     ]);
     // 分期付款对应的原账单（只有业务发生制需要；两种口径共用一次读取）
     const parents = await loadParentBillsWith(source, rawLoaded.standaloneExpenses, 'ACCRUAL');
@@ -121,6 +128,15 @@ export const loadCockpitWith = async (
     // 另一种口径的净利（只取数字，用来说明两种口径的差异）
     const otherMode = accountingMode === 'ACCRUAL' ? 'CASH' : 'ACCRUAL';
     const otherModeNetProfit = buildCockpit(inputsFor(otherMode)).kpis.actualProfit.value;
-    const result = buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit });
+    // 唯一盈亏引擎（业务发生制）：利润以它为准；现金制画面仍是现金流对照
+    const engineInput = {
+        settlements: rawLoaded.settlements as any[], standaloneExpenses: rawLoaded.standaloneExpenses as any[], billPayments: rawLoaded.billPayments as any[],
+        payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
+        attendanceByMonth: Object.fromEntries(labourMonths.map((m, i) => [m, summariseReviewedAttendance(reviews[i])])),
+    };
+    const engines = accountingMode === 'ACCRUAL' && options.useEngine === true
+        ? { engine: computePnL(engineInput, period.start, period.end, today), monthEngine: computePnL(engineInput, monthStart, monthEnd, today) }
+        : {};
+    const result = buildCockpit({ ...inputsFor(accountingMode), otherModeNetProfit, ...engines });
     return { ...result, context: { labourByMonth, employees, payrollRecords } };
 };

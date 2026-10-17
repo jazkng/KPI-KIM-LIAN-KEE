@@ -56,14 +56,15 @@ describe('利润引擎：收款手续费与钱箱支出', () => {
 });
 
 describe('利润引擎：套用到成本与对账明细', () => {
-    it('平台扣款以修正值取代计算出的平台类别；手续费与钱箱支出计入经营费用', () => {
+    it('平台扣款以修正值取代计算出的平台类别；手续费计入经营费用，钱箱支出不计入', () => {
         const byCat = { PLATFORM_COMM_GRAB: 80, PLATFORM_ADS_GRAB: 20, PLATFORM_FEE: 5, RENT: 1000, INGREDIENT_MEAT: 300 };
         const adj = { platformCost: 120, platformCostReport: 100, unreconciledPlatformDays: 1, platformRows: [], bankFees: 3.5, bankFeeCount: 1, pettyCash: 47.5, pettyCashCount: 2 };
         const c = applyAdjustments(splitCosts(byCat), byCat, adj);
         expect(c.platform).toBe(125); // 120 + 另行入账的 PLATFORM_FEE 5
-        expect(c.opex).toBe(1051);
+        expect(c.opex).toBe(1003.5);
+        expect(c.pettyCash).toBe(0);
         const rows = reconciliationRows(adj, 700);
-        expect(rows.map(r => r.amount)).toEqual([-20, -3.5, -47.5, 700]);
+        expect(rows.map(r => r.amount)).toEqual([-20, -3.5, 700]);
     });
     it('没有修正资料时与原本相同', () => {
         const byCat = { PLATFORM_COMM_GRAB: 80, RENT: 1000 };
