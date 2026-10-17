@@ -1746,7 +1746,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             <div className="flex items-center gap-2">
                                 <span className="font-black text-[#111111]">{log.date}</span>
                                 <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 font-bold">{new Date(log.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-black ${log.source === 'RECEIVE' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{log.source === 'RECEIVE' ? '收货' : '盘点'}</span>
                             </div>
+                            {log.source === 'RECEIVE' && (
+                                <div className="text-[11px] text-blue-700 font-bold mt-0.5 truncate">{log.supplierName} · {log.poId}</div>
+                            )}
                             <div className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-0.5">
                                 <User size={12}/> {log.staffName} • {changeCount} items changed
                             </div>
@@ -2333,7 +2337,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             </div>
                         </div>
 
-                        {logs.length === 0 ? <div className="text-center py-20 text-gray-400 font-bold">暂无盘点记录 (No History)</div> : logs.map(log => renderLogCard(log))}
+                        {logs.length === 0 ? <div className="text-center py-20 text-gray-400 font-bold">暂无盘点 / 收货记录 (No History)</div> : logs.map(log => renderLogCard(log))}
                     </div>
                 )}
 

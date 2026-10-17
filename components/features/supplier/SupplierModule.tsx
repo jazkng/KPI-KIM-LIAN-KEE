@@ -34,6 +34,8 @@ import { ReceivePOModal } from './ReceivePOModal';
 import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
+import { buildReceiveLogs } from '../../../utils/inventory/receiveLog';
+import { getMalaysiaDateString } from '../../../utils/dateHelper';
 
 // 共用常量
 import { 
@@ -713,6 +715,29 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             changedItems.forEach(item => { const mainCat = resolveStockArea(item)!; if (!changedByCategory[mainCat]) changedByCategory[mainCat] = []; changedByCategory[mainCat].push(item); });
             const updatePromises = Object.entries(changedByCategory).filter(([_, items]) => items.length > 0).map(([cat, items]) => DataManager.batchUpdateStock(cat as any, items));
             await Promise.all(updatePromises);
+
+            // 收货记录：写库存记录与进货价格（失败不影响已完成的收货，只提示）
+            try {
+                const session = localStorage.getItem('kepong_erp_session_employee');
+                const staffName = session ? JSON.parse(session).name : 'Admin';
+                const logs = buildReceiveLogs({
+                    poId: receivingPO.id, supplierName: receivingPO.supplierName, staffName,
+                    date: getMalaysiaDateString(), timestamp: new Date().toISOString(),
+                    entries: changedItems.map(item => {
+                        const diff = Number((item as StockItem & { diff?: number }).diff) || 0;
+                        return {
+                            area: resolveStockArea(item)!, stockId: item.id, stockName: item.name,
+                            unit: item.baseUnit || item.unit || '', newAvgCost: getCostPerBaseUnit(item),
+                            oldQty: getCurrentQtyBase(item) - diff, receivedQty: diff,
+                            totalCost: stockUpdates.get(item.id)?.receivedTotalCost || 0,
+                        };
+                    }),
+                });
+                await Promise.all(logs.map(log => DataManager.saveInventoryLog(log)));
+            } catch (logError) {
+                console.error('收货记录写入失败', logError);
+                alert('⚠️ 库存已更新，但收货记录没有写入成功（不影响库存数量）。');
+            }
 
             const receivedPOItems = receivedItems.map(item => {
                 const receivedQty = Math.max(0, Number(item.receivedQty) || 0);
