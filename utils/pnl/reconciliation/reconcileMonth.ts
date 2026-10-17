@@ -141,8 +141,14 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const data = { settlements, standaloneExpenses: standalone, billPayments, payrollRecords: payrollRecords as any[], employees: employees as any[] };
     const reportData = { ...data, standaloneExpenses: reportExpenses };
 
-    // ── A ──
-    const A = legacyFinancialReport({ ...data, standaloneExpenses: [...withDayBefore.values()], parentBills: parents }, start, end, 'ACCRUAL');
+    // ── 统一引擎（修改后）：同一份资料；账单时间带时区的，前一天的也要读进来再按马来西亚日期判断 ──
+    const engine = computePnL({
+        settlements, standaloneExpenses: [...withDayBefore.values()], billPayments,
+        payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
+    }, start, end, today);
+
+    // ── A（财务报表首页：2026-10-17 起业务发生制的人工 = 引擎人工）──
+    const A = legacyFinancialReport({ ...data, standaloneExpenses: [...withDayBefore.values()], parentBills: parents, headlineLabour: engine.labour }, start, end, 'ACCRUAL');
 
     // ── B（画面与多月份导出）──
     const classicInput = (costByCategory: Record<string, number>, platformGross: any, inStoreSales: number, laborByDept: Record<string, number>) => buildClassicPnL({
@@ -499,13 +505,6 @@ export const reconcileMonth = async (source: ReconSource, month: string, today: 
     const explainedB = bridgeB.reduce((s, x) => s + x.amount, 0);
     const unexplainedB = r2(B.netProfit - C.netProfit - explainedB);
 
-    // ── 统一引擎（修改后）：同一份资料；账单时间带时区的，前一天的也要读进来再按马来西亚日期判断 ──
-    const engineExpenses = new Map<string, any>();
-    [...(rawDayBefore.standaloneExpenses as any[]), ...standalone].forEach(e => engineExpenses.set(e.id, e));
-    const engine = computePnL({
-        settlements, standaloneExpenses: [...engineExpenses.values()], billPayments,
-        payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills, parentBills: parents,
-    }, start, end, today);
 
     const sample = D.days.length ? D.days[Math.floor(D.days.length / 2)] : null;
     return {

@@ -24,7 +24,7 @@ const previousMonth = (today: string) => {
 };
 
 const LABOUR_SOURCE: Record<string, string> = {
-    POSTED: '已发放薪资单', DRAFT: '薪资草稿', BASIC_SALARY: '员工档案底薪合计', ACTUAL_LABOR_EXPENSES: '人工类支出', FALLBACK_57300: 'RM 57,300 后备值',
+    ENGINE: '唯一盈亏引擎（与传统账目、驾驶舱相同）', POSTED: '已发放薪资单', DRAFT: '薪资草稿', BASIC_SALARY: '员工档案底薪合计', ACTUAL_LABOR_EXPENSES: '人工类支出', FALLBACK_57300: 'RM 57,300 后备值',
 };
 
 const LINES: { key: 'revenue' | 'platform' | 'food' | 'labour' | 'opex' | 'netProfit'; label: string }[] = [
@@ -222,7 +222,7 @@ export const PnLReconciliation: React.FC<{ onClose: () => void }> = ({ onClose }
                                 <ul className="mt-3 space-y-1 text-xs leading-relaxed text-stone-600">
                                     <li className="sm:hidden">手机版金额四舍五入到 RM 1；精确到分的金额见下方差额拆解与摘要。</li>
                                     <li>A、B、C 是<strong>修改前</strong>的算法（对照用）；「修改后」是唯一盈亏引擎，驾驶舱与传统账目现在都显示这个数字。</li>
-                                    <li>A 的人工来源：{LABOUR_SOURCE[result.algorithms.A.labourSource]}，整月 {rm(result.algorithms.A.baseMonthlyLabour)}，按已日结 {result.algorithms.A.settledDays} / {result.algorithms.A.daysInMonth} 天分摊。</li>
+                                    <li>A 的人工来源：{LABOUR_SOURCE[result.algorithms.A.labourSource]}{result.algorithms.A.labourSource === 'ENGINE' ? `，${rm(result.algorithms.A.labour)}` : `，整月 ${rm(result.algorithms.A.baseMonthlyLabour)}，按已日结 ${result.algorithms.A.settledDays} / ${result.algorithms.A.daysInMonth} 天分摊`}。</li>
                                     <li>B 的「其他经营费用」= 营运栏 + 非平台的行销广告；传统账目多月份导出算出的净利：{rm(result.algorithms.B.exportNetProfit)}。</li>
                                     <li>
                                         D 经营日报：{result.algorithms.D.days} 天逐日加总 {rm(result.algorithms.D.sum)}，其中 {result.algorithms.D.estimatedFoodDays} 天的食材用营业额 × 35% 估算（{rm(result.algorithms.D.estimatedFoodAmount)}）。

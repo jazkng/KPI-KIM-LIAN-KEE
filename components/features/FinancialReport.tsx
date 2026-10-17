@@ -804,7 +804,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                     ? totalLabor 
                     : (employees.filter(e => e.status !== 'TERMINATED' && !e.isArchived).reduce((acc, e) => acc + (Number((e as any).basicSalary) || 0), 0) || 57300)));
         
-        const totalLaborSynced = (baseMonthlyLabor / daysInMonth) * settledDays;
+        // 业务发生制：首页人工与传统账目、驾驶舱同一个引擎（薪资单应发 + 雇主供款 + 兼职 + 员工餐 + 补发工资；
+        // 预支已含在应发里，借款扣回与宿舍费不减少人工）。以前只取「实发 + 法定」× 已日结天数，
+        // 漏掉预支、兼职、员工餐与薪资单以外补发的工资（2026-10-17 负责人核对）。现金制维持原算法。
+        const totalLaborSynced = accountingMode === 'ACCRUAL'
+            ? classicEngine.current.labour
+            : (baseMonthlyLabor / daysInMonth) * settledDays;
 
         const grossProfit = netRealizedRevenue - totalCOGS; 
         const totalStoreCosts = totalCOGS + totalLaborSynced + totalOPEX; 
@@ -1094,7 +1099,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 costAnomalies: costAnomalies.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
             }
         };
-    }, [settlementRecords, pnlExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [settlementRecords, pnlExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode, classicEngine]);
 
     // ========== 👑 经营体检指标 (Prime Cost / 盈亏平衡) ==========
     // 纯计算，用的全是 analytics 已经算好的数字，不额外读取任何资料

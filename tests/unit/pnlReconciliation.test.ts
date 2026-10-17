@@ -30,7 +30,7 @@ const sourceOf = (over: Partial<{ settlements: any[]; standalone: any[]; bills: 
 describe('盈亏对账 · 虚构 9 月', () => {
     it('三套算法的数字与审计文件一致，差额全部可以解释（未能解释 = 0）', async () => {
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
-        expect(r.algorithms.A.netProfit).toBe(34297.65); // 2026-10-16 起不再重复计入分期付款 4,000
+        expect(r.algorithms.A.netProfit).toBe(33247.65); // 不再重复分期 +4,000；2026-10-17 起首页人工 = 引擎人工（预支、兼职、员工餐 −1,050）
         expect(r.algorithms.B.netProfit).toBe(34205.75); // 不再重复分期 +4,000；宿舍电费 300、订阅 120 改为计入
         expect(r.algorithms.C.netProfit).toBe(32922.65); // 旧驾驶舱算法 2026-10-16 起也不计钱箱支出
         expect(r.algorithms.B.exportNetProfit).toBe(34205.75);
@@ -53,7 +53,9 @@ describe('盈亏对账 · 虚构 9 月', () => {
         expect(f.PLATFORM_UNRECONCILED.count).toBe(15);
         expect(f.PETTY_CASH).toBeUndefined(); // 每日结算钱箱支出完全不纳入
         expect(f.BANK_FEE.amount).toBe(25);
-        expect(f.FR_LABOUR_EXPENSES_EXCLUDED.amount).toBe(1050);
+        expect(f.FR_LABOUR_EXPENSES_EXCLUDED.amount).toBe(0); // 首页人工已改用引擎，人工类支出不再漏算
+        expect(r.algorithms.A.labourSource).toBe('ENGINE');
+        expect(r.algorithms.A.labour).toBe(r.engine.labour);
         expect(f.CLASSIC_UNMAPPED.amount).toBe(120); // 应付账款的 SUBSCRIPTION（已并入后备科目，只列出）；固定账单的宿舍电费已换成 AP 分类
         expect(f.CLASSIC_UNMAPPED.effectOnB).toBe(0);
         expect(f.CLASSIC_STATUTORY_UNPAID.amount).toBe(958.1);
@@ -64,7 +66,7 @@ describe('盈亏对账 · 虚构 9 月', () => {
     it('摘要不含员工姓名', async () => {
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
         const text = reconciliationSummaryText(r);
-        expect(text).toContain('34,297.65');
+        expect(text).toContain('33,247.65');
         expect(text).not.toContain('员工甲');
         expect(text).not.toContain('员工乙');
     });
@@ -166,7 +168,7 @@ describe('多月修改前后摘要', () => {
         const { batchSummaryText } = await import('../../utils/pnl/reconciliation/reconcileMonth');
         const r = await reconcileMonth(sourceOf(), '2026-09', '2026-10-15');
         const text = batchSummaryText([r]);
-        expect(text).toContain('2026-09 | 32,922.65 | 34,297.65 | 34,205.75 | 32,922.65 | 0.00 | 暂估／待核对');
+        expect(text).toContain('2026-09 | 32,922.65 | 33,247.65 | 34,205.75 | 32,922.65 | 0.00 | 暂估／待核对');
         expect(text).not.toContain('钱箱 ');
     });
 });
