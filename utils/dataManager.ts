@@ -16,6 +16,7 @@ import { PaymentVoucher } from "./paymentVoucherUtils";
 import { StorehubMonthlySales } from "./storehubImport";
 import { normalizeInventoryItem } from "./unitConversion";
 import { registerStockArea, type StockArea } from "./inventory/stockArea";
+import { keepStockCodeFields } from "./inventory/stockCode";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
 import { buildOperationalLogNotifications } from "./notificationUtils";
 import { getBusinessDateString } from "./dateHelper";
@@ -725,7 +726,7 @@ export class DataManager {
         await runTransaction(db, async (transaction) => {
             const snap = await transaction.get(docRef);
             const existingData = snap.exists() ? snap.data() : {};
-            transaction.set(docRef, { ...existingData, ...syncedItem });
+            transaction.set(docRef, keepStockCodeFields(existingData, { ...existingData, ...syncedItem }));
         });
         DataManager.clearCacheKeys(['stock_']);
     }
@@ -762,7 +763,7 @@ export class DataManager {
                 const baseUnitVal = cleanItem.baseUnit || cleanItem.unit || 'pcs';
                 const costVal = cleanItem.costPerBaseUnit ?? cleanItem.cost ?? 0;
 
-                transaction.set(ref, { 
+                transaction.set(ref, keepStockCodeFields(currentDBData, { 
                     ...currentDBData, 
                     ...cleanItem, 
                     currentQty: finalQtyVal,
@@ -771,7 +772,7 @@ export class DataManager {
                     baseUnit: baseUnitVal,
                     cost: costVal,
                     costPerBaseUnit: costVal
-                });
+                }));
             });
         });
         DataManager.clearCacheKeys(['stock_']);

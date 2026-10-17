@@ -5,6 +5,7 @@ import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, Cat
 import { normalizeCatalogItem } from '../utils';
 import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
+import { displayStockCode, matchesStockSearch } from '../../utils/inventory/stockCode';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
     calculateWeightedAverageCost, calculateReceivedLine, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
@@ -613,7 +614,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
         if (searchTerm) {
             const lower = searchTerm.toLowerCase();
-            list = list.filter(i => i.name.toLowerCase().includes(lower) || i.id.toLowerCase().includes(lower));
+            list = list.filter(i => matchesStockSearch(i, lower));
         }
         return list;
     }, [stockItems, activeCategory, activeSubCategory, filterLowStock, searchTerm, activeSupplierFilter, findAllSuppliersForStock]);
@@ -1504,7 +1505,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                                {item.id}
+                                {displayStockCode(item)}
                             </span>
                             {allMatches.length === 0 ? (
                                 <span className="text-[9px] font-bold bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">
