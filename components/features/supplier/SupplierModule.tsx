@@ -44,9 +44,13 @@ interface SupplierModuleProps {
     onClose?: () => void;
     isModal?: boolean;
     onNavigateToStock?: (stockId: string) => void;
+    /** 打开后直接进入这个供应商（数据审查中心「去处理」用） */
+    initialSupplierId?: string;
+    /** 同时打开这个供应商品项的编辑窗 */
+    initialCatalogItemId?: string;
 }
 
-export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal = false, onNavigateToStock }) => {
+export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal = false, onNavigateToStock, initialSupplierId, initialCatalogItemId }) => {
     const [mainTab, setMainTab] = useState<'SUPPLIERS' | 'POS'>('SUPPLIERS');
     const [view, setView] = useState<'LIST' | 'DETAIL'>('LIST');
 
@@ -332,6 +336,18 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     // ============================================================
     // Product CRUD
     // ============================================================
+    // 从数据审查中心「去处理」进来：读完资料后直接打开供应商（与品项），只打开一次
+    const openedInitialRef = useRef(false);
+    useEffect(() => {
+        if (!initialSupplierId || openedInitialRef.current || suppliers.length === 0) return;
+        const sup = suppliers.find(s => s.id === initialSupplierId);
+        if (!sup) return;
+        openedInitialRef.current = true;
+        setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG');
+        const item = initialCatalogItemId ? sup.catalog?.find(c => c.id === initialCatalogItemId) : undefined;
+        if (item) { setProductForm(item); setProductUoms(item.uomOptions || DEFAULT_UOMS); setIsEditingProduct(true); }
+    }, [initialSupplierId, initialCatalogItemId, suppliers]);
+
     const handleAddProduct = () => { setProductForm({ unit: 'unit', price: 0 }); setProductUoms(DEFAULT_UOMS); setIsEditingProduct(true); };
 
     // 👑 批量填供应商编号

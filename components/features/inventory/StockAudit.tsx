@@ -1,9 +1,13 @@
 // 库存资料审计（只读）：列出会让收货、盘点、成本、编号出错的资料问题，不修改任何资料。
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Loader2, RefreshCw, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Loader2, RefreshCw, FileSpreadsheet, ChevronDown, ChevronRight, ArrowRight, ArrowLeft } from 'lucide-react';
+import type { Employee } from '../../../types';
+import { canUseBossTarget } from '../../../utils/bossPortalAccess';
+import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
+import { InventoryModule, SupplierModule, MenuManagement, StockCodeMigration } from '../../lazyModules';
 import { db } from '../../../firebaseConfig';
 import { CATEGORY_SECTIONS } from './inventoryConstants';
-import { auditStock, loadStockAuditInput, type AuditFinding, type AuditSeverity } from '../../../utils/inventory/stockAudit';
+import { auditStock, loadStockAuditInput, type AuditFinding, type AuditSeverity, type AuditTarget } from '../../../utils/inventory/stockAudit';
 
 const SECTIONS = Object.fromEntries(Object.entries(CATEGORY_SECTIONS).map(([k, v]) => [k, v.map(s => s.id)]));
 const SEV: Record<AuditSeverity, { label: string; cls: string }> = {
@@ -19,7 +23,18 @@ const download = (name: string, text: string) => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-export const StockAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const TARGET_LABEL: Record<AuditTarget['kind'], string> = { STOCK: '打开商品', SUPPLIER: '打开供应商', MENU: '打开菜谱', TASKS: '打开盘点任务', CODES: '打开编号整理' };
+
+/** 「去处理」能不能用：跟各画面原本的权限一样 */
+const canGo = (employee: Employee | null | undefined, t: AuditTarget): boolean => {
+    if (t.kind === 'SUPPLIER') return canUseBossTarget(employee, 'SUPPLIER_CONTACTS');
+    if (t.kind === 'MENU') return canUseBossTarget(employee, 'MENU');
+    if (t.kind === 'CODES') return canManageStockCodes(employee);
+    return canUseBossTarget(employee, 'INVENTORY_VIEW');
+};
+
+export const StockAudit: React.FC<{ onClose: () => void; currentEmployee?: Employee | null }> = ({ onClose, currentEmployee }) => {
+    const [goto, setGoto] = useState<AuditTarget | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [findings, setFindings] = useState<AuditFinding[]>([]);
@@ -35,6 +50,8 @@ export const StockAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         } catch (e: any) { setError(e?.message || String(e)); } finally { setLoading(false); }
     };
     useEffect(() => { run(); }, []);
+    // 处理完回来：重新检查一次
+    const back = () => { setGoto(null); run(); };
 
     const counts = useMemo(() => ({
         HIGH: findings.filter(f => f.severity === 'HIGH').length,
@@ -53,6 +70,24 @@ export const StockAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         const rows = findings.map(f => [SEV[f.severity].label, f.title, f.subject, f.detail, f.stockId || ''].map(esc).join(','));
         download(`库存资料审计-${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + [['等级', '问题', '对象', '说明', '内部 ID'].map(esc).join(','), ...rows].join('\n'));
     };
+
+    if (goto) {
+        const backBar = (
+            <button onClick={back} className="fixed left-3 z-[400] flex min-h-[44px] items-center gap-1 rounded-full bg-stone-900 px-4 text-sm font-black text-white shadow-lg" style={{ bottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+                <ArrowLeft size={16} /> 回到库存资料审计
+            </button>
+        );
+        return (
+            <div className="fixed inset-0 z-[310] overflow-auto bg-white">
+                {goto.kind === 'STOCK' && <InventoryModule employee={currentEmployee || undefined} initialMode="MASTER" initialStockView={goto.area} initialEditStockId={goto.stockId} onClose={back} />}
+                {goto.kind === 'TASKS' && <InventoryModule employee={currentEmployee || undefined} initialMode="MASTER" initialViewType="TASKS" onClose={back} />}
+                {goto.kind === 'SUPPLIER' && <SupplierModule isModal onClose={back} initialSupplierId={goto.supplierId} initialCatalogItemId={goto.catalogItemId} />}
+                {goto.kind === 'MENU' && <MenuManagement onClose={back} initialMenuItemId={goto.menuId} />}
+                {goto.kind === 'CODES' && <StockCodeMigration operatorName={currentEmployee?.name || '负责人'} onClose={back} onChanged={() => {}} />}
+                {backBar}
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-[300] flex flex-col bg-stone-50 text-stone-900">
@@ -104,9 +139,16 @@ export const StockAudit: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                     {isOpen && (
                                         <div className="divide-y divide-stone-100 border-t border-stone-100">
                                             {list.slice(0, 300).map((f, i) => (
-                                                <div key={i} className="px-3 py-2">
-                                                    <div className="text-xs font-black">{f.subject}</div>
-                                                    <div className="mt-0.5 text-[11px] font-bold text-stone-500">{f.detail}</div>
+                                                <div key={i} className="flex items-center gap-2 px-3 py-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-xs font-black">{f.subject}</div>
+                                                        <div className="mt-0.5 text-[11px] font-bold text-stone-500">{f.detail}</div>
+                                                    </div>
+                                                    {f.target && canGo(currentEmployee, f.target) && (
+                                                        <button onClick={() => setGoto(f.target!)} className="flex min-h-[40px] shrink-0 items-center gap-1 rounded-full border border-stone-300 bg-white px-3 text-[11px] font-black text-stone-700 hover:border-stone-900" title={TARGET_LABEL[f.target.kind]}>
+                                                            去处理 <ArrowRight size={12} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                             {list.length > 300 && <div className="px-3 py-2 text-[11px] font-bold text-stone-400">另有 {list.length - 300} 项，请下载 Excel 查看</div>}

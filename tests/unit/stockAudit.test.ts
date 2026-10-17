@@ -16,7 +16,7 @@ const base = (): StockAuditInput => ({
         { id: 'cat2', name: '旧鸡', linkedStockId: 'GONE' },
         { id: 'cat3', name: '没连结' },
     ] } }],
-    openPurchaseOrders: [{ id: 'PO1', data: { supplierName: 'ABC', items: [
+    openPurchaseOrders: [{ id: 'PO1', data: { supplierId: 'sup1', supplierName: 'ABC', items: [
         { stockId: 'cat1', name: '肉片' }, { stockId: 'cat3', name: '没连结' }, { stockId: 'K2', name: '鸡' }, { stockId: '???', name: '不明' }, { stockId: 'cat2', name: '旧鸡' },
     ] } }],
     menu: [{ id: 'm1', data: { name: '福建面', variants: [{ label: '大', recipe: [{ stockId: 'K1', stockName: '肉片' }, { stockId: 'OLD', stockName: '旧猪油' }] }] } }],
@@ -65,6 +65,27 @@ describe('库存资料审计（只读）', () => {
     });
     it('还没全部重新连号：不报未编号', () => {
         expect(t.some(x => x.includes('MISSING_CODE'))).toBe(false);
+    });
+});
+
+describe('去处理：每个问题指向要打开的画面', () => {
+    const f = auditStock(base());
+    const find = (type: string, subject?: string) => f.find(x => x.type === type && (!subject || x.subject.includes(subject)))!;
+    it('供应商连结断掉 → 打开该供应商与品项', () => {
+        expect(find('BROKEN_SUPPLIER_LINK').target).toEqual({ kind: 'SUPPLIER', supplierId: 'sup1', catalogItemId: 'cat2' });
+        expect(find('UNLINKED_CATALOG').target).toEqual({ kind: 'SUPPLIER', supplierId: 'sup1' });
+    });
+    it('采购单品项 → 打开供应商（有品项时连品项）', () => {
+        expect(find('OPEN_PO_UNLINKED').target).toEqual({ kind: 'SUPPLIER', supplierId: 'sup1', catalogItemId: 'cat3' });
+    });
+    it('库存问题 → 打开该区域的商品', () => {
+        expect(find('AREA_MISMATCH').target).toEqual({ kind: 'STOCK', area: 'BAR', stockId: 'B1' });
+        expect(find('NEGATIVE_QTY').target).toEqual({ kind: 'STOCK', area: 'BAR', stockId: 'B2' });
+        expect(find('DOC_ID_MISMATCH').target).toEqual({ kind: 'STOCK', area: 'GENERAL', stockId: 'G2' });
+    });
+    it('菜谱 → 打开那道菜；盘点任务 → 打开任务', () => {
+        expect(find('BROKEN_RECIPE').target).toEqual({ kind: 'MENU', menuId: 'm1' });
+        expect(find('BROKEN_TASK').target).toEqual({ kind: 'TASKS' });
     });
 });
 

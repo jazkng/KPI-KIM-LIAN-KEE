@@ -23,6 +23,8 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 interface MenuManagementProps {
     onClose?: () => void;
     isModal?: boolean;
+    /** 打开后直接编辑这道菜（数据审查中心「去处理」用） */
+    initialMenuItemId?: string;
 }
 
 const MENU_CATEGORY_STORAGE_KEY = 'menu_categories_v1';
@@ -480,7 +482,7 @@ type InfoState = {
     icon?: 'success' | 'error' | 'info';
 } | null;
 
-export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal = true }) => {
+export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal = true, initialMenuItemId }) => {
     // ---- Data State ----
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<MenuCategory[]>(MENU_CATEGORIES);
@@ -1446,6 +1448,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
     };
 
     const handleAddNew = () => { resetForm(); setViewMode('EDIT'); };
+
+    // 从数据审查中心「去处理」进来：资料读完后直接打开这道菜（只打开一次）
+    const openedInitialRef = useRef(false);
+    useEffect(() => {
+        if (!initialMenuItemId || openedInitialRef.current || loading) return;
+        const target = menuItems.find(m => m.id === initialMenuItemId);
+        if (target) { openedInitialRef.current = true; handleEditItem(target); }
+    }, [initialMenuItemId, loading, menuItems]);
     const handleDeleteClick = (id: string) => { if (isReorderMode) return; setDeleteId(id); };
 
     const confirmDelete = async () => {
