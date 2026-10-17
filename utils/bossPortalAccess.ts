@@ -51,6 +51,8 @@ export const BOSS_TARGET_MODULE_MAP: Record<string, AppModule> = {
     OKR: 'PLANNING',
     CAMPAIGN: 'PLANNING',
     EVENTS: 'PLANNING',
+    // 数据审查中心：里面的财务审查与财务报表同一个权限；库存编号整理另外只给负责人 / 系统管理员
+    DATA_TOOLS: 'REPORTS',
     // 其他
     TRANSLATION: 'TRANSLATION',
     WARRANTY: 'WARRANTY',

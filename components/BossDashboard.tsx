@@ -3,7 +3,7 @@ import {
     Users, Banknote, Coffee, Truck, Armchair, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, ShoppingBag, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Award, Languages, X,
-    FileText, Calculator, Star, Search, Lock, Gauge, Scale, ListChecks
+    FileText, Calculator, Star, Search, Lock, Gauge, ListChecks
 } from 'lucide-react';
 import { Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
@@ -14,14 +14,15 @@ import {
     sortNavigationItems,
 } from '../constants/moduleNavigation';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
+import { canOpenDataTools } from './features/system/DataToolsHub';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
-import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, ExpenseAudit, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, ExpenseAudit, DataToolsHub, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
 const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 mins cache
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'EXPENSE_AUDIT' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'EXPENSE_AUDIT' | 'DATA_TOOLS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
 type PlanningTab  = 'VOTE' | 'OKR' | 'CAMPAIGN' | 'EVENTS';
 
 type CardConfig = {
@@ -57,8 +58,6 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "treasury", title: "资金管理", sub: "CASH & BANK", icon: Wallet, colorClass: "bg-emerald-50", iconColor: "text-emerald-600", actionType: 'MODAL', target: 'TREASURY' },
     { id: "reports", title: "财务报表", sub: "P&L REPORT", icon: FileBarChart, colorClass: "bg-green-50", iconColor: "text-green-600", actionType: 'MODAL', target: 'REPORTS' },
     { id: "boss_cockpit", title: "经营驾驶舱", sub: "BOSS COCKPIT", icon: Gauge, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'BOSS_COCKPIT' },
-    { id: "pnl_recon", title: "盈亏对账", sub: "P&L RECONCILIATION", icon: Scale, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'PNL_RECON' },
-    { id: "expense_audit", title: "杂项费用审计", sub: "EXPENSE AUDIT", icon: ListChecks, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'EXPENSE_AUDIT' },
     { id: "labour_profit", title: "人工成本与盈利", sub: "LABOUR & PROFIT", icon: TrendingUp, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'LABOUR_PROFIT' },
     { id: "staff_cash", title: "兼职与预支", sub: "PART-TIME & ADVANCE", icon: Banknote, colorClass: "bg-emerald-50", iconColor: "text-emerald-700", actionType: 'NAVIGATE', target: 'STAFF_CASH' },
     { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
@@ -70,6 +69,8 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "okr", title: "目标规划", sub: "OKRs & KPI", icon: Target, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'PLANNING', target: 'OKR' },
     { id: "campaign", title: "营销推广", sub: "CAMPAIGNS (ROI)", icon: Megaphone, colorClass: "bg-pink-50", iconColor: "text-pink-600", actionType: 'PLANNING', target: 'CAMPAIGN' },
     { id: "events", title: "节日活动", sub: "EVENTS CALENDAR", icon: PartyPopper, colorClass: "bg-rose-50", iconColor: "text-rose-600", actionType: 'PLANNING', target: 'EVENTS' },
+    // 盈亏对账、杂项费用审计、库存编号整理都集中在「数据审查中心」
+    { id: "data_tools", title: "数据审查中心", sub: "AUDIT & DATA TOOLS", icon: ListChecks, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'DATA_TOOLS' },
     { id: "translation", title: "翻译管理", sub: "TRANSLATION", icon: Languages, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'TRANSLATION' },
     { id: "warranty", title: "保修记录", sub: "WARRANTY", icon: ShieldCheck, colorClass: "bg-cyan-50", iconColor: "text-cyan-600", actionType: 'MODAL', target: 'WARRANTY' },
 ];
@@ -299,7 +300,9 @@ export const BossDashboard: React.FC<{
 
     // 🔐 权限闸门：L1 老板看全部；L2 等被指派进老板界面的人只看已勾选模块
     const canUseCard = useCallback(
-        (card: CardConfig) => canUseBossTarget(currentEmployee, card.target),
+        (card: CardConfig) => card.target === 'DATA_TOOLS'
+            ? canOpenDataTools(currentEmployee) // 里面任何一个工具能用就显示入口（系统管理员可只用库存编号整理）
+            : canUseBossTarget(currentEmployee, card.target),
         [currentEmployee],
     );
 
@@ -399,6 +402,7 @@ export const BossDashboard: React.FC<{
             'BOSS_COCKPIT': <BossCockpit onClose={close} />,
             'PNL_RECON': <PnLReconciliation onClose={close} />,
             'EXPENSE_AUDIT': <ExpenseAudit onClose={close} />,
+            'DATA_TOOLS': <DataToolsHub onClose={close} currentEmployee={currentEmployee} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
             'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
