@@ -10,6 +10,7 @@
 //   1. 月份边界改用马来西亚日期（带时区的时间先换算），不再用 UTC 字串切日
 //   2. 业务发生制排除分期付款的第二笔以后（pay_<账单>_<时间>），原账单已按全额计入
 //   3. 固定账单付款换成与应付账款镜像相同的分类（宿舍水电、订阅、其他固定账单原本找不到科目）
+//   5. 首页人工（业务发生制）改用唯一盈亏引擎的人工（呼叫端传入 headlineLabour），与传统账目、驾驶舱相同
 //   4. 薪资 = 实发 + 薪资扣回的员工借款（loanRepay）+ 宿舍费（hostelFee）；借款发出时记 STAFF_LOAN 资产，扣回不减少工资成本；宿舍费负责人决定算人工
 // version: 'BEFORE_FIX' 重现修正前的算法，只给对账 / 修正前后比较用。
 // ============================================================================
@@ -27,7 +28,7 @@ export interface LegacyFinancialReportResult {
     opex: number;
     netProfit: number;
     /** 财务报表人工的来源（画面上「薪资预测」显示的同一个判断） */
-    labourSource: 'POSTED' | 'DRAFT' | 'BASIC_SALARY' | 'ACTUAL_LABOR_EXPENSES' | 'FALLBACK_57300';
+    labourSource: 'ENGINE' | 'POSTED' | 'DRAFT' | 'BASIC_SALARY' | 'ACTUAL_LABOR_EXPENSES' | 'FALLBACK_57300';
     /** 分摊前的整月人工基数 */
     baseMonthlyLabour: number;
     settledDays: number;
@@ -50,6 +51,8 @@ export const legacyFinancialReport = (
         employees: any[];
         /** 分期付款列对应、但不在读取区间内的原账单 */
         parentBills?: Map<string, { totalBillAmount?: number }>;
+        /** 业务发生制首页人工（唯一盈亏引擎的人工；2026-10-17 起财务报表首页用它） */
+        headlineLabour?: number;
     },
     startDate: string,
     endDate: string,
@@ -244,7 +247,8 @@ export const legacyFinancialReport = (
     else if (totalLabor > 0) { baseMonthlyLabor = totalLabor; labourSource = 'ACTUAL_LABOR_EXPENSES'; }
     else if (activeBasic > 0) { baseMonthlyLabor = activeBasic; labourSource = 'BASIC_SALARY'; }
     else { baseMonthlyLabor = 57300; labourSource = 'FALLBACK_57300'; }
-    const totalLaborSynced = (baseMonthlyLabor / daysInMonth) * settledDays;
+    if (fixed && accountingMode === 'ACCRUAL' && input.headlineLabour !== undefined) labourSource = 'ENGINE';
+    const totalLaborSynced = labourSource === 'ENGINE' ? num(input.headlineLabour) : (baseMonthlyLabor / daysInMonth) * settledDays;
     const netProfit = netRealizedRevenue - (totalCOGS + totalLaborSynced + totalOPEX);
 
     // :967-980 传统账目的 costByCategory
@@ -269,7 +273,7 @@ export const legacyFinancialReport = (
         baseMonthlyLabour: r2(baseMonthlyLabor),
         settledDays,
         daysInMonth,
-        labourExpensesNotCounted: labourSource === 'ACTUAL_LABOR_EXPENSES' ? 0 : r2(
+        labourExpensesNotCounted: labourSource === 'ACTUAL_LABOR_EXPENSES' || labourSource === 'ENGINE' ? 0 : r2(
             Object.entries(groups)
                 .filter(([k]) => categorizeExpense(k) === 'LABOR' && k !== 'PAYROLL' && k !== 'EPF_SOCSO')
                 .reduce((s, [, v]) => s + v, 0),

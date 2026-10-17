@@ -8,7 +8,9 @@ import { ClassicPnLTab } from './ClassicPnLTab';
 import { LABOR_DEPT_ROLE_FALLBACK } from '../../constants/classicPnLCostMap';
 import { billPaymentCostCategory } from '../../constants/recurringBillCategoryMap';
 import { buildCategoryMargins, buildClassicPnL } from '../../utils/classicPnLBuilder';
-import { aggregateMonth, monthRange, diffCostByCategory, parentBillIdOfPayment, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../utils/monthlyPnLAggregator';
+import { monthRange, diffCostByCategory, parentBillIdOfPayment, payrollWageFromDetail, splitAccrualDuplicatePayments } from '../../utils/monthlyPnLAggregator';
+import { computePnL, PNL_STATUS_LABEL, type PnLEngineResult } from '../../utils/pnl/engine/pnlEngine';
+import { getBusinessDateString } from '../../utils/dateHelper';
 import { exportClassicPnLMultiToExcel } from '../../utils/classicPnLMultiExport';
 import { downloadBlob } from '../../utils/classicPnLExport';
 import { CATEGORY_MARGIN_PAIRS } from '../../constants/classicPnLCostMap';
@@ -156,6 +158,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     const [transfers, setTransfers] = useState<FundTransfer[]>([]);
     const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
+    // 📒 传统账目改读唯一盈亏引擎：分期付款对应的原账单、固定账单设定（只读）
+    const [recurringBillsForEngine, setRecurringBillsForEngine] = useState<any[]>([]);
     const [treasuryConfig, setTreasuryConfig] = useState<TreasuryConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -344,6 +348,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 setTreasuryConfig(config);
                 setPayrollRecords(payrolls);
                 setEmployees(emps);
+                // 唯一盈亏引擎需要固定账单设定（检查缺少的固定费用）；读不到不影响其他画面
+                DataManager.getRecurringBills().catch(() => []).then(bills => setRecurringBillsForEngine(bills as any[]));
             } catch (error) {
                 console.error("Failed to load financial data", error);
                 alert("⚠️ 财务数据拉取异常，请检查网络或联系管理员。");
@@ -379,6 +385,16 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     };
 
     const formatMoney = (amount: number) => `RM ${Number(amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+    // 📒 唯一盈亏引擎（权责发生制）：传统账目（画面与多月 Excel）与老板驾驶舱共用同一份结果
+    const classicEngine = useMemo(() => {
+        const input = {
+            settlements: settlementRecords as any[], standaloneExpenses: standaloneExpenses as any[], billPayments: billPayments as any[],
+            payrollRecords: payrollRecords as any[], employees: employees as any[], recurringBills: recurringBillsForEngine, parentBills,
+        };
+        const today = getBusinessDateString();
+        return { current: computePnL(input, startDate, endDate, today), prev: computePnL(input, prevStartDate, prevEndDate, today) };
+    }, [settlementRecords, standaloneExpenses, billPayments, payrollRecords, employees, recurringBillsForEngine, parentBills, startDate, endDate, prevStartDate, prevEndDate]);
 
     // 👑 核心引擎
     /**
@@ -788,7 +804,12 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                     ? totalLabor 
                     : (employees.filter(e => e.status !== 'TERMINATED' && !e.isArchived).reduce((acc, e) => acc + (Number((e as any).basicSalary) || 0), 0) || 57300)));
         
-        const totalLaborSynced = (baseMonthlyLabor / daysInMonth) * settledDays;
+        // 业务发生制：首页人工与传统账目、驾驶舱同一个引擎（薪资单应发 + 雇主供款 + 兼职 + 员工餐 + 补发工资；
+        // 预支已含在应发里，借款扣回与宿舍费不减少人工）。以前只取「实发 + 法定」× 已日结天数，
+        // 漏掉预支、兼职、员工餐与薪资单以外补发的工资（2026-10-17 负责人核对）。现金制维持原算法。
+        const totalLaborSynced = accountingMode === 'ACCRUAL'
+            ? classicEngine.current.labour
+            : (baseMonthlyLabor / daysInMonth) * settledDays;
 
         const grossProfit = netRealizedRevenue - totalCOGS; 
         const totalStoreCosts = totalCOGS + totalLaborSynced + totalOPEX; 
@@ -1078,7 +1099,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 costAnomalies: costAnomalies.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
             }
         };
-    }, [settlementRecords, pnlExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode]);
+    }, [settlementRecords, pnlExpenses, billPayments, payrollRecords, employees, startDate, endDate, prevStartDate, prevEndDate, accountingMode, classicEngine]);
 
     // ========== 👑 经营体检指标 (Prime Cost / 盈亏平衡) ==========
     // 纯计算，用的全是 analytics 已经算好的数字，不额外读取任何资料
@@ -2065,9 +2086,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
     // ==========================================
     // 📒 多月份 P&L 导出
     // ------------------------------------------
-    // 一次抓整段期间的原始资料，逐月用 aggregateMonth 算，再一起写进一张 Excel。
-    // ⚠️ aggregateMonth 是另一份算法（抄自本档的大 useMemo），所以每次导出都会
-    //    拿「本月」的结果跟画面正在用的 costByCategory 逐项比对，对不上会写在 Excel 最后。
+    // 一次抓整段期间的原始资料，逐月用唯一盈亏引擎（computePnL）算，再一起写进一张 Excel（会计格式不变）。
+    // 画面上的传统账目也是同一个引擎；导出时仍拿「本月」与画面逐项比对，对不上会写在 Excel 最后。
     // ==========================================
     const handleExportMultiMonth = async () => {
         const months = monthRange(multiStart, multiEnd, 12);
@@ -2076,6 +2096,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
         setMultiBusy(`读取 ${months.length} 个月的资料…`);
         try {
             const rangeStart = `${months[0]}-01`;
+            // 多读前一天：带时区的账单时间要换成马来西亚日期再判断月份
+            const expStart = (() => { const d = new Date(`${rangeStart}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
             const lastY = Number(months[months.length - 1].split('-')[0]);
             const lastM = Number(months[months.length - 1].split('-')[1]);
             const lastDay = new Date(lastY, lastM, 0).getDate();
@@ -2084,8 +2106,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const [setSnap, billSnap, expSnap1, expSnap2, shList] = await Promise.all([
                 getDocs(query(collection(db, 'settlements'), where('date', '>=', rangeStart), where('date', '<=', rangeEnd))),
                 getDocs(query(collection(db, 'bill_payments'), where('date', '>=', rangeStart), where('date', '<=', rangeEnd))),
-                getDocs(query(collection(db, 'standalone_expenses'), where('time', '>=', rangeStart), where('time', '<=', rangeEnd))),
-                getDocs(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', rangeStart), where('paymentDate', '<=', rangeEnd))),
+                getDocs(query(collection(db, 'standalone_expenses'), where('time', '>=', expStart), where('time', '<=', rangeEnd))),
+                getDocs(query(collection(db, 'standalone_expenses'), where('paymentDate', '>=', expStart), where('paymentDate', '<=', rangeEnd))),
                 DataManager.getStorehubSalesRange(months[0], months[months.length - 1]),
             ]);
 
@@ -2104,26 +2126,30 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 payrollRecords: (payrollRecords || []) as any[],
                 employees: (employees || []) as any[],
             };
+            const exportParents = new Map<string, { totalBillAmount?: number }>(parents.map(b => [b.id, b]));
+            const exportBills = await DataManager.getRecurringBills().catch(() => [] as any[]);
+            const today = getBusinessDateString();
             const shByMonth: Record<string, any> = {};
             (shList || []).forEach((x: any) => { if (x?.month) shByMonth[x.month] = x; });
 
             setMultiBusy('计算中…');
             const periods = months.map(m => {
-                const agg = aggregateMonth(m, raw as any, accountingMode);
+                const last = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate();
+                const engine: PnLEngineResult = computePnL({ ...raw, recurringBills: exportBills, parentBills: exportParents }, `${m}-01`, `${m}-${String(last).padStart(2, '0')}`, today);
                 const data = buildClassicPnL({
                     month: m,
                     storehub: shByMonth[m] || null,
-                    platformGross: agg.platformGross,
-                    costByCategory: agg.costByCategory,
+                    platformGross: engine.classic.platformGross,
+                    costByCategory: engine.classic.costByCategory,
                     viewMode: 'DETAILED',
                     channelMode: 'IN_STORE',
                     includeCost: true,
                     costDetailMode: 'DETAILED',
-                    laborByDept: agg.laborByDept,
-                    inStoreSales: agg.inStoreSales,
+                    laborByDept: engine.classic.laborByDept,
+                    inStoreSales: engine.classic.inStoreSales,
                 });
-                return { label: m, data, agg };
-            }).filter(p => p.agg.hasData || p.data.salesTotal > 0);
+                return { label: m, data, engine };
+            }).filter(p => p.engine.sourceCounts.settlements > 0 || p.data.salesTotal > 0);
 
             if (periods.length === 0) { setMultiBusy(''); return alert('⚠️ 这段期间没有任何结算资料'); }
 
@@ -2131,8 +2157,10 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             const curMonth = startDate ? startDate.slice(0, 7) : '';
             const curPeriod = periods.find(p => p.label === curMonth);
             const selfCheck = curPeriod
-                ? { month: curMonth, issues: diffCostByCategory(curPeriod.agg.costByCategory, analytics.classicPnL?.costByCategory || {}) }
+                ? { month: curMonth, issues: diffCostByCategory(curPeriod.engine.classic.costByCategory, classicEngine.current.classic.costByCategory) }
                 : null;
+            // 未确认的月份：Excel 格式照旧，但下载后明确提醒不是最终数字
+            const provisional = periods.filter(p => p.engine.status !== 'CONFIRMED').map(p => p.label);
 
             setMultiBusy('产生 Excel…');
             const blob = await exportClassicPnLMultiToExcel({
@@ -2142,6 +2170,9 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             downloadBlob(blob, `传统账目_多月PL_${months[0]}_至_${months[months.length - 1]}.xlsx`);
             setMultiOpen(false);
 
+            if (provisional.length) {
+                alert(`ℹ️ 以下月份的经营盈亏是「${PNL_STATUS_LABEL.PROVISIONAL}」，Excel 里的 NET PROFIT 不是最终数字：\n${provisional.join('、')}\n\n原因（平台未对账、薪资未发放、缺日结等）请到「盈亏对账」查看。`);
+            }
             if (selfCheck && selfCheck.issues.length > 0) {
                 alert(`⚠️ 自我校验发现 ${selfCheck.issues.length} 个科目跟画面对不上，已经写在 Excel 最后一段。\n请先别拿这份去报税或给会计，把那几行截图给开发者看。`);
             }
@@ -5528,29 +5559,20 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                                     <ClassicPnLTab
                                         month={startDate.slice(0, 7)}
                                         prevMonth={prevStartDate.slice(0, 7)}
-                                        platformGross={{
-                                            grab: analytics.bdown.grabGross,
-                                            shopee: analytics.bdown.shopeeGross,
-                                            panda: analytics.bdown.pandaGross,
-                                            lalamove: analytics.bdown.lalamove,
-                                        }}
-                                        prevPlatformGross={{
-                                            grab: analytics.classicPnL.prevBdown.grabGross,
-                                            shopee: analytics.classicPnL.prevBdown.shopeeGross,
-                                            panda: analytics.classicPnL.prevBdown.pandaGross,
-                                            lalamove: analytics.classicPnL.prevBdown.lalamove,
-                                        }}
-                                        costByCategory={analytics.classicPnL.costByCategory}
-                                        prevCostByCategory={analytics.classicPnL.prevCostByCategory}
-                                        laborByDept={classicLaborByDept.current.byDept}
-                                        prevLaborByDept={classicLaborByDept.prev.byDept}
+                                        platformGross={classicEngine.current.classic.platformGross}
+                                        prevPlatformGross={classicEngine.prev.classic.platformGross}
+                                        costByCategory={classicEngine.current.classic.costByCategory}
+                                        prevCostByCategory={classicEngine.prev.classic.costByCategory}
+                                        laborByDept={classicEngine.current.classic.laborByDept}
+                                        prevLaborByDept={classicEngine.prev.classic.laborByDept}
+                                        pnlStatus={classicEngine.current}
                                         laborDeptMeta={{
                                             guessedCount: classicLaborByDept.current.guessedCount,
                                             guessedAmount: classicLaborByDept.current.guessedAmount,
                                             totalCount: classicLaborByDept.current.totalCount,
                                         }}
-                                        inStoreSales={analytics.rev.inStoreSales}
-                                        prevInStoreSales={analytics.classicPnL.prevInStoreSales}
+                                        inStoreSales={classicEngine.current.classic.inStoreSales}
+                                        prevInStoreSales={classicEngine.prev.classic.inStoreSales}
                                         mixedSeafoodLegacyAmount={analytics.classicPnL.mixedSeafoodLegacyAmount}
                                         currentRange={{ start: startDate, end: endDate }}
                                         prevRange={{ start: prevStartDate, end: prevEndDate }}
