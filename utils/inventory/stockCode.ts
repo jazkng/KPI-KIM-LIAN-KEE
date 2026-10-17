@@ -14,6 +14,11 @@ import type { StockArea } from './stockArea';
 export const STOCK_CODE_PREFIX: Record<StockArea, string> = { KITCHEN: 'K', BAR: 'B', GENERAL: 'G', FUEL: 'F' };
 export const STOCK_CODE_DIGITS = 4;
 
+/** 集合名称 */
+export const STOCK_CODES_COLLECTION = 'stock_codes';
+export const STOCK_CODE_COUNTERS_COLLECTION = 'stock_code_counters';
+export const STOCK_CODE_RUNS_COLLECTION = 'stock_code_migration_runs';
+
 const CODE_RE = /^([KBGF])(\d{4,})$/;
 
 export const formatStockCode = (area: StockArea, seq: number): string =>
