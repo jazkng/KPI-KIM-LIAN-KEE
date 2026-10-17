@@ -17,6 +17,7 @@ import { StorehubMonthlySales } from "./storehubImport";
 import { normalizeInventoryItem } from "./unitConversion";
 import { registerStockArea, type StockArea } from "./inventory/stockArea";
 import { keepStockCodeFields } from "./inventory/stockCode";
+import { reserveStockCode } from "./inventory/stockCodeAllocator";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
 import { buildOperationalLogNotifications } from "./notificationUtils";
 import { getBusinessDateString } from "./dateHelper";
@@ -693,7 +694,7 @@ export class DataManager {
         registerStockArea(type, items);
         return items;
     }
-    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem): Promise<void> {
+    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem, by = 'SYSTEM'): Promise<void> {
         let colName = 'stock_general';
         if (type === 'KITCHEN') colName = 'stock_kitchen';
         if (type === 'BAR') colName = 'stock_bar';
@@ -726,7 +727,10 @@ export class DataManager {
         await runTransaction(db, async (transaction) => {
             const snap = await transaction.get(docRef);
             const existingData = snap.exists() ? snap.data() : {};
+            // 新商品：同一交易配下一个编号（还没执行全部重新连号时不配）
+            const reserved = snap.exists() ? null : await reserveStockCode(transaction, db, type, syncedItem.id, by);
             transaction.set(docRef, keepStockCodeFields(existingData, { ...existingData, ...syncedItem }));
+            reserved?.write(transaction, docRef);
         });
         DataManager.clearCacheKeys(['stock_']);
     }
