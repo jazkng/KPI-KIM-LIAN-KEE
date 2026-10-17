@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { MenuItem, MenuCategory, MenuVariant, StockItem, MenuIngredient } from '../../types';
 import { DataManager } from '../../utils/dataManager';
+import { resolveStockArea } from '../../utils/inventory/stockArea';
 import { useIsMobile } from '../../utils/useIsMobile';
 import {
     getBaseUnit,
@@ -3000,7 +3001,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                 const grouped: Record<string, StockItem[]> = {};
                                 const kitchenOnly = stockItems.filter(s => {
                                     if (stockSearch) return s.name.toLowerCase().includes(stockSearch.toLowerCase());
-                                    return ['FRESH', 'MEAT', 'SEAFOOD', 'VEG', 'NOODLE', 'DRY', 'SAUCE', 'HQ'].includes(s.category) || s.id.startsWith('K');
+                                    return resolveStockArea(s) === 'KITCHEN';
                                 });
                                 kitchenOnly.forEach(s => {
                                     const catLabel = STOCK_CATEGORIES[s.category] || '其他 (Other)';
