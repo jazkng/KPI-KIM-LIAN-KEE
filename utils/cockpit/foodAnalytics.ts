@@ -34,6 +34,7 @@ export interface InventoryLogLike {
     date?: string;
     totalValueChange?: number;
     category?: string;
+    source?: string;
 }
 
 export interface PriceHistoryLike {
@@ -91,7 +92,9 @@ export const buildFoodAnalytics = (input: FoodAnalyticsInput, stockNames: Record
     const estimate = estimateRatio !== null ? round2(input.periodRevenue * estimateRatio) : null;
 
     // ── 盘点差异（期间内）──
+    // 收货记录（source = RECEIVE）是进货，不是盘点差异
     const logs = input.inventoryLogs.filter(l => {
+        if (l.source === 'RECEIVE') return false;
         const d = String(l.date || '').slice(0, 10);
         return d >= input.period.start && d <= input.period.end;
     });

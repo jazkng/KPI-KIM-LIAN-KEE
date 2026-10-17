@@ -1027,6 +1027,8 @@ export interface InventoryLogItem {
     unit: string;
     cost: number;
     valueChange: number;
+    /** 收货记录才有：这次的进货单价（每基础单位）。cost 一律是平均成本，与盘点记录同口径 */
+    purchaseUnitCost?: number;
 }
 
 export interface InventoryLog {
@@ -1037,6 +1039,10 @@ export interface InventoryLog {
     totalValueChange: number;
     items: InventoryLogItem[];
     category: string;
+    // 收货记录（2026-10-18 起，可选；以前只有盘点会写库存记录）
+    source?: 'STOCKTAKE' | 'RECEIVE';
+    poId?: string;
+    supplierName?: string;
 }
 
 export interface InventoryTaskItem {

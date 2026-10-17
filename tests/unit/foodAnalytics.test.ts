@@ -19,6 +19,7 @@ const base: FoodAnalyticsInput = {
         { date: '2026-10-05', totalValueChange: -120 },
         { date: '2026-10-10', totalValueChange: 30 },
         { date: '2026-09-28', totalValueChange: -999 },
+        { date: '2026-10-12', totalValueChange: 500, source: 'RECEIVE' }, // 收货不是盘点差异
     ],
     priceHistories: [
         { stockId: 's1', entries: [{ date: '2026-08-01', cost: 0.025 }, { date: '2026-10-02', cost: 0.03 }] },
@@ -43,7 +44,7 @@ describe('食材成本双轨分析', () => {
         expect(a.consumption.estimateBasis).toContain('2026-07、2026-08、2026-09');
         expect(a.consumption.estimateBasis).toContain('不是实际耗用');
     });
-    it('盘点差异只算期间内的记录', () => {
+    it('盘点差异只算期间内的盘点记录（收货记录不算）', () => {
         expect(a.countVariance).toMatchObject({ logs: 2, loss: -120, gain: 30, net: -90 });
     });
     it('品项价格变化：只有一笔价格的品项不列；涨价 20% 产生提醒', () => {

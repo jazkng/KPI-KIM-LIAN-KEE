@@ -5,6 +5,8 @@ import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, Cat
 import { normalizeCatalogItem } from '../utils';
 import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
+import { buildReceiveLogs } from '../../utils/inventory/receiveLog';
+import { getMalaysiaDateString } from '../../utils/dateHelper';
 import { displayStockCode, matchesStockSearch } from '../../utils/inventory/stockCode';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
@@ -1356,6 +1358,29 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                     DataManager.batchUpdateStock(cat as any, items)
                 )
             );
+
+            // 收货记录：写库存记录与进货价格（失败不影响已完成的收货，只提示）
+            try {
+                const session = localStorage.getItem('kepong_erp_session_employee');
+                const staffName = session ? JSON.parse(session).name : 'Admin';
+                const logs = buildReceiveLogs({
+                    poId: receivingPO.id, supplierName: receivingPO.supplierName, staffName,
+                    date: getMalaysiaDateString(), timestamp: new Date().toISOString(),
+                    entries: changedItems.map(item => {
+                        const diff = Number(item.diff) || 0;
+                        return {
+                            area: resolveStockArea(item)!, stockId: item.id, stockName: item.name,
+                            unit: item.baseUnit || item.unit || '', newAvgCost: getCostPerBaseUnit(item),
+                            oldQty: getCurrentQtyBase(item) - diff, receivedQty: diff,
+                            totalCost: stockUpdates.get(item.id)?.costDelta || 0,
+                        };
+                    }),
+                });
+                await Promise.all(logs.map(log => DataManager.saveInventoryLog(log)));
+            } catch (logError) {
+                console.error('收货记录写入失败', logError);
+                alert('⚠️ 库存已更新，但收货记录没有写入成功（不影响库存数量）。');
+            }
 
             // 本地同步，避免再次全量 loadData
             setStockItems(prev => prev.map(s => {
