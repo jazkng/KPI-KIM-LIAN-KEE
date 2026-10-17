@@ -55,6 +55,10 @@ interface InventoryModuleProps {
     lockedMode?: 'CHECK' | 'MASTER';
     initialMode?: 'CHECK' | 'MASTER';
     initialSearchTerm?: string;
+    /** 打开后先显示的区域，以及直接打开编辑的商品（数据审查中心「去处理」用） */
+    initialStockView?: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
+    initialEditStockId?: string;
+    initialViewType?: 'LIST' | 'TASKS';
     isManagementStaff?: boolean;
     lang?: AppLanguage | string;
     onClose?: () => void;
@@ -349,11 +353,14 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     lockedMode, 
     initialMode = 'CHECK', 
     initialSearchTerm,
+    initialStockView,
+    initialEditStockId,
+    initialViewType,
     isManagementStaff = false,
     lang = 'zh',
     onClose
 }) => {
-    const [currentStockView, setCurrentStockView] = useState<'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL'>('KITCHEN');
+    const [currentStockView, setCurrentStockView] = useState<'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL'>(initialStockView || 'KITCHEN');
     const [mode, setMode] = useState<'CHECK' | 'MASTER' | 'ASSIGN'>(lockedMode || initialMode);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
     
@@ -421,7 +428,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         return translations.units?.[unit] || unit;
     }, [lang, translations.units]);
     
-    const [viewType, setViewType] = useState<'LIST' | 'HISTORY' | 'TASKS'>('LIST');
+    const [viewType, setViewType] = useState<'LIST' | 'HISTORY' | 'TASKS'>(initialViewType || 'LIST');
     const [logs, setLogs] = useState<InventoryLog[]>([]);
     const [items, setItems] = useState<StockItem[]>([]);
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
@@ -664,6 +671,14 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             setSearchTerm(initialSearchTerm);
         }
     }, [initialSearchTerm]);
+
+    // 从数据审查中心「去处理」进来：该区域读完后直接打开商品编辑（只打开一次）
+    const openedInitialEditRef = useRef(false);
+    useEffect(() => {
+        if (!initialEditStockId || openedInitialEditRef.current) return;
+        const target = items.find(i => i.id === initialEditStockId);
+        if (target) { openedInitialEditRef.current = true; setEditingItem(target); }
+    }, [initialEditStockId, items]);
 
     useEffect(() => {
         if (editingItem && editingItem.id) {

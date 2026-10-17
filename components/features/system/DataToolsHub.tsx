@@ -36,7 +36,7 @@ export const DataToolsHub: React.FC<Props> = ({ currentEmployee, onClose }) => {
 
     if (open === 'PNL_RECON') return <PnLReconciliation onClose={back} />;
     if (open === 'EXPENSE_AUDIT') return <ExpenseAudit onClose={back} />;
-    if (open === 'STOCK_AUDIT') return <StockAudit onClose={back} />;
+    if (open === 'STOCK_AUDIT') return <StockAudit onClose={back} currentEmployee={currentEmployee} />;
     if (open === 'STOCK_CODES') return <StockCodeMigration operatorName={currentEmployee?.name || '负责人'} onClose={back} onChanged={() => {}} />;
 
     const groups = [...new Set(DATA_TOOLS.map(t => t.group))];

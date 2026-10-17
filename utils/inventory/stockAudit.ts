@@ -14,7 +14,16 @@ import { STOCK_CODE_COUNTERS_COLLECTION, STOCK_CODES_COLLECTION, nameKey, sugges
 
 export type AuditSeverity = 'HIGH' | 'MEDIUM' | 'LOW';
 
+/** 「去处理」要打开的画面 */
+export type AuditTarget =
+    | { kind: 'STOCK'; area: StockArea; stockId: string }
+    | { kind: 'SUPPLIER'; supplierId: string; catalogItemId?: string }
+    | { kind: 'MENU'; menuId: string }
+    | { kind: 'TASKS' }
+    | { kind: 'CODES' };
+
 export interface AuditFinding {
+    target?: AuditTarget;
     severity: AuditSeverity;
     type: string;
     title: string;        // 问题类别（同一类会归在一起）
@@ -63,16 +72,17 @@ const SEVERITY_RANK: Record<AuditSeverity, number> = { HIGH: 0, MEDIUM: 1, LOW: 
 
 export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     const out: AuditFinding[] = [];
-    const add = (severity: AuditSeverity, type: string, subject: string, detail: string, stockId?: string) =>
-        out.push({ severity, type, title: TYPE_LABEL[type] || type, subject, detail, ...(stockId ? { stockId } : {}) });
+    const byId = new Map<string, { area: StockArea; data: Record<string, any> }[]>();
+    const add = (severity: AuditSeverity, type: string, subject: string, detail: string, stockId?: string, target?: AuditTarget) =>
+        out.push({ severity, type, title: TYPE_LABEL[type] || type, subject, detail, ...(stockId ? { stockId } : {}), ...(target ? { target } : {}) });
+    const stockTarget = (id: string): AuditTarget | undefined => { const e = byId.get(id)?.[0]; return e ? { kind: 'STOCK', area: e.area, stockId: id } : undefined; };
 
     // ── 库存本身 ──
-    const byId = new Map<string, { area: StockArea; data: Record<string, any> }[]>();
     STOCK_AREAS.forEach(area => (input.stock[area] || []).forEach(d => {
         const id = String(d.data.id || d.id);
         byId.set(id, [...(byId.get(id) || []), { area, data: d.data }]);
         if (d.data.id && d.data.id !== d.id) {
-            add('HIGH', 'DOC_ID_MISMATCH', `${d.data.name || id}`, `${STOCK_AREA_COLLECTION[area]} 文件「${d.id}」里的 id 是「${d.data.id}」。写入会用 id 当文件名，可能产生另一份资料。请管理员人工处理。`, id);
+            add('HIGH', 'DOC_ID_MISMATCH', `${d.data.name || id}`, `${STOCK_AREA_COLLECTION[area]} 文件「${d.id}」里的 id 是「${d.data.id}」。写入会用 id 当文件名，可能产生另一份资料。请管理员人工处理。`, id, { kind: 'STOCK', area, stockId: id });
         }
     }));
     const label = (id: string) => { const e = byId.get(id)?.[0]; return e ? `${e.data.name || id}${e.data.stockCode ? `（${e.data.stockCode}）` : ''}` : id; };
@@ -80,19 +90,19 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     byId.forEach((entries, id) => {
         if (entries.length > 1) {
             const qty = entries.map(e => `${AREA_LABEL[e.area]} ${Number(e.data.currentQtyBase ?? e.data.currentQty ?? 0)}`).join('、');
-            add('HIGH', 'DUPLICATE_ID', label(id), `同时存在于：${qty}。收货与盘点会被拦下，需决定保留哪一份。`, id);
+            add('HIGH', 'DUPLICATE_ID', label(id), `同时存在于：${qty}。收货与盘点会被拦下，需决定保留哪一份。`, id, stockTarget(id));
         }
         const { area, data } = entries[0];
         const catArea = areaOfCategory(data.category);
-        if (!catArea) add('MEDIUM', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category ?? '（空白）'}」系统认不得，在采购筛选、补货里可能找不到。`, id);
-        else if (catArea !== area) add('MEDIUM', 'AREA_MISMATCH', label(id), `放在${AREA_LABEL[area]}，但分类「${data.category}」属于${AREA_LABEL[catArea]}。写入仍会写回${AREA_LABEL[area]}；建议改分类或确认放置区域。`, id);
-        else if (!(input.sections[area] || []).includes(String(data.category))) add('LOW', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category}」不在${AREA_LABEL[area]}的分类清单里，库存画面可能归到「其他」。`, id);
+        if (!catArea) add('MEDIUM', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category ?? '（空白）'}」系统认不得，在采购筛选、补货里可能找不到。`, id, stockTarget(id));
+        else if (catArea !== area) add('MEDIUM', 'AREA_MISMATCH', label(id), `放在${AREA_LABEL[area]}，但分类「${data.category}」属于${AREA_LABEL[catArea]}。写入仍会写回${AREA_LABEL[area]}；建议改分类或确认放置区域。`, id, stockTarget(id));
+        else if (!(input.sections[area] || []).includes(String(data.category))) add('LOW', 'UNKNOWN_CATEGORY', label(id), `分类「${data.category}」不在${AREA_LABEL[area]}的分类清单里，库存画面可能归到「其他」。`, id, stockTarget(id));
         const qty = Number(data.currentQtyBase ?? data.currentQty ?? 0);
-        if (qty < 0) add('MEDIUM', 'NEGATIVE_QTY', label(id), `目前数量 ${qty}。可能是盘点或收货单位换算错误。`, id);
-        if (!data.baseUnit && !data.unit) add('LOW', 'MISSING_UNIT', label(id), '没有基础单位，成本与数量换算可能出错。', id);
-        if (!data.stockCode && input.hasCounters && entries.length === 1) add('MEDIUM', 'MISSING_CODE', label(id), '已经执行过全部重新连号，这个商品还没有编号。可在「库存编号整理 → 为未编号商品配号」补上。', id);
+        if (qty < 0) add('MEDIUM', 'NEGATIVE_QTY', label(id), `目前数量 ${qty}。可能是盘点或收货单位换算错误。`, id, stockTarget(id));
+        if (!data.baseUnit && !data.unit) add('LOW', 'MISSING_UNIT', label(id), '没有基础单位，成本与数量换算可能出错。', id, stockTarget(id));
+        if (!data.stockCode && input.hasCounters && entries.length === 1) add('MEDIUM', 'MISSING_CODE', label(id), '已经执行过全部重新连号，这个商品还没有编号。可在「库存编号整理 → 为未编号商品配号」补上。', id, { kind: 'CODES' });
         const ns = suggestStockName(String(data.name || ''));
-        if (ns.suggested || ns.issue) add('LOW', 'NAME_FORMAT', label(id), ns.suggested ? `建议改成「${ns.suggested}」` : ns.issue === 'MISSING_ENGLISH' ? '缺英文名' : ns.issue === 'MISSING_CHINESE' ? '缺中文名' : '需人工命名', id);
+        if (ns.suggested || ns.issue) add('LOW', 'NAME_FORMAT', label(id), ns.suggested ? `建议改成「${ns.suggested}」` : ns.issue === 'MISSING_ENGLISH' ? '缺英文名' : ns.issue === 'MISSING_CHINESE' ? '缺中文名' : '需人工命名', id, stockTarget(id));
     });
 
     // 同名
@@ -100,41 +110,41 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     byId.forEach((entries, id) => { const k = nameKey(entries[0].data.name || ''); if (k) byName.set(k, [...(byName.get(k) || []), id]); });
     byName.forEach(ids => {
         if (ids.length < 2) return;
-        add('MEDIUM', 'SAME_NAME', ids.map(label).join(' / '), `${ids.length} 个商品名称相同，${ids.map(i => AREA_LABEL[byId.get(i)![0].area]).join('、')}。若是同一样东西，库存与成本会分散在几份里。`);
+        add('MEDIUM', 'SAME_NAME', ids.map(label).join(' / '), `${ids.length} 个商品名称相同，${ids.map(i => AREA_LABEL[byId.get(i)![0].area]).join('、')}。若是同一样东西，库存与成本会分散在几份里。`, undefined, stockTarget(ids[0]));
     });
 
     // 编号
     const byCode = new Map<string, string[]>();
     byId.forEach((entries, id) => { const c = entries[0].data.stockCode; if (c) byCode.set(c, [...(byCode.get(c) || []), id]); });
-    byCode.forEach((ids, code) => { if (ids.length > 1) add('HIGH', 'CODE_DUPLICATE', code, `编号 ${code} 同时用在：${ids.map(label).join('、')}`); });
+    byCode.forEach((ids, code) => { if (ids.length > 1) add('HIGH', 'CODE_DUPLICATE', code, `编号 ${code} 同时用在：${ids.map(label).join('、')}`, undefined, { kind: 'CODES' }); });
     input.codes.forEach(c => {
         const rec = c.data;
         const holder = byId.get(String(rec.stockId))?.[0];
         if (rec.status === 'RETIRED') return;
-        if (!holder) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${rec.stockId}，但这个商品已不存在。`);
-        else if (holder.data.stockCode !== (rec.code || c.id)) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${label(String(rec.stockId))}，但商品上的编号是「${holder.data.stockCode || '（没有）'}」。`, String(rec.stockId));
+        if (!holder) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${rec.stockId}，但这个商品已不存在。`, undefined, { kind: 'CODES' });
+        else if (holder.data.stockCode !== (rec.code || c.id)) add('HIGH', 'CODE_REGISTRY_MISMATCH', String(rec.code || c.id), `登记给 ${label(String(rec.stockId))}，但商品上的编号是「${holder.data.stockCode || '（没有）'}」。`, String(rec.stockId), { kind: 'CODES' });
     });
 
     // ── 供应商 ──
     const linked = new Set<string>();
-    const catalogById = new Map<string, { supplier: string; item: Record<string, any> }>();
+    const catalogById = new Map<string, { supplier: string; supplierId: string; item: Record<string, any> }>();
     input.suppliers.forEach(s => {
         const catalog: Record<string, any>[] = s.data.catalog || [];
         const unlinked: string[] = [];
         catalog.forEach(item => {
-            catalogById.set(String(item.id), { supplier: s.data.name || s.id, item });
+            catalogById.set(String(item.id), { supplier: s.data.name || s.id, supplierId: String(s.data.id || s.id), item });
             if (!item.linkedStockId) { unlinked.push(item.name); return; }
             linked.add(String(item.linkedStockId));
             if (!byId.has(String(item.linkedStockId))) {
-                add('HIGH', 'BROKEN_SUPPLIER_LINK', `${s.data.name || s.id} · ${item.name}`, `连结到 ${item.linkedStockId}，但库存里没有这个商品。收货时库存不会增加。请在供应商品项重新选择连结。`);
+                add('HIGH', 'BROKEN_SUPPLIER_LINK', `${s.data.name || s.id} · ${item.name}`, `连结到 ${item.linkedStockId}，但库存里没有这个商品。收货时库存不会增加。请在供应商品项重新选择连结；不再采购的话删除这个品项。`, undefined, { kind: 'SUPPLIER', supplierId: String(s.data.id || s.id), catalogItemId: String(item.id) });
             }
         });
         if (unlinked.length && s.data.status !== 'INACTIVE') {
-            add('LOW', 'UNLINKED_CATALOG', `${s.data.name || s.id}`, `${unlinked.length} 个品项没连结库存：${unlinked.slice(0, 6).join('、')}${unlinked.length > 6 ? '…' : ''}`);
+            add('LOW', 'UNLINKED_CATALOG', `${s.data.name || s.id}`, `${unlinked.length} 个品项没连结库存：${unlinked.slice(0, 6).join('、')}${unlinked.length > 6 ? '…' : ''}`, undefined, { kind: 'SUPPLIER', supplierId: String(s.data.id || s.id) });
         }
     });
     byId.forEach((entries, id) => {
-        if (!linked.has(id)) add('LOW', 'NO_SUPPLIER', label(id), `没有任何供应商品项连结到这个商品（市场临时采购的可以忽略）。`, id);
+        if (!linked.has(id)) add('LOW', 'NO_SUPPLIER', label(id), `没有任何供应商品项连结到这个商品（市场临时采购的可以忽略）。`, id, stockTarget(id));
     });
 
     // ── 未收货采购单 ──
@@ -143,12 +153,14 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
             const sid = String(line.stockId || '');
             const subject = `${po.data.supplierName || po.data.supplierId || ''} · ${po.id} · ${line.name}`;
             const cat = catalogById.get(sid);
+            const poTarget: AuditTarget | undefined = cat ? { kind: 'SUPPLIER', supplierId: cat.supplierId, catalogItemId: String(cat.item.id) }
+                : po.data.supplierId ? { kind: 'SUPPLIER', supplierId: String(po.data.supplierId) } : undefined;
             if (cat) {
-                if (!cat.item.linkedStockId) add('MEDIUM', 'OPEN_PO_UNLINKED', subject, '供应商品项没连结库存，收货后库存不会增加。');
-                else if (!byId.has(String(cat.item.linkedStockId))) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `供应商品项连结的 ${cat.item.linkedStockId} 已不存在。`);
+                if (!cat.item.linkedStockId) add('MEDIUM', 'OPEN_PO_UNLINKED', subject, '供应商品项没连结库存，收货后库存不会增加。', undefined, poTarget);
+                else if (!byId.has(String(cat.item.linkedStockId))) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `供应商品项连结的 ${cat.item.linkedStockId} 已不存在。`, undefined, poTarget);
                 return;
             }
-            if (!byId.has(sid)) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `品项代码「${sid}」既不是供应商品项也不是库存商品，收货时库存不会增加。`);
+            if (!byId.has(sid)) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `品项代码「${sid}」既不是供应商品项也不是库存商品，收货时库存不会增加。`, undefined, poTarget);
         });
     });
 
@@ -156,13 +168,13 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     input.menu.forEach(m => {
         (m.data.variants || []).forEach((v: Record<string, any>) => (v.recipe || []).forEach((ing: Record<string, any>) => {
             if (ing.stockId && !byId.has(String(ing.stockId))) {
-                add('MEDIUM', 'BROKEN_RECIPE', `${m.data.name}${v.label ? `（${v.label}）` : ''} · ${ing.stockName || ing.stockId}`, `配方用到的 ${ing.stockId} 已不存在，菜品成本会少算。请在智能菜谱重新选择食材。`);
+                add('MEDIUM', 'BROKEN_RECIPE', `${m.data.name}${v.label ? `（${v.label}）` : ''} · ${ing.stockName || ing.stockId}`, `配方用到的 ${ing.stockId} 已不存在，菜品成本会少算。请在智能菜谱重新选择食材。`, undefined, { kind: 'MENU', menuId: String(m.data.id || m.id) });
             }
         }));
     });
     input.pendingTasks.forEach(t => {
         const missing = (t.data.items || []).filter((i: Record<string, any>) => !byId.has(String(i.stockId)));
-        if (missing.length) add('MEDIUM', 'BROKEN_TASK', `盘点任务 ${t.id}（${t.data.assigneeName || ''}）`, `${missing.length} 个商品已不存在：${missing.slice(0, 5).map((i: any) => i.stockName).join('、')}。执行时会自动略过。`);
+        if (missing.length) add('MEDIUM', 'BROKEN_TASK', `盘点任务 ${t.id}（${t.data.assigneeName || ''}）`, `${missing.length} 个商品已不存在：${missing.slice(0, 5).map((i: any) => i.stockName).join('、')}。执行时会自动略过。`, undefined, { kind: 'TASKS' });
     });
 
     return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.title.localeCompare(b.title) || a.subject.localeCompare(b.subject));
