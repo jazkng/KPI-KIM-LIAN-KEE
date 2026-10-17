@@ -4,6 +4,7 @@ import { ShoppingCart, Package, Truck, AlertTriangle, Plus, FileText, Send, Prin
 import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, CatalogItem } from '../../types';
 import { normalizeCatalogItem } from '../utils';
 import { DataManager } from '../../utils/dataManager';
+import { resolveStockArea } from '../../utils/inventory/stockArea';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
     calculateWeightedAverageCost, calculateReceivedLine, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
@@ -591,18 +592,18 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             });
         } else {
             if (activeCategory === 'KITCHEN') {
-                list = list.filter(i => i.id.startsWith('K') || ['MEAT','SEAFOOD','VEG','NOODLE','DRY','SAUCE','HQ','FRESH'].includes(i.category));
+                list = list.filter(i => resolveStockArea(i) === 'KITCHEN');
                 if (activeSubCategory !== 'ALL') {
                     list = list.filter(i => i.category === activeSubCategory);
                 }
             } else if (activeCategory === 'BAR') {
-                list = list.filter(i => i.id.startsWith('B') || ['TEA','FRUIT','RTD','MISC','DRINK'].includes(i.category));
+                list = list.filter(i => resolveStockArea(i) === 'BAR');
             } else if (activeCategory === 'GENERAL') {
-                list = list.filter(i => (i.id.startsWith('S') || i.id.startsWith('G')) && i.category !== 'PACKAGING');
+                list = list.filter(i => resolveStockArea(i) === 'GENERAL' && i.category !== 'PACKAGING');
             } else if (activeCategory === 'PACKAGING') {
                 list = list.filter(i => i.category === 'PACKAGING');
             } else if (activeCategory === 'FUEL') {
-                list = list.filter(i => ['GAS','CHARCOAL','OIL'].includes(i.category));
+                list = list.filter(i => resolveStockArea(i) === 'FUEL');
             }
         }
 
@@ -799,14 +800,14 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             if (targetId === 'ALL') {
                 targetItems = latestStockItems;
             } else if (targetId === 'KITCHEN') {
-                targetItems = latestStockItems.filter(i => i.id.startsWith('K') || ['MEAT','SEAFOOD','VEG','NOODLE','DRY','SAUCE','HQ','FRESH'].includes(i.category));
+                targetItems = latestStockItems.filter(i => resolveStockArea(i) === 'KITCHEN');
                 if (subTarget) targetItems = targetItems.filter(i => i.category === subTarget);
             } else if (targetId === 'BAR') {
-                targetItems = latestStockItems.filter(i => i.id.startsWith('B') || ['TEA','FRUIT','RTD','MISC','DRINK'].includes(i.category));
+                targetItems = latestStockItems.filter(i => resolveStockArea(i) === 'BAR');
             } else if (targetId === 'GENERAL') {
-                targetItems = latestStockItems.filter(i => i.id.startsWith('S') || i.id.startsWith('G') || i.category === 'PACKAGING');
+                targetItems = latestStockItems.filter(i => resolveStockArea(i) === 'GENERAL');
             } else if (targetId === 'FUEL') {
-                targetItems = latestStockItems.filter(i => ['GAS','CHARCOAL','OIL'].includes(i.category));
+                targetItems = latestStockItems.filter(i => resolveStockArea(i) === 'FUEL');
             }
         } else if (type === 'SUPPLIER') {
             const supplier = suppliers.find(s => s.id === targetId);
@@ -1333,14 +1334,20 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 }
             });
 
+            // 按库存实际所在的集合写回（不看 ID 前缀）；判断不了就整单停下，避免在别的区域生出复制品
+            const unresolved = changedItems.filter(item => !resolveStockArea(item));
+            if (unresolved.length > 0) {
+                alert(
+                    `⚠️ 以下库存品项无法判断属于哪个区域（厨房 / 吧台 / 杂项 / 燃料），本次收货没有写入任何资料：\n\n` +
+                    `${unresolved.slice(0, 8).map(i => i.name).join('\n')}\n\n请先在库存模块确认这些品项的分类后再收货。`
+                );
+                return;
+            }
             const changedByCategory: Record<string, StockItem[]> = {};
             changedItems.forEach(item => {
-                let mainCat = 'GENERAL';
-                if (item.id.startsWith('K') || ['FRESH','MEAT','SEAFOOD','VEG','NOODLE','DRY','SAUCE','HQ'].includes(item.category)) mainCat = 'KITCHEN';
-                else if (item.id.startsWith('B') || ['TEA','FRUIT','RTD','MISC','DRINK'].includes(item.category)) mainCat = 'BAR';
-                else if (['GAS','CHARCOAL','OIL'].includes(item.category)) mainCat = 'FUEL';
-                if (!changedByCategory[mainCat]) changedByCategory[mainCat] = [];
-                changedByCategory[mainCat].push(item);
+                const area = resolveStockArea(item)!;
+                if (!changedByCategory[area]) changedByCategory[area] = [];
+                changedByCategory[area].push(item);
             });
 
             await Promise.all(

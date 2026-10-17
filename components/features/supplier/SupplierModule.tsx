@@ -33,10 +33,11 @@ import { BillFormModal } from './BillFormModal';
 import { ReceivePOModal } from './ReceivePOModal';
 import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
+import { resolveStockArea } from '../../../utils/inventory/stockArea';
 
 // 共用常量
 import { 
-    ITEMS_PER_PAGE, DEFAULT_UOMS, CATEGORY_MAP, SUP_LABEL_STYLE, SupplierReceivedItem 
+    ITEMS_PER_PAGE, DEFAULT_UOMS, SUP_LABEL_STYLE, SupplierReceivedItem 
 } from './supplierConstants';
 
 interface SupplierModuleProps {
@@ -444,8 +445,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
 
         if (newItem.linkedStockId) {
             const targetStock = allStockList.find(s => s.id === newItem.linkedStockId);
-            if (targetStock) {
-                const type = (CATEGORY_MAP[targetStock.category] || 'KITCHEN') as 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
+            // 写回库存实际所在的区域；判断不了就不写，避免在别的区域新建同 ID 的复制品
+            const type = targetStock ? resolveStockArea(targetStock) : null;
+            if (targetStock && !type) {
+                alert(`⚠️ 供应商品项已保存，但无法确定库存「${targetStock.name}」所在的区域（可能同一编号出现在两个区域），所以没有更新库存的采购单位。请联络管理员检查。`);
+            }
+            if (targetStock && type) {
                 const isWeightBased = newItem.pricingMode === 'WEIGHT_BASED' || newItem.conversionMode === 'ACTUAL_WEIGHT';
 
                 if (isWeightBased) {
@@ -626,6 +631,18 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             const supplier = suppliers.find(s => s.id === receivingPO.supplierId);
             const billCategory = supplier?.category || 'SUPPLIER';
 
+            // 没有连结库存的品项：以前会静默略过，现在先列出来让收货人确认
+            const unlinkedNames = receivedItems
+                .filter(item => (Number(item.receivedQty) || 0) > 0 || (Number(item.receivedWeight) || 0) > 0)
+                .filter(item => {
+                    const catalogItem = supplier?.catalog?.find(c => c.id === item.stockId);
+                    return !(catalogItem?.linkedStockId && allStockList.some(s => s.id === catalogItem.linkedStockId));
+                })
+                .map(item => item.name);
+            if (unlinkedNames.length && !confirm(`⚠️ 以下 ${unlinkedNames.length} 个品项没有连结库存（或连结的库存已不存在），收货后库存数量不会增加：\n\n${unlinkedNames.join('\n')}\n\n仍要继续收货吗？`)) {
+                return;
+            }
+
             receivedItems.forEach((item) => {
                 const catalogItem = supplier?.catalog?.find(c => c.id === item.stockId);
                 if (catalogItem && catalogItem.linkedStockId) {
@@ -670,8 +687,14 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 }
             });
 
+            // 写回库存实际所在的区域；有任何一件判断不了就整笔停下（还没写入任何资料）
+            const unresolved = changedItems.filter(item => !resolveStockArea(item));
+            if (unresolved.length) {
+                alert(`❌ 无法确定以下库存所在的区域（可能同一编号出现在两个区域），收货没有保存：\n\n${unresolved.map(i => i.name).join('\n')}\n\n请联络管理员检查后再收货。`);
+                return;
+            }
             const changedByCategory: Record<string, StockItem[]> = {};
-            changedItems.forEach(item => { const mainCat = CATEGORY_MAP[item.category] || 'KITCHEN'; if (!changedByCategory[mainCat]) changedByCategory[mainCat] = []; changedByCategory[mainCat].push(item); });
+            changedItems.forEach(item => { const mainCat = resolveStockArea(item)!; if (!changedByCategory[mainCat]) changedByCategory[mainCat] = []; changedByCategory[mainCat].push(item); });
             const updatePromises = Object.entries(changedByCategory).filter(([_, items]) => items.length > 0).map(([cat, items]) => DataManager.batchUpdateStock(cat as any, items));
             await Promise.all(updatePromises);
 

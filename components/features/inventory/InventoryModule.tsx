@@ -17,6 +17,7 @@ import { AssignModal } from './AssignModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
+import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { StockEditModal } from './StockEditModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
@@ -852,31 +853,33 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 return { ...item, diff }; // 将差异值携带进去
             }).filter(item => item.diff !== 0);
 
-            // 按大分类分组（仅变动物品）
+            // 按库存实际所在的集合分组（仅变动物品）；同一 ID 在多个区域的复制品要先人工处理，不猜
+            const areaById = new Map<string, string>();
+            const unresolved: string[] = [];
+            targetItems.forEach(item => {
+                const area = resolveStockArea(item);
+                if (area) areaById.set(item.id, area);
+                else unresolved.push(item.name);
+            });
+            if (unresolved.length > 0) {
+                alert(
+                    `⚠️ 以下品项无法判断属于哪个区域（可能同一 ID 同时存在于两个区域），本次盘点没有写入任何资料：\n\n` +
+                    `${unresolved.slice(0, 8).join('\n')}${unresolved.length > 8 ? `\n…还有 ${unresolved.length - 8} 项` : ''}\n\n请先通知管理员处理后再提交。`
+                );
+                return;
+            }
+
             const changedByCategory: Record<string, StockItem[]> = {};
             changedOnly.forEach(item => {
-                const cat = item.category || currentStockView;
-                let mainCategory = currentStockView;
-                for (const [groupKey, sections] of Object.entries(CATEGORY_SECTIONS)) {
-                    if (sections.some(s => s.id === cat)) {
-                        mainCategory = groupKey as any;
-                        break;
-                    }
-                }
+                const mainCategory = areaById.get(item.id)!;
                 if (!changedByCategory[mainCategory]) changedByCategory[mainCategory] = [];
                 changedByCategory[mainCategory].push(item);
             });
 
-            // 日志按分类分组
+            // 日志跟着品项的实际区域分组
             const logItemsByCategory: Record<string, InventoryLogItem[]> = {};
             logItems.forEach((li) => {
-                let mainCategory = currentStockView;
-                for (const [groupKey, sections] of Object.entries(CATEGORY_SECTIONS)) {
-                    if (sections.some(s => s.id === li._category)) {
-                        mainCategory = groupKey as any;
-                        break;
-                    }
-                }
+                const mainCategory = areaById.get(li.stockId)!;
                 if (!logItemsByCategory[mainCategory]) logItemsByCategory[mainCategory] = [];
                 const { _category, ...cleanLog } = li;
                 logItemsByCategory[mainCategory].push(cleanLog);
@@ -1210,14 +1213,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             const stockItem = editTaskStockData.find(s => s.id === stockId);
             if (!stockItem) return existing || null;
             
-            let itemCategory = 'KITCHEN';
-            for (const [groupKey, sections] of Object.entries(CATEGORY_SECTIONS)) {
-                if (sections.some(s => s.id === stockItem.category)) {
-                    itemCategory = groupKey;
-                    break;
-                }
-            }
-            
+            // 任务里记的是区域（KITCHEN / BAR / GENERAL / FUEL）：以库存实际所在集合为准
+            const itemCategory = resolveStockArea(stockItem) ?? getInventoryScopeForCategory(stockItem.category);
+
             return {
                 ...existing,
                 stockId: stockItem.id, stockName: stockItem.name,
@@ -1243,15 +1241,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             return;
         }
         // 提取任务中包含的所有主分类 (e.g. ['KITCHEN', 'FUEL'])
-        const categoriesInTask = Array.from(new Set(task.items.map(ti => {
-            let cat = 'KITCHEN';
-            for (const [groupKey, sections] of Object.entries(CATEGORY_SECTIONS)) {
-                if (sections.some(s => s.id === ti.category)) {
-                    cat = groupKey; break;
-                }
-            }
-            return cat;
-        })));
+        // ti.category 存的是区域名（旧任务可能是子分类）；两种都认得，不能把 BAR / FUEL 当成 KITCHEN
+        const categoriesInTask = Array.from(new Set(task.items.map(ti => getInventoryScopeForCategory(ti.category))));
         
         // 如果数据异常，至少保证拉一个 KITCHEN
         if (categoriesInTask.length === 0) categoriesInTask.push('KITCHEN');
@@ -1267,9 +1258,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         
         // 极端情况拦截：如果任务里所有东西都被老板删完了
         if (validTaskItems.length === 0) {
-            alert("⚠️ 该任务包含的所有物品均已被移出库存，任务自动失效。");
-            await DataManager.saveInventoryTask({ ...task, status: 'COMPLETED' });
-            loadTasks();
+            // 不自动结束任务：读取失败或区域判断错误时，自动关掉会让任务无声消失
+            if (await (window as any).systemDialog.confirm("⚠️ 在库存中找不到该任务包含的任何物品（可能已被删除）。要结束这个任务吗？", "库存管理")) {
+                await DataManager.saveInventoryTask({ ...task, status: 'COMPLETED' });
+                loadTasks();
+            }
             return;
         }
 
