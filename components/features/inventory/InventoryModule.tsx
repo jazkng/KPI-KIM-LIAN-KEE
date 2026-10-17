@@ -4,7 +4,7 @@ import {
     Search, Layers, AlertTriangle, ChevronUp, ChevronDown, 
     Plus, Edit3, CheckCircle2, X, Image as ImageIcon,
     Box, Minus, DollarSign, History, Clock, User, Scale, Loader2, Check, Flame, Send, ClipboardList, CheckSquare, PlayCircle, RefreshCw,
-    FileDown, UserCheck, PenLine, Users, XCircle, AlertOctagon, RotateCcw, CalendarClock, ArrowLeft, HelpCircle, Lock, Hash
+    FileDown, UserCheck, PenLine, Users, XCircle, AlertOctagon, RotateCcw, CalendarClock, ArrowLeft, HelpCircle, Lock
 } from 'lucide-react';
 import { StockItem, Employee, AppModule, Supplier, InventoryLog, InventoryLogItem, InventoryTask, InventoryPermission, InventoryScope, PortalRole, AppLanguage } from '../../../types';
 import { 
@@ -21,7 +21,6 @@ import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
-import { StockCodeMigration } from './StockCodeMigration';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
@@ -460,7 +459,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     const [completionLog, setCompletionLog] = useState<TaskCompletion[]>([]);
 
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-    const [isStockCodeToolOpen, setIsStockCodeToolOpen] = useState(false);
     const [exportConfig, setExportConfig] = useState({
         categories: { KITCHEN: true, BAR: false, GENERAL: false, FUEL: false },
         showCost: true,
@@ -1986,12 +1984,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 >
                                     {isGeneratingPdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} 导出
                                 </button>
-                                {canManageCodes && <button
-                                    onClick={() => setIsStockCodeToolOpen(true)}
-                                    className="flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white px-2 text-[10px] font-black text-gray-600 active:scale-[0.98]"
-                                >
-                                    <Hash size={14}/> 编号整理
-                                </button>}
                                 {canAddItem && <button
                                     onClick={() => setEditingItem({ category: CATEGORY_SECTIONS[currentStockView][0].id, unit: 'unit' })}
                                     className="flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-xl bg-[#111111] px-2 text-[10px] font-black text-[#FFD200] active:scale-[0.98]"
@@ -2052,7 +2044,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     >
                                         {isGeneratingPdf ? <Loader2 size={18} className="animate-spin"/> : <FileDown size={18}/>}
                                     </button>
-                                    {canManageCodes && <button onClick={() => setIsStockCodeToolOpen(true)} className="bg-white border border-gray-200 text-gray-600 p-2 rounded-xl shadow-sm hover:bg-gray-50" title="库存编号整理"><Hash size={18}/></button>}
                                     {canAddItem && <button onClick={() => setEditingItem({ category: CATEGORY_SECTIONS[currentStockView][0].id, unit: 'unit' })} className="bg-[#111111] text-[#FFD200] p-2 rounded-xl shadow-sm hover:bg-black"><Plus size={18}/></button>}
                                 </>
                             )}
@@ -2474,14 +2465,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         </div>
                     </div>
                 </div>
-            )}
-
-            {isStockCodeToolOpen && canManageCodes && (
-                <StockCodeMigration
-                    operatorName={employee?.name || '负责人'}
-                    onClose={() => setIsStockCodeToolOpen(false)}
-                    onChanged={() => loadStock(currentStockView)}
-                />
             )}
 
             {isExportModalOpen && canViewStock && (
