@@ -2171,7 +2171,7 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             setMultiOpen(false);
 
             if (provisional.length) {
-                alert(`ℹ️ 以下月份的经营盈亏是「${PNL_STATUS_LABEL.PROVISIONAL}」，Excel 里的 NET PROFIT 不是最终数字：\n${provisional.join('、')}\n\n原因（平台未对账、薪资未发放、缺日结等）请到「盈亏对账」查看。`);
+                alert(`ℹ️ 以下月份的经营盈亏是「${PNL_STATUS_LABEL.PROVISIONAL}」，Excel 里的 NET PROFIT 不是最终数字：\n${provisional.join('、')}\n\n原因（平台未对账、薪资未发放、缺日结等）请到「数据审查中心 → 盈亏对账」查看。`);
             }
             if (selfCheck && selfCheck.issues.length > 0) {
                 alert(`⚠️ 自我校验发现 ${selfCheck.issues.length} 个科目跟画面对不上，已经写在 Excel 最后一段。\n请先别拿这份去报税或给会计，把那几行截图给开发者看。`);

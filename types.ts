@@ -970,6 +970,52 @@ export interface StockItem {
     requiresActualWeightOnReceive?: boolean;
     currentWeightQty?: number;
     weightUnit?: string;
+
+    // 库存编号（2026-10-17，全部可选；V1 不认得也不影响）。id 永远不改，stockCode 是给人看的编号。
+    stockCode?: string;              // 例如 K0001（K 厨房 / B 吧台 / G 杂项 / F 燃料）
+    stockCodeAssignedAt?: string;
+    stockCodeAssignedBy?: string;
+    stockCodeSource?: 'MIGRATION' | 'AUTO' | 'MANUAL';
+    stockCodeRunId?: string;         // 由哪一次重新编号写入（回滚用）
+    legacyCodes?: string[];          // 以前显示过的旧编号，隐藏保存，搜寻仍然找得到
+    nameHistory?: { name: string; changedAt: string; changedBy: string; runId?: string }[];
+}
+
+/** stock_codes/{code}：编号登记表，一个编号只属于一个商品，发出后不再重复使用 */
+export interface StockCodeRecord {
+    code: string;
+    stockId: string;
+    area: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
+    status: 'ACTIVE' | 'RETIRED';
+    assignedAt: string;
+    assignedBy: string;
+    source: 'MIGRATION' | 'AUTO' | 'MANUAL';
+    runId?: string;
+}
+
+/** stock_code_counters/{K|B|G|F}：下一个要发的号码 */
+export interface StockCodeCounter {
+    prefix: string;
+    nextSeq: number;
+    updatedAt: string;
+}
+
+/** stock_code_migration_runs/{runId}：每次重新编号的执行记录 */
+export interface StockCodeMigrationRun {
+    id: string;
+    startedAt: string;
+    finishedAt?: string;
+    by: string;
+    planHash: string;
+    total: number;
+    done: number;
+    skipped: number;
+    failed: number;
+    renamed: number;
+    status: 'RUNNING' | 'DONE' | 'PARTIAL' | 'ROLLED_BACK';
+    countersBefore: Record<string, number | null>;
+    countersAfter: Record<string, number>;
+    backupSummary?: { collection: string; count: number; sha256: string }[];
 }
 
 export interface InventoryLogItem {

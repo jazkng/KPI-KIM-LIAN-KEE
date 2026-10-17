@@ -108,6 +108,8 @@ export const LabourProfitDashboard = lazyNamed(() => import('./features/labour/L
 export const BossCockpit = lazyNamed(() => import('./features/cockpit/BossCockpit'), 'BossCockpit');
 export const PnLReconciliation = lazyNamed(() => import('./features/finance/PnLReconciliation'), 'PnLReconciliation');
 export const ExpenseAudit = lazyNamed(() => import('./features/finance/ExpenseAudit'), 'ExpenseAudit');
+export const DataToolsHub = lazyNamed(() => import('./features/system/DataToolsHub'), 'DataToolsHub');
+export const StockCodeMigration = lazyNamed(() => import('./features/inventory/StockCodeMigration'), 'StockCodeMigration');
 export const AccountsPayableModule = lazyNamed(() => import('./features/ap/AccountsPayableModule'), 'AccountsPayableModule');
 export const TreasuryModule = lazyNamed(() => import('./features/TreasuryModule'), 'TreasuryModule');
 export const WarrantyModule = lazyNamed(() => import('./features/WarrantyModule'), 'WarrantyModule');

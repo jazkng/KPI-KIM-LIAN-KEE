@@ -435,7 +435,7 @@ export const ClassicPnLTab: React.FC<ClassicPnLTabProps> = ({
                     {blockingReasons.length > 0 && (
                         <ul className="mt-1 list-disc pl-4">
                             {blockingReasons.slice(0, 6).map((r, i) => <li key={i}>{r.label}{r.amount !== undefined ? `（RM ${fmt(r.amount)}）` : ''}</li>)}
-                            {blockingReasons.length > 6 && <li>另有 {blockingReasons.length - 6} 项，详见「盈亏对账」</li>}
+                            {blockingReasons.length > 6 && <li>另有 {blockingReasons.length - 6} 项，详见「数据审查中心 → 盈亏对账」</li>}
                         </ul>
                     )}
                 </div>

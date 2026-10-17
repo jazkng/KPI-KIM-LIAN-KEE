@@ -15,9 +15,14 @@ import {
 import { PaymentVoucher } from "./paymentVoucherUtils";
 import { StorehubMonthlySales } from "./storehubImport";
 import { normalizeInventoryItem } from "./unitConversion";
+import { registerStockArea, type StockArea } from "./inventory/stockArea";
+import { keepStockCodeFields } from "./inventory/stockCode";
+import { reserveStockCode } from "./inventory/stockCodeAllocator";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
 import { buildOperationalLogNotifications } from "./notificationUtils";
 import { getBusinessDateString } from "./dateHelper";
+
+const STOCK_AREA_BY_COLLECTION: Record<string, StockArea> = { stock_kitchen: 'KITCHEN', stock_bar: 'BAR', stock_general: 'GENERAL', stock_fuel: 'FUEL' };
 
 const withoutUndefined = <T>(value: T): T =>
     JSON.parse(JSON.stringify(value)) as T;
@@ -615,6 +620,7 @@ export class DataManager {
                 const d = await getDoc(doc(db, col, stockId));
                 if (d.exists()) {
                     const item = d.data() as StockItem;
+                    registerStockArea(STOCK_AREA_BY_COLLECTION[col], [{ id: stockId }]);
                     // Apply backward compatibility fallback
                     if (!item.baseUnit) {
                         item.baseUnit = item.unit || '';
@@ -672,7 +678,7 @@ export class DataManager {
         if (type === 'KITCHEN') colName = 'stock_kitchen';
         if (type === 'BAR') colName = 'stock_bar';
         if (type === 'FUEL') colName = 'stock_fuel';
-        return DataManager.runWithCache(`stock_${colName}`, async () => {
+        const items = await DataManager.runWithCache(`stock_${colName}`, async () => {
             const snap = await getDocs(collection(db, colName));
             return snap.docs.map(d => {
                 const item = d.data() as StockItem;
@@ -684,8 +690,11 @@ export class DataManager {
                 return normalized as unknown as StockItem;
             });
         });
+        // 登记每个 ID 实际所在的区域：之后写入一律写回这里，不再按分类或 ID 前缀猜
+        registerStockArea(type, items);
+        return items;
     }
-    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem): Promise<void> {
+    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem, by = 'SYSTEM'): Promise<void> {
         let colName = 'stock_general';
         if (type === 'KITCHEN') colName = 'stock_kitchen';
         if (type === 'BAR') colName = 'stock_bar';
@@ -718,7 +727,10 @@ export class DataManager {
         await runTransaction(db, async (transaction) => {
             const snap = await transaction.get(docRef);
             const existingData = snap.exists() ? snap.data() : {};
-            transaction.set(docRef, { ...existingData, ...syncedItem });
+            // 新商品：同一交易配下一个编号（还没执行全部重新连号时不配）
+            const reserved = snap.exists() ? null : await reserveStockCode(transaction, db, type, syncedItem.id, by);
+            transaction.set(docRef, keepStockCodeFields(existingData, { ...existingData, ...syncedItem }));
+            reserved?.write(transaction, docRef);
         });
         DataManager.clearCacheKeys(['stock_']);
     }
@@ -755,7 +767,7 @@ export class DataManager {
                 const baseUnitVal = cleanItem.baseUnit || cleanItem.unit || 'pcs';
                 const costVal = cleanItem.costPerBaseUnit ?? cleanItem.cost ?? 0;
 
-                transaction.set(ref, { 
+                transaction.set(ref, keepStockCodeFields(currentDBData, { 
                     ...currentDBData, 
                     ...cleanItem, 
                     currentQty: finalQtyVal,
@@ -764,7 +776,7 @@ export class DataManager {
                     baseUnit: baseUnitVal,
                     cost: costVal,
                     costPerBaseUnit: costVal
-                });
+                }));
             });
         });
         DataManager.clearCacheKeys(['stock_']);
