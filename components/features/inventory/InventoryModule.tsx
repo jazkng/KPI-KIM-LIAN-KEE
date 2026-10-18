@@ -22,7 +22,8 @@ import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
 import { moveStockAreaRegistration, resolveStockArea } from '../../../utils/inventory/stockArea';
 import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
-import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { normalizeUnitName } from '../../../utils/unitConversion';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
@@ -126,7 +127,7 @@ const MemoizedStockCard = React.memo(({
                     ) : (
                         <div className="font-bold text-sm text-[#111111]">{displayName}</div>
                     )}
-                    <div className="text-[10px] text-gray-400 font-mono mt-0.5">{displayStockCode(item)}</div>
+                    {item.stockCode && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{item.stockCode}</div>}
                     {assignedTo && assignedTo.length > 0 && (
                         <div className="flex items-center gap-1 mt-1">
                             <UserCheck size={10} className="text-blue-500"/>
@@ -186,7 +187,7 @@ const MemoizedStockCard = React.memo(({
                             <div className="font-black text-sm md:text-base text-[#111111] truncate">{displayName}</div>
                         )}
                         <div className="text-[10px] text-gray-400 font-mono mt-1 flex flex-col gap-0.5">
-                            <span className="bg-black/5 px-1.5 py-0.5 rounded font-bold w-fit mb-0.5">{displayStockCode(item)}</span>
+                            {item.stockCode && <span className="bg-black/5 px-1.5 py-0.5 rounded font-bold w-fit mb-0.5">{item.stockCode}</span>}
                             <span>Min: {isDisplayMode ? `${(minLevelBase / displayToBaseRatio).toFixed(1)} ${tUnit(displayUnit)}` : `${minLevelBase} ${tUnit(baseUnit)}`}</span>
                         </div>
                     </div>
@@ -267,10 +268,12 @@ const MemoizedStockCard = React.memo(({
                                 )}
                                 {onEdit && <div className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors shrink-0"><Edit3 size={12}/></div>}
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[9px] text-gray-400 font-mono font-black bg-[#F6F7FB] border border-[#E5E7EB] px-1.5 py-0.5 rounded-md">
-                                    {displayStockCode(item)}
-                                </span>
+                            <div className="flex items-center gap-2 mt-1 empty:hidden">
+                                {item.stockCode && (
+                                    <span className="text-[9px] text-gray-400 font-mono font-black bg-[#F6F7FB] border border-[#E5E7EB] px-1.5 py-0.5 rounded-md">
+                                        {item.stockCode}
+                                    </span>
+                                )}
                                 {isCardOutOfStock && (
                                     <span className="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">
                                         无货
@@ -284,19 +287,15 @@ const MemoizedStockCard = React.memo(({
                             </div>
                         </div>
 
-                        {/* Conversion Summary Display */}
-                        <div className="text-[10px] text-gray-500 font-semibold flex items-center gap-1 mt-1.5">
-                            <Scale size={10} className="text-gray-400 shrink-0"/>
-                            {defaultPU ? (
+                        {/* 进货规格：只在有设定时显示；没有就不占位置 */}
+                        {defaultPU && defaultPU.unitName && normalizeUnitName(defaultPU.unitName) !== normalizeUnitName(baseUnit) && (
+                            <div className="text-[10px] text-gray-500 font-semibold flex items-center gap-1 mt-1.5">
+                                <Scale size={10} className="text-gray-400 shrink-0"/>
                                 <span className="truncate">
-                                    规格: {defaultPU.toDisplayRatio && item.displayUnit && item.displayUnit !== item.baseUnit 
-                                        ? `1 ${defaultPU.unitName} = ${defaultPU.toDisplayRatio} ${tUnit(item.displayUnit)} = ${defaultPU.toBaseRatio} ${tUnit(baseUnit)}`
-                                        : `1 ${defaultPU.unitName} = ${defaultPU.toBaseRatio} ${tUnit(baseUnit)}`}
+                                    进货 1 {defaultPU.unitName} {defaultPU.conversionMode === 'ACTUAL_WEIGHT' ? `≈ ${defaultPU.toBaseRatio} ${tUnit(baseUnit)}（称重）` : `= ${defaultPU.toBaseRatio} ${tUnit(baseUnit)}`}
                                 </span>
-                            ) : (
-                                <span className="italic text-gray-400 truncate">无采购规格换算</span>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -316,13 +315,13 @@ const MemoizedStockCard = React.memo(({
                         )}
                     </div>
                     <div className="px-2 py-1.5 bg-[#F6F7FB] rounded-lg border border-[#E5E7EB]/50">
-                        <span className="text-[8px] text-gray-400 font-black block uppercase tracking-wide">基础单价</span>
+                        <span className="text-[8px] text-gray-400 font-black block uppercase tracking-wide">成本 / {tUnit(baseUnit)}</span>
                         <span className="text-[11px] font-black text-emerald-600 block">
-                            RM {costPerBase.toFixed(3)}
+                            RM {costPerBase.toFixed(costPerBase >= 1 ? 2 : 3)}
                         </span>
                         {sstPercent > 0 && (
                             <span className="text-[7.5px] text-orange-600 font-bold block leading-none mt-1 whitespace-nowrap">
-                                +{sstPercent}% = RM {costPerBaseWithSST.toFixed(3)}
+                                +{sstPercent}% = RM {costPerBaseWithSST.toFixed(costPerBaseWithSST >= 1 ? 2 : 3)}
                             </span>
                         )}
                         {isDisplayMode && (
@@ -341,9 +340,9 @@ const MemoizedStockCard = React.memo(({
 
                 {/* Additional indicators: Assigned tasks */}
                 {assignedTo && assignedTo.length > 0 && (
-                    <div className="flex items-center gap-1 text-[9px] text-blue-600 bg-blue-50/50 border border-blue-100 p-1.5 rounded-lg">
-                        <UserCheck size={10}/>
-                        <span className="font-bold truncate">已指派: {[...new Set(assignedTo.map((a: any) => a.assigneeName))].join(', ')}</span>
+                    <div className="flex items-center gap-1 text-[9px] text-blue-600 -mt-1">
+                        <UserCheck size={10} className="shrink-0"/>
+                        <span className="font-bold truncate">盘点: {[...new Set(assignedTo.map((a: any) => a.assigneeName))].join(', ')}</span>
                     </div>
                 )}
             </div>

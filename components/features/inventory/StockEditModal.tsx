@@ -474,12 +474,11 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>物料编码 (ID Code)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>库存编号 (Stock Code)</label>
                                 <input 
                                     className={`${INPUT_STYLE} font-mono bg-gray-50 text-gray-400 cursor-not-allowed`} 
-                                    value={editingItem.id || '自动生成 (Auto)'} 
+                                    value={editingItem.stockCode || (editingItem.id ? '未编号' : '存档后自动配号')} 
                                     readOnly 
-                                    placeholder="Auto" 
                                 />
                             </div>
                             <div>
