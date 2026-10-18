@@ -23,6 +23,8 @@ import { SettlementRecord, ExpenseItem } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { getMalaysiaDateString } from '../../utils/dateHelper';
+import { shiftDate } from '../../utils/apDueDate';
 
 interface DailyBusinessReportModalProps {
     isOpen: boolean;
@@ -152,10 +154,8 @@ export const DailyBusinessReportModal: React.FC<DailyBusinessReportModalProps> =
 }) => {
     // Determine Malaysia (UTC+8) yesterday
     const defaultYesterday = useMemo(() => {
-        const now = new Date();
-        const utc8 = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (3600000 * 8));
-        const yesterday = new Date(utc8.getTime() - 86400000);
-        return yesterday.toISOString().split('T')[0];
+        // 马来西亚日期（原本的算法在马来西亚的手机上，凌晨会多减一天）
+        return shiftDate(getMalaysiaDateString(), -1);
     }, []);
 
     // Active settlements list (with fallback fetch)
