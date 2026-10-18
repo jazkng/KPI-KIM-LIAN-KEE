@@ -35,6 +35,7 @@ import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+import { categoryShortLabel, outstandingBySupplier, SUPPLIER_GROUPS, supplierGroupInfo, supplierGroupOf, type SupplierGroupId } from '../../../utils/supplier/supplierGroups';
 
 const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
 import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../../utils/inventory/catalogPrices';
@@ -245,11 +246,39 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         }
     }, [selectedSupplier]);
 
+    // 列表筛选：分类（肉类、海鲜类…）与「只看未付款」
+    const [groupFilter, setGroupFilter] = useState<SupplierGroupId | 'ALL'>('ALL');
+    const [unpaidOnly, setUnpaidOnly] = useState(false);
+    const [unpaidBills, setUnpaidBills] = useState<ExpenseItem[]>([]);
+    useEffect(() => {
+        if (mainTab !== 'SUPPLIERS' || view !== 'LIST') return;
+        // 只读：未付清的账单（回到列表时重读，付款后金额会更新）
+        getDocs(query(collection(db, 'standalone_expenses'), where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])))
+            .then(snap => setUnpaidBills(snap.docs.map(d => d.data() as ExpenseItem)))
+            .catch(err => console.error('读取未付款失败', err));
+    }, [mainTab, view]);
+    const outstandingMap = useMemo(() => outstandingBySupplier(suppliers, unpaidBills), [suppliers, unpaidBills]);
+    const totalOutstanding = useMemo(() => Object.values(outstandingMap).reduce((a, b) => a + b, 0), [outstandingMap]);
+    const groupCounts = useMemo(() => {
+        const c: Partial<Record<SupplierGroupId, number>> = {};
+        suppliers.forEach(s => { const g = supplierGroupOf(s.category); c[g] = (c[g] || 0) + 1; });
+        return c;
+    }, [suppliers]);
+
     const filteredSuppliers = useMemo(() => {
+        const term = searchTerm.toLowerCase();
         return suppliers
-            .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.category.toLowerCase().includes(searchTerm.toLowerCase()) || s.tags?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())) || s.id.includes(searchTerm))
-            .sort((a, b) => { if (a.isFavorite && !b.isFavorite) return -1; if (!a.isFavorite && b.isFavorite) return 1; return a.name.localeCompare(b.name); });
-    }, [suppliers, searchTerm]);
+            .filter(s => s.name.toLowerCase().includes(term) || s.category.toLowerCase().includes(term) || categoryShortLabel(s.category).includes(searchTerm) || s.tags?.some(t => t.toLowerCase().includes(term)) || s.id.includes(searchTerm))
+            .filter(s => groupFilter === 'ALL' || supplierGroupOf(s.category) === groupFilter)
+            .filter(s => !unpaidOnly || (outstandingMap[s.id] || 0) > 0)
+            .sort((a, b) => {
+                const ia = a.status === 'INACTIVE' ? 1 : 0, ib = b.status === 'INACTIVE' ? 1 : 0;
+                if (ia !== ib) return ia - ib; // 停用的排最后
+                if (unpaidOnly) return (outstandingMap[b.id] || 0) - (outstandingMap[a.id] || 0);
+                if (a.isFavorite && !b.isFavorite) return -1; if (!a.isFavorite && b.isFavorite) return 1;
+                return a.name.localeCompare(b.name);
+            });
+    }, [suppliers, searchTerm, groupFilter, unpaidOnly, outstandingMap]);
 
     const filteredExportSuppliers = useMemo(() => {
         return suppliers
@@ -1434,40 +1463,71 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 </button>
                             </div>
                         </div>
+                        {/* 分类与未付款筛选（手机也看得到） */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button onClick={() => setGroupFilter('ALL')} className={`min-h-[36px] rounded-full border px-3 text-xs font-black ${groupFilter === 'ALL' ? 'border-[#111111] bg-[#111111] text-[#FFD200]' : 'border-gray-200 bg-white text-gray-600'}`}>全部 {suppliers.length}</button>
+                            {SUPPLIER_GROUPS.filter(g => groupCounts[g.id]).map(g => (
+                                <button key={g.id} onClick={() => setGroupFilter(groupFilter === g.id ? 'ALL' : g.id)}
+                                    className={`min-h-[36px] rounded-full border px-3 text-xs font-black ${groupFilter === g.id ? 'border-[#111111] bg-[#111111] text-[#FFD200]' : 'border-gray-200 bg-white text-gray-600'}`}>
+                                    {g.icon} {g.label} {groupCounts[g.id]}
+                                </button>
+                            ))}
+                            <button onClick={() => setUnpaidOnly(v => !v)}
+                                className={`min-h-[36px] rounded-full border px-3 text-xs font-black md:ml-auto ${unpaidOnly ? 'border-rose-600 bg-rose-600 text-white' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+                                💰 只看未付款{totalOutstanding > 0 ? `（共 RM ${totalOutstanding.toFixed(2)}）` : ''}
+                            </button>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {filteredSuppliers.map(sup => (
-                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className="relative bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-sm hover:shadow-[0_8px_30px_rgba(255,210,0,0.15)] hover:border-[#FFD200]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full overflow-hidden">
-                                    <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
-                                    <div className="absolute top-2 right-2 p-2 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"><Truck size={48}/></div>
-                                    <div className="flex items-start justify-between gap-2 mb-3 relative z-10">
-                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-xs shadow-md shrink-0">{(sup.name || '?').trim().slice(0, 2).toUpperCase()}</div>
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="font-black text-sm text-[#111111] leading-snug line-clamp-2 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
-                                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest mt-1 ${sup.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${sup.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{sup.status}</span>
+                            {filteredSuppliers.map(sup => {
+                                const group = supplierGroupInfo(supplierGroupOf(sup.category));
+                                const inactive = sup.status === 'INACTIVE';
+                                const owed = outstandingMap[sup.id] || 0;
+                                const catLabels = [...new Set([sup.category, ...(sup.secondaryCategories || [])].filter(Boolean).map(c => categoryShortLabel(c)))];
+                                return (
+                                <div key={sup.id} onClick={() => { setSelectedSupplier(sup); setView('DETAIL'); setActiveDetailTab('CATALOG'); }} className={`relative rounded-2xl p-4 border shadow-sm hover:shadow-[0_8px_30px_rgba(255,210,0,0.15)] hover:border-[#FFD200]/60 transition-all duration-300 cursor-pointer group flex flex-col h-full ${inactive ? 'bg-gray-50 border-gray-200 opacity-75' : 'bg-white border-[#E5E7EB]'}`}>
+                                    <div className="flex items-start gap-2.5 mb-3">
+                                        <div className={`w-11 h-11 rounded-xl border flex flex-col items-center justify-center shrink-0 ${group.color}`} title={group.label}>
+                                            <span className="text-lg leading-none">{group.icon}</span>
+                                            <span className="text-[8px] font-black leading-none mt-0.5">{group.label}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="font-black text-sm text-[#111111] leading-snug break-words line-clamp-3 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
+                                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                <span className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-gray-600">#{sup.id}</span>
+                                                {inactive && <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white">已停用</span>}
                                             </div>
                                         </div>
-                                        <button onClick={(e) => handleToggleFavorite(e, sup)} className="p-1.5 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:bg-gray-50 transition-all hover:scale-110 active:scale-95 shrink-0 mt-0.5"><Star size={14} className={sup.isFavorite ? "fill-[#FFD200] text-[#FFD200]" : "text-gray-200"} /></button>
+                                        <button onClick={(e) => handleToggleFavorite(e, sup)} className="p-1.5 rounded-full bg-white border border-gray-100 hover:bg-gray-50 transition-all active:scale-95 shrink-0" title={sup.isFavorite ? '取消常用' : '设为常用'}><Star size={14} className={sup.isFavorite ? "fill-[#FFD200] text-[#FFD200]" : "text-gray-200"} /></button>
                                     </div>
-                                    {sup.restDayNote && (<div className="mb-3 bg-orange-50/80 border border-orange-100/50 rounded-lg px-2 py-1.5 flex items-start gap-1.5 relative z-10"><CalendarOff size={12} className="text-orange-500 mt-px shrink-0"/><p className="text-[10px] font-bold text-orange-800 leading-tight line-clamp-1">{sup.restDayNote}</p></div>)}
-                                    <div className="space-y-2 mt-auto relative z-10">
-                                        <p className="text-[11px] text-gray-500 font-medium flex items-center gap-1.5 truncate"><User size={12} className="text-gray-400 shrink-0"/> {sup.contactPerson || sup.name.slice(0, 12)}</p>
-                                        {sup.contact && (<button onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${sup.contact.replace(/\D/g, '')}`, '_blank'); }} className="text-[10px] text-green-600 font-bold flex items-center gap-1 hover:text-green-700"><Phone size={10}/> {sup.contact.slice(-8)}</button>)}
-                                        <div className="flex gap-1.5 flex-wrap">
-                                            {sup.category && <span className="text-[9px] font-bold bg-[#111111]/5 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200/50 truncate max-w-full">{sup.category}</span>}
-                                            {sup.tags?.slice(0, 2).map(t => <span key={t} className="text-[9px] font-bold bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md border border-gray-100 truncate">#{t}</span>)}
-                                        </div>
-                                        <div className="pt-3 mt-1 border-t border-gray-100/80 flex justify-between items-center text-[11px] font-black text-gray-500">
-                                            <span>📦 {sup.catalog?.length || 0} 品项</span>
+                                    {sup.restDayNote && (<div className="mb-3 bg-orange-50/80 border border-orange-100/50 rounded-lg px-2 py-1.5 flex items-start gap-1.5"><CalendarOff size={12} className="text-orange-500 mt-px shrink-0"/><p className="text-[10px] font-bold text-orange-800 leading-tight line-clamp-1">{sup.restDayNote}</p></div>)}
+                                    <div className="space-y-2 mt-auto">
+                                        {(sup.contactPerson || sup.contact) && (
+                                            <div className="flex items-center gap-3 text-[11px]">
+                                                {sup.contactPerson && <span className="text-gray-500 font-medium flex items-center gap-1 truncate"><User size={12} className="text-gray-400 shrink-0"/> {sup.contactPerson}</span>}
+                                                {sup.contact && (<button onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${sup.contact.replace(/\D/g, '')}`, '_blank'); }} className="text-[10px] text-green-600 font-bold flex items-center gap-1 hover:text-green-700 shrink-0"><Phone size={10}/> {sup.contact.slice(-8)}</button>)}
+                                            </div>
+                                        )}
+                                        {catLabels.length > 0 && (
+                                            <div className="flex gap-1.5 flex-wrap">
+                                                {catLabels.slice(0, 3).map(l => <span key={l} className="text-[10px] font-bold bg-gray-50 text-gray-600 px-2 py-0.5 rounded-md border border-gray-200 truncate max-w-full">{l}</span>)}
+                                            </div>
+                                        )}
+                                        <div className="pt-3 mt-1 border-t border-gray-100/80 flex justify-between items-center gap-2 text-[11px] font-black text-gray-500">
+                                            <span className="flex flex-col">
+                                                <span>📦 {sup.catalog?.length || 0} 品项</span>
+                                                {owed > 0 && <span className="text-rose-600">未付 RM {owed.toFixed(2)}</span>}
+                                            </span>
                                             <div className="flex items-center gap-1 bg-[#111111] text-[#FFD200] px-3 py-1.5 rounded-lg text-[10px] shadow-sm font-black active:scale-95 transition-all">
                                                 详情 <ArrowLeft size={10} className="rotate-180 text-[#FFD200]"/>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                         {filteredSuppliers.length === 0 && (
+
                             <div className="col-span-full py-20 text-center flex flex-col items-center justify-center bg-white rounded-[2rem] border border-gray-100 shadow-sm mt-4">
                                 <div className="bg-gray-50 p-6 rounded-full mb-4 ring-8 ring-gray-50/50"><Truck size={48} className="text-gray-300"/></div>
                                 <h3 className="font-black text-lg text-[#111111] mb-1">未找到相关供应商</h3>
@@ -1488,7 +1548,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 shadow-inner flex items-center justify-center shrink-0"><Truck size={28} className="text-[#8B0000]" /></div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest shrink-0 ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{selectedSupplier.status}</span>
+                                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-mono font-black shrink-0 border border-gray-200/50">#{selectedSupplier.id}</span>
+                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest shrink-0 ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{selectedSupplier.status === 'INACTIVE' ? '已停用' : '使用中'}</span>
                                             {selectedSupplier.restDayNote && (<span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-800 text-[9px] font-bold shrink-0"><CalendarOff size={10}/> {selectedSupplier.restDayNote}</span>)}
                                         </div>
                                         <h1 className="text-xl md:text-3xl font-black text-[#111111] truncate group-hover:text-[#8B0000] transition-colors" title={selectedSupplier.name}>{selectedSupplier.name}</h1>
