@@ -11,6 +11,7 @@ import { SupplierComparison } from './SupplierComparison';
 import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { STOCK_AREAS, type StockArea } from '../../../utils/inventory/stockArea';
 import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
+import { summarizeUnitSetup, type UnitSetupSummary } from '../../../utils/inventory/unitSetupSummary';
 
 const isPurchaseSameAsDisplay = (purchaseUnitName: string, displayUnitName?: string): boolean => {
     return normalizeUnitName(purchaseUnitName) === normalizeUnitName(displayUnitName);
@@ -39,6 +40,49 @@ interface StockEditModalProps {
     onMoveArea?: (to: StockArea, category: string) => Promise<void>;
 }
 
+
+const StepHeading: React.FC<{ step: string; color: string; title: string; sub: string }> = ({ step, color, title, sub }) => (
+    <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
+        <span className={`w-1.5 h-4 ${color} rounded-full`}></span>
+        <div className="min-w-0">
+            <h4 className="text-sm font-black text-[#111111]">{step} {title}</h4>
+            <div className="text-[10px] font-bold text-gray-400">{sub}</div>
+        </div>
+    </div>
+);
+
+const UNIT_EXAMPLES = [
+    { name: '花肉', lines: ['① kg', '② 按包装数：1 CTN ≈ 20 kg（或直接数 kg）', '③ CTN · 每次称重，收货填实际公斤'] },
+    { name: '虎牌啤酒', lines: ['① BTL（瓶）', '② 直接数 BTL', '③ CTN · 固定数量：1 CTN = 24 BTL'] },
+    { name: '鸡蛋', lines: ['① pcs（粒）', '② 按包装数：1 tray = 30 pcs', '③ tray · 固定数量（与盘点单位相同，自动 = 30 pcs）'] },
+];
+
+const UnitSetupOverview: React.FC<{ summary: UnitSetupSummary }> = ({ summary }) => (
+    <div className="bg-white p-4 rounded-2xl border-2 border-[#111111] shadow-sm space-y-2">
+        <div className="text-xs font-black text-[#111111]">单位设定一览（自动生成，按下面 ①②③ 修改）</div>
+        <ul className="space-y-1 text-[12px] font-bold leading-relaxed text-gray-800">
+            <li>① {summary.stock}</li>
+            <li>② {summary.count}</li>
+            {summary.purchases.map((p, i) => <li key={i}>③ {p}</li>)}
+        </ul>
+        {summary.warnings.length > 0 && (
+            <ul className="space-y-0.5 rounded-xl border border-red-200 bg-red-50 p-2 text-[11px] font-bold text-red-700">
+                {summary.warnings.map((w, i) => <li key={i}>⚠️ {w}</li>)}
+            </ul>
+        )}
+        <details className="text-[11px] text-gray-600">
+            <summary className="cursor-pointer font-black text-blue-700">看例子：花肉、啤酒、鸡蛋怎么设？</summary>
+            <div className="mt-1.5 grid gap-1.5 md:grid-cols-3">
+                {UNIT_EXAMPLES.map(ex => (
+                    <div key={ex.name} className="rounded-lg bg-[#F6F7FB] p-2">
+                        <div className="font-black text-[#111111]">{ex.name}</div>
+                        {ex.lines.map(l => <div key={l}>{l}</div>)}
+                    </div>
+                ))}
+            </div>
+        </details>
+    </div>
+);
 
 const MoveAreaSection: React.FC<{ currentArea: string; disabled: boolean; onMove: (to: StockArea, category: string) => Promise<void> }> = ({ currentArea, disabled, onMove }) => {
     const targets = STOCK_AREAS.filter(a => a !== currentArea);
@@ -125,6 +169,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     const overheadPercent = editingItem.overheadPercent ?? 0;
     const sstPercent = editingItem.sstPercent ?? 0;
     const purchaseUnits = editingItem.purchaseUnits || [];
+    const unitSummary = summarizeUnitSetup(editingItem);
 
     const revalidatePurchaseRules = (
         pUnits: UnitConversionRule[],
@@ -487,14 +532,13 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         </div>
                     </div>
 
+                    <UnitSetupOverview summary={unitSummary} />
+
                     {/* Card Section 2: System Stock & Cost Unit */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                        <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
-                            <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
-                            <h4 className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">系统库存与成本单位 (System Stock & Cost Unit)</h4>
-                        </div>
-                        <p className="text-[11px] text-gray-400 leading-relaxed">
-                            系统实际保存库存数量的单位，也用于菜谱扣库存和成本计算，例如 kg、g、ml、pcs。
+                        <StepHeading step="①" color="bg-blue-500" title="库存用什么单位记？" sub="系统库存与成本单位 (System Stock & Cost Unit)" />
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                            选<strong>最小、最常用来算成本</strong>的单位：肉、菜用 kg，饮料用瓶 / 罐，鸡蛋用 pcs。菜谱扣库存、成本都用这个单位。
                         </p>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -645,17 +689,14 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                     {/* New Card Section: Display / Ordering Unit */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                        <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
-                            <span className="w-1.5 h-4 bg-[#FFD200] rounded-full"></span>
-                            <h4 className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">盘点显示单位 (Stock Count Display Unit)</h4>
-                        </div>
+                        <StepHeading step="②" color="bg-[#FFD200]" title="员工盘点时怎么数？" sub="盘点显示单位 (Stock Count Display Unit)" />
                         
-                        <p className="text-[11px] text-gray-400 leading-relaxed">
-                            员工在库存总览和盘点时习惯使用的单位，例如 PACK、TRAY、BOTTLE。此单位不会改变系统的基础库存单位。
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                            员工习惯数「几盘、几箱」就选「按包装数」，系统会自动换成 {baseUnit} 保存。这里不会改变第 ① 步的库存单位。
                         </p>
 
                         <div>
-                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>首选查看/盘点单位 (Preferred View Unit)</label>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>盘点时数什么？ (Preferred View Unit)</label>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                                 <button
                                     type="button"
@@ -668,7 +709,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                             : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                     }`}
                                 >
-                                    基础单位 ({baseUnit})
+                                    直接数 {baseUnit}
                                 </button>
                                 <button
                                     type="button"
@@ -679,7 +720,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                             : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                     }`}
                                 >
-                                    展示单位 ({editingItem.displayUnit || '未设定'})
+                                    按包装数{editingItem.displayUnit && !isDisplaySameAsBase(editingItem.displayUnit, baseUnit) ? `（${editingItem.displayUnit}）` : '（箱 / 盘 / 包）'}
                                 </button>
                             </div>
                         </div>
@@ -791,10 +832,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     {/* Card Section 3: Purchase Unit Conversion */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                         <div className="flex justify-between items-center border-b border-[#F6F7FB] pb-2.5 mb-1">
-                            <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-4 bg-emerald-500 rounded-full"></span>
-                                <h4 className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">供应商采购规格 (Supplier Purchase Unit)</h4>
-                            </div>
+                            <StepHeading step="③" color="bg-emerald-500" title="供应商怎么卖给你？" sub="供应商采购规格 (Supplier Purchase Unit)" />
                             <button 
                                 type="button" 
                                 onClick={addPurchaseUnit} 
@@ -804,8 +842,8 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             </button>
                         </div>
                         
-                        <p className="text-[11px] text-gray-400 leading-relaxed">
-                            供应商报价、采购单和Invoice使用的单位，例如 PACK、CTN、BUNDLE、BOX。
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                            供应商报价、采购单、Invoice 用的包装，例如 CTN、PACK、BOX。每箱数量固定（24 罐）选「固定数量」；每箱重量不一样（花肉、鱼）选「每次称重」，收货时填实际重量。
                         </p>
 
                         <div className="space-y-3">
@@ -941,7 +979,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                                             {/* Mode Selector - Stretch buttons equally on mobile */}
                                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-t border-b border-gray-200/50 py-2.5 text-xs">
-                                                <span className="font-bold text-gray-400">换算模式:</span>
+                                                <span className="font-bold text-gray-400">每个包装的数量:</span>
                                                 <div className="flex gap-1.5 w-full md:w-auto">
                                                     <button
                                                         type="button"
@@ -952,7 +990,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                                         }`}
                                                     >
-                                                        ⚙️ 固定比例 (Fixed)
+                                                        📦 固定数量 (Fixed)
                                                     </button>
                                                     <button
                                                         type="button"
@@ -963,7 +1001,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                                         }`}
                                                     >
-                                                        ⚖️ 实际称重 (Actual)
+                                                        ⚖️ 每次称重 (Actual)
                                                     </button>
                                                 </div>
                                             </div>
@@ -1015,7 +1053,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                         ) : (
                                                             // Full Three-tier Conversion Input - Wrapped and centered nicely for mobile
                                                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white p-3 rounded-xl border border-[#E5E7EB] text-xs">
-                                                                <span className="font-extrabold text-gray-400 shrink-0">三级单位关系:</span>
+                                                                <span className="font-extrabold text-gray-400 shrink-0">1 包装有几个盘点单位:</span>
                                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                                     <span className="font-black text-emerald-600">
                                                                         1 {pu.unitName || '包装'} = 
@@ -1104,7 +1142,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 })
                             ) : (
                                 <div className="text-[11px] text-gray-400 italic text-center py-6 border border-dashed border-[#E5E7EB] rounded-xl bg-gray-50/50">
-                                    暂无大包装换算，默认采用: 1 {baseUnit} = 1 {baseUnit} 基础计算。
+                                    还没设定采购规格：采购时直接按 {baseUnit} 买（1 {baseUnit} = 1 {baseUnit}）。需要按箱 / 包买就按右上角「+ 增加采购规格」。
                                 </div>
                             )}
                         </div>
