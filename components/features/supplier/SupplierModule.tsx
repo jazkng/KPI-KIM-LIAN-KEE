@@ -34,6 +34,8 @@ import { ReceivePOModal } from './ReceivePOModal';
 import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
+import { listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../../utils/inventory/catalogPrices';
 import { buildReceiveLogs } from '../../../utils/inventory/receiveLog';
 import { getMalaysiaDateString } from '../../../utils/dateHelper';
 
@@ -450,8 +452,27 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             conversionMode: productForm.conversionMode,
             purchaseUnit: productForm.purchaseUnit,
             pricingUnit: productForm.pricingUnit,
-            pricePerPricingUnit: productForm.pricePerPricingUnit
+            pricePerPricingUnit: productForm.pricePerPricingUnit,
+            // 供应商目录内容字段与最近进价（编辑时一并保留，不能在存档时丢掉）
+            packDesc: productForm.packDesc?.trim() || undefined,
+            brand: productForm.brand?.trim() || undefined,
+            spec: productForm.spec?.trim() || undefined,
+            storage: productForm.storage || undefined,
+            minOrderQty: Number(productForm.minOrderQty) > 0 ? Number(productForm.minOrderQty) : undefined,
+            leadTimeDays: Number(productForm.leadTimeDays) > 0 ? Number(productForm.leadTimeDays) : undefined,
+            status: productForm.status === 'DISCONTINUED' ? 'DISCONTINUED' : undefined,
+            note: productForm.note?.trim() || undefined,
+            lastReceivedPrice: productForm.lastReceivedPrice,
+            lastReceivedPricePerBase: productForm.lastReceivedPricePerBase,
+            lastReceivedAt: productForm.lastReceivedAt,
+            lastReceivedPoId: productForm.lastReceivedPoId,
         };
+        // 价格有改才更新「价格更新日期」
+        const previous = selectedSupplier.catalog?.find(c => c.id === rawItem.id);
+        const priceChanged = !previous
+            || Number(previous.pricePerPurchaseUnit ?? previous.price) !== Number(rawItem.pricePerPurchaseUnit ?? rawItem.price)
+            || Number(previous.pricePerBillingUnit || 0) !== Number(rawItem.pricePerBillingUnit || 0);
+        rawItem.priceUpdatedAt = priceChanged ? new Date().toISOString() : (previous?.priceUpdatedAt || productForm.priceUpdatedAt);
 
         const normalized = normalizeCatalogItem(rawItem, allStockList);
         const newItem = JSON.parse(JSON.stringify(normalized));
@@ -778,6 +799,22 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             await DataManager.saveStandaloneExpense({ id: `exp_${Date.now()}`, category: billCategory, expenseType: 'GENERAL', company: receivingPO.supplierName, amount: 0, totalBillAmount: finalTotal, outstandingAmount: finalTotal, paymentStatus: 'UNPAID', time: new Date().toISOString(), note: `PO: ${receivingPO.id} (Auto-generated)`, paymentMethod: 'BANK_TRANSFER', paidBy: 'COMPANY' });
 
             alert(`✅ 入库成功！应付: RM ${finalTotal.toFixed(2)}\n分类: ${billCategory}`);
+
+            // 最近进价写回供应商品项；进价跟目录价差超过 5% 时问要不要更新目录价格（不自动改）
+            try {
+                const at = new Date().toISOString();
+                const received = receivedPOItems
+                    .filter((l: any) => Number(l.receivedBaseQty) > 0 && Number(l.costPerBaseUnitAtReceive) > 0)
+                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id }));
+                const diffs = await recordReceivedPrices(db, receivingPO.supplierId, received);
+                const msg = priceDiffMessage(receivingPO.supplierName, diffs);
+                if (msg && window.confirm(msg)) await updateCatalogPrices(db, receivingPO.supplierId, diffs);
+                DataManager.clearCacheKeys(['suppliers']);
+                setSuppliers(await DataManager.getSuppliers());
+            } catch (priceError) {
+                console.error('最近进价写入失败', priceError);
+            }
+
             setIsReceiveModalOpen(false); setReceivingPO(null);
 
             setAllStockList(prev => prev.map(stockItem => {
@@ -1667,6 +1704,14 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                             </div>
                                                         </div>
                                                         <h4 className="font-bold text-sm text-[#111111] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
+                                                        {(item.status === 'DISCONTINUED' || item.packDesc || item.brand || item.spec || item.storage) && (
+                                                            <div className="mb-1.5 flex flex-wrap gap-1 text-[9px] font-black">
+                                                                {item.status === 'DISCONTINUED' && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-gray-600">停售</span>}
+                                                                {item.packDesc && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{item.packDesc}</span>}
+                                                                {(item.brand || item.spec) && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{[item.brand, item.spec].filter(Boolean).join(' · ')}</span>}
+                                                                {item.storage && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-sky-700">{item.storage === 'FROZEN' ? '冷冻' : item.storage === 'CHILLED' ? '冷藏' : '常温'}</span>}
+                                                            </div>
+                                                        )}
                                                         
                                                         {linkedStock && (
                                                             <div className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1 mb-2 inline-flex items-center gap-1">
@@ -1679,6 +1724,13 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                             RM {(item.pricePerPurchaseUnit ?? item.price).toFixed(2)}
                                                             <span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.purchaseUnitName || item.unit}</span>
                                                         </div>
+                                                        {(item.lastReceivedAt || item.priceUpdatedAt) && (
+                                                            <div className="mb-1 text-[10px] font-bold text-gray-500">
+                                                                {item.lastReceivedAt && <span className="text-blue-700">最近进价 RM {Number(item.lastReceivedPrice || 0).toFixed(2)}（{item.lastReceivedAt.slice(0, 10)}）</span>}
+                                                                {item.lastReceivedAt && item.priceUpdatedAt && ' · '}
+                                                                {item.priceUpdatedAt && <span>价格更新 {item.priceUpdatedAt.slice(0, 10)}</span>}
+                                                            </div>
+                                                        )}
 
                                                         {linkedStock && (
                                                             <div className="bg-gray-50 rounded-xl p-2.5 mb-4 text-[10px] text-gray-500 font-bold space-y-1 border border-gray-100">
@@ -2085,7 +2137,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             )}
 
             {isEditingProduct && (
-                <ProductEditModal productForm={productForm} productUoms={productUoms} allStockList={allStockList} stockSearchTerm={stockSearchTerm} onFormChange={setProductForm} onUomsChange={setProductUoms} onStockSearchChange={setStockSearchTerm} onSave={handleSaveProduct} onClose={() => setIsEditingProduct(false)} />
+                <ProductEditModal productForm={productForm} productUoms={productUoms} allStockList={allStockList} stockSearchTerm={stockSearchTerm} onFormChange={setProductForm} onUomsChange={setProductUoms} onStockSearchChange={setStockSearchTerm} onSave={handleSaveProduct} onClose={() => setIsEditingProduct(false)}
+                    otherOptions={productForm.linkedStockId
+                        ? listSupplyOptions(allStockList.find(st => st.id === productForm.linkedStockId) || { id: productForm.linkedStockId }, suppliers).filter(o => o.catalogItem.id !== productForm.id)
+                        : []} />
             )}
 
             {isBillFormOpen && (

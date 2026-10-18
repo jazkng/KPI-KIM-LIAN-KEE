@@ -3,6 +3,7 @@ import { Package, X, Search, Box, Trash2, Link as LinkIcon } from 'lucide-react'
 import { CatalogItem, StockItem, UomOption } from '../../../types';
 import { SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
 import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { catalogPerBaseCost, type SupplyOption } from '../../../utils/inventory/supplyOptions';
 
 interface ProductEditModalProps {
     productForm: Partial<CatalogItem>;
@@ -14,11 +15,13 @@ interface ProductEditModalProps {
     onStockSearchChange: (term: string) => void;
     onSave: () => void;
     onClose: () => void;
+    /** 同一库存商品在其他供应商的价格（比价用，不含正在编辑的这个品项） */
+    otherOptions?: SupplyOption[];
 }
 
 export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     productForm, productUoms, allStockList, stockSearchTerm,
-    onFormChange, onUomsChange, onStockSearchChange, onSave, onClose
+    onFormChange, onUomsChange, onStockSearchChange, onSave, onClose, otherOptions = []
 }) => {
     const addUomOption = () => { onUomsChange([...productUoms, { label: '', value: '', ratio: 10 }]); };
     const updateUomOption = (idx: number, field: keyof UomOption, value: any) => { const c = [...productUoms]; c[idx] = { ...c[idx], [field]: value }; onUomsChange(c); };
@@ -445,6 +448,79 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                             </div>
                         )
                     )}
+
+                    {linkedStock && otherOptions.length > 0 && (() => {
+                        const mine = catalogPerBaseCost(normalizedForm as any);
+                        const base = linkedStock.baseUnit || linkedStock.unit || '';
+                        return (
+                            <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-1.5">
+                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">其他供应商同一样东西</h4>
+                                {otherOptions.map(o => {
+                                    return (
+                                        <div key={o.supplier.id + o.catalogItem.id} className="flex items-center justify-between gap-2 text-xs font-bold">
+                                            <span className="truncate text-gray-700">{o.supplier.name} · 1 {o.packUnit} = {o.packRatio} {base}</span>
+                                            <span className="shrink-0 font-mono">{o.perBase !== null ? `RM ${o.perBase.toFixed(4)}/${base}` : '未报价'}</span>
+                                        </div>
+                                    );
+                                })}
+                                {mine !== null && <div className="border-t border-gray-100 pt-1.5 text-[11px] font-black text-gray-800">这家：RM {mine.toFixed(4)} / {base}{(() => {
+                                    const cheapest = Math.min(...otherOptions.map(o => o.perBase ?? Infinity));
+                                    if (!isFinite(cheapest)) return '';
+                                    const pct = ((mine - cheapest) / cheapest) * 100;
+                                    return pct > 0.5 ? `（比最便宜贵 ${pct.toFixed(0)}%）` : '（最便宜）';
+                                })()}</div>}
+                            </div>
+                        );
+                    })()}
+
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+                        <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">品项资料 (Details)</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
+                                <label className={SUP_LABEL_STYLE}>包装说明</label>
+                                <input className={SUP_INPUT_STYLE} placeholder="例如 24 瓶 × 320ml" value={productForm.packDesc || ''} onChange={e => onFormChange({ ...productForm, packDesc: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className={SUP_LABEL_STYLE}>品牌</label>
+                                <input className={SUP_INPUT_STYLE} value={productForm.brand || ''} onChange={e => onFormChange({ ...productForm, brand: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className={SUP_LABEL_STYLE}>规格</label>
+                                <input className={SUP_INPUT_STYLE} placeholder="例如 大只 / A 级" value={productForm.spec || ''} onChange={e => onFormChange({ ...productForm, spec: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className={SUP_LABEL_STYLE}>保存方式</label>
+                                <select className={SUP_INPUT_STYLE} value={productForm.storage || ''} onChange={e => onFormChange({ ...productForm, storage: (e.target.value || undefined) as CatalogItem['storage'] })}>
+                                    <option value="">--</option>
+                                    <option value="FROZEN">冷冻</option>
+                                    <option value="CHILLED">冷藏</option>
+                                    <option value="AMBIENT">常温</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className={SUP_LABEL_STYLE}>最少订购量</label>
+                                <input type="number" min="0" className={SUP_INPUT_STYLE} value={productForm.minOrderQty ?? ''} onChange={e => onFormChange({ ...productForm, minOrderQty: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                            </div>
+                            <div>
+                                <label className={SUP_LABEL_STYLE}>到货天数</label>
+                                <input type="number" min="0" className={SUP_INPUT_STYLE} value={productForm.leadTimeDays ?? ''} onChange={e => onFormChange({ ...productForm, leadTimeDays: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                            </div>
+                            <label className="flex items-center gap-2 text-xs font-black text-gray-700">
+                                <input type="checkbox" checked={productForm.status === 'DISCONTINUED'} onChange={e => onFormChange({ ...productForm, status: e.target.checked ? 'DISCONTINUED' : undefined })} />
+                                停售（不再出现在补货）
+                            </label>
+                            <div className="col-span-2">
+                                <label className={SUP_LABEL_STYLE}>备注</label>
+                                <input className={SUP_INPUT_STYLE} value={productForm.note || ''} onChange={e => onFormChange({ ...productForm, note: e.target.value })} />
+                            </div>
+                        </div>
+                        {(productForm.lastReceivedAt || productForm.priceUpdatedAt) && (
+                            <div className="flex flex-wrap gap-x-4 text-[11px] font-bold text-gray-500">
+                                {productForm.lastReceivedAt && <span className="text-blue-700">最近进价 RM {Number(productForm.lastReceivedPrice || 0).toFixed(2)}（{productForm.lastReceivedAt.slice(0, 10)}）</span>}
+                                {productForm.priceUpdatedAt && <span>价格更新 {productForm.priceUpdatedAt.slice(0, 10)}</span>}
+                            </div>
+                        )}
+                    </div>
 
                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
                         <div className="flex justify-between items-center mb-3">
