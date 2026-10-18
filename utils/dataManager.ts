@@ -16,6 +16,8 @@ import { PaymentVoucher } from "./paymentVoucherUtils";
 import { StorehubMonthlySales } from "./storehubImport";
 import { normalizeInventoryItem } from "./unitConversion";
 import { registerStockArea, type StockArea } from "./inventory/stockArea";
+
+const STOCK_NOT_IN_AREA_MESSAGE = (names: string) => `「${names}」已不在这个库存区域（可能已被移动到别的区域或删除），没有保存。请刷新页面后再操作。`;
 import { keepStockCodeFields } from "./inventory/stockCode";
 import { reserveStockCode } from "./inventory/stockCodeAllocator";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
@@ -694,7 +696,7 @@ export class DataManager {
         registerStockArea(type, items);
         return items;
     }
-    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem, by = 'SYSTEM'): Promise<void> {
+    static async saveStockItem(type: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL', item: StockItem, by = 'SYSTEM', opts: { mustExist?: boolean } = {}): Promise<void> {
         let colName = 'stock_general';
         if (type === 'KITCHEN') colName = 'stock_kitchen';
         if (type === 'BAR') colName = 'stock_bar';
@@ -726,6 +728,8 @@ export class DataManager {
         const docRef = doc(db, colName, syncedItem.id);
         await runTransaction(db, async (transaction) => {
             const snap = await transaction.get(docRef);
+            // 编辑既有商品时，文件必须还在这个区域：可能已被移到别的区域或删除，不能在这里重新建一份
+            if (opts.mustExist && !snap.exists()) throw new Error(STOCK_NOT_IN_AREA_MESSAGE(syncedItem.name || syncedItem.id));
             const existingData = snap.exists() ? snap.data() : {};
             // 新商品：同一交易配下一个编号（还没执行全部重新连号时不配）
             const reserved = snap.exists() ? null : await reserveStockCode(transaction, db, type, syncedItem.id, by);
@@ -749,6 +753,9 @@ export class DataManager {
         if (type === 'FUEL') colName = 'stock_fuel';
         await runTransaction(db, async (transaction) => {
             const reads = await Promise.all(items.map(item => transaction.get(doc(db, colName, item.id))));
+            // 收货 / 盘点只更新既有商品：不在这个区域（已移动或删除）就整笔停下，不新建复制品
+            const missing = items.filter((_, idx) => !reads[idx].exists());
+            if (missing.length) throw new Error(STOCK_NOT_IN_AREA_MESSAGE(missing.map(i => i.name || i.id).join('、')));
             items.forEach((item, idx) => {
                 const ref = doc(db, colName, item.id);
                 const currentDBData = reads[idx].exists() ? reads[idx].data() : {};

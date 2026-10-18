@@ -63,6 +63,13 @@ export const registerStockArea = (area: StockArea, items: { id?: string }[]): vo
 export const stockAreaConflicts = (): { id: string; areas: StockArea[] }[] =>
     [...conflicts.entries()].map(([id, set]) => ({ id, areas: [...set] }));
 
+/** 商品已移动到另一个区域（同一 ID）：更新登记，旧区域不再算冲突 */
+export const moveStockAreaRegistration = (id: string, area: StockArea): void => {
+    if (!id) return;
+    seenArea.set(id, area);
+    conflicts.delete(id);
+};
+
 /** 只给测试用 */
 export const resetStockAreaRegistry = (): void => { seenArea.clear(); conflicts.clear(); };
 

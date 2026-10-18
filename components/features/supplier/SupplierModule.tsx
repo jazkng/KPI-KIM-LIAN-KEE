@@ -504,7 +504,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         purchaseUnit: newItem.orderUnit || newItem.purchaseUnit || newItem.unit,
                         pricingUnit: newItem.billingUnit || newItem.pricingUnit || targetStock.baseUnit || targetStock.unit,
                         pricePerPricingUnit: Math.max(0, Number(newItem.pricePerBillingUnit ?? newItem.pricePerPricingUnit ?? newItem.price) || 0)
-                    });
+                    }, 'SYSTEM', { mustExist: true });
                 } else {
                     const purchaseUnitName = newItem.purchaseUnitName || newItem.unit || targetStock.baseUnit || targetStock.unit;
                     const requestedPurchaseUnitId = newItem.linkedPurchaseUnitId || `supplier_${newItem.id}`;
@@ -545,7 +545,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         uomOptions: newItem.uomOptions,
                         purchaseUnits,
                         defaultPurchaseUnitId: targetStock.defaultPurchaseUnitId || purchaseRule.id
-                    });
+                    }, 'SYSTEM', { mustExist: true });
                 }
             }
         }
