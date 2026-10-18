@@ -7,6 +7,8 @@ import { cheapestOption, listSupplyOptions, pickDefaultSupply, pickSupplyForSupp
 import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
 import { buildReceiveLogs } from '../../utils/inventory/receiveLog';
+import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../utils/inventory/catalogPrices';
+import { db } from '../../firebaseConfig';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
 import { displayStockCode, matchesStockSearch } from '../../utils/inventory/stockCode';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
@@ -1437,6 +1439,22 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             await DataManager.saveStandaloneExpense(newBill);
 
             await (window as any).systemDialog.alert("✅ 入库成功！库存已更新，成本已更新。", "采购管理");
+            if (receivingPO.supplierId && receivingPO.supplierId !== 'ADHOC_MARKET') {
+            // 最近进价写回供应商品项；进价跟目录价差超过 5% 时问要不要更新目录价格（不自动改）
+            try {
+                const at = new Date().toISOString();
+                const received = receivedItemsWithNewFields
+                    .filter((l: any) => Number(l.receivedBaseQty) > 0 && Number(l.costPerBaseUnitAtReceive) > 0)
+                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id }));
+                const diffs = await recordReceivedPrices(db, receivingPO.supplierId, received);
+                const msg = priceDiffMessage(receivingPO.supplierName, diffs);
+                if (msg && window.confirm(msg)) await updateCatalogPrices(db, receivingPO.supplierId, diffs);
+                DataManager.clearCacheKeys(['suppliers']);
+                setSuppliers(await DataManager.getSuppliers());
+            } catch (priceError) {
+                console.error('最近进价写入失败', priceError);
+            }
+            }
             setIsReceiveModalOpen(false);
             setReceivingPO(null); 
         } catch (error: any) {

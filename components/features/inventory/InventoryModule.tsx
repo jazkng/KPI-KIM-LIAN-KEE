@@ -14,6 +14,7 @@ import {
 } from './inventoryConstants';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { db } from '../../../firebaseConfig';
+import { setPreferredSupply } from '../../../utils/inventory/preferredSupply';
 import { findLinkedCatalogItems, updateSupplierLinksForDeletedStock, type LinkAction, type LinkedCatalogRef } from '../../../utils/inventory/supplierLinks';
 import { AssignModal } from './AssignModal';
 import { TaskEditorModal } from './TaskEditorModal';
@@ -2441,6 +2442,19 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     canDelete={canDeactivateItem}
                     canSave={!editingItem.id ? canAddItem : canEditExistingItem}
                     showInternalIds={canManageCodes}
+                    onSetPreferred={async option => {
+                        if (!editingItem?.id) return;
+                        const area = resolveStockArea(editingItem as StockItem) ?? currentStockView;
+                        try {
+                            const value = await setPreferredSupply(db, area, editingItem.id,
+                                option ? { supplierId: option.supplier.id, catalogItemId: option.catalogItem.id } : null, employee?.name || 'Admin');
+                            setEditingItem(prev => prev ? { ...prev, preferredSupply: value } : prev);
+                            setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, preferredSupply: value } : i));
+                            DataManager.clearCacheKeys(['stock_']);
+                        } catch (e: any) {
+                            alert(`没有保存常用供应商：${e?.message || e}`);
+                        }
+                    }}
                 />
             )}
 

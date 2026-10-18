@@ -11,6 +11,7 @@
 import { collection, getDocs, query, where, type Firestore, type Query } from 'firebase/firestore';
 import { STOCK_AREA_COLLECTION, STOCK_AREAS, areaOfCategory, type StockArea } from './stockArea';
 import { STOCK_CODE_COUNTERS_COLLECTION, STOCK_CODES_COLLECTION, nameKey, suggestStockName } from './stockCode';
+import { catalogPerBaseCost } from './supplyOptions';
 
 export type AuditSeverity = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -59,6 +60,10 @@ export const TYPE_LABEL: Record<string, string> = {
     OPEN_PO_UNRESOLVED: '未收货的采购单：品项找不到对应库存',
     OPEN_PO_UNLINKED: '未收货的采购单：品项没连结库存（收货不会加库存）',
     STALE_PO: '超过 30 天还没收货的采购单',
+    PRICE_DRIFT: '最近进价跟目录价格差超过 10%',
+    PREFERRED_GONE: '常用供应商已失效',
+    PACK_NAME_CLASH: '同名包装、大小不同',
+    STALE_PRICE: '目录价格超过 90 天没更新',
     CODE_DUPLICATE: '编号重复',
     CODE_REGISTRY_MISMATCH: '编号登记表与商品不一致',
     AREA_MISMATCH: '分类与所在区域不符',
@@ -162,6 +167,45 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
         return Math.round((Date.parse(today) - Date.parse(d)) / 86400000);
     };
     const suppliersById = new Map(input.suppliers.map(s => [String(s.data.id || s.id), s]));
+
+    // ── 供应商比价资料 ──
+    const optionsByStock = new Map<string, { supplierId: string; supplierName: string; item: Record<string, any> }[]>();
+    input.suppliers.forEach(s => (s.data.catalog || []).forEach((item: Record<string, any>) => {
+        if (!item.linkedStockId || item.status === 'DISCONTINUED') return;
+        const k = String(item.linkedStockId);
+        optionsByStock.set(k, [...(optionsByStock.get(k) || []), { supplierId: String(s.data.id || s.id), supplierName: String(s.data.name || s.id), item }]);
+        const supTarget: AuditTarget = { kind: 'SUPPLIER', supplierId: String(s.data.id || s.id), catalogItemId: String(item.id) };
+        const subject = `${s.data.name || s.id} · ${item.name}`;
+        const catalogBase = catalogPerBaseCost(item as any);
+        const lastBase = Number(item.lastReceivedPricePerBase);
+        if (catalogBase && lastBase > 0) {
+            const pct = ((lastBase - catalogBase) / catalogBase) * 100;
+            if (Math.abs(pct) > 10) add('MEDIUM', 'PRICE_DRIFT', subject, `目录 RM ${catalogBase.toFixed(4)}，${String(item.lastReceivedAt || '').slice(0, 10)} 实际进价 RM ${lastBase.toFixed(4)}（每基础单位 ${pct > 0 ? '+' : ''}${pct.toFixed(1)}%）。补货估价会不准，请更新目录价格。`, undefined, supTarget);
+        }
+        const updated = daysSince(String(item.priceUpdatedAt || ''));
+        if (updated !== null && updated > 90) add('LOW', 'STALE_PRICE', subject, `目录价格 ${String(item.priceUpdatedAt).slice(0, 10)} 之后没有更新（${updated} 天），请跟供应商确认现价。`, undefined, supTarget);
+    }));
+    optionsByStock.forEach((opts, stockId) => {
+        if (!byId.has(stockId)) return;
+        const byUnit = new Map<string, Set<number>>();
+        opts.forEach(o => {
+            if (o.item.pricingMode === 'WEIGHT_BASED' || o.item.conversionMode === 'ACTUAL_WEIGHT') return;
+            const unit = String(o.item.purchaseUnitName || o.item.unit || '').trim().toLowerCase();
+            if (!unit) return;
+            byUnit.set(unit, new Set([...(byUnit.get(unit) || []), Number(o.item.toBaseRatio) || 1]));
+        });
+        byUnit.forEach((ratios, unit) => {
+            if (ratios.size > 1) add('LOW', 'PACK_NAME_CLASH', label(stockId), `几家供应商都叫「${unit.toUpperCase()}」，但 1 ${unit.toUpperCase()} = ${[...ratios].sort((a, b) => a - b).join(' / ')}。系统已按各家自己的包装计算；下单时看清楚是哪一家，也可以在包装说明写清楚。`, stockId, stockTarget(stockId));
+        });
+    });
+    byId.forEach((entries, id) => {
+        const pref = entries[0].data.preferredSupply;
+        if (!pref?.supplierId) return;
+        const sup = suppliersById.get(String(pref.supplierId));
+        const item = (sup?.data.catalog || []).find((c: Record<string, any>) => String(c.id) === String(pref.catalogItemId));
+        const why = !sup ? '供应商已删除' : !item ? '供应商品项已删除' : item.linkedStockId !== id ? '供应商品项已改连到别的商品' : item.status === 'DISCONTINUED' ? '供应商品项已停售' : null;
+        if (why) add('MEDIUM', 'PREFERRED_GONE', label(id), `${why}；补货会改用最便宜的那家。请在库存编辑窗「供应商比价」重新设常用。`, id, stockTarget(id));
+    });
     input.openPurchaseOrders.forEach(po => {
         const poId = String(po.data.id || po.id);
         const date = String(po.data.date || '').slice(0, 10);

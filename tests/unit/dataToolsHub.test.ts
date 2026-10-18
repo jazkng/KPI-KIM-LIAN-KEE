@@ -7,7 +7,7 @@ const visible = (e: Employee) => DATA_TOOLS.filter(t => t.allowed(e)).map(t => t
 
 describe('数据审查中心权限', () => {
     it('负责人（L1）：全部工具', () => {
-        expect(visible(emp({ orgLevel: 'OWNER' }))).toEqual(['PNL_RECON', 'EXPENSE_AUDIT', 'STOCK_AUDIT', 'STOCK_CODES']);
+        expect(visible(emp({ orgLevel: 'OWNER' }))).toEqual(['PNL_RECON', 'EXPENSE_AUDIT', 'STOCK_AUDIT', 'SUPPLIER_PRICES', 'STOCK_CODES']);
     });
     it('分店经理有财务报表权限：只有财务审查，不能整理库存编号', () => {
         expect(visible(emp({ orgLevel: 'BRANCH_MANAGER', allowedModules: ['REPORTS'] as any }))).toEqual(['PNL_RECON', 'EXPENSE_AUDIT']);
