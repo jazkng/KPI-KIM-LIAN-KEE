@@ -34,7 +34,9 @@ import { ReceivePOModal } from './ReceivePOModal';
 import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
-import { listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+
+const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
 import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../../utils/inventory/catalogPrices';
 import { findUnchangedWeights, unchangedWeightMessage, weightStatsText } from '../../../utils/inventory/receiveWeight';
 import { buildReceiveLogs } from '../../../utils/inventory/receiveLog';
@@ -1439,7 +1441,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <div className="absolute top-2 right-2 p-2 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"><Truck size={48}/></div>
                                     <div className="flex items-start justify-between gap-2 mb-3 relative z-10">
                                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-[10px] shadow-md shrink-0">{sup.id}</div>
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-xs shadow-md shrink-0">{(sup.name || '?').trim().slice(0, 2).toUpperCase()}</div>
                                             <div className="min-w-0 flex-1">
                                                 <h4 className="font-black text-sm text-[#111111] leading-snug line-clamp-2 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest mt-1 ${sup.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${sup.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{sup.status}</span>
@@ -1486,7 +1488,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 shadow-inner flex items-center justify-center shrink-0"><Truck size={28} className="text-[#8B0000]" /></div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono tracking-widest shrink-0 border border-gray-200/50">{selectedSupplier.id}</span>
                                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest shrink-0 ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${selectedSupplier.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{selectedSupplier.status}</span>
                                             {selectedSupplier.restDayNote && (<span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-800 text-[9px] font-bold shrink-0"><CalendarOff size={10}/> {selectedSupplier.restDayNote}</span>)}
                                         </div>
@@ -1579,7 +1580,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     </div>
                                     <div className="relative z-10 border-t border-white/5 pt-2 mt-2 flex justify-between items-center text-[10px] text-gray-500 font-bold">
                                          <span>PREMIUM ACCOUNT BOOK</span>
-                                         <span className="text-amber-500/80 font-mono">SUP-{selectedSupplier.id}</span>
                                     </div>
                                 </div>
 
@@ -1703,7 +1703,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                 return (
                                                     <div key={item.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-[#FFD200] hover:shadow-md transition-all flex flex-col group relative">
                                                         <div className="flex justify-between items-start mb-2">
-                                                            <div className="text-[10px] text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{item.supplierCode || 'NO-CODE'}</div>
+                                                            {item.supplierCode ? <div className="text-[10px] text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{item.supplierCode}</div> : <span />}
                                                             <div className="flex items-center gap-1">
                                                                 <button onClick={() => { setProductForm(item); setProductUoms(item.uomOptions || DEFAULT_UOMS); setIsEditingProduct(true); }} className="text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 p-1.5 rounded-lg"><Edit3 size={12}/></button>
                                                                 <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
@@ -1719,16 +1719,12 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                             </div>
                                                         )}
                                                         
-                                                        {linkedStock && (
-                                                            <div className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1 mb-2 inline-flex items-center gap-1">
-                                                                <Box size={10} />
-                                                                <span className="truncate">已关联: {linkedStock.name}</span>
-                                                            </div>
-                                                        )}
-                                                        
                                                         <div className="font-mono text-base font-black text-[#111111] mb-1">
-                                                            RM {(item.pricePerPurchaseUnit ?? item.price).toFixed(2)}
-                                                            <span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.purchaseUnitName || item.unit}</span>
+                                                            {isWeightItem(item) ? (
+                                                                <>RM {Number(catalogPerBaseCost(item) ?? item.price).toFixed(2)}<span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.billingUnit || item.pricingUnit || 'kg'}（按重量）</span></>
+                                                            ) : (
+                                                                <>RM {(item.pricePerPurchaseUnit ?? item.price).toFixed(2)}<span className="text-[10px] text-gray-400 ml-1 font-bold">/{item.purchaseUnitName || item.unit}</span></>
+                                                            )}
                                                         </div>
                                                         {(item.lastReceivedAt || item.priceUpdatedAt) && (
                                                             <div className="mb-1 text-[10px] font-bold text-gray-500">
@@ -1739,17 +1735,19 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                         )}
                                                         {weightStatsText(item) && <div className="mb-1 text-[10px] font-bold text-orange-700">{weightStatsText(item)}</div>}
 
-                                                        {linkedStock && (
-                                                            <div className="bg-gray-50 rounded-xl p-2.5 mb-4 text-[10px] text-gray-500 font-bold space-y-1 border border-gray-100">
-                                                                <div className="flex justify-between">
-                                                                    <span>换算关系:</span>
-                                                                    <span className="text-gray-700">1 {item.purchaseUnitName || item.unit} = {item.toBaseRatio || 1} {item.baseUnit || 'pcs'}</span>
-                                                                </div>
-                                                                <div className="flex justify-between border-t border-gray-200/50 pt-1 mt-1">
-                                                                    <span>基础单位成本:</span>
-                                                                    <span className="text-amber-700 font-extrabold font-mono">RM {(item.costPerBaseUnit || (item.price / (item.toBaseRatio || 1))).toFixed(4)} / {item.baseUnit || 'pcs'}</span>
-                                                                </div>
+                                                        {/* 连到哪个库存、怎么换算：合成一行；没连库存就提醒（收货不会进库存） */}
+                                                        {linkedStock ? (
+                                                            <div className="mb-3 flex items-center gap-1 text-[10px] font-bold text-gray-500">
+                                                                <Box size={10} className="shrink-0 text-blue-600" />
+                                                                <span className="truncate">
+                                                                    <span className="text-blue-700">{linkedStock.name}</span>
+                                                                    {isWeightItem(item)
+                                                                        ? ` · 1 ${item.orderUnit || item.unit} ≈ ${item.estimatedWeightPerUnit || '?'} ${item.billingUnit || 'kg'}（称重）`
+                                                                        : ` · 1 ${item.purchaseUnitName || item.unit} = ${item.toBaseRatio || 1} ${item.baseUnit || linkedStock.baseUnit || 'pcs'}`}
+                                                                </span>
                                                             </div>
+                                                        ) : (
+                                                            <div className="mb-3 text-[10px] font-bold text-orange-600">未连到库存：收货不会增加库存</div>
                                                         )}
 
                                                         <div className="mt-auto pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
@@ -1953,7 +1951,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             <div>
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">供应商 Supplier</p>
                                                 <p className="text-sm font-black text-[#111111]">{printingPO.supplierName}</p>
-                                                <p className="text-[10px] text-gray-500 font-mono mt-1">ID: {printingPO.supplierId}</p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">收货方 Deliver To</p>
