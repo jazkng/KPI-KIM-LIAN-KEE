@@ -22,8 +22,12 @@ export type AuditTarget =
     | { kind: 'TASKS' }
     | { kind: 'CODES' };
 
+/** 跟未收货采购单有关的问题：画面上可以直接「取消这张采购单」 */
+export interface AuditPoRef { id: string; supplierName: string; date: string; ageDays: number | null }
+
 export interface AuditFinding {
     target?: AuditTarget;
+    po?: AuditPoRef;
     severity: AuditSeverity;
     type: string;
     title: string;        // 问题类别（同一类会归在一起）
@@ -44,6 +48,8 @@ export interface StockAuditInput {
     hasCounters: boolean;
     /** 每个区域在库存画面上的子分类 */
     sections: Record<string, string[]>;
+    /** 今天（YYYY-MM-DD），用来算采购单放了几天；测试时固定 */
+    today?: string;
 }
 
 export const TYPE_LABEL: Record<string, string> = {
@@ -52,6 +58,7 @@ export const TYPE_LABEL: Record<string, string> = {
     BROKEN_SUPPLIER_LINK: '供应商品项连结的库存已不存在',
     OPEN_PO_UNRESOLVED: '未收货的采购单：品项找不到对应库存',
     OPEN_PO_UNLINKED: '未收货的采购单：品项没连结库存（收货不会加库存）',
+    STALE_PO: '超过 30 天还没收货的采购单',
     CODE_DUPLICATE: '编号重复',
     CODE_REGISTRY_MISMATCH: '编号登记表与商品不一致',
     AREA_MISMATCH: '分类与所在区域不符',
@@ -73,8 +80,8 @@ const SEVERITY_RANK: Record<AuditSeverity, number> = { HIGH: 0, MEDIUM: 1, LOW: 
 export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     const out: AuditFinding[] = [];
     const byId = new Map<string, { area: StockArea; data: Record<string, any> }[]>();
-    const add = (severity: AuditSeverity, type: string, subject: string, detail: string, stockId?: string, target?: AuditTarget) =>
-        out.push({ severity, type, title: TYPE_LABEL[type] || type, subject, detail, ...(stockId ? { stockId } : {}), ...(target ? { target } : {}) });
+    const add = (severity: AuditSeverity, type: string, subject: string, detail: string, stockId?: string, target?: AuditTarget, po?: AuditPoRef) =>
+        out.push({ severity, type, title: TYPE_LABEL[type] || type, subject, detail, ...(stockId ? { stockId } : {}), ...(target ? { target } : {}), ...(po ? { po } : {}) });
     const stockTarget = (id: string): AuditTarget | undefined => { const e = byId.get(id)?.[0]; return e ? { kind: 'STOCK', area: e.area, stockId: id } : undefined; };
 
     // ── 库存本身 ──
@@ -148,19 +155,43 @@ export const auditStock = (input: StockAuditInput): AuditFinding[] => {
     });
 
     // ── 未收货采购单 ──
+    const today = input.today || new Date().toISOString().slice(0, 10);
+    const daysSince = (date: string): number | null => {
+        const d = String(date || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+        return Math.round((Date.parse(today) - Date.parse(d)) / 86400000);
+    };
+    const suppliersById = new Map(input.suppliers.map(s => [String(s.data.id || s.id), s]));
     input.openPurchaseOrders.forEach(po => {
-        (po.data.items || []).forEach((line: Record<string, any>) => {
+        const poId = String(po.data.id || po.id);
+        const date = String(po.data.date || '').slice(0, 10);
+        const ageDays = daysSince(date);
+        const supplierName = String(po.data.supplierName || po.data.supplierId || '');
+        const poRef: AuditPoRef = { id: poId, supplierName, date, ageDays };
+        const ageText = date ? `（${date} 下单${ageDays !== null ? `，已 ${ageDays} 天` : ''}）` : '';
+        const lines: Record<string, any>[] = po.data.items || [];
+        if (ageDays !== null && ageDays > 30) {
+            add('MEDIUM', 'STALE_PO', `${supplierName} · ${poId}`, `${date} 下单，已 ${ageDays} 天还没在系统收货，共 ${lines.length} 个品项。货早就收了的话取消这张单（不要再按收货，以免多出一笔应付账款）；还没到货就跟供应商确认。`, undefined, undefined, poRef);
+        }
+        const supplierCatalog: Record<string, any>[] = suppliersById.get(String(po.data.supplierId || ''))?.data.catalog || [];
+        lines.forEach(line => {
             const sid = String(line.stockId || '');
-            const subject = `${po.data.supplierName || po.data.supplierId || ''} · ${po.id} · ${line.name}`;
+            const subject = `${supplierName} · ${poId} · ${line.name}`;
             const cat = catalogById.get(sid);
             const poTarget: AuditTarget | undefined = cat ? { kind: 'SUPPLIER', supplierId: cat.supplierId, catalogItemId: String(cat.item.id) }
                 : po.data.supplierId ? { kind: 'SUPPLIER', supplierId: String(po.data.supplierId) } : undefined;
             if (cat) {
-                if (!cat.item.linkedStockId) add('MEDIUM', 'OPEN_PO_UNLINKED', subject, '供应商品项没连结库存，收货后库存不会增加。', undefined, poTarget);
-                else if (!byId.has(String(cat.item.linkedStockId))) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `供应商品项连结的 ${cat.item.linkedStockId} 已不存在。`, undefined, poTarget);
+                if (!cat.item.linkedStockId) add('MEDIUM', 'OPEN_PO_UNLINKED', subject, `供应商品项没连结库存，收货后库存不会增加${ageText}。`, undefined, poTarget, poRef);
+                else if (!byId.has(String(cat.item.linkedStockId))) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `供应商品项连结的 ${cat.item.linkedStockId} 已不存在${ageText}。`, undefined, poTarget, poRef);
                 return;
             }
-            if (!byId.has(sid)) add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `品项代码「${sid}」既不是供应商品项也不是库存商品，收货时库存不会增加。`, undefined, poTarget);
+            if (byId.has(sid)) return;
+            // 供应商现在有同名品项：多半是品项重建过，采购单还记着旧代码
+            const sameName = supplierCatalog.find(c => nameKey(String(c.name || '')) === nameKey(String(line.name || '')));
+            const hint = sameName
+                ? `供应商现在有同名品项「${sameName.name}」，品项多半重建过，这张单还记着旧代码。`
+                : `供应商目前没有这个品项。`;
+            add('HIGH', 'OPEN_PO_UNRESOLVED', subject, `品项代码「${sid}」找不到，收货时库存不会增加${ageText}。${hint}货已收 → 取消这张单；还没到 → 取消后用现在的品项重新下单。`, undefined, poTarget, poRef);
         });
     });
 
