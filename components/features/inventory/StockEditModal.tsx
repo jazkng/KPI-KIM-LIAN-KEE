@@ -1,12 +1,14 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
-    Edit3, X, Trash2, Link as LinkIcon, Package, Loader2, Save,
+    Edit3, X, Trash2, Link as LinkIcon, Loader2, Save,
     Camera, Image as ImageIcon, Info, Percent, Coins, Layers, Check
 } from 'lucide-react';
 import { CATEGORY_SECTIONS, INPUT_STYLE, LABEL_STYLE } from './inventoryConstants';
 import { StockItem, Supplier, UnitConversionRule } from '../../../types';
 import { uploadToCloudinary } from '../../utils';
 import { normalizeUnitName } from '../../../utils/unitConversion';
+import { SupplierComparison } from './SupplierComparison';
+import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
 
 const isPurchaseSameAsDisplay = (purchaseUnitName: string, displayUnitName?: string): boolean => {
     return normalizeUnitName(purchaseUnitName) === normalizeUnitName(displayUnitName);
@@ -29,6 +31,8 @@ interface StockEditModalProps {
     canSave?: boolean;
     /** 负责人 / 系统管理员：显示内部 ID 与旧编号 */
     showInternalIds?: boolean;
+    /** 设定 / 取消常用供应商（只写 preferredSupply 一个字段） */
+    onSetPreferred?: (option: SupplyOption | null) => Promise<void>;
 }
 
 // Common unit conversion mapping configuration
@@ -63,7 +67,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -1187,20 +1191,17 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                     {/* Card Section 6: Supplier Links */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-3">
-                        <h4 className="text-xs font-black text-gray-600 uppercase flex items-center gap-2"><LinkIcon size={14}/> 绑定供应商 (Supplier Links)</h4>
-                        {linkedSuppliers.length > 0 ? (
-                            <div className="space-y-2">
-                                {linkedSuppliers.map(s => (
-                                    <div key={s.id} className="flex items-center gap-2 bg-[#F6F7FB] p-2.5 rounded-xl border border-[#E5E7EB] text-xs">
-                                        <div className="bg-blue-50 text-blue-600 p-1 rounded-lg"><Package size={14}/></div>
-                                        <span className="font-bold text-[#111111] truncate flex-1">{s.name}</span>
-                                        <span className="text-[10px] text-gray-400 bg-white border border-[#E5E7EB] px-2 py-0.5 rounded-md font-mono">{s.id}</span>
-                                    </div>
-                                ))}
-                            </div>
+                        <h4 className="text-xs font-black text-gray-600 uppercase flex items-center gap-2"><LinkIcon size={14}/> 供应商比价 (Suppliers)</h4>
+                        {editingItem.id ? (
+                            <SupplierComparison
+                                stock={editingItem as Partial<StockItem> & { id: string }}
+                                suppliers={linkedSuppliers}
+                                canSetPreferred={!!onSetPreferred && canSave}
+                                onSetPreferred={async option => { if (onSetPreferred) await onSetPreferred(option); }}
+                            />
                         ) : (
                             <div className="text-[11px] text-gray-400 italic text-center py-3 bg-gray-50 border border-dashed border-[#E5E7EB] rounded-xl">
-                                暂无关联供应商 (No active supplier bindings)
+                                存档后在供应商品项里连结这个商品
                             </div>
                         )}
                     </div>
