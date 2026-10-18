@@ -1114,6 +1114,14 @@ export interface CatalogItem {
     lastReceivedPricePerBase?: number;
     lastReceivedAt?: string;
     lastReceivedPoId?: string;
+    weightHistory?: WeightReceipt[]; // 称重品项：最近 10 次收货的箱数与实际重量（新的在前）
+}
+
+export interface WeightReceipt {
+    at: string;
+    poId: string;
+    packs: number;   // 收到几个下单单位（例如 1 CTN）
+    weight: number;  // 实际重量（计价单位，例如 19.38 kg）
 }
 
 export interface SupplierBank {

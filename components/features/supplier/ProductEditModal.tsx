@@ -4,6 +4,7 @@ import { CatalogItem, StockItem, UomOption } from '../../../types';
 import { SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
 import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
 import { catalogPerBaseCost, type SupplyOption } from '../../../utils/inventory/supplyOptions';
+import { weightStats, weightStatsText } from '../../../utils/inventory/receiveWeight';
 
 interface ProductEditModalProps {
     productForm: Partial<CatalogItem>;
@@ -293,6 +294,15 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                         className={SUP_INPUT_STYLE}
                                         placeholder="e.g. 8.0"
                                     />
+                                    {weightStats(productForm.weightHistory) && (
+                                        <div className="mt-1.5 rounded-lg bg-orange-50 px-2 py-1.5 text-[11px] font-bold text-orange-800">
+                                            {weightStatsText(productForm)}
+                                            {weightStats(productForm.weightHistory)!.avgPerPack !== productForm.estimatedWeightPerUnit && (
+                                                <button type="button" onClick={() => onFormChange({ ...productForm, estimatedWeightPerUnit: weightStats(productForm.weightHistory)!.avgPerPack })}
+                                                    className="ml-2 rounded-md border border-orange-300 bg-white px-2 py-0.5 text-[10px] font-black text-orange-800">改用平均值</button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
