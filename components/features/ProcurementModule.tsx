@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ShoppingCart, Package, Truck, AlertTriangle, Plus, FileText, Send, Printer, CheckCircle2, X, RefreshCw, Search, ClipboardCheck, ArrowDownToLine, Loader2, Info, ChevronDown, Filter, Utensils, Coffee, Wrench, Minus, ChevronUp, History, Clock, Zap, Trash2, Fish, Beef, Wheat, Carrot, ArrowLeft, Percent, Bus, Scale, Calculator, Flame } from 'lucide-react';
 import { StockItem, Supplier, PurchaseOrder, PurchaseOrderItem, ExpenseItem, CatalogItem } from '../../types';
 import { normalizeCatalogItem } from '../utils';
+import { cheapestOption, listSupplyOptions, pickDefaultSupply, pickSupplyForSupplier, type SupplyOption } from '../../utils/inventory/supplyOptions';
 import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
 import { buildReceiveLogs } from '../../utils/inventory/receiveLog';
@@ -61,6 +62,8 @@ interface OrderDraftItem {
     price: number;
     ratio: number;
     selectedSupplierId?: string;
+    /** 同一家可以有多个包装：记下选的是哪个供应商品项 */
+    selectedCatalogItemId?: string;
 }
 
 interface ReceivedItem extends PurchaseOrderItem {
@@ -213,8 +216,13 @@ export function resolveProcurementPrice(
     }
 
     // 1. Resolve ratio for FIXED mode
+    // 供应商品项自己的包装（toBaseRatio）优先：两家都叫「CTN」但大小不同时，不能用库存上同名单位的换算
+    const catalogUnitNorm = catalogItem ? normalizeUnit(catalogItem.purchaseUnitName || catalogItem.unit) : '';
+    const catalogPackRatio = Number(catalogItem?.toBaseRatio) > 0 ? Number(catalogItem!.toBaseRatio) : null;
     let ratio = 1;
-    if (selectedUnitNorm === normalizeUnit(baseUnit) || selectedUnitNorm === normalizeUnit(item.unit)) {
+    if (catalogPackRatio !== null && catalogUnitNorm && selectedUnitNorm === catalogUnitNorm) {
+        ratio = catalogPackRatio;
+    } else if (selectedUnitNorm === normalizeUnit(baseUnit) || selectedUnitNorm === normalizeUnit(item.unit)) {
         ratio = 1;
     } else if (item.displayUnit && normalizeUnit(item.displayUnit) === selectedUnitNorm) {
         ratio = item.displayToBaseRatio || 1;
@@ -254,7 +262,9 @@ export function resolveProcurementPrice(
 
         if (catPrice > 0) {
             let catToBaseRatio = 1;
-            if (catUnitNorm === normalizeUnit(baseUnit)) {
+            if (catalogPackRatio !== null) {
+                catToBaseRatio = catalogPackRatio;
+            } else if (catUnitNorm === normalizeUnit(baseUnit)) {
                 catToBaseRatio = 1;
             } else if (item.displayUnit && normalizeUnit(item.displayUnit) === catUnitNorm) {
                 catToBaseRatio = item.displayToBaseRatio || 1;
@@ -423,6 +433,9 @@ function getDefaultReplenishUnit(item: StockItem, catalogItem?: CatalogItem) {
 
     if (catalogItem && catalogItem.pricingMode === 'WEIGHT_BASED' && catalogItem.orderUnit) {
         defaultUnitName = catalogItem.orderUnit;
+    } else if (catalogItem && catalogItem.conversionMode !== 'ACTUAL_WEIGHT' && (catalogItem.purchaseUnitName || catalogItem.unit)) {
+        // 向这家下单时，默认用这家自己的包装
+        defaultUnitName = catalogItem.purchaseUnitName || catalogItem.unit;
     }
 
     const resolved = resolveProcurementPrice(item, defaultUnitName, catalogItem);
@@ -533,30 +546,22 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
     };
 
     // --- HELPER: FIND SUPPLIER ---
-    const findAllSuppliersForStock = useCallback((stockId: string): { supplier: Supplier, catalogItem: CatalogItem }[] => {
-        const results: { supplier: Supplier, catalogItem: CatalogItem }[] = [];
-        for (const sup of suppliers) {
-            if (sup.catalog) {
-                const match = sup.catalog.find(c => c.linkedStockId === stockId);
-                if (match) results.push({ supplier: sup, catalogItem: match });
-            }
-        }
-        return results;
-    }, [suppliers]);
+    // 一样东西多个供应商：列出所有还在卖的供应商品项（同一家多个包装都列），默认「常用 → 最便宜 → 第一个」
+    const findAllSuppliersForStock = useCallback((stockId: string): SupplyOption[] => {
+        const stock = stockItems.find(s => s.id === stockId) || { id: stockId };
+        return listSupplyOptions(stock, suppliers);
+    }, [stockItems, suppliers]);
 
-    const findSupplierForStock = useCallback((stockId: string) => {
-        const all = findAllSuppliersForStock(stockId);
-        return all.length > 0 ? all[0] : null;
+    const findSupplierForStock = useCallback((stockId: string) => pickDefaultSupply(findAllSuppliersForStock(stockId)), [findAllSuppliersForStock]);
+
+    /** 指定了供应商（与包装）就用那个；没指定或已失效就用默认 */
+    const resolveSupplyFor = useCallback((stockId: string, supplierId?: string, catalogItemId?: string): SupplyOption | null => {
+        const options = findAllSuppliersForStock(stockId);
+        return (supplierId ? pickSupplyForSupplier(options, supplierId, catalogItemId) : null) ?? pickDefaultSupply(options);
     }, [findAllSuppliersForStock]);
 
-    const resolveSupplierForDraft = useCallback((draft: OrderDraftItem): { supplier: Supplier, catalogItem: CatalogItem } | null => {
-        if (draft.selectedSupplierId) {
-            const sup = suppliers.find(s => s.id === draft.selectedSupplierId);
-            const catalogItem = sup?.catalog?.find(c => c.linkedStockId === draft.stockId);
-            if (sup && catalogItem) return { supplier: sup, catalogItem };
-        }
-        return findSupplierForStock(draft.stockId);
-    }, [suppliers, findSupplierForStock]);
+    const resolveSupplierForDraft = useCallback((draft: OrderDraftItem): SupplyOption | null =>
+        resolveSupplyFor(draft.stockId, draft.selectedSupplierId, draft.selectedCatalogItemId), [resolveSupplyFor]);
 
     // --- SUPPLIER LOW STOCK COUNTS ---
     const supplierLowStockCounts = useMemo(() => {
@@ -565,9 +570,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
         
         stockItems.forEach(item => {
             if (needsReplenishment(item)) {
-                const allMatches = findAllSuppliersForStock(item.id);
-                allMatches.forEach(({ supplier }) => {
-                    counts[supplier.id] = (counts[supplier.id] || 0) + 1;
+                const supplierIds = new Set(findAllSuppliersForStock(item.id).map(m => m.supplier.id));
+                supplierIds.forEach(id => {
+                    counts[id] = (counts[id] || 0) + 1;
                 });
             }
         });
@@ -630,17 +635,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             }
 
             // Resolve catalog item for the selected supplier (if any)
-            let catalogItem: CatalogItem | undefined;
-            if (newSupplierId) {
-                const sup = suppliers.find(s => s.id === newSupplierId);
-                catalogItem = sup?.catalog?.find(c => c.linkedStockId === stockId);
-            } else {
-                const match = findSupplierForStock(stockId);
-                if (match) {
-                    catalogItem = match.catalogItem;
-                    newSupplierId = match.supplier.id;
-                }
-            }
+            const match = resolveSupplyFor(stockId, newSupplierId, field === 'selectedSupplierId' ? undefined : prev[stockId]?.selectedCatalogItemId);
+            const catalogItem: CatalogItem | undefined = match?.catalogItem;
+            newSupplierId = match?.supplier.id ?? newSupplierId;
 
             const defInfo = getDefaultReplenishUnit(baseItem, catalogItem);
             const current = prev[stockId] || { stockId, qty: 0, unit: defInfo.unit, price: defInfo.price, ratio: defInfo.ratio };
@@ -662,12 +659,13 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 qty: newQty,
                 ratio: resolved.purchaseToBaseRatio,
                 price: resolved.purchaseUnitPrice,
-                selectedSupplierId: newSupplierId
+                selectedSupplierId: newSupplierId,
+                selectedCatalogItemId: catalogItem?.id
             };
 
             return { ...prev, [stockId]: updated };
         });
-    }, [suppliers, findSupplierForStock]);
+    }, [resolveSupplyFor]);
 
     // =====================================================
     // 🔧 FIX: handleQuickAdd - 之前缺失导致数量无法更改
@@ -675,18 +673,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
     const handleQuickAdd = useCallback((item: StockItem, delta: number) => {
         setOrderDrafts(prev => {
             // Ensure price is correct for current unit and selected supplier
-            let selectedSupplierId = prev[item.id]?.selectedSupplierId;
-            let catalogItem: CatalogItem | undefined;
-            if (selectedSupplierId) {
-                const sup = suppliers.find(s => s.id === selectedSupplierId);
-                catalogItem = sup?.catalog?.find(c => c.linkedStockId === item.id);
-            } else {
-                const match = findSupplierForStock(item.id);
-                if (match) {
-                    catalogItem = match.catalogItem;
-                    selectedSupplierId = match.supplier.id;
-                }
-            }
+            const match = resolveSupplyFor(item.id, prev[item.id]?.selectedSupplierId, prev[item.id]?.selectedCatalogItemId);
+            const catalogItem: CatalogItem | undefined = match?.catalogItem;
+            const selectedSupplierId = match?.supplier.id ?? prev[item.id]?.selectedSupplierId;
 
             const defInfo = getDefaultReplenishUnit(item, catalogItem);
             const current = prev[item.id] || { stockId: item.id, qty: 0, unit: defInfo.unit, price: defInfo.price, ratio: defInfo.ratio };
@@ -701,23 +690,29 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                     qty: newQty,
                     price: resolved.purchaseUnitPrice,
                     ratio: resolved.purchaseToBaseRatio,
-                    selectedSupplierId
+                    selectedSupplierId,
+                    selectedCatalogItemId: catalogItem?.id
                 }
             };
         });
-    }, [suppliers, findSupplierForStock]);
+    }, [resolveSupplyFor]);
 
     const updateDraftSupplier = useCallback((stockId: string, supplierId: string, catalogItem: CatalogItem, baseItem: StockItem) => {
         setOrderDrafts(prev => {
             const defInfo = getDefaultReplenishUnit(baseItem, catalogItem);
             const current = prev[stockId] || { stockId, qty: 1, unit: defInfo.unit, price: defInfo.price, ratio: defInfo.ratio };
-            
-            const resolved = resolveProcurementPrice(baseItem, current.unit, catalogItem);
+            // 换成那一家自己的包装；数量按基础单位换算，不会因为包装大小不同而订多或订少
+            const resolved = resolveProcurementPrice(baseItem, defInfo.unit, catalogItem);
+            const baseQty = (current.qty || 0) * (current.ratio || 1);
+            const qty = current.qty > 0 && resolved.purchaseToBaseRatio > 0 ? Math.max(1, Math.ceil(baseQty / resolved.purchaseToBaseRatio)) : current.qty;
             return {
                 ...prev,
                 [stockId]: {
                     ...current,
+                    qty,
+                    unit: resolved.unitName,
                     selectedSupplierId: supplierId,
+                    selectedCatalogItemId: catalogItem.id,
                     price: resolved.purchaseUnitPrice,
                     ratio: resolved.purchaseToBaseRatio
                 }
@@ -768,7 +763,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                         unit: defInfo.unit,
                         price: resolved.purchaseUnitPrice,
                         ratio: resolved.purchaseToBaseRatio,
-                        selectedSupplierId: match?.supplier.id
+                        selectedSupplierId: match?.supplier.id,
+                        selectedCatalogItemId: match?.catalogItem.id
                     };
                     addedCount++;
                 }
@@ -846,12 +842,11 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 maxQtyBase
             } = getItemReplenishConfig(item);
 
-            // Determine supplier pricing
-            let catalogItem: CatalogItem | undefined;
-            const match = findSupplierForStock(item.id);
-            if (match) {
-                catalogItem = match.catalogItem;
-            }
+            // Determine supplier pricing：按供应商补货时一定用那一家（以前会跑到第一家）
+            const match = type === 'SUPPLIER'
+                ? pickSupplyForSupplier(findAllSuppliersForStock(item.id), targetId)
+                : findSupplierForStock(item.id);
+            const catalogItem: CatalogItem | undefined = match?.catalogItem;
 
             const defInfo = getDefaultReplenishUnit(item, catalogItem);
             const ratio = defInfo.ratio || 1;
@@ -869,7 +864,8 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                     unit: defInfo.unit,
                     price: resolved.purchaseUnitPrice,
                     ratio: resolved.purchaseToBaseRatio,
-                    selectedSupplierId: match?.supplier.id
+                    selectedSupplierId: match?.supplier.id,
+                    selectedCatalogItemId: match?.catalogItem.id
                 };
                 addedCount++;
             }
@@ -1485,9 +1481,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
         } = getItemReplenishConfig(item);
         
         const isLow = needsReplenishment(item);
-        const selectedSupplierId = orderDrafts[item.id]?.selectedSupplierId || allMatches[0]?.supplier.id;
-        const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
-        const activeCatalogItem = selectedSupplier?.catalog?.find(c => c.linkedStockId === item.id);
+        const selectedMatch = resolveSupplyFor(item.id, orderDrafts[item.id]?.selectedSupplierId, orderDrafts[item.id]?.selectedCatalogItemId);
+        const selectedSupplier = selectedMatch?.supplier;
+        const activeCatalogItem = selectedMatch?.catalogItem;
+        const cheapest = cheapestOption(allMatches);
 
         const defUnitInfo = getDefaultReplenishUnit(item, activeCatalogItem);
         const draft = orderDrafts[item.id] || { 
@@ -1538,7 +1535,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                 </span>
                             ) : (
                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 ${allMatches.length > 1 ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                                    <Truck size={9}/> {allMatches.length} 家供应商
+                                    <Truck size={9}/> {new Set(allMatches.map(m => m.supplier.id)).size} 家供应商{allMatches.length > new Set(allMatches.map(m => m.supplier.id)).size ? ` · ${allMatches.length} 种包装` : ''}
                                 </span>
                             )}
                         </div>
@@ -1596,12 +1593,12 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                             {showSupplierSelectorMap[item.id] && allMatches.length > 1 && (
                                 <div className="mt-2 flex flex-col gap-1.5 bg-white border border-gray-100 rounded-lg p-2 shadow-sm max-h-[160px] overflow-y-auto z-10">
                                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">选择其他供应商:</p>
-                                    {allMatches.map(({ supplier, catalogItem }) => {
-                                        const optPriceInfo = resolveProcurementPrice(item, draft.unit, catalogItem);
-                                        const isSelected = selectedSupplierId === supplier.id;
+                                    {allMatches.map(({ supplier, catalogItem, perBase, packRatio, packUnit, isPreferred }) => {
+                                        const isSelected = activeCatalogItem?.id === catalogItem.id;
+                                        const isCheapest = cheapest?.catalogItem.id === catalogItem.id && allMatches.length > 1;
                                         return (
                                             <button
-                                                key={supplier.id}
+                                                key={`${supplier.id}_${catalogItem.id}`}
                                                 type="button"
                                                 onClick={() => {
                                                     updateDraftSupplier(item.id, supplier.id, catalogItem, item);
@@ -1613,13 +1610,17 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                         : 'border-gray-100 bg-gray-50 text-gray-600 hover:bg-gray-100'
                                                 }`}
                                             >
-                                                <div className="flex justify-between items-center w-full font-bold">
+                                                <div className="flex justify-between items-center w-full font-bold gap-1">
                                                     <span className="truncate max-w-[150px]">{supplier.name}</span>
-                                                    {isSelected && <span className="text-[9px] bg-[#111111] text-[#FFD200] px-1 py-0.2 rounded font-black">当前</span>}
+                                                    <span className="flex shrink-0 gap-1">
+                                                        {isPreferred && <span className="text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-black">常用</span>}
+                                                        {isCheapest && <span className="text-[9px] bg-green-100 text-green-800 px-1 rounded font-black">最便宜</span>}
+                                                        {isSelected && <span className="text-[9px] bg-[#111111] text-[#FFD200] px-1 py-0.2 rounded font-black">当前</span>}
+                                                    </span>
                                                 </div>
-                                                <div className="font-mono flex justify-between text-[10px] mt-0.5 text-gray-500">
-                                                    <span>RM {optPriceInfo.purchaseUnitPrice.toFixed(2)} / {draft.unit}</span>
-                                                    <span>≈ RM {optPriceInfo.costPerBaseUnit.toFixed(4)} / {resolvedPrice.baseUnit}</span>
+                                                <div className="font-mono flex justify-between text-[10px] mt-0.5 text-gray-500 gap-2">
+                                                    <span className="truncate">1 {packUnit} = {packRatio} {resolvedPrice.baseUnit}</span>
+                                                    <span className="shrink-0">{perBase !== null ? `RM ${perBase.toFixed(4)} / ${resolvedPrice.baseUnit}` : '未报价'}</span>
                                                 </div>
                                             </button>
                                         );
