@@ -11,7 +11,7 @@ import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../
 import { findUnchangedWeights, unchangedWeightMessage } from '../../utils/inventory/receiveWeight';
 import { db } from '../../firebaseConfig';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
-import { displayStockCode, matchesStockSearch } from '../../utils/inventory/stockCode';
+import { matchesStockSearch } from '../../utils/inventory/stockCode';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
     calculateWeightedAverageCost, calculateReceivedLine, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
@@ -1548,9 +1548,11 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                             )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                            <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                                {displayStockCode(item)}
-                            </span>
+                            {item.stockCode && (
+                                <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                                    {item.stockCode}
+                                </span>
+                            )}
                             {allMatches.length === 0 ? (
                                 <span className="text-[9px] font-bold bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">
                                     无供应商
@@ -2028,7 +2030,6 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                         >
                                                                             <div className="flex flex-col truncate flex-1 mr-2">
                                                                                 <span className="flex items-center gap-1.5 truncate"><Truck size={11}/> {s.name}</span>
-                                                                                <span className="text-[9px] text-gray-400 font-mono ml-4">ID: {s.id}</span>
                                                                             </div>
                                                                             {count > 0 && <span className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full text-[9px] border border-red-100 whitespace-nowrap shrink-0">{count} 缺货</span>}
                                                                         </button>

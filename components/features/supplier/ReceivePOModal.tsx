@@ -52,7 +52,7 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
                                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
                                         <td className="p-4 font-bold text-xs text-[#111111]">
                                             {item.name}
-                                            <div className="text-[9px] text-gray-400 font-mono mt-0.5">{item.supplierCode || 'NO-CODE'}</div>
+                                            {item.supplierCode && <div className="text-[9px] text-gray-400 font-mono mt-0.5">{item.supplierCode}</div>}
                                         </td>
                                         <td className="p-4 text-xs font-mono font-medium">{item.orderQty} <span className="text-[10px] text-gray-400">{item.unit}</span></td>
                                         <td className="p-4">

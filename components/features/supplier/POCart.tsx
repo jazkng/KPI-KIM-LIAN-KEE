@@ -52,7 +52,6 @@ export const POCart: React.FC<POCartProps> = ({
                                 <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:border-[#FFD200]/50 transition-colors">
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-black text-sm text-[#111111] truncate">{item.name}</h4>
-                                        <p className="text-[10px] font-mono text-gray-400 mt-0.5">{item.stockId}</p>
                                     </div>
                                     <div className="flex items-center justify-between md:justify-end gap-4">
                                         <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl p-1 shadow-inner">

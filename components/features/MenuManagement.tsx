@@ -3004,7 +3004,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                         <div className="p-4 border-b">
                             <div className="relative">
                                 <Search className="absolute left-3 top-3 text-gray-400" size={16} />
-                                <input className="w-full pl-10 p-2.5 bg-gray-50 rounded-xl text-base font-bold outline-none" placeholder="Search stock..." value={stockSearch} onChange={e => setStockSearch(e.target.value)} autoFocus />
+                                <input className="w-full pl-10 p-2.5 bg-gray-50 rounded-xl text-base font-bold outline-none" placeholder="搜索食材名称或编号…" value={stockSearch} onChange={e => setStockSearch(e.target.value)} autoFocus />
                             </div>
                         </div>
                         <div className="flex-grow overflow-y-auto p-2 pb-6">
@@ -3020,7 +3020,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                     grouped[catLabel].push(s);
                                 });
                                 const sortedGroups = Object.keys(grouped).sort();
-                                if (sortedGroups.length === 0) return <div className="p-8 text-center text-gray-400 text-xs">No matching kitchen ingredients found.</div>;
+                                if (sortedGroups.length === 0) return <div className="p-8 text-center text-gray-400 text-xs">找不到。没有输入时只列出厨房食材；输入名称可以搜索全部区域（例如燃料的食油）。</div>;
                                 return sortedGroups.map(group => (
                                     <div key={group} className="mb-4">
                                         <div className="px-3 py-2 bg-gray-50 rounded-lg text-xs font-black text-gray-500 uppercase tracking-wider mb-1 sticky top-0 z-10 flex items-center gap-2">
@@ -3029,8 +3029,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                         {grouped[group].map(s => (
                                             <button key={s.id} onClick={() => addIngredientToVariant(s)} className="w-full text-left p-3.5 min-h-[56px] hover:bg-gray-50 rounded-xl flex justify-between items-center group border-b border-gray-50 last:border-0 active:scale-[0.99] active:bg-yellow-50 transition-all">
                                                 <div>
-                                                    <div className="font-bold text-sm text-[#111111]">{s.name}</div>
-                                                    <div className="text-[10px] text-gray-400">Unit: {getBaseUnit(s)} • Cost: RM {getCostPerBaseUnit(s).toFixed(2)}</div>
+                                                    <div className="font-bold text-sm text-[#111111]">{s.name}{s.stockCode && <span className="ml-1.5 text-[10px] font-mono font-bold text-gray-400">{s.stockCode}</span>}</div>
+                                                    <div className="text-[10px] text-gray-400">成本 RM {getCostPerBaseUnit(s).toFixed(2)} / {getBaseUnit(s)}</div>
                                                 </div>
                                                 <Plus size={18} className="text-gray-300 group-hover:text-[#FFD200]" />
                                             </button>
