@@ -2,7 +2,12 @@ import React from 'react';
 import { Package, X, Search, Box, Trash2, Link as LinkIcon } from 'lucide-react';
 import { CatalogItem, StockItem, UomOption } from '../../../types';
 import { SUP_INPUT_STYLE, SUP_LABEL_STYLE } from './supplierConstants';
-import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { resolveStockArea } from '../../../utils/inventory/stockArea';
+import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
+
+/** 同名商品可能在不同区域（例如厨房和燃料都有「碳」）：选的时候要看得出是哪一个 */
+const areaLabel = (s: StockItem) => { const a = resolveStockArea(s); return a ? STOCK_AREA_LABEL[a].split(' ')[0] : ''; };
 import { catalogPerBaseCost, type SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { weightStats, weightStatsText } from '../../../utils/inventory/receiveWeight';
 
@@ -126,29 +131,39 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                         <button 
                                             key={s.id} 
                                             onClick={() => { 
+                                                // 连结只改「连到哪个库存」：供应商这边自己的名称、价格、包装已经填了就保留，
+                                                // 只有空白时才用库存的资料帮忙填（新增品项时）。
+                                                const hasOwnPrice = Number(productForm.price) > 0;
+                                                const ownRatio = Number(productForm.toBaseRatio) > 0 ? Number(productForm.toBaseRatio) : toBaseRatio;
+                                                const ownPrice = Number(productForm.pricePerPurchaseUnit ?? productForm.price) || 0;
                                                 onFormChange({
                                                     ...productForm, 
                                                     linkedStockId: s.id, 
-                                                    name: s.name, 
-                                                    unit: unitName, 
-                                                    price: priceVal, 
-                                                    category: s.category,
-                                                    
-                                                    // Prompt 3 fields
-                                                    linkedPurchaseUnitId: defaultPU?.id,
-                                                    purchaseUnitName: unitName,
-                                                    toBaseRatio: toBaseRatio,
+                                                    name: productForm.name?.trim() ? productForm.name : s.name, 
+                                                    category: productForm.category || s.category,
                                                     baseUnit: s.baseUnit || s.unit || 'pcs',
                                                     displayUnit: s.displayUnit,
                                                     displayToBaseRatio: s.displayToBaseRatio,
-                                                    pricePerPurchaseUnit: priceVal,
-                                                    costPerBaseUnit: priceVal / (toBaseRatio || 1)
+                                                    ...(hasOwnPrice ? {
+                                                        linkedPurchaseUnitId: undefined,
+                                                        toBaseRatio: ownRatio,
+                                                        costPerBaseUnit: ownPrice / (ownRatio || 1),
+                                                    } : {
+                                                        unit: unitName,
+                                                        price: priceVal,
+                                                        linkedPurchaseUnitId: defaultPU?.id,
+                                                        purchaseUnitName: unitName,
+                                                        toBaseRatio: toBaseRatio,
+                                                        pricePerPurchaseUnit: priceVal,
+                                                        costPerBaseUnit: priceVal / (toBaseRatio || 1),
+                                                    }),
                                                 }); 
                                                 onStockSearchChange(''); 
                                             }} 
                                             className="w-full text-left px-3 py-2.5 hover:bg-blue-50 text-xs font-bold text-gray-700 border-b border-gray-50 flex justify-between"
                                         >
-                                            {s.name} <span className="text-[9px] font-mono text-gray-400 bg-gray-100 px-1 rounded">{displayStockCode(s)}</span>
+                                            <span className="truncate">{s.name}</span>
+                                            <span className="shrink-0 text-[9px] text-gray-400">{[s.stockCode, areaLabel(s)].filter(Boolean).join(' · ')}</span>
                                         </button>
                                     );
                                 })}
@@ -159,8 +174,8 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                 <div className="flex items-center gap-2">
                                     <div className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><Box size={14}/></div>
                                     <div>
-                                        <p className="text-[9px] text-gray-400 font-bold uppercase">Linked Item</p>
-                                        <p className="text-xs font-black text-blue-900">{linkedStock?.name || productForm.linkedStockId}</p>
+                                        <p className="text-[9px] text-gray-400 font-bold">已连到库存{linkedStock ? `（${[linkedStock.stockCode, areaLabel(linkedStock)].filter(Boolean).join(' · ')}）` : ''}</p>
+                                        <p className="text-xs font-black text-blue-900">{linkedStock?.name || '库存已不存在，请重新连结'}</p>
                                     </div>
                                 </div>
                                 <button onClick={() => onFormChange({...productForm, linkedStockId: undefined, linkedPurchaseUnitId: undefined, purchaseUnitName: undefined, toBaseRatio: undefined})} className="text-red-400 p-1.5 hover:bg-red-50 rounded-lg"><X size={14}/></button>
