@@ -1,3 +1,4 @@
+import { DailyContextBadge } from '../ui/DailyContextBadge';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
     X, ChevronLeft, ChevronRight, TrendingUp, TrendingDown,
@@ -672,6 +673,7 @@ export const DailyBusinessReportModal: React.FC<DailyBusinessReportModalProps> =
                 </div>
 
                 {/* 日期选择控制器 */}
+                <div className="px-4"><DailyContextBadge date={selectedDate}/></div>
                 <div className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
                     <button
                         onClick={() => setSelectedDate(shiftDays(selectedDate, -1))}

@@ -1,0 +1,5 @@
+
+import React from 'react';import{createRoot}from'react-dom/client';import{DailyContextBadge}from'../../components/ui/DailyContextBadge.tsx';
+const data={date:'2026-10-19',fetchedAt:'2026-10-19T07:00:00Z',timezone:'Asia/Kuala_Lumpur',window:{start:'16:30',end:'21:00'},kind:'forecast',weather:{label:'可能有雨',rainMm:2,minC:25,maxC:29.5},air:{pm25Mean:37.5,pm25Max:60,pm10Mean:20},holidays:{status:'unavailable',names:[],sourceUrl:null},issues:['全年节日日历未就绪'],attribution:'天气：Open-Meteo；空气质量：CAMS / Open-Meteo（模型预报，非环境局实测API）'};
+let calls=0;window.fetch=async()=>{calls++;document.getElementById('count').textContent=`本页读取${calls}次；抓取外部来源0次`;return new Response(JSON.stringify({status:'ready',data}));};
+createRoot(document.getElementById('root')).render(React.createElement('main',{className:'mx-auto max-w-xl p-5'},React.createElement('p',{className:'text-xs text-amber-700'},'组件验收 · 全部模拟资料'),React.createElement('h1',{className:'text-2xl font-bold my-4'},'营业时段预报'),React.createElement('p',null,'每天15:00后台执行，范围16:30–21:00'),React.createElement(DailyContextBadge,{date:'2026-10-19'}),React.createElement('p',{id:'count',className:'mt-4 text-xs'},'')));

@@ -1,3 +1,4 @@
+import { DailyContextBadge } from './ui/DailyContextBadge';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     FileBarChart, CreditCard, Wallet, ShieldCheck, Banknote,
@@ -803,6 +804,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                             </span>
                                                         )}
                                                     </p>
+                                                <DailyContextBadge date={r.dateStr}/>
                                                 </div>
                                             </div>
                                             <button

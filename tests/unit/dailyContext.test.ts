@@ -1,0 +1,28 @@
+import { describe,it,expect,vi } from 'vitest';
+import { malaysiaClock,validDate,validateCalendar,holidaySummary,summarizeWeather,summarizeAir } from '../../server/context/policy';
+import { forecastConfig,forecastUrl,fetchForecasts } from '../../server/context/provider';
+import { runDailyContext,type ContextStore } from '../../server/context/service';
+import type { DailyContext,CalendarYear } from '../../shared/dailyContext';
+const date='2026-10-19',at=new Date('2026-10-19T07:00:00Z');
+const hourly={time:[16,17,18,19,20,21].map(h=>`${date}T${h}:00`),temperature_2m:[30,29,28,27,26,25],precipitation:[100,2,1,0,0,0],weather_code:[1,61,61,2,2,1],pm2_5:[10,20,30,40,50,60],pm10:[20,20,20,20,20,20]};
+const env={CONTEXT_LATITUDE:'3.2',CONTEXT_LONGITUDE:'101.6',CONTEXT_OPEN_METEO_KEY:'test-key',CONTEXT_REGION:'MY-14'};
+const calendar:CalendarYear={year:2026,region:'MY-14',reviewedAt:'2026-10-19',sourceUrl:'https://www.kabinet.gov.my/hari-kelepasan-am/',days:[{date,name:'测试节日',kind:'public'}]};
+function memoryStore(){let claimed=false,snapshot:DailyContext|null=null;return {claim:vi.fn(async()=>{if(claimed)return false;claimed=true;return true;}),get:vi.fn(async(_date:string)=>snapshot),save:vi.fn(async(_d:string,data:DailyContext)=>{snapshot=data;}),calendar:vi.fn(async()=>calendar),saveCalendar:vi.fn(async()=>{})} satisfies ContextStore;}
+const goodFetch=()=>vi.fn(async()=>new Response(JSON.stringify({hourly}),{status:200})) as unknown as typeof fetch;
+describe('daily context window and source integrity',()=>{
+ it('uses Malaysia time independently of the host clock',()=>expect(malaysiaClock(at)).toEqual({date,minutes:900}));
+ it.each(['2026-02-30','wrong','2026-13-01'])('rejects invalid date %s',d=>expect(validDate(d)).toBe(false));
+ it('does not use a different region or year calendar',()=>{expect(()=>validateCalendar(calendar,2027,'MY-14')).toThrow();expect(()=>validateCalendar(calendar,2026,'MY-10')).toThrow();});
+ it('distinguishes unavailable calendar from a confirmed non-holiday',()=>{expect(holidaySummary(null,date).status).toBe('unavailable');expect(holidaySummary(calendar,'2026-10-20')).toMatchObject({status:'ready',names:[]});});
+ it('limits precipitation to 16:30–21:00 and interpolates its start temperature',()=>expect(summarizeWeather(hourly,date)).toEqual({label:'可能有雨',rainMm:2,minC:25,maxC:29.5}));
+ it('does not classify the window using an earlier 16:00 thunderstorm',()=>expect(summarizeWeather({...hourly,weather_code:[95,0,0,0,0,0],precipitation:[100,0,0,0,0,0]},date).label).toBe('晴'));
+ it('calculates time-weighted PM2.5 for 4.5 hours, not a national pollution index',()=>expect(summarizeAir(hourly,date)).toEqual({pm25Mean:37.5,pm25Max:60,pm10Mean:20}));
+ it('does not turn null upstream values into 0 or sunny',()=>expect(()=>summarizeWeather({...hourly,precipitation:[0,null,0,0,0,0]},date)).toThrow());
+ it('requires configured coordinates and licensed key',()=>{expect(()=>forecastConfig({})).toThrow();expect(()=>forecastConfig({...env,CONTEXT_LATITUDE:'NaN'})).toThrow();});
+ it('uses fixed provider hosts and explicit local date',()=>{const url=forecastUrl('air',date,forecastConfig(env));expect(url.hostname).toBe('customer-air-quality-api.open-meteo.com');expect(url.searchParams.get('timezone')).toBe('Asia/Kuala_Lumpur');expect(url.searchParams.get('end_date')).toBe(date);});
+ it('keeps partial failures separate and redacts upstream errors',async()=>{const f=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({hourly}))).mockRejectedValueOnce(new Error('SECRET_KEY'));const r=await fetchForecasts(date,forecastConfig(env),f);expect(r.weather).not.toBeNull();expect(r.air).toBeNull();expect(JSON.stringify(r)).not.toContain('SECRET_KEY');});
+ it.each(['2026-10-19T06:59:00Z','2026-10-19T08:30:00Z'])('does not fetch outside the 15:00–16:30 dispatch window %s',async time=>{const store=memoryStore(),f=goodFetch();expect(await runDailyContext(store,new Date(time),env,f)).toEqual({status:'outside-sync-window'});expect(f).not.toHaveBeenCalled();expect(store.claim).not.toHaveBeenCalled();});
+ it('fetches once per source/day across duplicate scheduler calls',async()=>{const store=memoryStore(),f=goodFetch();const results=await Promise.all([runDailyContext(store,at,env,f),runDailyContext(store,at,env,f)]);expect(results.map(r=>r.status).sort()).toEqual(['already-claimed','saved']);expect(f).toHaveBeenCalledTimes(2);expect(store.save).toHaveBeenCalledTimes(1);expect((await store.get(date))?.holidays.names).toEqual(['测试节日']);});
+ it('does not silently retry failed sources on repeated job delivery',async()=>{const store=memoryStore(),f=vi.fn().mockRejectedValue(new Error('unavailable'));await runDailyContext(store,at,env,f);await runDailyContext(store,at,env,f);expect(f).toHaveBeenCalledTimes(2);expect((await store.get(date))?.issues).toHaveLength(2);});
+ it('does not assume an absent annual calendar means an ordinary day',async()=>{const store=memoryStore();store.calendar.mockResolvedValue(null as never);await runDailyContext(store,at,env,goodFetch());expect((await store.get(date))?.holidays.status).toBe('unavailable');});
+});

@@ -1,3 +1,4 @@
+import { DailyContextBadge } from '../ui/DailyContextBadge';
 import { html2canvas, loadJsPDF } from '../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -1399,6 +1400,9 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     <div className="h-px bg-white/10 my-2"></div>
                     <div className="flex justify-between items-center"><span className="text-xs font-black text-[#FFD200] uppercase">Expected Cash</span><span className="text-xl font-mono font-black text-white">RM {totals.expectedCash.toFixed(2)}</span></div>
                 </div>
+                {import.meta.env.VITE_DAILY_CONTEXT_ENABLED === 'true' ? <>
+                  <DailyContextBadge date={businessDate}/>
+                  <details><summary className="cursor-pointer text-xs text-white/70">现场天气补充（选填）</summary>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
                     <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-2 tracking-widest">今日天气 (Weather)</label>
                     <div className="grid grid-cols-4 gap-2">
@@ -1418,6 +1422,28 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                         ))}
                     </div>
                 </div>
+                  </details>
+                </> : (
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-2 tracking-widest">今日天气 (Weather)</label>
+                    <div className="grid grid-cols-4 gap-2">
+                        {WEATHER_OPTIONS.map(opt => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setWeather(prev => prev === opt.value ? '' : opt.value)}
+                                className={`py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 border ${
+                                    weather === opt.value
+                                        ? 'bg-[#FFD200] text-black border-[#FFD200]'
+                                        : 'bg-black/30 text-white/60 border-white/10'
+                                }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                )}
                 <div className="bg-white/10 p-6 rounded-[2rem] border border-white/10 relative">
                     <label className="text-[10px] font-black text-[#FFD200] uppercase block mb-3 text-center tracking-widest">钱箱实际结余 (Actual Closing Cash)</label>
                     <div className="relative">

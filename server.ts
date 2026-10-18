@@ -1,3 +1,4 @@
+import { isContextJob, mountContextRoutes } from './server/context/routes';
 import express from "express";
 import crypto from "crypto";
 import fs from "fs";
@@ -173,12 +174,13 @@ async function startServer() {
 
   if (process.env.PREVIEW_ACCESS_PASSWORD) {
     const gate = createPreviewGate(process.env.PREVIEW_ACCESS_PASSWORD);
-    app.use((req, res, next) => (isSchedulerCall(req) ? next() : gate(req, res, next)));
+    app.use((req, res, next) => ((isSchedulerCall(req) || isContextJob(req,isEmulatorMode)) ? next() : gate(req, res, next)));
     console.log("🔒 预览站访问门禁已启用");
   }
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));
+  mountContextRoutes(app,isEmulatorMode);
 
   // Secure API endpoint for querying app data context with Gemini
   app.post("/api/gemini/chat", async (req, res) => {
