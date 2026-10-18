@@ -89,6 +89,30 @@ describe('去处理：每个问题指向要打开的画面', () => {
     });
 });
 
+describe('旧采购单', () => {
+    const input = base();
+    input.today = '2026-10-18';
+    input.suppliers.push({ id: 'wf', data: { id: 'wf', name: 'WENG FATT', catalog: [{ id: 'cat_new', name: '调色油 (Thick Sauce)', linkedStockId: 'K1' }] } });
+    input.openPurchaseOrders.push({ id: 'PO20260511003', data: { supplierId: 'wf', supplierName: 'WENG FATT', date: '2026-05-11T03:00:00Z', items: [{ stockId: 'cat_old', name: '调色油（Thick Sauce）' }] } });
+    const f = auditStock(input);
+
+    it('超过 30 天没收货：列出日期与天数，可直接取消', () => {
+        const stale = f.find(x => x.type === 'STALE_PO')!;
+        expect(stale.subject).toBe('WENG FATT · PO20260511003');
+        expect(stale.detail).toContain('160 天');
+        expect(stale.po).toEqual({ id: 'PO20260511003', supplierName: 'WENG FATT', date: '2026-05-11', ageDays: 160 });
+    });
+    it('品项代码找不到但供应商有同名品项：提示品项重建过', () => {
+        const x = f.find(y => y.type === 'OPEN_PO_UNRESOLVED' && y.subject.includes('PO20260511003'))!;
+        expect(x.detail).toContain('同名品项「调色油 (Thick Sauce)」');
+        expect(x.detail).toContain('2026-05-11 下单，已 160 天');
+        expect(x.po?.id).toBe('PO20260511003');
+    });
+    it('没有日期的采购单不报「超过 30 天」', () => {
+        expect(f.filter(x => x.type === 'STALE_PO').map(x => x.po?.id)).toEqual(['PO20260511003']);
+    });
+});
+
 describe('编号检查', () => {
     it('重新连号后：未编号、编号重复、登记表不一致', () => {
         const input = base();

@@ -1194,6 +1194,8 @@ export interface PurchaseOrder {
     receivedDelivery?: number;
     receivedAt?: string;
     receivedBy?: string;
+    cancelledAt?: string;
+    cancelledBy?: string;
 }
 
 export interface MenuIngredient {

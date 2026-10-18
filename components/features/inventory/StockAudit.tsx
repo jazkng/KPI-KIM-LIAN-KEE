@@ -7,7 +7,8 @@ import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { InventoryModule, SupplierModule, MenuManagement, StockCodeMigration } from '../../lazyModules';
 import { db } from '../../../firebaseConfig';
 import { CATEGORY_SECTIONS } from './inventoryConstants';
-import { auditStock, loadStockAuditInput, type AuditFinding, type AuditSeverity, type AuditTarget } from '../../../utils/inventory/stockAudit';
+import { auditStock, loadStockAuditInput, type AuditFinding, type AuditPoRef, type AuditSeverity, type AuditTarget } from '../../../utils/inventory/stockAudit';
+import { cancelPurchaseOrder } from '../../../utils/inventory/purchaseOrders';
 
 const SECTIONS = Object.fromEntries(Object.entries(CATEGORY_SECTIONS).map(([k, v]) => [k, v.map(s => s.id)]));
 const SEV: Record<AuditSeverity, { label: string; cls: string }> = {
@@ -35,6 +36,23 @@ const canGo = (employee: Employee | null | undefined, t: AuditTarget): boolean =
 
 export const StockAudit: React.FC<{ onClose: () => void; currentEmployee?: Employee | null }> = ({ onClose, currentEmployee }) => {
     const [goto, setGoto] = useState<AuditTarget | null>(null);
+    const [cancelling, setCancelling] = useState<string | null>(null);
+    const canCancelPo = canUseBossTarget(currentEmployee, 'PROCUREMENT') || canUseBossTarget(currentEmployee, 'SUPPLIER_CONTACTS');
+    // 旧采购单在采购单清单里找不到（清单只显示最近几十张），直接在这里取消
+    const cancelPo = async (po: AuditPoRef) => {
+        const ok = window.confirm(
+            `取消采购单 ${po.id}？\n${po.supplierName}${po.date ? ` · ${po.date} 下单` : ''}${po.ageDays !== null ? `（已 ${po.ageDays} 天）` : ''}\n\n` +
+            `取消后：状态改成「已取消」，单据保留；不会加库存，也不会产生应付账款。\n货早就收了、账也处理了，才按确定。`
+        );
+        if (!ok) return;
+        setCancelling(po.id);
+        try {
+            await cancelPurchaseOrder(db, po.id, currentEmployee?.name || '负责人');
+            await run();
+        } catch (e: any) {
+            alert(`没有取消：${e?.message || e}`);
+        } finally { setCancelling(null); }
+    };
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [findings, setFindings] = useState<AuditFinding[]>([]);
@@ -139,11 +157,16 @@ export const StockAudit: React.FC<{ onClose: () => void; currentEmployee?: Emplo
                                     {isOpen && (
                                         <div className="divide-y divide-stone-100 border-t border-stone-100">
                                             {list.slice(0, 300).map((f, i) => (
-                                                <div key={i} className="flex items-center gap-2 px-3 py-2">
-                                                    <div className="min-w-0 flex-1">
+                                                <div key={i} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                                                    <div className="min-w-[60%] flex-1">
                                                         <div className="text-xs font-black">{f.subject}</div>
                                                         <div className="mt-0.5 text-[11px] font-bold text-stone-500">{f.detail}</div>
                                                     </div>
+                                                    {f.po && canCancelPo && (
+                                                        <button disabled={!!cancelling} onClick={() => cancelPo(f.po!)} className="flex min-h-[40px] shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3 text-[11px] font-black text-red-700 hover:border-red-500 disabled:opacity-50">
+                                                            {cancelling === f.po.id ? <Loader2 size={12} className="animate-spin" /> : null} 取消这张采购单
+                                                        </button>
+                                                    )}
                                                     {f.target && canGo(currentEmployee, f.target) && (
                                                         <button onClick={() => setGoto(f.target!)} className="flex min-h-[40px] shrink-0 items-center gap-1 rounded-full border border-stone-300 bg-white px-3 text-[11px] font-black text-stone-700 hover:border-stone-900" title={TARGET_LABEL[f.target.kind]}>
                                                             去处理 <ArrowRight size={12} />
