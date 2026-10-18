@@ -3086,7 +3086,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onClose, isModal
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="font-bold text-sm text-[#111111] truncate">{item.name}</div>
-                                                <div className="text-[10px] text-gray-400 font-mono">ID: {item.id} • {item.variants?.[0]?.recipe?.length || 0} 项配方</div>
+                                                <div className="text-[10px] text-gray-400">{item.variants?.[0]?.recipe?.length || 0} 项配方</div>
                                             </div>
                                         </div>
                                         <Copy size={16} className="text-gray-300 group-hover:text-orange-500 shrink-0 ml-2" />

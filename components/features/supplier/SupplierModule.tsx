@@ -1441,7 +1441,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                     <div className="absolute top-2 right-2 p-2 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"><Truck size={48}/></div>
                                     <div className="flex items-start justify-between gap-2 mb-3 relative z-10">
                                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-[10px] shadow-md shrink-0">{sup.id}</div>
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#111111] to-gray-800 text-[#FFD200] flex items-center justify-center font-black text-xs shadow-md shrink-0">{(sup.name || '?').trim().slice(0, 2).toUpperCase()}</div>
                                             <div className="min-w-0 flex-1">
                                                 <h4 className="font-black text-sm text-[#111111] leading-snug line-clamp-2 group-hover:text-[#8B0000] transition-colors" title={sup.name}>{sup.name}</h4>
                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest mt-1 ${sup.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'}`}><span className={`w-1 h-1 rounded-full ${sup.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>{sup.status}</span>
@@ -1951,7 +1951,6 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             <div>
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">供应商 Supplier</p>
                                                 <p className="text-sm font-black text-[#111111]">{printingPO.supplierName}</p>
-                                                <p className="text-[10px] text-gray-500 font-mono mt-1">ID: {printingPO.supplierId}</p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">收货方 Deliver To</p>
