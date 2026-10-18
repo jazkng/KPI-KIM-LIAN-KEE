@@ -7,7 +7,7 @@ import { CATEGORY_SECTIONS, INPUT_STYLE, LABEL_STYLE } from './inventoryConstant
 import { StockItem, Supplier, UnitConversionRule } from '../../../types';
 import { uploadToCloudinary } from '../../utils';
 import { normalizeUnitName } from '../../../utils/unitConversion';
-import { SupplierComparison } from './SupplierComparison';
+import { SupplierComparison, type SameNameRef } from './SupplierComparison';
 import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { STOCK_AREAS, type StockArea } from '../../../utils/inventory/stockArea';
 import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
@@ -38,6 +38,9 @@ interface StockEditModalProps {
     onSetPreferred?: (option: SupplyOption | null) => Promise<void>;
     /** 负责人 / 系统管理员：把商品移到另一个区域（例如 厨房 → 燃料） */
     onMoveArea?: (to: StockArea, category: string) => Promise<void>;
+    /** 没有供应商连到这个商品时，同名却连到别处的供应商品项与改连 */
+    sameNameSupply?: SameNameRef[];
+    onRelinkSupply?: (ref: SameNameRef) => Promise<void>;
 }
 
 
@@ -154,7 +157,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -1282,6 +1285,8 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 suppliers={linkedSuppliers}
                                 canSetPreferred={!!onSetPreferred && canSave}
                                 onSetPreferred={async option => { if (onSetPreferred) await onSetPreferred(option); }}
+                                sameName={sameNameSupply}
+                                onRelink={onRelinkSupply}
                             />
                         ) : (
                             <div className="text-[11px] text-gray-400 italic text-center py-3 bg-gray-50 border border-dashed border-[#E5E7EB] rounded-xl">

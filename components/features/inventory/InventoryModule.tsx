@@ -22,6 +22,8 @@ import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
 import { moveStockAreaRegistration, resolveStockArea } from '../../../utils/inventory/stockArea';
 import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
+import { findSameNameCatalog, relinkCatalogItem } from '../../../utils/inventory/sameNameSupply';
+import type { SameNameRef } from './SupplierComparison';
 import { matchesStockSearch } from '../../../utils/inventory/stockCode';
 import { normalizeUnitName } from '../../../utils/unitConversion';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
@@ -443,6 +445,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
     const [editingItem, setEditingItem] = useState<Partial<StockItem> | null>(null);
     const [linkedSuppliers, setLinkedSuppliers] = useState<Supplier[]>([]);
+    const [sameNameSupply, setSameNameSupply] = useState<SameNameRef[]>([]);
+    const [supplierRefresh, setSupplierRefresh] = useState(0);
     
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // 删除前检查：哪些供应商品项、菜谱用到这个商品
@@ -690,13 +694,34 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             // 以连结（linkedStockId）为准，跟名称无关。以前存在 sessionStorage 整个分页期间不更新，
             // 在供应商那边刚连好的品项这里看不到；改用 DataManager 的快取（供应商存档时会清掉）。
             const stockId = editingItem.id;
-            DataManager.getSuppliers().then(allSuppliers => {
-                setLinkedSuppliers(allSuppliers.filter(s => s.catalog?.some(c => c.linkedStockId === stockId)));
+            const stockName = editingItem.name || '';
+            let cancelled = false;
+            setSameNameSupply([]);
+            DataManager.getSuppliers().then(async allSuppliers => {
+                const linked = allSuppliers.filter(s => s.catalog?.some(c => c.linkedStockId === stockId));
+                if (cancelled) return;
+                setLinkedSuppliers(linked);
+                if (linked.length > 0) return;
+                // 没有供应商连到这个商品：找同名、却连到别处的供应商品项，说明连到哪里
+                const refs = findSameNameCatalog({ id: stockId, name: stockName }, allSuppliers);
+                if (!refs.length) return;
+                const ids = [...new Set(refs.map(r => r.item.linkedStockId).filter(Boolean) as string[])];
+                const others = ids.length ? await DataManager.getStockItemsByIds(ids) : [];
+                if (cancelled) return;
+                setSameNameSupply(refs.map(r => {
+                    if (!r.item.linkedStockId) return { ...r, linkedTo: '没有连到任何库存' };
+                    const o = others.find(x => x.id === r.item.linkedStockId);
+                    if (!o) return { ...r, linkedTo: '连到的库存已不存在' };
+                    const a = resolveStockArea(o);
+                    return { ...r, linkedTo: `连到另一个库存：${a ? STOCK_AREA_LABEL[a].split(' ')[0] + ' · ' : ''}${o.name}${o.stockCode ? `（${o.stockCode}）` : ''}` };
+                }));
             }).catch(() => setLinkedSuppliers([]));
+            return () => { cancelled = true; };
         } else {
             setLinkedSuppliers([]);
+            setSameNameSupply([]);
         }
-    }, [editingItem?.id]);
+    }, [editingItem?.id, supplierRefresh]);
 
     const loadStock = async (view: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL') => {
         const data = await DataManager.getStock(view);
@@ -2442,6 +2467,19 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             alert(`✅ 已移动「${name}」。${r.newCode && r.newCode !== r.oldCode ? `\n新编号 ${r.newCode}（旧编号 ${r.oldCode} 仍可搜寻）` : ''}`);
                         } catch (e: any) {
                             alert(`没有移动：${e?.message || e}`);
+                        }
+                    } : undefined}
+                    sameNameSupply={sameNameSupply}
+                    onRelinkSupply={canEditExistingItem ? async ref => {
+                        const id = editingItem.id;
+                        if (!id) return;
+                        if (!confirm(`把「${ref.supplierName} · ${ref.item.name}」改连到「${editingItem.name}」？\n\n只改连结；供应商品项的名称、价格不变。以后收货会进这个商品的库存。`)) return;
+                        try {
+                            await relinkCatalogItem(db, ref.supplierId, ref.item.id, id);
+                            DataManager.clearCacheKeys(['suppliers']);
+                            setSupplierRefresh(n => n + 1);
+                        } catch (e: any) {
+                            alert(`没有改连：${e?.message || e}`);
                         }
                     } : undefined}
                     onSetPreferred={async option => {

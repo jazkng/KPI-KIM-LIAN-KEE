@@ -4,6 +4,9 @@ import { Star, Loader2 } from 'lucide-react';
 import type { StockItem, Supplier } from '../../../types';
 import { cheapestOption, listSupplyOptions, type SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { weightStatsText } from '../../../utils/inventory/receiveWeight';
+import type { SameNameCatalogRef } from '../../../utils/inventory/sameNameSupply';
+
+export type SameNameRef = SameNameCatalogRef & { linkedTo: string };
 
 const STORAGE_LABEL: Record<string, string> = { FROZEN: '冷冻', CHILLED: '冷藏', AMBIENT: '常温' };
 
@@ -12,9 +15,13 @@ interface Props {
     suppliers: Supplier[];
     canSetPreferred: boolean;
     onSetPreferred: (option: SupplyOption | null) => Promise<void>;
+    /** 没有供应商连到这个商品时：同名、却连到别的库存的供应商品项 */
+    sameName?: SameNameRef[];
+    /** 把同名品项改连到这个商品（只改连结，名称价格不动） */
+    onRelink?: (ref: SameNameRef) => Promise<void>;
 }
 
-export const SupplierComparison: React.FC<Props> = ({ stock, suppliers, canSetPreferred, onSetPreferred }) => {
+export const SupplierComparison: React.FC<Props> = ({ stock, suppliers, canSetPreferred, onSetPreferred, sameName = [], onRelink }) => {
     const [busy, setBusy] = useState<string | null>(null);
     const options = useMemo(() => listSupplyOptions(stock, suppliers, true), [stock, suppliers]);
     const active = options.filter(o => o.catalogItem.status !== 'DISCONTINUED');
@@ -30,7 +37,33 @@ export const SupplierComparison: React.FC<Props> = ({ stock, suppliers, canSetPr
     };
 
     if (options.length === 0) {
-        return <div className="text-[11px] text-gray-400 italic text-center py-3 bg-gray-50 border border-dashed border-[#E5E7EB] rounded-xl">暂无关联供应商 (No active supplier bindings)</div>;
+        return (
+            <div className="space-y-2">
+                <div className="text-[11px] text-gray-400 italic text-center py-3 bg-gray-50 border border-dashed border-[#E5E7EB] rounded-xl">暂无供应商连到这个商品</div>
+                {sameName.length > 0 && (
+                    <div className="space-y-1.5 rounded-xl border border-orange-200 bg-orange-50 p-3 text-[11px] font-bold text-orange-900">
+                        <div>找到 {sameName.length} 个同名的供应商品项，但没有连到这个商品（连结看的是「连到哪个库存」，不看名称）：</div>
+                        {sameName.map(r => {
+                            const key = r.supplierId + r.item.id;
+                            return (
+                                <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-2">
+                                    <div className="min-w-0">
+                                        <div className="truncate text-[#111111]">{r.supplierName} · {r.item.name}</div>
+                                        <div className="text-[10px] font-bold text-gray-500">目前：{r.linkedTo}</div>
+                                    </div>
+                                    {onRelink && (
+                                        <button type="button" disabled={!!busy} onClick={async () => { setBusy(key); try { await onRelink(r); } finally { setBusy(null); } }}
+                                            className="flex min-h-[36px] items-center gap-1 rounded-lg bg-[#111111] px-3 text-[11px] font-black text-white disabled:opacity-50">
+                                            {busy === key && <Loader2 size={12} className="animate-spin" />} 改连到这个商品
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
     }
 
     return (
