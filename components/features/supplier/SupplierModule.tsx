@@ -36,6 +36,7 @@ import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './Suppli
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { listSupplyOptions } from '../../../utils/inventory/supplyOptions';
 import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../../utils/inventory/catalogPrices';
+import { findUnchangedWeights, unchangedWeightMessage, weightStatsText } from '../../../utils/inventory/receiveWeight';
 import { buildReceiveLogs } from '../../../utils/inventory/receiveLog';
 import { getMalaysiaDateString } from '../../../utils/dateHelper';
 
@@ -466,6 +467,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             lastReceivedPricePerBase: productForm.lastReceivedPricePerBase,
             lastReceivedAt: productForm.lastReceivedAt,
             lastReceivedPoId: productForm.lastReceivedPoId,
+            weightHistory: productForm.weightHistory,
         };
         // 价格有改才更新「价格更新日期」
         const previous = selectedSupplier.catalog?.find(c => c.id === rawItem.id);
@@ -673,6 +675,10 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 }
             }
 
+            // 称重品项的实际重量还是预估值：提醒对照单据或磅秤
+            const weightMsg = unchangedWeightMessage(findUnchangedWeights(receivedItems));
+            if (weightMsg && !confirm(weightMsg)) return;
+
             const finalTotal = receivedItems.reduce((sum, item) => sum + ((item.billByWeight && item.receivedWeight ? item.receivedWeight : item.receivedQty) * item.finalCost), 0);
             const stockUpdates = new Map<string, { qtyDelta: number, receivedTotalCost: number }>();
             const supplier = suppliers.find(s => s.id === receivingPO.supplierId);
@@ -805,7 +811,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 const at = new Date().toISOString();
                 const received = receivedPOItems
                     .filter((l: any) => Number(l.receivedBaseQty) > 0 && Number(l.costPerBaseUnitAtReceive) > 0)
-                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id }));
+                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id, ...(l.billByWeight ? { packs: Number(l.receivedQty), weight: Number(l.receivedWeight) } : {}) }));
                 const diffs = await recordReceivedPrices(db, receivingPO.supplierId, received);
                 const msg = priceDiffMessage(receivingPO.supplierName, diffs);
                 if (msg && window.confirm(msg)) await updateCatalogPrices(db, receivingPO.supplierId, diffs);
@@ -1731,6 +1737,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 {item.priceUpdatedAt && <span>价格更新 {item.priceUpdatedAt.slice(0, 10)}</span>}
                                                             </div>
                                                         )}
+                                                        {weightStatsText(item) && <div className="mb-1 text-[10px] font-bold text-orange-700">{weightStatsText(item)}</div>}
 
                                                         {linkedStock && (
                                                             <div className="bg-gray-50 rounded-xl p-2.5 mb-4 text-[10px] text-gray-500 font-bold space-y-1 border border-gray-100">

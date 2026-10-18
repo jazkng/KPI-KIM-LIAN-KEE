@@ -9,10 +9,12 @@
 import { doc, runTransaction, type Firestore } from 'firebase/firestore';
 import type { CatalogItem } from '../../types';
 import { catalogPerBaseCost } from './supplyOptions';
+import { appendWeightReceipt } from './receiveWeight';
 
 export const PRICE_ALERT_PCT = 5;
 
-export interface ReceivedPrice { catalogItemId: string; perBase: number; at: string; poId: string }
+/** packs / weight：称重品项这次收到几个下单单位、实际重量（有的话记进 weightHistory） */
+export interface ReceivedPrice { catalogItemId: string; perBase: number; at: string; poId: string; packs?: number; weight?: number }
 export interface PriceDiff { catalogItemId: string; name: string; unit: string; catalogPerBase: number; receivedPerBase: number; pct: number; newPackPrice: number }
 
 const round = (n: number, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
@@ -35,7 +37,10 @@ export const applyReceivedPrices = (catalog: CatalogItem[], received: ReceivedPr
                 catalogPerBase: round(catalogPerBase), receivedPerBase: round(r.perBase), pct: round(pct, 1), newPackPrice: round(packPriceFromPerBase(c, r.perBase), 2),
             });
         }
-        return { ...c, lastReceivedPrice: round(packPriceFromPerBase(c, r.perBase), 2), lastReceivedPricePerBase: round(r.perBase), lastReceivedAt: r.at, lastReceivedPoId: r.poId };
+        const withWeight = isWeight(c) && Number(r.packs) > 0 && Number(r.weight) > 0
+            ? { weightHistory: appendWeightReceipt(c.weightHistory, { at: r.at, poId: r.poId, packs: Number(r.packs), weight: Number(r.weight) }) }
+            : {};
+        return { ...c, lastReceivedPrice: round(packPriceFromPerBase(c, r.perBase), 2), lastReceivedPricePerBase: round(r.perBase), lastReceivedAt: r.at, lastReceivedPoId: r.poId, ...withWeight };
     });
     return { catalog: next, diffs };
 };

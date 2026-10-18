@@ -8,6 +8,7 @@ import { DataManager } from '../../utils/dataManager';
 import { resolveStockArea } from '../../utils/inventory/stockArea';
 import { buildReceiveLogs } from '../../utils/inventory/receiveLog';
 import { priceDiffMessage, recordReceivedPrices, updateCatalogPrices } from '../../utils/inventory/catalogPrices';
+import { findUnchangedWeights, unchangedWeightMessage } from '../../utils/inventory/receiveWeight';
 import { db } from '../../firebaseConfig';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
 import { displayStockCode, matchesStockSearch } from '../../utils/inventory/stockCode';
@@ -1242,6 +1243,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 await (window as any).systemDialog.alert("❌ 错误：入库基础数量必须大于 0 (Received base qty must be > 0)", "采购管理");
                 return;
             }
+            // 称重品项的实际重量还是预估值：提醒对照单据或磅秤
+            const weightMsg = unchangedWeightMessage(findUnchangedWeights(receivedItems));
+            if (weightMsg && !await (window as any).systemDialog.confirm(weightMsg, "采购管理")) return;
 
             const itemsTotal = receivedItems.reduce(
                 (sum: number, item) => sum + calculateReceivedLine(item).finalLineTotal,
@@ -1445,7 +1449,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 const at = new Date().toISOString();
                 const received = receivedItemsWithNewFields
                     .filter((l: any) => Number(l.receivedBaseQty) > 0 && Number(l.costPerBaseUnitAtReceive) > 0)
-                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id }));
+                    .map((l: any) => ({ catalogItemId: String(l.stockId), perBase: Number(l.costPerBaseUnitAtReceive), at, poId: receivingPO.id, ...(l.billByWeight ? { packs: Number(l.receivedQty), weight: Number(l.receivedWeight) } : {}) }));
                 const diffs = await recordReceivedPrices(db, receivingPO.supplierId, received);
                 const msg = priceDiffMessage(receivingPO.supplierName, diffs);
                 if (msg && window.confirm(msg)) await updateCatalogPrices(db, receivingPO.supplierId, diffs);

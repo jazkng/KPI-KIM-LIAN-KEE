@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Star, Loader2 } from 'lucide-react';
 import type { StockItem, Supplier } from '../../../types';
 import { cheapestOption, listSupplyOptions, type SupplyOption } from '../../../utils/inventory/supplyOptions';
+import { weightStatsText } from '../../../utils/inventory/receiveWeight';
 
 const STORAGE_LABEL: Record<string, string> = { FROZEN: '冷冻', CHILLED: '冷藏', AMBIENT: '常温' };
 
@@ -72,6 +73,7 @@ export const SupplierComparison: React.FC<Props> = ({ stock, suppliers, canSetPr
                             {c.leadTimeDays ? <span>{c.leadTimeDays} 天到货</span> : null}
                             {c.lastReceivedAt && <span className="text-blue-700">最近进价 RM {Number(c.lastReceivedPrice || 0).toFixed(2)}（{c.lastReceivedAt.slice(0, 10)}）</span>}
                             {c.priceUpdatedAt && <span>价格更新 {c.priceUpdatedAt.slice(0, 10)}</span>}
+                            {weightStatsText(c) && <span className="text-orange-700">{weightStatsText(c)}</span>}
                         </div>
                         {canSetPreferred && !off && (
                             <button type="button" disabled={!!busy} onClick={() => toggle(o)}
