@@ -687,24 +687,12 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
 
     useEffect(() => {
         if (editingItem && editingItem.id) {
-            const CACHE_KEY = 'inventory_suppliers_cache';
-            const cached = sessionStorage.getItem(CACHE_KEY);
-            
-            const processSuppliers = (allSuppliers: Supplier[]) => {
-                const linked = allSuppliers.filter(s => 
-                    s.catalog?.some(c => c.linkedStockId === editingItem.id)
-                );
-                setLinkedSuppliers(linked);
-            };
-
-            if (cached) {
-                processSuppliers(JSON.parse(cached));
-            } else {
-                DataManager.getSuppliers().then(allSuppliers => {
-                    sessionStorage.setItem(CACHE_KEY, JSON.stringify(allSuppliers));
-                    processSuppliers(allSuppliers);
-                });
-            }
+            // 以连结（linkedStockId）为准，跟名称无关。以前存在 sessionStorage 整个分页期间不更新，
+            // 在供应商那边刚连好的品项这里看不到；改用 DataManager 的快取（供应商存档时会清掉）。
+            const stockId = editingItem.id;
+            DataManager.getSuppliers().then(allSuppliers => {
+                setLinkedSuppliers(allSuppliers.filter(s => s.catalog?.some(c => c.linkedStockId === stockId)));
+            }).catch(() => setLinkedSuppliers([]));
         } else {
             setLinkedSuppliers([]);
         }
@@ -1334,7 +1322,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     if (!linkAction) throw new Error('未选择供应商品项的处理方式');
                     await updateSupplierLinksForDeletedStock(db, editingItem.id, linkAction, newStockId);
                     DataManager.clearCacheKeys(['suppliers']);
-                    try { sessionStorage.removeItem('inventory_suppliers_cache'); } catch { /* 无痕模式 */ }
                 }
 
                 // 2. 从主库存中彻底删除
