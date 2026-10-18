@@ -13,6 +13,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { DataManager } from '../utils/dataManager';
 import { needsReplenishment } from '../utils/unitConversion';
 import { getEffectiveAPDueDate, shiftDate } from '../utils/apDueDate';
+import { getMalaysiaDateString } from '../utils/dateHelper';
 
 // 👑 关闭弹窗后重抓首页数据的冷却时间（毫秒）。首页一趟 fetchData 要读十几个集合，
 //    没有节流的话每关一次 Modal 就重读一次，是日常操作中最高频的 Firestore 浪费。
@@ -177,11 +178,10 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     const fetchData = async () => {
         try {
             // Get today's Malaysia (UTC+8) date string
-            const now = new Date();
-            const utc8 = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (3600000 * 8));
-            const todayStr = utc8.toISOString().split('T')[0];
-            const yr = utc8.getFullYear();
-            const mo = utc8.getMonth() + 1;
+            // 不能用「本机时间 + 时区差」再 toISOString：在马来西亚的手机上会在 00:00–08:00 算成前一天
+            const todayStr = getMalaysiaDateString();
+            const [yr, mo, dd] = todayStr.split('-').map(Number);
+            const todayMidnight = new Date(yr, mo - 1, dd);
             const pm = new Date(yr, mo - 2, 1);
             const pmStr = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
 
@@ -264,7 +264,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                     const amount = Number(bill.amount) || 0;
                     totalUnpaidCount++;
                     totalUnpaidAmount += amount;
-                    const diff = Math.ceil((due.getTime() - utc8.getTime()) / 86400000);
+                    const diff = Math.round((due.getTime() - todayMidnight.getTime()) / 86400000);
                     if (diff < 0) {
                         overdueBills++;
                         overdueAmount += amount;
@@ -387,18 +387,12 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
 
     // Calculate dates for Malaysia (UTC+8) timezone
     const tzDates = useMemo(() => {
-        const now = new Date();
-        const utc8 = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (3600000 * 8));
-        const todayStr = utc8.toISOString().split('T')[0];
-
-        const yesterday = new Date(utc8.getTime() - 86400000);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-        const dayBeforeYesterday = new Date(utc8.getTime() - (86400000 * 2));
-        const dayBeforeYesterdayStr = dayBeforeYesterday.toISOString().split('T')[0];
-
-        const lastWeekSameDay = new Date(utc8.getTime() - (86400000 * 8));
-        const lastWeekSameDayStr = lastWeekSameDay.toISOString().split('T')[0];
+        // 马来西亚今天的日期（原本的算法在马来西亚的手机上，凌晨 00:00–08:00 会算成前一天，
+        // 结果当晚结算完的营业日在经营日报里看不到）
+        const todayStr = getMalaysiaDateString();
+        const yesterdayStr = shiftDate(todayStr, -1);
+        const dayBeforeYesterdayStr = shiftDate(todayStr, -2);
+        const lastWeekSameDayStr = shiftDate(todayStr, -8);
 
         const firstDayOfMonth = `${todayStr.substring(0, 8)}01`;
 
@@ -546,9 +540,9 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
     const dailyReportSummary = useMemo(() => {
         if (settlements.length === 0) return null;
 
-        // 优先获取昨日记录；若昨日尚未提交，取最新的已结算记录
-        const yesterdayRecord = settlements.find(s => s.date === tzDates.yesterdayStr);
-        const activeRecord = yesterdayRecord || sortSettlementsNewestFirst(settlements)[0];
+        // 显示最新一天已结算的营业日（刚结算完就看得到；还没结算就显示前一个营业日）
+        const activeRecord = sortSettlementsNewestFirst(settlements.filter(s => s.date <= tzDates.todayStr))[0]
+            || sortSettlementsNewestFirst(settlements)[0];
         if (!activeRecord) return null;
 
         const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -559,6 +553,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
         const byDate = new Map(settlements.map(r => [r.date, r]));
 
         const isYesterday = activeRecord.date === tzDates.yesterdayStr;
+        const isToday = activeRecord.date === tzDates.todayStr;
         const f = getSettlementFigures(activeRecord);
         const ops = getOps(activeRecord);
         const revenue = f.netRevenue;
@@ -637,6 +632,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             formattedDate,
             weekday: weekdayOf(activeRecord.date),
             isYesterday,
+            isToday,
             revenue,
             storeTotal: f.storeHubTotal,
             deliveryTotal: f.totalDelivery,
@@ -795,8 +791,8 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         <h2 className="whitespace-nowrap text-[15px] font-extrabold tracking-tight text-stone-900">经营日报</h2>
-                                                        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${r.isYesterday ? 'bg-[#FFD200] text-stone-900' : 'bg-stone-100 text-stone-600'}`}>
-                                                            {r.isYesterday ? '昨天' : '最新营业日'}
+                                                        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${r.isYesterday || r.isToday ? 'bg-[#FFD200] text-stone-900' : 'bg-stone-100 text-stone-600'}`}>
+                                                            {r.isToday ? '今天' : r.isYesterday ? '昨天' : '最新营业日'}
                                                         </span>
                                                     </div>
                                                     <p className="mt-0.5 flex items-center gap-2 whitespace-nowrap text-[12px] font-medium text-stone-500 tabular-nums">
