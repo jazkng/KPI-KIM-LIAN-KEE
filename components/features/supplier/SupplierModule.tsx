@@ -35,6 +35,7 @@ import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+import { isFrozenBill, withoutFrozen } from '../../../utils/ap/frozenBills';
 import { categoryShortLabel, outstandingBySupplier, SUPPLIER_GROUPS, supplierGroupInfo, supplierGroupOf, type SupplierGroupId } from '../../../utils/supplier/supplierGroups';
 
 const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
@@ -201,6 +202,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     const billStats = useMemo(() => {
         let total = 0, outstanding = 0;
         supplierExpenses.forEach(b => {
+            if (isFrozenBill(b)) return; // 冻结的账单不计入
             total += b.totalBillAmount || b.amount || 0;
             outstanding += b.outstandingAmount || 0;
         });
@@ -254,7 +256,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         if (mainTab !== 'SUPPLIERS' || view !== 'LIST') return;
         // 只读：未付清的账单（回到列表时重读，付款后金额会更新）
         getDocs(query(collection(db, 'standalone_expenses'), where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])))
-            .then(snap => setUnpaidBills(snap.docs.map(d => d.data() as ExpenseItem)))
+            .then(snap => setUnpaidBills(withoutFrozen(snap.docs.map(d => d.data() as ExpenseItem))))
             .catch(err => console.error('读取未付款失败', err));
     }, [mainTab, view]);
     const outstandingMap = useMemo(() => outstandingBySupplier(suppliers, unpaidBills), [suppliers, unpaidBills]);
@@ -1920,7 +1922,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                         </div>
                                                                         <div className="flex-1 text-right">
                                                                             <div className="font-mono font-black text-xs text-[#111111]">RM {(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</div>
-                                                                            {bill.outstandingAmount && bill.outstandingAmount > 0 ? (
+                                                                            {isFrozenBill(bill) && <div className="text-[9px] text-sky-700 font-black mt-0.5 leading-none">❄️ 已冻结（不计入）</div>}
+                                                                            {!isFrozenBill(bill) && bill.outstandingAmount && bill.outstandingAmount > 0 ? (
                                                                                 <div className="text-[9px] text-rose-500 font-bold mt-0.5 leading-none">未付: RM {bill.outstandingAmount.toFixed(2)}</div>
                                                                             ) : (
                                                                                 <div className="text-[8px] text-emerald-600 font-black mt-0.5 leading-none">已付讫</div>

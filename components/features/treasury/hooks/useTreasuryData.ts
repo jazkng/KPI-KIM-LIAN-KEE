@@ -21,6 +21,7 @@ import {
   MonthlyClosing,
 } from "../treasuryTypes";
 import { formatMoney, getMonthLabel } from "../treasuryUtils";
+import { isFrozenBill, withoutFrozen } from '../../../../utils/ap/frozenBills';
 
 /**
  * 资金管理 — 数据层
@@ -325,7 +326,7 @@ export const useTreasuryData = () => {
         });
       });
 
-      expSnap.docs.forEach((d) => {
+      expSnap.docs.filter((d) => !isFrozenBill(d.data())).forEach((d) => {
         const e = d.data() as ExpenseItem;
         if (e.id.startsWith("bill_sync_") || e.expenseType === "RECURRING")
           return;
@@ -408,7 +409,7 @@ export const useTreasuryData = () => {
         }
         setRawStandaloneExpenses(source);
       }
-      allExp.push(...source);
+      allExp.push(...withoutFrozen(source)); // 冻结的应付账款不计入
 
       // Extract nested expenses from daily settlements
       fullSettlements.forEach((s) => {
@@ -497,7 +498,7 @@ export const useTreasuryData = () => {
         .map((d) => d.data() as FundTransfer)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const bills = billsSnap.docs.map((d) => d.data() as BillPaymentRecord);
-      const rawExp = expSnap.docs.map((d) => d.data() as ExpenseItem);
+      const rawExp = withoutFrozen(expSnap.docs.map((d) => d.data() as ExpenseItem));
 
       setSettlements(stl);
       setTransfers(trf);

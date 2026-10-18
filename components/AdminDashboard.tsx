@@ -10,6 +10,7 @@ import { getBusinessDateString } from '../utils/dateHelper';
 import { needsReplenishment } from '../utils/unitConversion';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { OnlineOrderCenter, SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, StaffCashModule } from './lazyModules';
+import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
 
 // --- NEW GENERIC IMPORTS ---
 
@@ -448,6 +449,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          {activeTab === 'AP' && (
              <AccountsPayableModule 
                 onClose={handleModuleExit} 
+                canFreeze={canManageStockCodes(currentEmployee)}
                 onNavigateToSelfVoucher={(prefill) => {
                     const isBoss = !allowedModules || allowedModules.length === 0;
                     if (isBoss || allowedModules.includes('SELF_INVOICE')) {

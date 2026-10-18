@@ -23,6 +23,7 @@ import { reserveStockCode } from "./inventory/stockCodeAllocator";
 import { normalizeEmployeeOrgFields } from "./orgAccess";
 import { buildOperationalLogNotifications } from "./notificationUtils";
 import { getBusinessDateString } from "./dateHelper";
+import { withoutFrozen } from './ap/frozenBills';
 
 const STOCK_AREA_BY_COLLECTION: Record<string, StockArea> = { stock_kitchen: 'KITCHEN', stock_bar: 'BAR', stock_general: 'GENERAL', stock_fuel: 'FUEL' };
 
@@ -2053,7 +2054,8 @@ export class DataManager {
         return {
             settlements: setSnap.docs.map(d => ({ id: d.id, ...d.data() }) as SettlementRecord),
             billPayments: billSnap.docs.map(d => ({ id: d.id, ...d.data() }) as BillPaymentRecord),
-            standaloneExpenses: [...expenses.values()],
+            // 冻结的应付账款不计入任何财务（V2）
+            standaloneExpenses: withoutFrozen([...expenses.values()]),
         };
     }
     /** 依 ID 读取独立支出（只读；用来找分期付款对应的原账单） */

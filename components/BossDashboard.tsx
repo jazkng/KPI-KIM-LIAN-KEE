@@ -17,6 +17,7 @@ import { canUseBossTarget } from '../utils/bossPortalAccess';
 import { canOpenDataTools } from './features/system/DataToolsHub';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
 import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, ExpenseAudit, DataToolsHub, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
@@ -404,7 +405,7 @@ export const BossDashboard: React.FC<{
             'EXPENSE_AUDIT': <ExpenseAudit onClose={close} />,
             'DATA_TOOLS': <DataToolsHub onClose={close} currentEmployee={currentEmployee} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
-            'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
+            'AP': <AccountsPayableModule onClose={close} canFreeze={canManageStockCodes(currentEmployee, !currentEmployee)} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
                 setActiveModal('SELF_INVOICE');
             }} />,

@@ -6,6 +6,7 @@ import { db } from "../../../firebaseConfig";
 import { DataManager } from "../../../utils/dataManager";
 import { LABOR_DEPT_ROLE_FALLBACK } from "../../../constants/classicPnLCostMap";
 import type { Employee, ExpenseItem, PayrollRecord, RecurringBill } from "../../../types";
+import { withoutFrozen } from '../../../utils/ap/frozenBills';
 
 /**
  * 📊 应付总览 —— 一页看完「还有多少钱没给」
@@ -124,7 +125,7 @@ export const PayablesOverview: React.FC<Props> = ({ isOpen, onClose }) => {
         DataManager.getEmployees(),
         DataManager.getRecurringBills(),
       ]);
-      setBills(snap.docs.map((d) => d.data() as ExpenseItem));
+      setBills(withoutFrozen(snap.docs.map((d) => d.data() as ExpenseItem)));
       setBillsCapped(snap.size >= 500);
       setPayrolls(pr || []);
       setEmployees(emps || []);
