@@ -33,6 +33,7 @@ import {
 
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from '../../firebaseConfig';
+import { isFrozenBill } from '../../utils/ap/frozenBills';
 
 interface FinancialReportProps {
     onClose: () => void;
@@ -334,8 +335,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
                 ]);
 
                 const expMap = new Map();
-                expSnap1.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
-                expSnap2.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+                expSnap1.docs.forEach(d => { if (!isFrozenBill(d.data())) expMap.set(d.id, { id: d.id, ...d.data() }); });
+                expSnap2.docs.forEach(d => { if (!isFrozenBill(d.data())) expMap.set(d.id, { id: d.id, ...d.data() }); }); // 冻结的应付账款不计入
                 const mergedExpenses = Array.from(expMap.values()) as ExpenseItem[];
                 const missingParents = [...new Set(mergedExpenses.map(e => parentBillIdOfPayment(e.id)).filter((id): id is string => !!id && !expMap.has(id)))];
                 const parents = missingParents.length ? await DataManager.getStandaloneExpensesByIds(missingParents) : [];
@@ -2112,8 +2113,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ onClose }) => 
             ]);
 
             const expMap = new Map<string, any>();
-            expSnap1.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
-            expSnap2.docs.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+            expSnap1.docs.forEach(d => { if (!isFrozenBill(d.data())) expMap.set(d.id, { id: d.id, ...d.data() }); });
+            expSnap2.docs.forEach(d => { if (!isFrozenBill(d.data())) expMap.set(d.id, { id: d.id, ...d.data() }); }); // 冻结的应付账款不计入
 
             // 业务发生制：分期付款第二笔以后的付款列不重复计入（原账单已按全额计入）
             const allExpenses = Array.from(expMap.values()) as any[];

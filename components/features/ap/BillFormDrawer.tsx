@@ -14,6 +14,9 @@ interface BillFormDrawerProps {
     isSaving: boolean;
     onSave: () => void;
     onDelete: (billId: string) => void;
+    /** 负责人 / 系统管理员才有：冻结 / 解冻这张账单 */
+    onFreeze?: (bill: ExpenseItem) => Promise<void>;
+    onUnfreeze?: (bill: ExpenseItem) => Promise<void>;
     generatePV: boolean;
     setGeneratePV: React.Dispatch<React.SetStateAction<boolean>>;
     pvTitle?: string;
@@ -46,6 +49,8 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
     isSaving,
     onSave,
     onDelete,
+    onFreeze,
+    onUnfreeze,
     generatePV,
     setGeneratePV,
     pvTitle,
@@ -931,7 +936,24 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             )}
                         </div>
 
+                        {editingBill.id && editingBill.frozen && (
+                            <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold text-sky-900">
+                                <div className="font-black">❄️ 这张账单已冻结：不计入应付、逾期、盈亏与财务报表</div>
+                                <div className="mt-1 text-sky-800">原因：{editingBill.frozenReason || '-'}（{editingBill.frozenBy || '-'} · {(editingBill.frozenAt || '').slice(0, 10)}）</div>
+                                {onUnfreeze && (
+                                    <button type="button" disabled={isSaving} onClick={() => onUnfreeze(editingBill as ExpenseItem)}
+                                        className="mt-2 min-h-[40px] rounded-xl bg-sky-700 px-4 text-xs font-black text-white disabled:opacity-50">解冻，恢复计算</button>
+                                )}
+                            </div>
+                        )}
+
                         <div className="mt-6 flex gap-3">
+                            {editingBill.id && !editingBill.frozen && onFreeze && editingBill.paymentStatus === 'UNPAID' && (
+                                <button type="button" disabled={isSaving} onClick={() => onFreeze(editingBill as ExpenseItem)} title="疑似重复或资料不全：先冻结，不删除，不计入财务"
+                                    className="px-4 bg-sky-50 text-sky-700 rounded-2xl hover:bg-sky-100 transition-colors text-xs font-black disabled:opacity-50">
+                                    ❄️ 冻结
+                                </button>
+                            )}
                             {editingBill.id && (
                                 <button 
                                     onClick={() => setShowDeleteConfirm(true)} 

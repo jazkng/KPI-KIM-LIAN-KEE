@@ -25,6 +25,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { getMalaysiaDateString } from '../../utils/dateHelper';
 import { shiftDate } from '../../utils/apDueDate';
+import { withoutFrozen } from '../../utils/ap/frozenBills';
 
 interface DailyBusinessReportModalProps {
     isOpen: boolean;
@@ -221,7 +222,7 @@ export const DailyBusinessReportModal: React.FC<DailyBusinessReportModalProps> =
                 );
                 const snap = await getDocs(qExp);
                 if (isMounted) {
-                    const items = snap.docs.map(d => d.data() as ExpenseItem);
+                    const items = withoutFrozen(snap.docs.map(d => d.data() as ExpenseItem));
                     setDayExpenses(items);
                 }
             } catch (err) {

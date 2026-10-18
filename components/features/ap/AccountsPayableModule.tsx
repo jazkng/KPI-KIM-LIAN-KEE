@@ -38,6 +38,11 @@ import { db } from '../../../firebaseConfig';
 
 // AP Constants & Sub-components
 import { getCached, TABS, FLAT_CATEGORIES, getQuickDateRange, getParticularsOptions } from './apConstants';
+import { freezeBill, freezeBlockReason, isFrozenBill, unfreezeBill, withoutFrozen } from '../../../utils/ap/frozenBills';
+
+const sessionEmployeeName = (): string => {
+    try { return JSON.parse(localStorage.getItem('kepong_erp_session_employee') || 'null')?.name || '负责人'; } catch { return '负责人'; }
+};
 import { PayablesOverview } from './PayablesOverview';
 import { BillFormDrawer } from './BillFormDrawer';
 import { QuickPayModal } from './QuickPayModal';
@@ -47,6 +52,8 @@ import { ApMigrationTool } from './ApMigrationTool';
 
 interface AccountsPayableModuleProps {
     onClose: () => void;
+    /** 负责人 / 系统管理员：可以冻结 / 解冻账单 */
+    canFreeze?: boolean;
     onNavigateToSelfVoucher?: (prefillData: { company: string; date: string; totalAmount: number; particulars: string; billRefId: string }) => void;
 }
 
@@ -88,8 +95,11 @@ const getEffectiveDueDate = (bill: Partial<ExpenseItem>): string =>
 
 const matchesActiveStatus = (
     bill: ExpenseItem,
-    activeTab: 'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'
+    activeTab: 'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL' | 'FROZEN'
 ): boolean => {
+    // 冻结的账单只在「已冻结」分页出现，其他分页与统计一律不算
+    if (activeTab === 'FROZEN') return isFrozenBill(bill);
+    if (isFrozenBill(bill)) return false;
     if (activeTab === 'ALL') return true;
     if (activeTab === 'UNPAID') return bill.paymentStatus !== 'PAID';
     return bill.paymentStatus === activeTab;
@@ -180,14 +190,14 @@ const requestApAi = async (path: string, init?: RequestInit) => {
     return { response, payload };
 };
 
-export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ onClose, onNavigateToSelfVoucher }) => {
+export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ onClose, onNavigateToSelfVoucher, canFreeze = false }) => {
     const [allBills, setAllBills] = useState<ExpenseItem[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'LIST' | 'SUPPLIER_DETAIL'>('LIST');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL'>('UNPAID');
+    const [activeTab, setActiveTab] = useState<'UNPAID' | 'PARTIAL' | 'PAID' | 'ALL' | 'FROZEN'>('UNPAID');
     const [isOverviewOpen, setIsOverviewOpen] = useState(false); // 📊 应付总览
     const [searchId, setSearchId] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2270,28 +2280,54 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         }
     };
 
+    // 冻结的账单不计入任何汇总
+    const liveBills = useMemo(() => withoutFrozen(allBills), [allBills]);
+    const frozenCount = allBills.length - liveBills.length;
+
+    const handleFreezeBill = async (bill: ExpenseItem) => {
+        if (!guardWrite('冻结账单')) return;
+        const block = freezeBlockReason(bill);
+        if (block) { alert(block); return; }
+        const reason = window.prompt(`冻结「${bill.company} · RM ${(bill.totalBillAmount || bill.amount || 0).toFixed(2)}」\n\n冻结后不删除，但不计入应付、逾期、盈亏与所有财务报表，随时可以解冻。\n请填写原因（例如：疑似重复，等供应商对账）：`, '');
+        if (reason === null) return;
+        if (!reason.trim()) { alert('请填写冻结原因'); return; }
+        try {
+            await freezeBill(db, bill.id, reason, sessionEmployeeName());
+            const at = new Date().toISOString();
+            mergeBillsIntoState([{ ...bill, frozen: true, frozenAt: at, frozenBy: sessionEmployeeName(), frozenReason: reason.trim() }]);
+        } catch (e: any) { alert(`没有冻结：${e?.message || e}`); }
+    };
+    const handleUnfreezeBill = async (bill: ExpenseItem) => {
+        if (!guardWrite('解冻账单')) return;
+        if (!window.confirm(`解冻「${bill.company} · RM ${(bill.totalBillAmount || bill.amount || 0).toFixed(2)}」？\n\n解冻后照常计入应付与财务报表。`)) return;
+        try {
+            await unfreezeBill(db, bill.id, sessionEmployeeName());
+            mergeBillsIntoState([{ ...bill, frozen: false }]);
+        } catch (e: any) { alert(`没有解冻：${e?.message || e}`); }
+    };
+
     const totalInvoicesOutstanding = useMemo(() => {
         const targetList = viewMode === 'SUPPLIER_DETAIL' && selectedSupplierId 
-            ? allBills.filter(b => b.company === supplierById.get(selectedSupplierId)?.name)
-            : allBills;
+            ? liveBills.filter(b => b.company === supplierById.get(selectedSupplierId)?.name)
+            : liveBills;
         return targetList.reduce((acc, b) => acc + (b.outstandingAmount || 0), 0);
-    }, [allBills, viewMode, selectedSupplierId, supplierById]);
+    }, [liveBills, viewMode, selectedSupplierId, supplierById]);
 
     const overdueBillsCount = useMemo(() => {
-        return allBills.filter(b => {
+        return liveBills.filter(b => {
             if (b.paymentStatus === 'PAID') return false;
             const dueDate = getEffectiveDueDate(b);
             return Boolean(dueDate) && new Date() > new Date(`${dueDate}T23:59:59`);
         }).length;
-    }, [allBills]);
+    }, [liveBills]);
 
     const thisMonthOutstanding = useMemo(() => {
         const today = new Date();
         const y = today.getFullYear();
         const m = String(today.getMonth() + 1).padStart(2, '0');
         const prefix = `${y}-${m}`;
-        return allBills.filter(b => (b.time || '').startsWith(prefix)).reduce((acc, b) => acc + (b.outstandingAmount || 0), 0);
-    }, [allBills]);
+        return liveBills.filter(b => (b.time || '').startsWith(prefix)).reduce((acc, b) => acc + (b.outstandingAmount || 0), 0);
+    }, [liveBills]);
 
     const showFab = viewMode === 'LIST' && !isFormOpen;
 
@@ -2385,7 +2421,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     {[
                         { id: 'UNPAID', label: '未付' },
                         { id: 'PAID', label: '已付' },
-                        { id: 'ALL', label: `全部状态 (${filteredBills.length})` }
+                        { id: 'ALL', label: `全部状态 (${filteredBills.length})` },
+                        ...(frozenCount > 0 || activeTab === 'FROZEN' ? [{ id: 'FROZEN', label: `冻结 ${frozenCount}` }] : []),
                     ].map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
@@ -2851,7 +2888,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                         </div>
 
                         <div className="flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
-                            {TABS.map(tab => {
+                            {[...TABS, ...(frozenCount > 0 || activeTab === 'FROZEN' ? [{ id: 'FROZEN', label: `已冻结 (Frozen ${frozenCount})`, color: 'text-sky-700 border-sky-600 bg-sky-50' }] : [])].map(tab => {
                                 const displayLabel = tab.id === 'ALL' ? '全部状态 (All Statuses)' : tab.label;
                                 return (
                                     <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black border-b-2 md:border-b-4 transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id ? tab.color : 'bg-white text-gray-400 border-transparent hover:bg-gray-50'}`}>{displayLabel.split(' ')[0]}<span className="hidden md:inline"> {displayLabel.split(' ').slice(1).join(' ')}</span>{activeTab === tab.id && <span className="bg-white/20 px-1 rounded text-[9px] ml-1">{filteredBills.length}</span>}</button>
@@ -3243,6 +3280,8 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 isSaving={isSaving}
                 onSave={handleSave}
                 onDelete={handleDeleteBill}
+                onFreeze={canFreeze ? async bill => { await handleFreezeBill(bill); setIsFormOpen(false); } : undefined}
+                onUnfreeze={canFreeze ? async bill => { await handleUnfreezeBill(bill); setIsFormOpen(false); } : undefined}
                 generatePV={formGeneratePV}
                 setGeneratePV={setFormGeneratePV}
                 pvTitle={formPVTitle}
