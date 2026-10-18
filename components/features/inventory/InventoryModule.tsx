@@ -25,6 +25,7 @@ import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveSt
 import { findSameNameCatalog, relinkCatalogItem } from '../../../utils/inventory/sameNameSupply';
 import type { SameNameRef } from './SupplierComparison';
 import { matchesStockSearch } from '../../../utils/inventory/stockCode';
+import { splitStockName } from '../../../utils/inventory/stockName';
 import { normalizeUnitName } from '../../../utils/unitConversion';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
@@ -113,22 +114,17 @@ const MemoizedStockCard = React.memo(({
     const isOutOfStock = stockStatus === 'OUT_OF_STOCK';
     const isLowStock = stockStatus === 'LOW_STOCK';
 
-    const displayName = tItem(item);
-    const hasTranslation = displayName !== item.name;
-    const cleanChinese = item.name.replace(/\([^)]+\)/, '').trim();
+    // 名称分两行：上面中文（有翻译就显示翻译），下面英文较小
+    const nameParts = splitStockName(item.name);
+    const translatedName = tItem(item);
+    const topName = translatedName === item.name ? nameParts.primary : splitStockName(translatedName).primary;
+    const subName = nameParts.secondary;
 
     if (mode === 'ASSIGN') {
         return (
             <div onClick={() => onAssignToggle(item.id)} className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer flex justify-between items-center ${isSelectedForAssign ? 'bg-indigo-50/70 border-indigo-500' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
                 <div>
-                    {hasTranslation ? (
-                        <div className="flex flex-col text-left leading-tight">
-                            <div className="font-bold text-sm text-stone-900 tracking-wide">{displayName}</div>
-                            <div className="text-[10px] text-stone-500 font-medium mt-0.5">{cleanChinese}</div>
-                        </div>
-                    ) : (
-                        <div className="font-bold text-sm text-[#111111]">{displayName}</div>
-                    )}
+                    <div className="flex flex-col text-left leading-tight min-w-0 flex-1"><div className="font-bold text-sm text-[#111111]">{topName}</div>{subName && <div className="text-[11px] text-stone-500 font-medium mt-0.5">{subName}</div>}</div>
                     {item.stockCode && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{item.stockCode}</div>}
                     {assignedTo && assignedTo.length > 0 && (
                         <div className="flex items-center gap-1 mt-1">
@@ -180,14 +176,7 @@ const MemoizedStockCard = React.memo(({
                         />
                     )}
                     <div className="flex-1 min-w-0">
-                        {hasTranslation ? (
-                            <div className="flex flex-col text-left leading-tight">
-                                <div className="font-black text-sm md:text-base text-stone-900 tracking-wide truncate">{displayName}</div>
-                                <div className="text-[10px] text-stone-500 font-medium truncate mt-0.5">{cleanChinese}</div>
-                            </div>
-                        ) : (
-                            <div className="font-black text-sm md:text-base text-[#111111] truncate">{displayName}</div>
-                        )}
+                        <div className="flex flex-col text-left leading-tight min-w-0 flex-1"><div className="font-black text-sm md:text-base text-[#111111] truncate">{topName}</div>{subName && <div className="text-[11px] text-stone-500 font-medium mt-0.5 truncate">{subName}</div>}</div>
                         <div className="text-[10px] text-gray-400 font-mono mt-1 flex flex-col gap-0.5">
                             {item.stockCode && <span className="bg-black/5 px-1.5 py-0.5 rounded font-bold w-fit mb-0.5">{item.stockCode}</span>}
                             <span>Min: {isDisplayMode ? `${(minLevelBase / displayToBaseRatio).toFixed(1)} ${tUnit(displayUnit)}` : `${minLevelBase} ${tUnit(baseUnit)}`}</span>
@@ -260,14 +249,7 @@ const MemoizedStockCard = React.memo(({
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start gap-2">
-                                {hasTranslation ? (
-                                    <div className="flex flex-col text-left leading-tight min-w-0 flex-1">
-                                        <div className="font-extrabold text-sm text-stone-900 tracking-wide truncate">{displayName}</div>
-                                        <div className="text-[10px] text-stone-500 font-medium truncate mt-0.5">{cleanChinese}</div>
-                                    </div>
-                                ) : (
-                                    <div className="font-extrabold text-sm text-[#111111] truncate">{displayName}</div>
-                                )}
+                                <div className="flex flex-col text-left leading-tight min-w-0 flex-1"><div className="font-extrabold text-sm text-[#111111] truncate">{topName}</div>{subName && <div className="text-[11px] text-stone-500 font-medium mt-0.5 truncate">{subName}</div>}</div>
                                 {onEdit && <div className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors shrink-0"><Edit3 size={12}/></div>}
                             </div>
                             <div className="flex items-center gap-2 mt-1 empty:hidden">
@@ -289,6 +271,7 @@ const MemoizedStockCard = React.memo(({
                             </div>
                         </div>
 
+                        {item.description && <p className="mt-1.5 text-[11px] font-medium leading-snug text-gray-600 line-clamp-2" title={item.description}>📝 {item.description}</p>}
                         {/* 进货规格：只在有设定时显示；没有就不占位置 */}
                         {defaultPU && defaultPU.unitName && normalizeUnitName(defaultPU.unitName) !== normalizeUnitName(baseUnit) && (
                             <div className="text-[10px] text-gray-500 font-semibold flex items-center gap-1 mt-1.5">
@@ -1016,7 +999,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             const purchaseUnitChanged = changed(['purchaseUnits', 'uomOptions']);
             const denied: InventoryPermission[] = [];
 
-            if (changed(['name', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
+            if (changed(['name', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
                 denied.push('EDIT_BASIC_INFO');
             }
             if (!baseUnitChanged && changed(['minLevelBase', 'minLevel', 'maxQtyBase', 'maxQty']) && !canInventory('EDIT_MIN_LEVEL')) {

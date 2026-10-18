@@ -938,6 +938,8 @@ export interface UnitConversionRule {
 export interface StockItem {
     id: string;
     name: string;
+    /** 使用说明（选填，例如稀释比例、用法）；没有就空白。V2 新增，V1 会忽略 */
+    description?: string;
     category: string;
     unit: string; // Legacy field
     maxQty: number; // Legacy field

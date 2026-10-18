@@ -5,6 +5,7 @@
 // ============================================================================
 
 import type { StockItem, UnitConversionRule } from '../../types';
+import { isTrivialConversion } from './stockName';
 
 const norm = (u?: string) => String(u || '').trim().toLowerCase();
 const fmt = (n: number, d = 2) => (Number.isFinite(n) ? String(Math.round(n * 10 ** d) / 10 ** d) : '?');
@@ -44,6 +45,7 @@ export const summarizeUnitSetup = (item: Partial<Item>): UnitSetupSummary => {
         if (pu.conversionMode === 'ACTUAL_WEIGHT') {
             return `${tag}按 ${name} 买，每次收货称实际重量（预估 1 ${name} ≈ ${fmt(r, 3)} ${base}）${price > 0 ? `，报价 RM ${fmt(price)} / ${name}${perBase}` : ''}。`;
         }
+        if (isTrivialConversion(name, r, base)) return `${tag}按 ${name} 买${price > 0 ? `，RM ${fmt(price)} / ${name}` : '，还没填价格'}。`;
         return `${tag}按 ${name} 买：1 ${name} = ${fmt(r, 4)} ${base}${price > 0 ? `，RM ${fmt(price)} / ${name}${perBase}` : '，还没填价格'}。`;
     });
     if (pus.length === 0) purchases.push(`没有设定采购规格：采购时直接按 ${base} 买。`);

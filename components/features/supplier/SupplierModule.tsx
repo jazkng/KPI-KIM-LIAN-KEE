@@ -36,6 +36,7 @@ import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './Suppli
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
 import { isFrozenBill, withoutFrozen } from '../../../utils/ap/frozenBills';
+import { isTrivialConversion, splitStockName } from '../../../utils/inventory/stockName';
 import { categoryShortLabel, outstandingBySupplier, SUPPLIER_GROUPS, supplierGroupInfo, supplierGroupOf, type SupplierGroupId } from '../../../utils/supplier/supplierGroups';
 
 const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
@@ -1772,7 +1773,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
                                                             </div>
                                                         </div>
-                                                        <h4 className="font-bold text-sm text-[#111111] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
+                                                        <h4 className="font-bold text-sm text-[#111111] leading-snug group-hover:text-blue-700 line-clamp-2">{splitStockName(item.name).primary}</h4>
+                                                        {splitStockName(item.name).secondary ? <div className="mb-1 text-[11px] font-medium text-gray-500 line-clamp-1">{splitStockName(item.name).secondary}</div> : <div className="mb-1" />}
                                                         {(item.status === 'DISCONTINUED' || item.packDesc || item.brand || item.spec || item.storage) && (
                                                             <div className="mb-1.5 flex flex-wrap gap-1 text-[9px] font-black">
                                                                 {item.status === 'DISCONTINUED' && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-gray-600">停售</span>}
@@ -1806,7 +1808,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                     <span className="text-blue-700">{linkedStock.name}</span>
                                                                     {isWeightItem(item)
                                                                         ? ` · 1 ${item.orderUnit || item.unit} ≈ ${item.estimatedWeightPerUnit || '?'} ${item.billingUnit || 'kg'}（称重）`
-                                                                        : ` · 1 ${item.purchaseUnitName || item.unit} = ${item.toBaseRatio || 1} ${item.baseUnit || linkedStock.baseUnit || 'pcs'}`}
+                                                                        : isTrivialConversion(item.purchaseUnitName || item.unit, item.toBaseRatio, item.baseUnit || linkedStock.baseUnit) ? '' : ` · 1 ${item.purchaseUnitName || item.unit} = ${item.toBaseRatio || 1} ${item.baseUnit || linkedStock.baseUnit || 'pcs'}`}
                                                                 </span>
                                                             </div>
                                                         ) : (

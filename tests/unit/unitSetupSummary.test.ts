@@ -33,5 +33,6 @@ describe('summarizeUnitSetup', () => {
         expect(s.warnings.join('|')).toContain('没有设定哪一个是「默认」');
         expect(s.purchases[1]).toContain('还没填价格');
         expect(summarizeUnitSetup({ baseUnit: 'kg' }).purchases[0]).toContain('直接按 kg 买');
+        expect(summarizeUnitSetup({ baseUnit: 'Bottle', purchaseUnits: [{ id: 'x', unitName: 'Bottle', unitType: 'PURCHASE', toBaseRatio: 1, pricePerUnit: 40 }] }).purchases[0]).toBe('按 Bottle 买，RM 40 / Bottle。');
     });
 });
