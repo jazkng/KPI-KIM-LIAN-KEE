@@ -502,6 +502,17 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             <MoveAreaSection currentArea={currentStockView} disabled={isSubmitting} onMove={onMoveArea} />
                         )}
 
+                        <div>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>使用说明（选填）</label>
+                            <textarea
+                                rows={2}
+                                className={`${INPUT_STYLE} focus:border-[#FFD200] resize-y`}
+                                value={editingItem.description || ''}
+                                onChange={e => onChange({ ...editingItem, description: e.target.value })}
+                                placeholder="例如：1 瓶兑 10 公升水；只用于地板。没有就留空"
+                            />
+                        </div>
+
                         {/* Image Upload Area */}
                         <div>
                             <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>商品照片 (Photo)</label>

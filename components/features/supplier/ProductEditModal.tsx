@@ -10,6 +10,7 @@ import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
 const areaLabel = (s: StockItem) => { const a = resolveStockArea(s); return a ? STOCK_AREA_LABEL[a].split(' ')[0] : ''; };
 import { catalogPerBaseCost, type SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { weightStats, weightStatsText } from '../../../utils/inventory/receiveWeight';
+import { isTrivialConversion } from '../../../utils/inventory/stockName';
 
 interface ProductEditModalProps {
     productForm: Partial<CatalogItem>;
@@ -362,7 +363,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                         <option value="">-- 请选择采购单位 --</option>
                                         {purchaseOptions.map(opt => (
                                             <option key={opt.id} value={opt.id}>
-                                                {opt.name} (1 {opt.name} = {opt.ratio} {linkedStock.baseUnit || linkedStock.unit || 'pcs'})
+                                                {isTrivialConversion(opt.name, opt.ratio, linkedStock.baseUnit || linkedStock.unit) ? opt.name : `${opt.name} (1 ${opt.name} = ${opt.ratio} ${linkedStock.baseUnit || linkedStock.unit || 'pcs'})`}
                                             </option>
                                         ))}
                                         <option value="__custom__">＋ 这家自己的包装（输入包装名称与数量）</option>
@@ -456,20 +457,22 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                         ) : (
                             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5 font-bold text-[#111111]">
                                 <p className="text-[10px] uppercase text-amber-800 tracking-wider">换算与成本预览 (Unit Conversion & Cost Preview)</p>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">配对采购单位:</span>
-                                    <span>1 {normalizedForm.purchaseUnitName} = {normalizedForm.toBaseRatio} {normalizedForm.baseUnit}</span>
-                                </div>
+                                {!isTrivialConversion(normalizedForm.purchaseUnitName, normalizedForm.toBaseRatio, normalizedForm.baseUnit) && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">配对采购单位:</span>
+                                        <span>1 {normalizedForm.purchaseUnitName} = {normalizedForm.toBaseRatio} {normalizedForm.baseUnit}</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between">
                                     <span className="text-gray-500">供应商报价 (Display Cost):</span>
                                     <span>RM {normalizedForm.pricePerPurchaseUnit.toFixed(2)} / {normalizedForm.purchaseUnitName}</span>
                                 </div>
-                                <div className="flex justify-between border-t border-amber-200/50 pt-1.5 mt-1.5">
+                                {!isTrivialConversion(normalizedForm.purchaseUnitName, normalizedForm.toBaseRatio, normalizedForm.baseUnit) && <div className="flex justify-between border-t border-amber-200/50 pt-1.5 mt-1.5">
                                     <span className="text-gray-700">单只/克成本 (Cost Per Base Unit):</span>
                                     <span className="text-amber-950 font-black">
                                         ≈ RM {normalizedForm.costPerBaseUnit.toFixed(4)} / {normalizedForm.baseUnit}
                                     </span>
-                                </div>
+                                </div>}
                             </div>
                         )
                     )}
