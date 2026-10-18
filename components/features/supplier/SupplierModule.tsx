@@ -488,16 +488,24 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     const purchasePrice = Math.max(0, Number(newItem.pricePerPurchaseUnit ?? newItem.price) || 0);
                     const purchaseRatio = toPositiveNumber(newItem.toBaseRatio, 1);
                     const purchaseUnits = [...(targetStock.purchaseUnits || [])];
-                    const matchingIndex = purchaseUnits.findIndex(unit =>
-                        unit.id === requestedPurchaseUnitId || unit.unitName.toLowerCase() === purchaseUnitName.toLowerCase()
-                    );
+                    // 只按 id 找同一笔：两家都叫「CTN」但一箱数量不同时，不能用名称去盖掉另一家的换算与价格
+                    let matchingIndex = purchaseUnits.findIndex(unit => unit.id === requestedPurchaseUnitId);
+                    const sameName = (unit: { unitName: string }) => unit.unitName.toLowerCase() === purchaseUnitName.toLowerCase();
+                    if (matchingIndex < 0) {
+                        // 同名同包装大小：沿用那一笔，不重复建立
+                        matchingIndex = purchaseUnits.findIndex(unit => sameName(unit) && Number(unit.toBaseRatio) === purchaseRatio);
+                    }
+                    // 同名但包装大小不同：库存上的名称加上数量区分，例如「CTN (12)」；供应商品项自己的名称不变
+                    const stockUnitName = matchingIndex < 0 && purchaseUnits.some(sameName)
+                        ? `${purchaseUnitName} (${purchaseRatio})`
+                        : purchaseUnitName;
                     const purchaseUnitId = matchingIndex >= 0
                         ? purchaseUnits[matchingIndex].id
                         : requestedPurchaseUnitId;
                     const purchaseRule = {
                         ...(matchingIndex >= 0 ? purchaseUnits[matchingIndex] : {}),
                         id: purchaseUnitId,
-                        unitName: purchaseUnitName,
+                        unitName: matchingIndex >= 0 ? purchaseUnits[matchingIndex].unitName : stockUnitName,
                         unitType: 'PURCHASE' as const,
                         toBaseRatio: purchaseRatio,
                         pricePerUnit: purchasePrice,

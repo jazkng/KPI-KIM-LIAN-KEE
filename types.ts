@@ -979,6 +979,9 @@ export interface StockItem {
     stockCodeRunId?: string;         // 由哪一次重新编号写入（回滚用）
     legacyCodes?: string[];          // 以前显示过的旧编号，隐藏保存，搜寻仍然找得到
     nameHistory?: { name: string; changedAt: string; changedBy: string; runId?: string }[];
+
+    /** 常用供应商与包装（2026-10-18，可选）：补货默认用这家；没设时用每基础单位最便宜的 */
+    preferredSupply?: { supplierId: string; catalogItemId: string; setAt?: string; setBy?: string };
 }
 
 /** stock_codes/{code}：编号登记表，一个编号只属于一个商品，发出后不再重复使用 */
@@ -1096,6 +1099,21 @@ export interface CatalogItem {
     purchaseUnit?: string;
     pricingUnit?: string;
     pricePerPricingUnit?: number;
+
+    // 供应商目录强化（2026-10-18，全部可选；V1 不认得也照常运作）
+    packDesc?: string;            // 包装说明，例如「24 瓶 × 320ml」
+    brand?: string;
+    spec?: string;                // 规格
+    storage?: 'FROZEN' | 'CHILLED' | 'AMBIENT';
+    minOrderQty?: number;         // 最少订购量（以这个品项的包装计）
+    leadTimeDays?: number;        // 下单到货天数
+    status?: 'ACTIVE' | 'DISCONTINUED';
+    note?: string;
+    priceUpdatedAt?: string;      // 目录价格最后修改
+    lastReceivedPrice?: number;   // 最近一次实际收货：每包装价格
+    lastReceivedPricePerBase?: number;
+    lastReceivedAt?: string;
+    lastReceivedPoId?: string;
 }
 
 export interface SupplierBank {

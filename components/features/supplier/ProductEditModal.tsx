@@ -25,6 +25,8 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     const removeUomOption = (idx: number) => { const c = [...productUoms]; c.splice(idx, 1); onUomsChange(c); };
 
     const linkedStock = productForm.linkedStockId ? allStockList.find(s => s.id === productForm.linkedStockId) : undefined;
+    // 这家自己的包装（例如别家一箱 24 瓶、这家一箱 12 瓶）：不必先在库存上建单位
+    const [customPack, setCustomPack] = React.useState(false);
 
     // Derived values for normalization and preview
     const purchaseOptions = React.useMemo(() => {
@@ -297,9 +299,19 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                 <div>
                                     <label className={SUP_LABEL_STYLE}>Linked Purchase Unit (选择采购单位)</label>
                                     <select
-                                        value={productForm.linkedPurchaseUnitId || purchaseOptions.find(o => o.name.toLowerCase() === productForm.unit?.toLowerCase())?.id || ''}
+                                        value={customPack ? '__custom__' : (
+                                            purchaseOptions.find(o => o.id === productForm.linkedPurchaseUnitId)?.id
+                                            || purchaseOptions.find(o => productForm.id && o.id === `supplier_${productForm.id}`)?.id
+                                            || purchaseOptions.find(o => o.name.toLowerCase() === (productForm.purchaseUnitName || productForm.unit || '').toLowerCase() && (!productForm.toBaseRatio || o.ratio === productForm.toBaseRatio))?.id
+                                            || '')}
                                         onChange={e => {
                                             const optId = e.target.value;
+                                            if (optId === '__custom__') {
+                                                setCustomPack(true);
+                                                onFormChange({ ...productForm, linkedPurchaseUnitId: undefined, baseUnit: linkedStock.baseUnit || linkedStock.unit || 'pcs' });
+                                                return;
+                                            }
+                                            setCustomPack(false);
                                             const selectedOpt = purchaseOptions.find(o => o.id === optId);
                                             if (selectedOpt) {
                                                 const newRatio = selectedOpt.ratio || 1;
@@ -325,7 +337,28 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
                                                 {opt.name} (1 {opt.name} = {opt.ratio} {linkedStock.baseUnit || linkedStock.unit || 'pcs'})
                                             </option>
                                         ))}
+                                        <option value="__custom__">＋ 这家自己的包装（输入包装名称与数量）</option>
                                     </select>
+                                    {customPack && (
+                                        <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                                            <div>
+                                                <label className={SUP_LABEL_STYLE}>包装名称</label>
+                                                <input className={SUP_INPUT_STYLE} placeholder="例如 CTN / 箱" value={productForm.purchaseUnitName || ''}
+                                                    onChange={e => onFormChange({ ...productForm, purchaseUnitName: e.target.value, unit: e.target.value })} />
+                                            </div>
+                                            <div>
+                                                <label className={SUP_LABEL_STYLE}>1 包装 = 几 {linkedStock.baseUnit || linkedStock.unit || 'pcs'}</label>
+                                                <input type="number" min="0" step="any" className={SUP_INPUT_STYLE} value={productForm.toBaseRatio ?? ''}
+                                                    onChange={e => {
+                                                        const ratio = parseFloat(e.target.value);
+                                                        const safe = isNaN(ratio) || ratio <= 0 ? undefined : ratio;
+                                                        const price = productForm.pricePerPurchaseUnit ?? productForm.price ?? 0;
+                                                        onFormChange({ ...productForm, toBaseRatio: safe, costPerBaseUnit: safe ? price / safe : undefined });
+                                                    }} />
+                                            </div>
+                                            <p className="col-span-2 text-[10px] font-bold text-blue-700">只属于这家供应商；不会改到其他供应商的包装。</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
