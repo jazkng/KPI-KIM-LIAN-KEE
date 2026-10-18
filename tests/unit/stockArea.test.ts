@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-    areaOfCategory, registerStockArea, resetStockAreaRegistry, resolveStockArea, stockAreaConflicts, STOCK_AREAS,
+    areaOfCategory, moveStockAreaRegistration, registerStockArea, resetStockAreaRegistry, resolveStockArea, stockAreaConflicts, STOCK_AREAS,
 } from '../../utils/inventory/stockArea';
 import { CATEGORY_SECTIONS } from '../../components/features/inventory/inventoryConstants';
 import { CATEGORY_MAP } from '../../components/features/supplier/supplierConstants';
@@ -65,5 +65,17 @@ describe('resolveStockArea', () => {
         registerStockArea('FUEL', [{ id: 'F1' }]);
         expect(stockAreaConflicts()).toEqual([]);
         expect(resolveStockArea({ id: 'F1' })).toBe('FUEL');
+    });
+});
+
+describe('moveStockAreaRegistration', () => {
+    it('移动后写到新区域，旧区域不算冲突', () => {
+        resetStockAreaRegistry();
+        registerStockArea('KITCHEN', [{ id: 'OIL' }]);
+        registerStockArea('FUEL', [{ id: 'OIL' }]);
+        expect(resolveStockArea({ id: 'OIL' })).toBeNull();
+        moveStockAreaRegistration('OIL', 'FUEL');
+        expect(resolveStockArea({ id: 'OIL' })).toBe('FUEL');
+        expect(stockAreaConflicts()).toEqual([]);
     });
 });

@@ -20,7 +20,8 @@ import { AssignModal } from './AssignModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
-import { resolveStockArea } from '../../../utils/inventory/stockArea';
+import { moveStockAreaRegistration, resolveStockArea } from '../../../utils/inventory/stockArea';
+import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
 import { displayStockCode, matchesStockSearch } from '../../../utils/inventory/stockCode';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
@@ -1095,12 +1096,12 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 conversionUnit: editingItem.conversionUnit || 'kg' 
             } as StockItem;
 
-            await DataManager.saveStockItem(currentStockView, newItem, employee?.name || 'Admin');
+            await DataManager.saveStockItem(currentStockView, newItem, employee?.name || 'Admin', { mustExist: !isNewItem });
             setEditingItem(null);
             await loadStock(currentStockView);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("保存失败 (Failed to save)");
+            alert(`保存失败 (Failed to save)${error?.message ? `\n${error.message}` : ''}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -2442,6 +2443,21 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     canDelete={canDeactivateItem}
                     canSave={!editingItem.id ? canAddItem : canEditExistingItem}
                     showInternalIds={canManageCodes}
+                    onMoveArea={canManageCodes && editingItem.id ? async (to, category) => {
+                        const id = editingItem.id!;
+                        const name = editingItem.name || id;
+                        if (!confirm(`把「${name}」从 ${STOCK_AREA_LABEL[currentStockView]} 移到 ${STOCK_AREA_LABEL[to]} · ${getCategoryLabel(category)}？\n\n数量、成本、供应商连结、菜谱都跟着走。`)) return;
+                        try {
+                            const r = await moveStockItem(db, { stockId: id, from: currentStockView, to, category, by: employee?.name || 'Admin' });
+                            moveStockAreaRegistration(id, to);
+                            DataManager.clearCacheKeys(['stock_']);
+                            setEditingItem(null);
+                            setItems(prev => prev.filter(i => i.id !== id));
+                            alert(`✅ 已移动「${name}」。${r.newCode && r.newCode !== r.oldCode ? `\n新编号 ${r.newCode}（旧编号 ${r.oldCode} 仍可搜寻）` : ''}`);
+                        } catch (e: any) {
+                            alert(`没有移动：${e?.message || e}`);
+                        }
+                    } : undefined}
                     onSetPreferred={async option => {
                         if (!editingItem?.id) return;
                         const area = resolveStockArea(editingItem as StockItem) ?? currentStockView;

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
     Edit3, X, Trash2, Link as LinkIcon, Loader2, Save,
-    Camera, Image as ImageIcon, Info, Percent, Coins, Layers, Check
+    Camera, Image as ImageIcon, Info, Percent, Coins, Layers, Check, ArrowRightLeft
 } from 'lucide-react';
 import { CATEGORY_SECTIONS, INPUT_STYLE, LABEL_STYLE } from './inventoryConstants';
 import { StockItem, Supplier, UnitConversionRule } from '../../../types';
@@ -9,6 +9,8 @@ import { uploadToCloudinary } from '../../utils';
 import { normalizeUnitName } from '../../../utils/unitConversion';
 import { SupplierComparison } from './SupplierComparison';
 import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
+import { STOCK_AREAS, type StockArea } from '../../../utils/inventory/stockArea';
+import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
 
 const isPurchaseSameAsDisplay = (purchaseUnitName: string, displayUnitName?: string): boolean => {
     return normalizeUnitName(purchaseUnitName) === normalizeUnitName(displayUnitName);
@@ -33,7 +35,48 @@ interface StockEditModalProps {
     showInternalIds?: boolean;
     /** 设定 / 取消常用供应商（只写 preferredSupply 一个字段） */
     onSetPreferred?: (option: SupplyOption | null) => Promise<void>;
+    /** 负责人 / 系统管理员：把商品移到另一个区域（例如 厨房 → 燃料） */
+    onMoveArea?: (to: StockArea, category: string) => Promise<void>;
 }
+
+
+const MoveAreaSection: React.FC<{ currentArea: string; disabled: boolean; onMove: (to: StockArea, category: string) => Promise<void> }> = ({ currentArea, disabled, onMove }) => {
+    const targets = STOCK_AREAS.filter(a => a !== currentArea);
+    const [open, setOpen] = useState(false);
+    const [to, setTo] = useState<StockArea>(targets[0]);
+    const [category, setCategory] = useState(CATEGORY_SECTIONS[targets[0]]?.[0]?.id || '');
+    const [busy, setBusy] = useState(false);
+    if (!open) {
+        return (
+            <button type="button" onClick={() => setOpen(true)} disabled={disabled}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 text-xs font-black text-gray-600 hover:border-gray-500 disabled:opacity-50">
+                <ArrowRightLeft size={14} /> 移动到其他区域（例如 厨房 → 燃料）
+            </button>
+        );
+    }
+    return (
+        <div className="space-y-2 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+            <div className="text-xs font-black text-blue-900">移动到其他区域</div>
+            <div className="grid grid-cols-2 gap-2">
+                <select className={INPUT_STYLE} value={to} onChange={e => { const a = e.target.value as StockArea; setTo(a); setCategory(CATEGORY_SECTIONS[a]?.[0]?.id || ''); }}>
+                    {targets.map(a => <option key={a} value={a}>{STOCK_AREA_LABEL[a]}</option>)}
+                </select>
+                <select className={INPUT_STYLE} value={category} onChange={e => setCategory(e.target.value)}>
+                    {CATEGORY_SECTIONS[to]?.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+            </div>
+            <p className="text-[11px] font-bold text-blue-800">数量、成本、照片、供应商连结、菜谱都跟着走。已有新编号系统时会换成新区域的编号，旧编号仍可搜寻。这里其他未保存的修改不会一起保存。</p>
+            <div className="flex gap-2">
+                <button type="button" onClick={() => setOpen(false)} disabled={busy} className="min-h-[40px] flex-1 rounded-xl bg-white text-xs font-black text-gray-600">取消</button>
+                <button type="button" disabled={busy || disabled || !category}
+                    onClick={async () => { setBusy(true); try { await onMove(to, category); } finally { setBusy(false); } }}
+                    className="flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-xl bg-blue-700 text-xs font-black text-white disabled:opacity-50">
+                    {busy && <Loader2 size={14} className="animate-spin" />} 移动到 {STOCK_AREA_LABEL[to]}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 // Common unit conversion mapping configuration
 const commonConversionMap: Record<string, Record<string, number>> = {
@@ -67,7 +110,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -407,6 +450,10 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 </select>
                             </div>
                         </div>
+
+                        {editingItem.id && onMoveArea && (
+                            <MoveAreaSection currentArea={currentStockView} disabled={isSubmitting} onMove={onMoveArea} />
+                        )}
 
                         {/* Image Upload Area */}
                         <div>
