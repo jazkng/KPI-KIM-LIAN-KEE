@@ -111,6 +111,7 @@ export const ExpenseAudit = lazyNamed(() => import('./features/finance/ExpenseAu
 export const DataToolsHub = lazyNamed(() => import('./features/system/DataToolsHub'), 'DataToolsHub');
 export const StockCodeMigration = lazyNamed(() => import('./features/inventory/StockCodeMigration'), 'StockCodeMigration');
 export const StockAudit = lazyNamed(() => import('./features/inventory/StockAudit'), 'StockAudit');
+export const SupplierPriceReport = lazyNamed(() => import('./features/inventory/SupplierPriceReport'), 'SupplierPriceReport');
 export const AccountsPayableModule = lazyNamed(() => import('./features/ap/AccountsPayableModule'), 'AccountsPayableModule');
 export const TreasuryModule = lazyNamed(() => import('./features/TreasuryModule'), 'TreasuryModule');
 export const WarrantyModule = lazyNamed(() => import('./features/WarrantyModule'), 'WarrantyModule');

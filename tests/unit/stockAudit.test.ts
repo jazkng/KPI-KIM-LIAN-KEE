@@ -113,6 +113,37 @@ describe('旧采购单', () => {
     });
 });
 
+describe('供应商比价检查', () => {
+    const input = base();
+    input.today = '2026-10-18';
+    input.stock.BAR.push(s('BEER', '虎牌啤酒 (Tiger Beer)', 'RTD', { preferredSupply: { supplierId: 'AL', catalogItemId: 'al_old' } }));
+    input.suppliers.push(
+        { id: 'EK', data: { id: 'EK', name: 'EK', catalog: [{ id: 'ek_ctn', name: 'Tiger 24', linkedStockId: 'BEER', purchaseUnitName: 'CTN', toBaseRatio: 24, price: 120, pricePerPurchaseUnit: 120,
+            lastReceivedPricePerBase: 5.6, lastReceivedAt: '2026-10-10', priceUpdatedAt: '2026-06-01' }] } },
+        { id: 'AL', data: { id: 'AL', name: 'AL', catalog: [
+            { id: 'al_ctn', name: 'Tiger 12', linkedStockId: 'BEER', purchaseUnitName: 'ctn', toBaseRatio: 12, price: 60, priceUpdatedAt: '2026-10-01' },
+            { id: 'al_old', name: 'Tiger 旧', linkedStockId: 'BEER', status: 'DISCONTINUED', toBaseRatio: 24, price: 100 }] } },
+    );
+    const f = auditStock(input);
+    const of = (t: string) => f.filter(x => x.type === t);
+
+    it('最近进价比目录价贵 12%：中', () => {
+        expect(of('PRICE_DRIFT').map(x => x.subject)).toEqual(['EK · Tiger 24']);
+        expect(of('PRICE_DRIFT')[0].target).toEqual({ kind: 'SUPPLIER', supplierId: 'EK', catalogItemId: 'ek_ctn' });
+    });
+    it('目录价格超过 90 天没更新：低（新的不报）', () => {
+        expect(of('STALE_PRICE').map(x => x.subject)).toEqual(['EK · Tiger 24']);
+    });
+    it('同名包装大小不同（大小写不分）', () => {
+        expect(of('PACK_NAME_CLASH')).toHaveLength(1);
+        expect(of('PACK_NAME_CLASH')[0].detail).toContain('12 / 24');
+    });
+    it('常用供应商品项已停售：中', () => {
+        expect(of('PREFERRED_GONE')[0]).toMatchObject({ stockId: 'BEER' });
+        expect(of('PREFERRED_GONE')[0].detail).toContain('停售');
+    });
+});
+
 describe('编号检查', () => {
     it('重新连号后：未编号、编号重复、登记表不一致', () => {
         const input = base();
