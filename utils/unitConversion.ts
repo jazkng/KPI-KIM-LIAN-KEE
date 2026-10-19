@@ -659,8 +659,32 @@ export function isDiscontinued(item: any): boolean {
   return item?.discontinued === true;
 }
 
+/** 当天用完（不计库存）：例如冰块，每天进货当天用完（2026-10-19 负责人批准） */
+export function isConsumeOnReceive(item: any): boolean {
+  return item?.consumeOnReceive === true;
+}
+
+/**
+ * 收货后库存的新数量与每单位成本（供应商页、采购管理共用）
+ * - 一般商品：数量相加，成本按移动平均
+ * - 当天用完：数量不变（diff = 0），每单位成本改成这次的进价
+ */
+export function applyReceivedStock(item: any, receivedQtyBase: number, receivedTotalCost: number): {
+  newQtyBase: number; newCostPerBaseUnit: number; diff: number;
+} {
+  const oldQtyBase = Math.max(0, getCurrentQtyBase(item));
+  const oldCost = getCostPerBaseUnit(item);
+  const qty = Math.max(0, toFiniteNumber(receivedQtyBase, 0));
+  const total = Math.max(0, toFiniteNumber(receivedTotalCost, 0));
+  if (isConsumeOnReceive(item)) {
+    return { newQtyBase: oldQtyBase, newCostPerBaseUnit: qty > 0 ? roundQuantity(total / qty, 4) : oldCost, diff: 0 };
+  }
+  const weighted = calculateWeightedAverageCost({ oldQtyBase, oldCostPerBaseUnit: oldCost, receivedQtyBase: qty, receivedTotalCost: total });
+  return { newQtyBase: weighted.newQtyBase, newCostPerBaseUnit: weighted.newCostPerBaseUnit, diff: qty };
+}
+
 export function getStockStatus(item: any): 'OUT_OF_STOCK' | 'LOW_STOCK' | 'NORMAL' {
-  if (isDiscontinued(item)) return 'NORMAL';
+  if (isDiscontinued(item) || isConsumeOnReceive(item)) return 'NORMAL';
   const currentQtyBase = getCurrentQtyBase(item);
   const minLevelBase = getMinLevelBase(item);
 
@@ -670,7 +694,7 @@ export function getStockStatus(item: any): 'OUT_OF_STOCK' | 'LOW_STOCK' | 'NORMA
 }
 
 export function needsReplenishment(item: any): boolean {
-  if (isDiscontinued(item)) return false;
+  if (isDiscontinued(item) || isConsumeOnReceive(item)) return false;
   return getCurrentQtyBase(item) <= getMinLevelBase(item);
 }
 

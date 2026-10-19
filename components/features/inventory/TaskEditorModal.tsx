@@ -53,6 +53,7 @@ export const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
 
                 <div className="p-4 overflow-y-auto flex-grow space-y-2 bg-[#F6F7FB]">
                     {editTaskStockData
+                        .filter(s => s.consumeOnReceive !== true || editTaskItems.has(s.id))
                         .filter(s => !editTaskSearchTerm || s.name.toLowerCase().includes(editTaskSearchTerm.toLowerCase()))
                         .map(stockItem => {
                             const isSelected = editTaskItems.has(stockItem.id);

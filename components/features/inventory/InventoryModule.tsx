@@ -33,7 +33,7 @@ import { StockEditModal } from './StockEditModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
-    needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase, isDiscontinued
+    needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase, isDiscontinued, isConsumeOnReceive
 } from '../../../utils/unitConversion';
 import {
     INVENTORY_PERMISSION_LABELS,
@@ -247,6 +247,7 @@ const MemoizedStockCard = React.memo(({
         const isCardOutOfStock = isOutOfStock;
         const isCardLowStock = isLowStock;
         const isCardDiscontinued = isDiscontinued(item);
+        const isCardConsumed = isConsumeOnReceive(item);
         
         // Find default or first purchase unit
         const defaultPU = item.purchaseUnits?.find((pu: any) => pu.isDefaultPurchase) || item.purchaseUnits?.[0];
@@ -305,6 +306,11 @@ const MemoizedStockCard = React.memo(({
                                         停订
                                     </span>
                                 )}
+                                {isCardConsumed && (
+                                    <span className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-black">
+                                        当天用完
+                                    </span>
+                                )}
                                 {isCardOutOfStock && (
                                     <span className="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">
                                         无货
@@ -336,11 +342,12 @@ const MemoizedStockCard = React.memo(({
                     <div className="px-2 py-1.5 bg-[#F6F7FB] rounded-lg border border-[#E5E7EB]/50">
                         <span className="text-[8px] text-gray-400 font-black block uppercase tracking-wide">当前库存</span>
                         <span className="text-[11px] font-black text-[#111111] block">
-                            {isDisplayMode 
+                            {isCardConsumed ? '—' : isDisplayMode 
                                 ? `${(qtyBase / displayToBaseRatio).toLocaleString()} ${tUnit(displayUnit)}` 
                                 : `${qtyBase.toLocaleString()} ${tUnit(baseUnit)}`}
                         </span>
-                        {isDisplayMode && (
+                        {isCardConsumed && <span className="text-[9px] text-sky-700 font-semibold block leading-none mt-0.5">不计库存</span>}
+                        {isDisplayMode && !isCardConsumed && (
                             <span className="text-[9px] text-gray-400 font-semibold block leading-none mt-0.5">
                                 = {qtyBase.toLocaleString()} {tUnit(baseUnit)}
                             </span>
@@ -1075,7 +1082,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             const purchaseUnitChanged = changed(['purchaseUnits', 'uomOptions']);
             const denied: InventoryPermission[] = [];
 
-            if (changed(['name', 'subName', 'discontinued', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
+            if (changed(['name', 'subName', 'discontinued', 'consumeOnReceive', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
                 denied.push('EDIT_BASIC_INFO');
             }
             if (!baseUnitChanged && changed(['minLevelBase', 'minLevel', 'maxQtyBase', 'maxQty']) && !canInventory('EDIT_MIN_LEVEL')) {
@@ -1445,6 +1452,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     const filteredItems = useMemo(() => {
         // 有编号的按编号排（编号本身就是「子分类 → 名称」的顺序）；还没编号的保持原来顺序，排在后面
         return items
+            // 当天用完（不计库存）的商品不用盘点，也不指派盘点
+            .filter(i => mode === 'MASTER' || !isConsumeOnReceive(i))
             .filter(i => !searchTerm || matchesStockSearch(i, searchTerm))
             .map((item, idx) => ({ item, idx }))
             .sort((a, b) => {
@@ -1454,7 +1463,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 return a.idx - b.idx;
             })
             .map(x => x.item);
-    }, [items, searchTerm]);
+    }, [items, searchTerm, mode]);
 
     const totalInventoryValue = useMemo(() => {
         return filteredItems.reduce((total, item) => total + getStockValue(item), 0);
@@ -1846,12 +1855,17 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 {log.items.map((item, idx) => (
                                     <tr key={idx} className="border-b border-gray-100 last:border-0">
                                         <td className="p-2 font-bold text-[#111111]">{item.stockName}</td>
+                                        {item.consumedQty !== undefined ? <>
+                                            <td className="p-2 text-center text-sky-700 font-bold">当天用完 · 收 {item.consumedQty} {item.unit}</td>
+                                            <td className="p-2 text-right font-mono font-bold text-gray-500">RM {(item.consumedCost ?? 0).toFixed(2)}</td>
+                                        </> : <>
                                         <td className="p-2 text-center text-gray-600">
                                             {item.oldQty} ➔ <span className="font-black">{item.newQty}</span>
                                         </td>
                                         <td className={`p-2 text-right font-mono font-bold ${item.valueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {item.valueChange > 0 ? '+' : ''}{item.valueChange.toFixed(2)}
                                         </td>
+                                        </>}
                                     </tr>
                                 ))}
                             </tbody>

@@ -21,6 +21,8 @@ export interface ReceiveEntry {
     receivedQty: number;  // 这次收到的基础单位数量
     totalCost: number;    // 这次收货的金额（RM）
     newAvgCost: number;   // 收货后的平均成本（每基础单位）
+    /** 当天用完（不计库存）：库存数量不变，记录照样留下收了多少、花多少钱 */
+    consumed?: boolean;
 }
 
 const round = (n: number, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
@@ -40,12 +42,14 @@ export const buildReceiveLogs = (args: {
             stockId: e.stockId,
             stockName: e.stockName,
             oldQty: round(e.oldQty),
-            newQty: round(e.oldQty + e.receivedQty),
-            diff: round(e.receivedQty),
+            newQty: round(e.consumed ? e.oldQty : e.oldQty + e.receivedQty),
+            diff: e.consumed ? 0 : round(e.receivedQty),
             unit: e.unit,
             cost: round(e.newAvgCost),
-            valueChange: round(e.totalCost, 2),
+            // 当天用完：钱当天就算费用，库存估值不变
+            valueChange: e.consumed ? 0 : round(e.totalCost, 2),
             purchaseUnitCost: round(e.totalCost / e.receivedQty),
+            ...(e.consumed ? { consumedQty: round(e.receivedQty), consumedCost: round(e.totalCost, 2) } : {}),
         }));
         return {
             id: `rcv_${args.poId}_${area}`,
