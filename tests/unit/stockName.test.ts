@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitStockName } from '../../utils/inventory/stockName';
+import { splitStockName, chineseFirstName } from '../../utils/inventory/stockName';
 
 describe('splitStockName', () => {
     it('中文 (English) 拆两行', () => {
@@ -19,4 +19,15 @@ describe('isTrivialConversion', () => {
         expect(isTrivialConversion('Bottle', 2, 'Bottle')).toBe(false);
         expect(isTrivialConversion('Bag', 1, 'kg')).toBe(false);
     });
+});
+
+describe('chineseFirstName（采购单）', () => {
+  it('puts the Chinese line first', () => {
+    expect(chineseFirstName('厚垃圾袋 (Karung Sampah tebal)')).toEqual({ primary: '厚垃圾袋', secondary: 'Karung Sampah tebal' });
+    expect(chineseFirstName('SQ1500 Box (单座饭盒)')).toEqual({ primary: '单座饭盒', secondary: 'SQ1500 Box' });
+  });
+  it('keeps English-only names on one line', () => {
+    expect(chineseFirstName('C.BIO (M) Brown Lunch Box')).toEqual({ primary: 'C.BIO (M) Brown Lunch Box', secondary: '' });
+    expect(chineseFirstName('Pearly Cocktail Napkin')).toEqual({ primary: 'Pearly Cocktail Napkin', secondary: '' });
+  });
 });

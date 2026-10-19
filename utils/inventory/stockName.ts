@@ -15,3 +15,13 @@ export const splitStockName = (name: string): { primary: string; secondary: stri
 /** 「1 Bottle = 1 Bottle」这种同单位、比例 1 的换算：重复，不用显示 */
 export const isTrivialConversion = (fromUnit: unknown, ratio: unknown, toUnit: unknown): boolean =>
     Number(ratio || 1) === 1 && String(fromUnit || '').trim().toLowerCase() === String(toUnit || '').trim().toLowerCase();
+
+const HAS_CJK = /[㐀-鿿]/;
+/** 采购单等对外单据：中文那一行永远在上（较大），英文在下。名称还没整理成「中文 (English)」时，若只有括号里是中文就对调。 */
+export const chineseFirstName = (name: string): { primary: string; secondary: string } => {
+    const { primary, secondary } = splitStockName(name);
+    // 全英文的名称（例如「C.BIO (M) Brown Lunch Box」）括号是名称的一部分，不拆
+    if (!HAS_CJK.test(primary) && !HAS_CJK.test(secondary)) return { primary: String(name || '').trim(), secondary: '' };
+    if (secondary && !HAS_CJK.test(primary) && HAS_CJK.test(secondary)) return { primary: secondary, secondary: primary };
+    return { primary, secondary };
+};
