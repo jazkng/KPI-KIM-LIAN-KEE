@@ -32,7 +32,7 @@ import { StockEditModal } from './StockEditModal';
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { 
     getCurrentQtyBase, getMinLevelBase, getCostPerBaseUnit, getBaseUnit, getStockValue, getStockStatus,
-    needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase
+    needsReplenishment, getPreferredCountQuantity, getDisplayToBaseRatio, convertDisplayToBase, isDiscontinued
 } from '../../../utils/unitConversion';
 import {
     INVENTORY_PERMISSION_LABELS,
@@ -40,6 +40,9 @@ import {
     resolveInventoryAccess,
 } from '../../../utils/inventoryAccess';
 import { getPortalRole } from '../../../utils/orgAccess';
+
+/** 停订的材料排在每一区最后面 */
+const sortDiscontinuedLast = <T,>(list: T[]): T[] => [...list].sort((a, b) => Number(isDiscontinued(a)) - Number(isDiscontinued(b)));
 
 // ============================================================
 // NEW TYPES for recurring task system
@@ -212,6 +215,7 @@ const MemoizedStockCard = React.memo(({
         
         const isCardOutOfStock = isOutOfStock;
         const isCardLowStock = isLowStock;
+        const isCardDiscontinued = isDiscontinued(item);
         
         // Find default or first purchase unit
         const defaultPU = item.purchaseUnits?.find((pu: any) => pu.isDefaultPurchase) || item.purchaseUnits?.[0];
@@ -221,7 +225,9 @@ const MemoizedStockCard = React.memo(({
             <div 
                 onClick={() => onEdit?.(item)}
                 className={`p-4 rounded-2xl border transition-all duration-150 relative text-left ${onEdit ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'} ${
-                    isCardOutOfStock 
+                    isCardDiscontinued
+                        ? 'border-dashed border-gray-300 bg-gray-50 opacity-70 hover:opacity-100'
+                        : isCardOutOfStock 
                         ? 'border-red-200 bg-red-50/40 hover:bg-red-50/70' 
                         : isCardLowStock 
                             ? 'border-orange-200 bg-orange-50/30 hover:bg-orange-50/60' 
@@ -256,6 +262,11 @@ const MemoizedStockCard = React.memo(({
                                 {item.stockCode && (
                                     <span className="text-[9px] text-gray-400 font-mono font-black bg-[#F6F7FB] border border-[#E5E7EB] px-1.5 py-0.5 rounded-md">
                                         {item.stockCode}
+                                    </span>
+                                )}
+                                {isCardDiscontinued && (
+                                    <span className="text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full font-black">
+                                        停订
                                     </span>
                                 )}
                                 {isCardOutOfStock && (
@@ -999,7 +1010,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             const purchaseUnitChanged = changed(['purchaseUnits', 'uomOptions']);
             const denied: InventoryPermission[] = [];
 
-            if (changed(['name', 'subName', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
+            if (changed(['name', 'subName', 'discontinued', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
                 denied.push('EDIT_BASIC_INFO');
             }
             if (!baseUnitChanged && changed(['minLevelBase', 'minLevel', 'maxQtyBase', 'maxQty']) && !canInventory('EDIT_MIN_LEVEL')) {
@@ -2362,7 +2373,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     </div>
                                     {isExpanded && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 mt-2 md:mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                            {sectionItems.map(item => renderItemCard(item))}
+                                            {sortDiscontinuedLast(sectionItems).map(item => renderItemCard(item))}
                                         </div>
                                     )}
                                 </div>
@@ -2395,7 +2406,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     <div className="px-3 pt-2 text-[10px] font-bold text-gray-400">💡 提示：请点击这些物品编辑，赋予它们正确的分类，它们就会回到正常的列表里。</div>
                                     {isExpanded && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 mt-2 md:mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                            {orphanedItems.map(item => renderItemCard(item))}
+                                            {sortDiscontinuedLast(orphanedItems).map(item => renderItemCard(item))}
                                         </div>
                                     )}
                                 </div>

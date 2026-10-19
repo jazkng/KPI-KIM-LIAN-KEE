@@ -958,6 +958,9 @@ export interface StockItem {
     name: string;
     /** 名称第二行（选填，例如英文名、款式）；有填就显示在品名下面、字较小。V2 新增，V1 会忽略 */
     subName?: string;
+    /** 停订：这个材料不再进货。不算无货 / 低库存，不提醒补货。V2 新增，V1 会忽略 */
+    discontinued?: boolean;
+    discontinuedAt?: string;
     /** 使用说明（选填，例如稀释比例、用法）；没有就空白。V2 新增，V1 会忽略 */
     description?: string;
     category: string;

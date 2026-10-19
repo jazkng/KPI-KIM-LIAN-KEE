@@ -133,7 +133,8 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
     const [categoryGroup, setCategoryGroup] = useState<string | null>(null);
     const [categoryExpanded, setCategoryExpanded] = useState(false); // 已选科目时默认收起，按「更改」才展开
     React.useEffect(() => { setCategoryGroup(null); setCategoryExpanded(false); }, [editingBill.id]); // 换一张账单就回到它自己科目的那一组
-    const showCategoryPicker = !editingBill.category || categoryExpanded;
+    // 旧资料的科目（例如自动建立供应商时留下的 GENERAL）不在科目表里 → 当作还没选，直接展开让人重选
+    const showCategoryPicker = !selectedCategoryOption || categoryExpanded;
     const activeCategoryGroup = categoryGroup || selectedCategoryOption?.group || categoryGroups[0]?.key || '';
     const selectCategory = (id: string) => { setCategoryExpanded(false); setEditingBill(prev => ({
         ...prev,
@@ -491,7 +492,11 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                         {(ACCOUNTING_CATEGORIES[activeCategoryGroup]?.options || []).map(opt => renderCategoryButton(opt))}
                                     </div>
                                     </>)}
-                                    {!editingBill.category && <p className="text-[10px] font-bold text-red-500">请选择一个会计科目</p>}
+                                    {!selectedCategoryOption && (
+                                        <p className="text-[10px] font-bold text-red-500">
+                                            {editingBill.category ? `目前的科目「${editingBill.category}」是旧资料、不在科目表里，请重新选一个` : '请选择一个会计科目'}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
