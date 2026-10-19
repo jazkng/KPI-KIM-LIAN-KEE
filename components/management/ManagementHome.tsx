@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { isRetiredModule } from '../../utils/retiredModules';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
     Users, Crown, CheckSquare, BookOpen, AlertTriangle, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Languages
@@ -286,7 +287,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
         if (allowedModules.includes('PROCUREMENT')) {
             list.push({ module: 'PROCUREMENT', label: mt('module_procurement', lang), icon: '🛒', bg: 'bg-purple-50 border-purple-200/80', text: 'text-purple-600 font-extrabold' });
         }
-        if (allowedModules.includes('ASSESSMENT')) {
+        if (!isRetiredModule('ASSESSMENT') && allowedModules.includes('ASSESSMENT')) {
             list.push({ module: 'ASSESSMENT', label: mt('module_assessment', lang), icon: '🎖️', bg: 'bg-cyan-50 border-cyan-200/80', text: 'text-cyan-600 font-extrabold' });
         }
         if (allowedModules.includes('AP')) {

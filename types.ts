@@ -956,6 +956,8 @@ export interface UnitConversionRule {
 export interface StockItem {
     id: string;
     name: string;
+    /** 名称第二行（选填，例如英文名、款式）；有填就显示在品名下面、字较小。V2 新增，V1 会忽略 */
+    subName?: string;
     /** 使用说明（选填，例如稀释比例、用法）；没有就空白。V2 新增，V1 会忽略 */
     description?: string;
     category: string;
@@ -1191,6 +1193,8 @@ export interface Supplier {
 export interface PurchaseOrderItem {
     stockId: string;
     name: string;
+    /** 下单当时库存的名称第二行（选填） */
+    subName?: string;
     orderQty: number;
     unit: string;
     ratio: number;

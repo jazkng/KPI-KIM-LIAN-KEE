@@ -500,7 +500,7 @@ export const StoreConfigModal: React.FC<StoreConfigModalProps> = ({ isOpen, onCl
                 'PROCUREMENT', 'MENU_MANAGEMENT', 'SETTLEMENT', 'ROSTER', 'ROSTER_KITCHEN', 'ROSTER_FLOOR',
                 'LOGBOOK', 'SOP_INSPECT', 'SOP', 'INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL',
                 'INVENTORY_FUEL', 'INVENTORY_CHECK', 'INVENTORY_VIEW', 'SUPPLIER_CONTACTS', 'QUEUE_MANAGER',
-                'QUEUE', 'ATTENDANCE_CONSOLE', 'ASSESSMENT', 'DAILY_ALERT', 'REPORTS', 'HR_FILES', 'AP',
+                'QUEUE', 'ATTENDANCE_CONSOLE', 'DAILY_ALERT', 'REPORTS', 'HR_FILES', 'AP',
                 'SELF_INVOICE', 'TREASURY', 'BILLS', 'WARRANTY', 'AI_ASSISTANT'
             ]
         };

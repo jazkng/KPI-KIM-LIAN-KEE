@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitStockName, chineseFirstName } from '../../utils/inventory/stockName';
+import { splitStockName, chineseFirstName, stockNameLines } from '../../utils/inventory/stockName';
 
 describe('splitStockName', () => {
     it('中文 (English) 拆两行', () => {
@@ -32,5 +32,16 @@ describe('chineseFirstName（采购单）', () => {
   it('keeps English-only names on one line', () => {
     expect(chineseFirstName('C.BIO (M) Brown Lunch Box')).toEqual({ primary: 'C.BIO (M) Brown Lunch Box', secondary: '' });
     expect(chineseFirstName('Pearly Cocktail Napkin')).toEqual({ primary: 'Pearly Cocktail Napkin', secondary: '' });
+  });
+});
+
+describe('stockNameLines（品名 + 第二行）', () => {
+  it('uses the second-line field when filled, without splitting the name', () => {
+    expect(stockNameLines({ name: '打包纸20X20 (Packing plastic20X20)', subName: '30 pkt / guni' })).toEqual({ primary: '打包纸20X20 (Packing plastic20X20)', secondary: '30 pkt / guni' });
+    expect(stockNameLines({ name: 'Plastic bag', subName: '30GG' })).toEqual({ primary: 'Plastic bag', secondary: '30GG' });
+  });
+  it('falls back to the automatic split when empty', () => {
+    expect(stockNameLines({ name: '洗布水 (Towel Detergent)', subName: '  ' })).toEqual({ primary: '洗布水', secondary: 'Towel Detergent' });
+    expect(stockNameLines({ name: 'Plastic bag (30GG)' })).toEqual({ primary: 'Plastic bag (30GG)', secondary: '' });
   });
 });

@@ -32,3 +32,14 @@ export const splitStockName = (name: string): { primary: string; secondary: stri
 
 /** 采购单等对外单据用，规则同 splitStockName */
 export const chineseFirstName = splitStockName;
+
+/**
+ * 库存品名显示成两行：
+ * - 有填「第二行」(subName) → 第一行照品名原样（不拆），第二行显示 subName
+ * - 没填 → 沿用自动拆法（「中文 (English)」）
+ */
+export const stockNameLines = (item: { name?: string; subName?: string }): { primary: string; secondary: string } => {
+    const sub = String(item.subName || '').trim();
+    if (sub) return { primary: String(item.name || '').trim(), secondary: sub };
+    return splitStockName(item.name || '');
+};

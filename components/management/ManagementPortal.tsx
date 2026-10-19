@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { isRetiredModule } from '../../utils/retiredModules';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
     CheckCircle2, LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
@@ -80,7 +81,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         'ATTENDANCE_CONSOLE',
         'PROCUREMENT',
         'MENU_MANAGEMENT',
-        'ASSESSMENT',
+        // 员工考核（ASSESSMENT）已在 V2 停用
         'AP',
         'SELF_INVOICE',
         'STAFF_CASH',
@@ -260,7 +261,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         }
 
         // 🎖️ ASSESSMENT Task
-        if (allowedModules.includes('ASSESSMENT')) {
+        if (!isRetiredModule('ASSESSMENT') && allowedModules.includes('ASSESSMENT')) {
             tasks.push({
                 id: 'assessment',
                 title: lang === 'my' ? 'ဝန်ထမ်း စွမ်းဆောင်ရည် ဆန်းစစ် အကဲဖြတ်ခြင်း' : '开展当班员工季度评分',

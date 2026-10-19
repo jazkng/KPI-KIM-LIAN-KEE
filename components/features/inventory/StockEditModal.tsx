@@ -475,6 +475,17 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             />
                         </div>
 
+                        <div>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>第二行（选填：英文名、款式…）</label>
+                            <input 
+                                className={`${INPUT_STYLE} focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200] transition-all`} 
+                                value={editingItem.subName || ''} 
+                                onChange={e => onChange({...editingItem, subName: e.target.value})} 
+                                placeholder="例如: Packing plastic 20×20；没有就留空" 
+                            />
+                            <p className="mt-1 text-[11px] font-medium text-gray-400">显示时品名在上（较大），这一行在下（较小）。留空就照品名里的「中文 (English)」自动分两行。</p>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>库存编号 (Stock Code)</label>

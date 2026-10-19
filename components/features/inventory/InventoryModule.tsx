@@ -25,7 +25,7 @@ import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveSt
 import { findSameNameCatalog, relinkCatalogItem } from '../../../utils/inventory/sameNameSupply';
 import type { SameNameRef } from './SupplierComparison';
 import { matchesStockSearch } from '../../../utils/inventory/stockCode';
-import { splitStockName } from '../../../utils/inventory/stockName';
+import { splitStockName, stockNameLines } from '../../../utils/inventory/stockName';
 import { normalizeUnitName } from '../../../utils/unitConversion';
 import { canManageStockCodes } from '../../../utils/inventory/stockCodeAccess';
 import { StockEditModal } from './StockEditModal';
@@ -115,9 +115,9 @@ const MemoizedStockCard = React.memo(({
     const isLowStock = stockStatus === 'LOW_STOCK';
 
     // 名称分两行：上面中文（有翻译就显示翻译），下面英文较小
-    const nameParts = splitStockName(item.name);
+    const nameParts = stockNameLines(item);
     const translatedName = tItem(item);
-    const topName = translatedName === item.name ? nameParts.primary : splitStockName(translatedName).primary;
+    const topName = translatedName === item.name ? nameParts.primary : (item.subName ? translatedName : splitStockName(translatedName).primary);
     const subName = nameParts.secondary;
 
     if (mode === 'ASSIGN') {
@@ -999,7 +999,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             const purchaseUnitChanged = changed(['purchaseUnits', 'uomOptions']);
             const denied: InventoryPermission[] = [];
 
-            if (changed(['name', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
+            if (changed(['name', 'subName', 'description', 'category', 'image', 'isKeyItem', 'yieldPercent', 'overheadPercent', 'sstPercent']) && !canInventory('EDIT_BASIC_INFO')) {
                 denied.push('EDIT_BASIC_INFO');
             }
             if (!baseUnitChanged && changed(['minLevelBase', 'minLevel', 'maxQtyBase', 'maxQty']) && !canInventory('EDIT_MIN_LEVEL')) {
