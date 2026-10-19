@@ -12,7 +12,7 @@ const fixtureLoader: typeof loadBusinessCenterWith = (_source, month, today) => 
     const end = month === today.slice(0, 7) ? addDays(today, -1) : `${month}-28`;
     const records = Array.from({ length: 42 }, (_, i) => {
         const date = addDays(end, -i), cash = [3950, 5200, 6900, 4200, 3800, 4500, 8100][i % 7];
-        return { id: date, date, isClosed: true, weather: i % 3 ? 'SUNNY' : 'HEAVY_RAIN', sales: { cash, storeHubTotal: cash, total: cash + 600, deliveryBreakdown: { grabGross: 600, grabNet: 450, grabAds: 30, pandaGross: 200 } }, ops: { bills: 140, pax: 230 } } as SettlementRecord;
+        return { id: date, date, isClosed: true, specialConditions: i === 0 ? ['HAZE'] : [], weather: i % 3 ? 'SUNNY' : 'HEAVY_RAIN', sales: { cash, storeHubTotal: cash, total: cash + 600, deliveryBreakdown: { grabGross: 600, grabNet: 450, grabAds: 30, grabOrders: 15, pandaGross: 200, pandaOrders: 5 } }, ops: { bills: 140, pax: 230 } } as SettlementRecord;
     });
     const source: CockpitDataSource = {
         getPnLRawRange: async () => ({ settlements: records, billPayments: [], standaloneExpenses: [{ id: 'qa-food', time: `${month}-03T12:00:00`, category: 'INGREDIENT_MEAT', amount: 18000, paymentStatus: 'UNPAID' }, { id: 'qa-rent', time: `${month}-01T12:00:00`, category: 'RENT', amount: 6000 }] as never[] }),

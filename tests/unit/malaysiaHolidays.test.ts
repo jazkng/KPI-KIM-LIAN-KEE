@@ -23,6 +23,12 @@ describe('malaysiaHolidays', () => {
     expect(getMalaysiaHoliday('2026-12-25T10:00:00Z')?.name).toBe('圣诞节');
   });
 
+  it('includes the announced 2026 additional and replacement days', () => {
+    expect(getMalaysiaHoliday('2026-03-20')?.name).toBe('开斋节额外假日');
+    expect(getMalaysiaHoliday('2026-06-01')?.replacement).not.toBe(true);
+    expect(getMalaysiaHoliday('2026-06-02')?.replacement).toBe(true);
+  });
+
   it('fixed-date national holidays fall on the right day', () => {
     for (const y of [2026, 2027]) {
       expect(getMalaysiaHoliday(`${y}-01-01`)).not.toBeNull();

@@ -1,8 +1,9 @@
-import type { SettlementRecord } from '../types';
+import { SPECIAL_CONDITION_OPTIONS, type SettlementRecord } from '../types';
 import { getOps } from '../components/features/settlement/settlementOps';
 import { computePnL } from './pnl/engine/pnlEngine';
 import { loadCockpitWith, type CockpitDataSource } from './cockpit/cockpitLoader';
 import { addDays, daysInMonth, resolvePeriod } from './cockpit/periods';
+import { getMalaysiaHoliday, hasHolidayDataForYear } from './holidays/malaysiaHolidays';
 
 export const businessMonthPeriod = (month: string, today: string) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month > today.slice(0, 7)) throw new Error('请选择有效的经营月份');
@@ -16,11 +17,17 @@ export const dailyBusiness = (records: SettlementRecord[], date: string) => {
     const ops = rows.map(getOps);
     const count = (key: 'bills' | 'pax') => ops.every(o => o[key] > 0) ? ops.reduce((n, o) => n + o[key], 0) : null;
     const bills = count('bills'), pax = count('pax'), store = pnl.classic.inStoreSales;
-    const channels = [{ label: '店内', amount: store }, { label: 'Grab', amount: pnl.classic.platformGross.grab }, { label: 'Foodpanda', amount: pnl.classic.platformGross.panda }, { label: 'ShopeeFood', amount: pnl.classic.platformGross.shopee }, { label: 'Lalamove', amount: pnl.classic.platformGross.lalamove }];
+    const platformCount = (key: 'grabOrders' | 'pandaOrders' | 'shopeeOrders' | 'lalamoveOrders') => {
+        const values = rows.map(r => r.sales?.deliveryBreakdown?.[key]);
+        return values.every(v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) ? values.reduce<number>((n, v) => n + v!, 0) : null;
+    };
+    const channels = [{ label: '店内', amount: store, orders: bills }, { label: 'Grab', amount: pnl.classic.platformGross.grab, orders: platformCount('grabOrders') }, { label: 'Foodpanda', amount: pnl.classic.platformGross.panda, orders: platformCount('pandaOrders') }, { label: 'ShopeeFood', amount: pnl.classic.platformGross.shopee, orders: platformCount('shopeeOrders') }, { label: 'Lalamove', amount: pnl.classic.platformGross.lalamove, orders: platformCount('lalamoveOrders') }].map(c => ({ ...c, average: c.orders && c.orders > 0 ? c.amount / c.orders : null, needsReview: c.orders === 0 && c.amount !== 0 }));
     const weather = [...new Set(rows.map(r => r.weather).filter(Boolean))];
     return { date, revenue: pnl.revenue, channels, bills, pax, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
         weather: weather.length === 1 ? weather[0] : undefined, weatherMixed: weather.length > 1,
-        legacyGrab: pnl.reasons.some(r => r.code === 'LEGACY_GRAB') };
+        legacyGrab: pnl.reasons.some(r => r.code === 'LEGACY_GRAB'),
+        specialConditions: SPECIAL_CONDITION_OPTIONS.filter(o => rows.some(r => Array.isArray(r.specialConditions) && r.specialConditions.includes(o.value))).map(o => o.value),
+        holiday: getMalaysiaHoliday(date), tomorrowHoliday: getMalaysiaHoliday(addDays(date, 1)), holidayYearCovered: hasHolidayDataForYear(date.slice(0, 4)) };
 };
 
 export const buildBusinessDays = (records: SettlementRecord[]) => [...new Set(records.filter(r => r.isClosed !== false).map(r => String(r.date).slice(0, 10)))].sort().map(date => dailyBusiness(records, date)!);

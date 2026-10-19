@@ -61,4 +61,23 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(value.result.kpis.revenue.value).toBe(actual + 315);
         expect(value.result.kpis.revenue.value).toBe(computePnL({ settlements: records, employees: [], payrollRecords: [], standaloneExpenses: [], billPayments: [] }, '2026-10-01', '2026-10-19', '2026-10-19').revenue);
     });
+    it('读取CC环境因素，未知值忽略，历史没填不推断晴天', () => {
+        const d = dailyBusiness([row('2026-11-08', { weather: undefined, specialConditions: ['HAZE', 'POWER_CUT', 'OTHER'] as never[] })], '2026-11-08')!;
+        expect(d.weather).toBeUndefined();
+        expect(d.specialConditions).toEqual(['HAZE', 'POWER_CUT']);
+        expect(d.holiday?.name).toBe('屠妖节');
+        expect(d.tomorrowHoliday?.replacement).toBe(true);
+        expect(dailyBusiness([row('2028-01-01')], '2028-01-01')!.holidayYearCovered).toBe(false);
+        expect(dailyBusiness([row('2026-10-18', { specialConditions: 'HAZE' as never })], '2026-10-18')!.specialConditions).toEqual([]);
+    });
+    it('外卖单数使用同渠道同日数据，缺失和零单分开，均价不扣佣金广告', () => {
+        const r = row('2026-10-18');
+        Object.assign(r.sales.deliveryBreakdown!, { grabOrders: 4, pandaOrders: 0, shopeeOrders: -2 });
+        const channels = dailyBusiness([r], r.date)!.channels;
+        expect(channels[1]).toMatchObject({ orders: 4, average: 20, needsReview: false });
+        expect(channels[2]).toMatchObject({ orders: 0, average: null, needsReview: true });
+        expect(channels[3]).toMatchObject({ orders: null, average: null });
+        expect(dailyBusiness([r, row(r.date)], r.date)!.channels[1].orders).toBeNull();
+    });
+
 });

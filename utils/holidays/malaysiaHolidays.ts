@@ -45,6 +45,7 @@ const ABOUT = {
 };
 
 export const MALAYSIA_HOLIDAYS: MalaysiaHoliday[] = [
+  // 2026 corrections: kabinet.gov.my/storage/2026/03/PUB-111_2026.pdf; JTKSM 2026-05 Wesak/Agong notice.
   // ── 2026 ──
   { date: '2026-01-01', name: '元旦', en: "New Year's Day", about: ABOUT.NEW_YEAR },
   { date: '2026-02-01', name: '大宝森节 · 联邦直辖区日', en: 'Thaipusam · Federal Territory Day', about: `${ABOUT.THAIPUSAM}同一天也是${ABOUT.FT_DAY}` },
@@ -52,13 +53,15 @@ export const MALAYSIA_HOLIDAYS: MalaysiaHoliday[] = [
   { date: '2026-02-17', name: '农历新年', en: 'Chinese New Year', about: ABOUT.CNY },
   { date: '2026-02-18', name: '农历新年（第二天）', en: 'Chinese New Year (Day 2)', about: ABOUT.CNY },
   { date: '2026-03-07', name: '可兰经降世日', en: 'Nuzul Al-Quran', about: ABOUT.NUZUL },
+  { date: '2026-03-20', name: '开斋节额外假日', en: 'Additional Hari Raya Holiday', about: '依 P.U. (B) 111/2026：开斋节正日为3月21日时，3月20日列为额外公共假日。' },
   { date: '2026-03-21', name: '开斋节', en: 'Hari Raya Aidilfitri', about: ABOUT.AIDILFITRI },
   { date: '2026-03-22', name: '开斋节（第二天）', en: 'Hari Raya Aidilfitri (Day 2)', about: ABOUT.AIDILFITRI },
   { date: '2026-03-23', name: '开斋节补假', en: 'Hari Raya Aidilfitri (Replacement)', about: ABOUT.REPLACEMENT, replacement: true },
   { date: '2026-05-01', name: '劳动节', en: 'Labour Day', about: ABOUT.LABOUR },
   { date: '2026-05-27', name: '哈芝节', en: 'Hari Raya Haji', about: ABOUT.HAJI },
   { date: '2026-05-31', name: '卫塞节', en: 'Wesak Day', about: ABOUT.WESAK },
-  { date: '2026-06-01', name: '最高元首诞辰 · 卫塞节补假', en: "Agong's Birthday · Wesak (Replacement)", about: ABOUT.AGONG },
+  { date: '2026-06-01', name: '最高元首诞辰', en: "Agong's Birthday", about: ABOUT.AGONG },
+  { date: '2026-06-02', name: '卫塞节补假', en: 'Wesak (Replacement)', about: '卫塞节为5月31日周日，6月1日是元首诞辰；补假参考6月2日，个人适用依休息日与门店假日安排。', replacement: true },
   { date: '2026-06-17', name: '回历新年', en: 'Awal Muharram', about: ABOUT.MUHARRAM },
   { date: '2026-08-25', name: '先知诞辰', en: 'Maulidur Rasul', about: ABOUT.MAULID },
   { date: '2026-08-31', name: '国庆日', en: 'Merdeka Day', about: ABOUT.MERDEKA },
