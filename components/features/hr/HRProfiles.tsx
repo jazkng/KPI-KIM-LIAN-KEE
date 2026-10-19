@@ -1,17 +1,15 @@
 import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Crown, Medal, Layout, CheckSquare, Square, Star, Settings, Wallet, Grid3x3 } from 'lucide-react';
-import { Employee, EmployeeAttributes, AppModule, WarningRecord, SalaryRecord, ReviewRecord, LoanRecord, AssessmentRecordV2, InventoryAccessConfig, PortalRole } from '../../../types';
+import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Medal, Layout, CheckSquare, Square, Settings, Wallet, Grid3x3 } from 'lucide-react';
+import { Employee, AppModule, WarningRecord, SalaryRecord, ReviewRecord, LoanRecord, InventoryAccessConfig, PortalRole } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { uploadToCloudinary } from '../../utils';
 import { DEFAULT_ROLES, NATIONALITY_OPTS, BANK_OPTIONS, MODULE_DEFINITIONS } from '../../constants';
-import { AssessmentHistoryPanel } from '../AssessmentHistoryPanel';
-import { JOB_METRICS, EMPLOYEE_DIMENSIONS, classifyJob } from '../assessmentConfig';
 import { DepartmentMigrationBanner, DEPARTMENTS, getRecommendedDept } from './DepartmentMigrationBanner';
 import { getOrgLevel, getOrgLevelLabel, getPortalRole, ORG_LEVEL_OPTIONS, PORTAL_ROLE_OPTIONS } from '../../../utils/orgAccess';
 import { INVENTORY_PERMISSION_LABELS, INVENTORY_PERMISSIONS, INVENTORY_SCOPE_LABELS, resolveInventoryAccess } from '../../../utils/inventoryAccess';
 import { InventoryAccessModal } from './InventoryAccessModal';
-import { DEFAULT_PIC_AREAS, PIC_SCORE_LABELS, picAverage, PicArea } from '../../../constants/hrSkill';
+import { DEFAULT_PIC_AREAS, PicArea } from '../../../constants/hrSkill';
 
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { HRExportDialog } from './HRExportDialog';
@@ -20,43 +18,15 @@ import { SkillStarPanel } from './skills/SkillStarPanel';
 import { SkillCatalogEditor } from './skills/SkillCatalogEditor';
 import { SkillPrintDialog } from './skills/SkillPrintDialog';
 import { useSkillCatalog } from './skills/skillCatalogStore';
-import { primarySkillScore } from '../../../constants/skillCatalog';
+import { primarySkillScore, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
 import type { StarLevel } from '../../../constants/skillCatalog';
 import { withoutRetiredModules } from '../../../utils/retiredModules';
 
-const ABILITY_TIERS = [
-    { label: 'SSS', score: 100, desc: '卓越传奇 (Legendary)', color: 'bg-amber-100 text-amber-800 border-amber-300 ring-amber-500', icon: Trophy },
-    { label: 'SS',  score: 95,  desc: '翘楚之秀 (Elite)', color: 'bg-rose-100 text-rose-700 border-rose-200 ring-rose-500', icon: Crown },
-    { label: 'S',   score: 85,  desc: '模范标兵 (Model)', color: 'bg-purple-100 text-purple-700 border-purple-200 ring-purple-500', icon: Medal },
-    { label: 'A',   score: 70,  desc: '核心骨干 (Excellent)', color: 'bg-green-100 text-green-700 border-green-200 ring-green-500', icon: Star },
-    { label: 'B',   score: 50,  desc: '合格称职 (Competent)', color: 'bg-blue-100 text-blue-700 border-blue-200 ring-blue-500', icon: CheckCircle2 },
-    { label: 'C',   score: 30,  desc: '有待整改 (Needs Improvement)', color: 'bg-orange-100 text-orange-700 border-orange-200 ring-orange-500', icon: AlertTriangle },
-    { label: 'D',   score: 10,  desc: '不合格 (Fail)', color: 'bg-red-100 text-red-700 border-red-200 ring-red-500', icon: X },
-];
-
-const ATTRIBUTE_CONFIG: Record<string, { label: string; desc: string }> = {
-    efficiency: { label: '工作效率 (Efficiency)', desc: '出餐/服务速度，动作麻利程度' },
-    service: { label: '服务态度 (Service)', desc: '对待客人的礼貌、微笑与耐心' },
-    culinary: { label: '岗位技能 (Skill)', desc: '烹饪火候 / 摆盘 / 清洁标准' },
-    leadership: { label: '团队配合 (Teamwork)', desc: '与同事沟通协作，不计较，服从安排' },
-    discipline: { label: '纪律考勤 (Discipline)', desc: '不迟到早退，遵守公司 S.O.P' }
-};
-
-const getGradeInfo = (score: number) => {
-    if (score >= 100) return ABILITY_TIERS[0];  // SSS
-    if (score >= 90) return ABILITY_TIERS[1];   // SS
-    if (score >= 80) return ABILITY_TIERS[2];   // S
-    if (score >= 60) return ABILITY_TIERS[3];   // A
-    if (score >= 40) return ABILITY_TIERS[4];   // B
-    if (score >= 20) return ABILITY_TIERS[5];   // C
-    return ABILITY_TIERS[6];                    // D
-};
-
 const InputField = ({ label, value, onChange, placeholder, type = "text", isEditing, className = "" }: any) => (
     <div className={className}>
-        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">{label}</label>
+        <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">{label}</label>
         {isEditing ? (
             <input 
                 type={type} 
@@ -75,7 +45,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", isEdit
 
 const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
     <div>
-        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">{label}</label>
+        <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">{label}</label>
         {isEditing ? (
             <select 
                 value={value || ''} 
@@ -98,31 +68,6 @@ const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
     </div>
 );
 
-const AbilityAssessmentModal = ({ isOpen, onClose, attributes, onChange }: any) => {
-    if (!isOpen) return null;
-    const isUnset = !attributes || Object.values(attributes as Record<string, number>).every((v: number) => v === 0);
-    const attrs = !isUnset ? attributes : { efficiency: 60, service: 60, culinary: 60, leadership: 60, discipline: 60 };
-    return (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] md:max-h-[90vh]">
-                <div className="bg-[#111111] p-4 flex justify-between items-center text-white shrink-0"><h3 className="font-black text-lg flex items-center gap-2"><Trophy size={18} className="text-[#FFD200]"/> 能力评估 (Assessment)</h3><button onClick={onClose} className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><X size={20} className="text-white/50 hover:text-white"/></button></div>
-                <div className="p-6 overflow-y-auto space-y-6 bg-gray-50 flex-grow">
-                    {Object.keys(attrs).map(key => {
-                        const config = ATTRIBUTE_CONFIG[key] || { label: key, desc: 'N/A' };
-                        const currentVal = attrs[key as keyof EmployeeAttributes];
-                        return (
-                            <div key={key} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
-                                <div className="mb-3"><h4 className="text-sm font-black text-[#111111]">{config.label}</h4><p className="text-[10px] text-gray-400 font-bold mt-0.5">{config.desc}</p></div>
-                                <div className="flex justify-between gap-1">{ABILITY_TIERS.slice().reverse().map(tier => { const isSelected = getGradeInfo(currentVal).label === tier.label; return (<button key={tier.label} onClick={() => onChange({...attrs, [key]: tier.score})} className={`min-h-[44px] md:min-h-0 flex-1 py-2 rounded-lg flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${isSelected ? `${tier.color} ring-2 ring-offset-1 border-transparent shadow-md font-black` : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100'}`}><span className="text-sm">{tier.label}</span>{isSelected && <span className="text-[8px] uppercase mt-0.5">{tier.desc.split(' ')[0]}</span>}</button>) })}</div>
-                            </div>
-                        );
-                    })}
-                </div>
-                <div className="p-4 bg-white border-t border-gray-100 shrink-0"><button onClick={onClose} className="w-full bg-[#111111] hover:bg-black text-[#FFD200] py-4 rounded-xl font-black shadow-lg transition-colors flex items-center justify-center gap-2"><CheckCircle2 size={18}/> 完成评估 (Complete)</button></div>
-            </div>
-        </div>
-    );
-};
 
 // --- UPDATED SYSTEM ACCESS MODAL WITH GROUPING ---
 const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessmentTargets, onUpdateTargets, allEmployees, readOnlyAccess, onToggleReadOnly }: any) => {
@@ -349,6 +294,16 @@ const getRoleChinese = (role?: string) => {
     const match = role.match(/[（(]([^)）]+)[)）]/);
     return match ? match[1] : role;
 };
+/** 员工档案分页（手机与电脑同一套） */
+type DetailTab = 'basic' | 'salary' | 'skills' | 'access' | 'records';
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+    { id: 'basic', label: '资料' },
+    { id: 'salary', label: '薪资' },
+    { id: 'skills', label: '技能' },
+    { id: 'access', label: '权限' },
+    { id: 'records', label: '记录' },
+];
+
 const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
 const DISCIPLINARY_TYPES = [{id: 'VERBAL', label: '口头警告 (Verbal)', color: 'text-yellow-600 bg-yellow-50'}, {id: 'WRITTEN', label: '书面警告 (Written)', color: 'text-orange-600 bg-orange-50'}, {id: 'FINAL', label: '最后警告 (Final)', color: 'text-red-600 bg-red-50'}];
 const TERMINATION_TYPES = [
@@ -406,7 +361,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const singleProfileRef = useRef<HTMLDivElement>(null); 
     const [isGeneratingSinglePdf, setIsGeneratingSinglePdf] = useState(false);
     const [isSalaryExpanded, setIsSalaryExpanded] = useState(false);
-    const [showAbilityModal, setShowAbilityModal] = useState(false);
     const [showAccessModal, setShowAccessModal] = useState(false);
     const [showInventoryAccessModal, setShowInventoryAccessModal] = useState(false);
     const [showWarningInput, setShowWarningInput] = useState(false);
@@ -416,7 +370,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [terminationData, setTerminationData] = useState({ reason: '', date: new Date().toISOString().split('T')[0], noticeDate: '', type: 'RESIGNED' as string });
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [viewImage, setViewImage] = useState<string | null>(null);
-    const [mobileDetailTab, setMobileDetailTab] = useState<'basic' | 'salary' | 'records'>('basic');
+    const [mobileDetailTab, setMobileDetailTab] = useState<DetailTab>('basic');
 
     // Auto focus when navigating from payroll tab
     useEffect(() => {
@@ -458,84 +412,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [isUploadingReviewImage, setIsUploadingReviewImage] = useState(false);
     
     const [attendanceSnapshot, setAttendanceSnapshot] = useState<{ late: number, lateDates: string[], absent: number, work: number }>({ late: 0, lateDates: [], absent: 0, work: 0 });
-    const [latestV2Assessment, setLatestV2Assessment] = useState<AssessmentRecordV2 | null>(null);
-    const [, setLoadingAssessment] = useState(false);
-
-    const activeDimensions = useMemo(() => {
-        const category = classifyJob(form.role || '');
-        const jobDef = JOB_METRICS[category];
-        const metrics = jobDef?.metrics && jobDef.metrics.length > 0 ? jobDef.metrics : EMPLOYEE_DIMENSIONS;
-        
-        return metrics.map((m) => {
-            let score = 0;
-            if (latestV2Assessment) {
-                // 1. 获取管理层初评得分
-                const initialScore = latestV2Assessment.initialRating?.metrics?.find(s => s.metricKey === m.key)?.score;
-                const hasInitial = initialScore !== undefined;
-
-                // 2. 获取所有非跳过的老板评分
-                const activeBosses = Object.values(latestV2Assessment.bossRatings || {}).filter(b => !b.skipped);
-                const bossScores = activeBosses
-                    .map(b => b.metrics?.find(s => s.metricKey === m.key)?.score)
-                    .filter((v): v is number => v !== undefined);
-                const bossesCount = bossScores.length;
-                const bossesAverage = bossesCount > 0 ? Math.round(bossScores.reduce((sum, s) => sum + s, 0) / bossesCount) : 0;
-
-                // 3. 按照 50% 初评 + 50% 老板平均分 进行综合加权，与 calculateMultiRaterTotals 逻辑保持 100% 物理同步
-                if (hasInitial && bossesCount > 0) {
-                    score = Math.round(initialScore * 0.5 + bossesAverage * 0.5);
-                } else if (hasInitial) {
-                    score = initialScore;
-                } else if (bossesCount > 0) {
-                    score = bossesAverage;
-                } else if (latestV2Assessment.ownerOverride) {
-                    const override = latestV2Assessment.ownerOverride.metrics?.find(s => s.metricKey === m.key);
-                    if (override) score = override.score;
-                }
-            } else {
-                const legacy = (form.attributes || {}) as any;
-                if (m.key === 'job_capability') {
-                    score = legacy.efficiency || legacy.culinary || 0;
-                } else if (m.key === 'loyalty') {
-                    score = legacy.discipline || 0;
-                } else if (m.key === 'teamwork') {
-                    score = legacy.service || legacy.leadership || 0;
-                } else if (m.key === 'personal_grooming') {
-                    score = legacy.discipline || 0;
-                } else {
-                    score = 0;
-                }
-            }
-            return {
-                ...m,
-                score
-            };
-        });
-    }, [form.role, latestV2Assessment, form.attributes]);
-
-    const v2OverallScore = useMemo(() => {
-        if (latestV2Assessment) {
-            return latestV2Assessment.finalScore || 0;
-        }
-        if (activeDimensions.length > 0) {
-            const sum = activeDimensions.reduce((s, d) => s + d.score, 0);
-            return Math.round(sum / activeDimensions.length);
-        }
-        return 0;
-    }, [latestV2Assessment, activeDimensions]);
-
-    /** 有没有任何评分资料（没有 → 不显示等级，不再出现 D） */
-    const hasAssessmentData = useMemo(
-        () => !!latestV2Assessment || activeDimensions.some(d => d.score > 0),
-        [latestV2Assessment, activeDimensions]
-    );
-
-    const v2OverallGradeInfo = useMemo(() => {
-        if (latestV2Assessment && latestV2Assessment.finalGrade) {
-            return ABILITY_TIERS.find(t => t.label === latestV2Assessment.finalGrade) || ABILITY_TIERS[3];
-        }
-        return getGradeInfo(v2OverallScore);
-    }, [latestV2Assessment, v2OverallScore]);
 
     const filteredEmployees = useMemo(() => {
         return employees.filter(e => {
@@ -626,36 +502,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
     }, [selectedEmpId]);
 
-    useEffect(() => {
-        if (!selectedEmpId) {
-            setLatestV2Assessment(null);
-            return;
-        }
-        const loadLatestV2 = async () => {
-            setLoadingAssessment(true);
-            try {
-                const data = await DataManager.getAssessmentRecordsByEmployee(selectedEmpId);
-                const sorted = (data as AssessmentRecordV2[]).sort(
-                    (a, b) => (b.quarter || '').localeCompare(a.quarter || '')
-                );
-                if (sorted.length > 0) {
-                    setLatestV2Assessment(sorted[0]);
-                } else {
-                    setLatestV2Assessment(null);
-                }
-            } catch (err) {
-                console.error("Failed to load latest V2 assessment:", err);
-                setLatestV2Assessment(null);
-            } finally {
-                setLoadingAssessment(false);
-            }
-        };
-        loadLatestV2();
-    }, [selectedEmpId]);
 
     // 👑 iOS 优化：任何 modal 打开时，锁定 body 滚动
     useEffect(() => {
-        const anyModalOpen = showAbilityModal || showAccessModal || showInventoryAccessModal || showTerminateModal || showDeleteModal || showLoanModal || showReviewModal || !!viewImage;
+        const anyModalOpen = showAccessModal || showInventoryAccessModal || showTerminateModal || showDeleteModal || showLoanModal || showReviewModal || !!viewImage;
         if (anyModalOpen) {
             const scrollY = window.scrollY;
             document.body.style.position = 'fixed';
@@ -669,7 +519,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 window.scrollTo(0, parseInt(savedY || '0') * -1);
             };
         }
-    }, [showAbilityModal, showAccessModal, showInventoryAccessModal, showTerminateModal, showDeleteModal, showLoanModal, showReviewModal, viewImage]);
+    }, [showAccessModal, showInventoryAccessModal, showTerminateModal, showDeleteModal, showLoanModal, showReviewModal, viewImage]);
 
     const handleSelect = (emp: Employee) => {
         setSelectedEmpId(emp.id);
@@ -898,16 +748,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
         setForm({ ...form, picAreas: next });
         setNewPicName('');
     };
-    const handleRatePicArea = (id: string, score: number) => {
-        const next = (form.picAreas || []).map(a =>
-            a.id === id
-                ? (a.score === score
-                    ? { ...a, score: undefined, ratedAt: undefined, ratedBy: undefined }   // 再点一次 = 清掉分数
-                    : { ...a, score, ratedAt: new Date().toISOString().split('T')[0], ratedBy: currentEmployee?.name || 'Admin' })
-                : a
-        );
-        setForm({ ...form, picAreas: next });
-    };
     const handleRemovePicArea = (id: string) => {
         setForm({ ...form, picAreas: (form.picAreas || []).filter(a => a.id !== id) });
     };
@@ -1036,10 +876,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         />
                     </div>
                     
-                    <label className="flex items-center gap-2 text-xs font-bold text-gray-500 cursor-pointer pl-1 active:opacity-70 select-none">
-                        <input type="checkbox" checked={showResigned} onChange={e => { setShowResigned(e.target.checked); setSelectedEmpId(null); }} className="w-4 h-4 rounded text-[#111111] focus:ring-[#111111] accent-[#111111]" />
-                        <Archive size={14} /> {showResigned ? '仅显示已离职档案' : '隐藏已离职员工'}
-                    </label>
+                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-200/60 p-1">
+                        {([[false, '在职员工'], [true, '已离职']] as const).map(([v, label]) => (
+                            <button key={label} type="button" onClick={() => { setShowResigned(v); setSelectedEmpId(null); }}
+                                className={`min-h-[40px] rounded-lg text-[13px] font-black flex items-center justify-center gap-1.5 ${showResigned === v ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500'}`}>
+                                {v && <Archive size={14} />}{label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* 员工列表区 */}
@@ -1283,12 +1127,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         {form.name || 'New Staff'}
                                     </h1>
                                     
-                                    {hasAssessmentData && (
-                                        <div className={`px-2 py-0.5 rounded-lg text-[10px] md:text-xs font-black uppercase flex items-center gap-1 border ${v2OverallGradeInfo.color} bg-opacity-100 shadow-lg shrink-0`}>
-                                            {React.createElement(v2OverallGradeInfo.icon, { size: 12 })}
-                                            {v2OverallGradeInfo.label}
-                                        </div>
-                                    )}
                                     {form.isArchived && <span className="bg-red-600 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold uppercase tracking-wider shrink-0">已离职</span>}
                                 </div>
                                 
@@ -1379,37 +1217,25 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         <div className="px-4 md:px-8 -mt-16 pb-20 space-y-6 relative z-10 max-w-6xl mx-auto w-full">
                             {form.isArchived && (<div className="bg-red-50 border-l-4 border-red-500 p-4 md:p-6 rounded-r-xl shadow-sm flex items-start gap-4"><div className="p-2 bg-red-100 rounded-full text-red-600 shrink-0"><Ban size={24}/></div><div><h4 className="text-red-800 font-black text-base md:text-lg">此员工已离职</h4><p className="text-red-600 text-xs md:text-sm font-bold mt-1">离职日期: {form.terminationDate || '未知'}</p><div className="mt-2 text-red-700 text-xs bg-white/50 p-3 rounded-lg border border-red-100 italic">"{form.terminationReason || '无记录原因'}"</div></div></div>)}
 
-                            {/* Mobile-only tab switcher */}
-                            <div className="flex md:hidden bg-white/90 backdrop-blur-md p-1 rounded-2xl border border-gray-200 sticky top-14 z-30 mb-4 gap-1 shadow-sm">
-                                <button 
-                                    onClick={() => setMobileDetailTab('basic')} 
-                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'basic' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
-                                >
-                                    个人档案
-                                </button>
-                                <button 
-                                    onClick={() => setMobileDetailTab('salary')} 
-                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'salary' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
-                                >
-                                    薪资法定
-                                </button>
-                                <button 
-                                    onClick={() => setMobileDetailTab('records')} 
-                                    className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-center rounded-xl text-xs font-black transition-all ${mobileDetailTab === 'records' ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
-                                >
-                                    评估记录
-                                </button>
+                            {/* 分页：手机与电脑同一套，一次只看一类资料 */}
+                            <div className="grid grid-cols-5 bg-white/95 backdrop-blur-md p-1 rounded-2xl border border-gray-200 sticky top-14 md:top-2 z-30 mb-4 gap-1 shadow-sm">
+                                {DETAIL_TABS.map(t => (
+                                    <button key={t.id} onClick={() => setMobileDetailTab(t.id)}
+                                        className={`min-h-[44px] py-2.5 text-center rounded-xl text-[13px] font-black transition-all ${mobileDetailTab === t.id ? 'bg-[#111111] text-[#FFD200] shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                        {t.label}
+                                    </button>
+                                ))}
                             </div>
 
                             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                                 {/* 左侧列：头像、考勤、薪资卡片 */}
                                 <div className="xl:col-span-4 flex flex-col gap-6">
-                                    <div className={`bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 flex-col items-center justify-center relative overflow-hidden group ${mobileDetailTab === 'basic' ? 'flex' : 'hidden md:flex'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 flex-col items-center justify-center relative overflow-hidden group ${mobileDetailTab === 'basic' ? 'flex' : 'hidden'}`}>
                                         <div className="relative w-32 h-32 md:w-40 md:h-40 mb-4 cursor-pointer" onClick={() => isEditing && fileInputRef.current?.click()}>
                                             <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 shadow-xl bg-gray-100 relative z-10 ${form.isArchived ? 'border-gray-300 grayscale' : 'border-white'}`}>
                                                 {form.avatar ? <img src={form.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-4xl md:text-5xl text-gray-300 font-black">{(form.name || 'U').charAt(0)}</div>}
                                             </div>
-                                            {isEditing && <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white z-20"><Camera size={24}/></div>}
+                                            {isEditing && <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-white z-20"><Camera size={24}/></div>}
                                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(!file) return; setIsUploading(true); try { const url = await uploadToCloudinary(file); setForm({...form, avatar: url}); } catch(err) { alert("❌ 上传失败"); } finally { setIsUploading(false); } }} />
                                         </div>
                                         <div className="flex gap-2 flex-wrap justify-center">
@@ -1426,7 +1252,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                     </div>
                                     
-                                    <div className={`rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 transition-all ${attendanceSnapshot.late > 0 ? 'bg-red-50 border-red-200' : 'bg-white'} ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 transition-all ${attendanceSnapshot.late > 0 ? 'bg-red-50 border-red-200' : 'bg-white'} ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
                                         <h4 className={`text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-2 ${attendanceSnapshot.late > 0 ? 'text-red-600' : 'text-gray-400'}`}>
                                             <CalendarDays size={14}/> 本月考勤 (This Month)
                                         </h4>
@@ -1446,7 +1272,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> 登录密码 (Access PIN)</h4>
                                         <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
                                             <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
@@ -1455,7 +1281,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
 
                                     {/* 薪水卡片 */}
-                                    <div className={`bg-[#111111] rounded-[2rem] shadow-lg text-white relative overflow-hidden group transition-all duration-300 ${form.isArchived ? 'grayscale opacity-80' : ''} ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-[#111111] rounded-[2rem] shadow-lg text-white relative overflow-hidden group transition-all duration-300 ${form.isArchived ? 'grayscale opacity-80' : ''} ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
                                         <button onClick={() => setIsSalaryExpanded(!isSalaryExpanded)} className="w-full p-4 md:p-6 flex justify-between items-center text-left relative z-10 hover:bg-white/5 transition-colors">
                                             <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 pr-2">
                                                 <div className="p-2 bg-white/10 rounded-full text-[#FFD200] shrink-0"><div className="font-mono text-lg leading-none">$</div></div>
@@ -1598,44 +1424,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         )}
                                     </div>
 
-                                    {/* 专业能力 (Special Skills) */}
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            <Trophy size={14} className="text-[#FFD200]"/> 专业能力 (Special Skills)
-                                        </h4>
-                                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                                            {isEditing ? (
-                                                <div className="flex flex-col gap-1.5">
-                                                    <textarea 
-                                                        value={form.specialSkills || ''} 
-                                                        onChange={e => setForm({...form, specialSkills: e.target.value})} 
-                                                        placeholder="请填写员工专业技能，如：会电工、会养鱼、会剖鱼、修水管等 (使用空格、逗号或顿号隔开)..." 
-                                                        className="bg-white text-gray-800 border border-gray-200 rounded-xl p-3 outline-none w-full resize-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all font-medium text-[16px] md:text-sm" 
-                                                        rows={3} />
-                                                    <span className="text-[10px] text-gray-400 font-bold">💡 支持多项专业技能，输入后用空格、逗号或顿号隔开会自动生成标签</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col gap-2">
-                                                    {form.specialSkills ? (
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {form.specialSkills.split(/[,，、\s]+/).filter(Boolean).map((skill, index) => (
-                                                                <span key={index} className="px-3 py-1.5 bg-stone-100 hover:bg-[#FFD200]/10 text-stone-800 hover:text-stone-900 border border-stone-200 hover:border-[#FFD200]/30 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-default">
-                                                                    ✨ {skill}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs text-gray-400 italic">暂未登记专业能力 (No skills defined yet)</span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
                                 </div>
 
                                 <div className="xl:col-span-8 flex flex-col gap-6">
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><User size={14}/> 个人档案 (Personal)</h4>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-5 gap-x-3">
                                             <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
@@ -1780,7 +1572,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <div className="mt-4 pt-4 border-t border-gray-50"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
                                     </div>
  
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Briefcase size={14}/> 政府与卫生 (Govt & Health)</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
@@ -1795,7 +1587,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     {/* ⭐ 工作能力 + 🧹 PIC 负责项目 */}
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
                                         {/* ⭐ 工作能力星级：主职 / 副职 → 工作项目 → ★1–★5 */}
                                         <SkillStarPanel
                                             employee={form}
@@ -1810,16 +1602,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         {/* ---- PIC 负责项目 ---- */}
                                         <div className="flex items-center justify-between gap-2 mt-6 mb-3 pt-5 border-t border-gray-100 flex-wrap">
                                             <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                                <CheckSquare size={14} className="text-[#FFD200]"/> PIC 负责项目
+                                                <CheckSquare size={14} className="text-[#FFD200]"/> 负责项目 (PIC)
                                             </h4>
-                                            {(() => {
-                                                const avg = picAverage(form.picAreas);
-                                                return avg === null ? null : (
-                                                    <span className="text-[10px] font-black text-stone-800 bg-[#FFD200]/30 border border-[#FFD200] px-2 py-1 rounded-lg">
-                                                        平均 {avg.toFixed(1)} ★ · {(form.picAreas || []).length} 项
-                                                    </span>
-                                                );
-                                            })()}
+                                            {(form.picAreas || []).length > 0 && <span className="text-[11px] font-bold text-gray-500">{(form.picAreas || []).length} 项</span>}
                                         </div>
 
                                         {(!form.picAreas || form.picAreas.length === 0) ? (
@@ -1831,33 +1616,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {(form.picAreas || []).map(area => (
                                                     <div key={area.id} className="bg-gray-50 rounded-xl border border-gray-100 px-3 py-2.5 min-w-0">
                                                         <div className="flex items-start justify-between gap-2">
-                                                            <span className="text-[11px] font-black text-stone-800 leading-snug break-words min-w-0">{area.name}</span>
+                                                            <span className="text-[13px] font-bold text-stone-800 leading-snug break-words min-w-0">{area.name}</span>
                                                             {isEditing && (
                                                                 <button onClick={() => handleRemovePicArea(area.id)}
-                                                                    className="text-gray-300 hover:text-red-500 shrink-0 active:scale-90 flex items-center justify-center min-h-[28px] min-w-[28px]">
-                                                                    <Trash2 size={12}/>
+                                                                    className="text-gray-400 hover:text-red-500 shrink-0 active:scale-90 flex items-center justify-center min-h-[40px] min-w-[40px] -my-2 -mr-2" aria-label="移除负责项目">
+                                                                    <Trash2 size={15}/>
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        <div className="flex items-center gap-0.5 mt-1 flex-wrap">
-                                                            {[1, 2, 3, 4, 5].map(n => {
-                                                                const filled = (area.score || 0) >= n;
-                                                                return isEditing ? (
-                                                                    <button key={n} onClick={() => handleRatePicArea(area.id, n)}
-                                                                        className="p-1 active:scale-90 transition-all flex items-center justify-center">
-                                                                        <Star size={16} className={filled ? 'text-[#FFD200] fill-[#FFD200]' : 'text-gray-300'}/>
-                                                                    </button>
-                                                                ) : (
-                                                                    <Star key={n} size={13} className={`m-0.5 ${filled ? 'text-[#FFD200] fill-[#FFD200]' : 'text-gray-200'}`}/>
-                                                                );
-                                                            })}
-                                                            <span className="text-[10px] font-bold text-gray-500 ml-1.5 whitespace-nowrap">
-                                                                {area.score ? PIC_SCORE_LABELS[area.score] : '未评分'}
-                                                            </span>
-                                                        </div>
-                                                        {area.ratedAt && (
-                                                            <p className="text-[9px] font-bold text-gray-400 mt-0.5 truncate">{area.ratedAt} · {area.ratedBy || '-'}</p>
-                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
@@ -1887,32 +1653,49 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 </div>
                                             </div>
                                         )}
-                                        {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-2">💡 点星星打分；再点同一颗星 = 清掉分数</p>}
                                     </div>
  
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden md:block'}`}>
+                                    {/* 其他专长（备注），放在技能星级之后 */}
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <Trophy size={14} className="text-[#FFD200]"/> 其他专长（备注）
+                                        </h4>
+                                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                                            {isEditing ? (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <textarea 
+                                                        value={form.specialSkills || ''} 
+                                                        onChange={e => setForm({...form, specialSkills: e.target.value})} 
+                                                        placeholder="请填写员工专业技能，如：会电工、会养鱼、会剖鱼、修水管等 (使用空格、逗号或顿号隔开)..." 
+                                                        className="bg-white text-gray-800 border border-gray-200 rounded-xl p-3 outline-none w-full resize-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all font-medium text-[16px] md:text-sm" 
+                                                        rows={3} />
+                                                    <span className="text-[10px] text-gray-400 font-bold">💡 支持多项专业技能，输入后用空格、逗号或顿号隔开会自动生成标签</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-2">
+                                                    {form.specialSkills ? (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {form.specialSkills.split(/[,，、\s]+/).filter(Boolean).map((skill, index) => (
+                                                                <span key={index} className="px-3 py-1.5 bg-stone-100 hover:bg-[#FFD200]/10 text-stone-800 hover:text-stone-900 border border-stone-200 hover:border-[#FFD200]/30 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-default">
+                                                                    ✨ {skill}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">暂未登记专业能力 (No skills defined yet)</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Phone size={14}/> 紧急联系人 (Emergency Contact)</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
                                     </div>
  
-                                    <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 items-start ${mobileDetailTab === 'records' ? 'grid' : 'hidden md:grid'}`}>
-                                        <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                                    <Trophy size={14}/> 季度评分 (Assessment)
-                                                </h4>
-                                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">V2</span>
-                                            </div>
-                                            {selectedEmpId && (
-                                                <AssessmentHistoryPanel 
-                                                    employee={form as Employee}
-                                                    currentEmployee={currentEmployee}
-                                                    onAssessmentUpdated={(record) => {
-                                                        setLatestV2Assessment(record);
-                                                    }}
-                                                />
-                                            )}
-                                        </div>
+                                    <div className={mobileDetailTab === 'access' ? 'block' : 'hidden'}>
                                         <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
                                             <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
                                             <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
@@ -1920,7 +1703,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
                                         <div className="flex items-start justify-between gap-3 mb-4">
                                             <div>
                                                 <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> 库存权限 (Inventory Access)</h4>
@@ -1953,13 +1736,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                     </div>
  
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden md:block'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
                                         <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> 奖惩记录 (Disciplinary)</h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95 min-h-[44px] md:min-h-0">+ Add Warning</button>}</div>
                                         {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
                                         <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={16}/></button>}</div>); })}</div>
                                     </div>
 
-                                    {isEditing && (
+                                    {isEditing && mobileDetailTab === 'access' && (
                                         <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col md:flex-row gap-3">
                                             <button onClick={handleResetPin} className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><Lock size={14}/> 重置密码 (Reset PIN)</button>
                                             {form.isArchived ? (
@@ -2006,7 +1789,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             </span>
                                             <span className="text-[10px] text-gray-400 font-mono">{review.date}</span>
                                         </div>
-                                        <button onClick={() => handleDeleteReview(review.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
+                                        <button onClick={() => handleDeleteReview(review.id)} className="text-gray-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
                                             <Trash2 size={14}/>
                                         </button>
                                     </div>
@@ -2044,7 +1827,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <img src={reviewFormState.image} className="w-full h-full object-cover"/>
                                             <button 
                                                 onClick={() => setReviewFormState(prev => ({...prev, image: ''}))}
-                                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
+                                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"
                                             >
                                                 <X size={12} className="text-white"/>
                                             </button>
@@ -2104,13 +1887,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 </div>
             )}
 
-            {/* @ts-ignore */}
-            <AbilityAssessmentModal 
-                isOpen={showAbilityModal} 
-                onClose={() => setShowAbilityModal(false)} 
-                attributes={form.attributes} 
-                onChange={(newAttr: any) => setForm({...form, attributes: newAttr})} 
-            />
             
             {/* @ts-ignore */}
             <SystemAccessModal 
@@ -2275,7 +2051,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 <div className={`text-sm font-mono font-bold ${rec.type === 'BORROW' ? 'text-red-600' : 'text-green-600'}`}>{rec.type === 'BORROW' ? '+' : '-'}RM {rec.amount.toFixed(2)}</div>
                                                 <div className="text-[9px] font-mono text-gray-400">余额: RM {runningBalance.toFixed(2)}</div>
                                             </div>
-                                            <button onClick={() => handleDeleteLoan(rec.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={12}/></button>
+                                            <button onClick={() => handleDeleteLoan(rec.id)} className="text-gray-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={12}/></button>
                                         </div>
                                     </div>
                                 );
@@ -2300,7 +2076,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         </div>
                     </div>
 
-                    <table className="w-full text-left text-xs">
+<div className="overflow-x-auto">                    <table className="w-full min-w-[420px] text-left text-xs">
                         <thead>
                             <tr data-pdf-atomic="true" className="border-b-2 border-black">
                                 <th className="py-2 uppercase font-black">ID</th>
@@ -2321,7 +2097,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 </tr>
                             ))}
                         </tbody>
-                    </table>
+                    </table></div>
 
                     {exportResignedEmployees.length > 0 && (
                         <div className="mt-8">
@@ -2329,7 +2105,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 <h2 className="text-sm font-black uppercase tracking-widest text-[#8B0000]">离职员工 Resigned Staff</h2>
                                 <span className="text-[10px] font-bold text-gray-400">{exportResignedEmployees.length} 人</span>
                             </div>
-                            <table className="w-full text-left text-xs">
+<div className="overflow-x-auto">                            <table className="w-full min-w-[420px] text-left text-xs">
                                 <thead>
                                     <tr data-pdf-atomic="true" className="border-b-2 border-black">
                                         <th className="py-2 uppercase font-black">ID</th>
@@ -2352,7 +2128,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </tr>
                                     ))}
                                 </tbody>
-                            </table>
+                            </table></div>
                         </div>
                     )}
 
@@ -2470,207 +2246,24 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             </div>
                         </div>
 
-                        <div className="col-span-2 bg-[#FDFDFD] border border-gray-100 rounded-2xl p-4 shadow-sm">
-                            <div className="flex justify-between items-center border-b-2 border-gray-200 pb-1.5 mb-2.5">
-                                <h3 className="text-xs font-black uppercase text-[#8B0000]">6维能力度量图 (Performance Assessment)</h3>
-                                <span className="text-[9px] font-black bg-red-50 text-red-700 px-2 py-0.5 rounded border border-red-100 uppercase">
-                                    V2 2026 Model ({latestV2Assessment?.quarter || '暂无评定'})
-                                </span>
-                            </div>
-                            
-                            <div className="grid grid-cols-12 gap-4 items-center">
-                                {/* SVG Radar Chart */}
-                                <div className="col-span-5 flex justify-center items-center">
-                                    <div className="relative w-[280px] h-[200px]">
-                                        <svg className="w-full h-full" viewBox="-40 0 280 200">
-                                            {/* Grid Levels */}
-                                            {[20, 40, 60, 80, 100].map((level) => {
-                                                const levelPoints = activeDimensions.map((_, idx) => {
-                                                    const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                    const radius = (level / 100) * 55;
-                                                    return `${100 + radius * Math.cos(angle)},${100 + radius * Math.sin(angle)}`;
-                                                });
-                                                return (
-                                                    <g key={level}>
-                                                        <polygon
-                                                            points={levelPoints.join(' ')}
-                                                            fill="none"
-                                                            stroke={level === 100 ? "#9CA3AF" : "#E5E7EB"}
-                                                            strokeWidth={level === 100 ? "1.5" : "0.75"}
-                                                            strokeDasharray={level === 100 ? "0" : "2,2"}
-                                                        />
-                                                        <text
-                                                            x="100"
-                                                            y={100 - (level / 100) * 55 - 2}
-                                                            textAnchor="middle"
-                                                            className="text-[6px] font-bold fill-gray-400 font-mono"
-                                                        >
-                                                            {level}
-                                                        </text>
-                                                    </g>
-                                                );
-                                            })}
-
-                                            {/* Axes */}
-                                            {activeDimensions.map((_, idx) => {
-                                                const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                const outerX = 100 + 55 * Math.cos(angle);
-                                                const outerY = 100 + 55 * Math.sin(angle);
-                                                return (
-                                                    <line
-                                                        key={idx}
-                                                        x1="100"
-                                                        y1="100"
-                                                        x2={outerX}
-                                                        y2={outerY}
-                                                        stroke="#D1D5DB"
-                                                        strokeWidth="0.75"
-                                                    />
-                                                );
-                                            })}
-
-                                            {/* Filled Radar Area */}
-                                            {activeDimensions.length > 0 && (
-                                                <>
-                                                    <polygon
-                                                        points={activeDimensions.map((d, idx) => {
-                                                            const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                            const radius = (d.score / 100) * 55;
-                                                            return `${100 + radius * Math.cos(angle)},${100 + radius * Math.sin(angle)}`;
-                                                        }).join(' ')}
-                                                        fill="rgba(139, 0, 0, 0.12)"
-                                                        stroke="#8B0000"
-                                                        strokeWidth="2"
-                                                    />
-                                                    {activeDimensions.map((d, idx) => {
-                                                        const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                        const radius = (d.score / 100) * 55;
-                                                        const cx = 100 + radius * Math.cos(angle);
-                                                        const cy = 100 + radius * Math.sin(angle);
-                                                        return (
-                                                            <circle
-                                                                key={idx}
-                                                                cx={cx}
-                                                                cy={cy}
-                                                                r="2"
-                                                                className="fill-white stroke-[#8B0000] stroke-[1.5]"
-                                                            />
-                                                        );
-                                                    })}
-                                                </>
-                                            )}
-
-                                            {/* Dimension Text Labels */}
-                                            {activeDimensions.map((d, idx) => {
-                                                const angle = (2 * Math.PI / 6) * idx - Math.PI / 2;
-                                                const labelRadius = 55 + 20; // 75 radius, clear of the 55px grid
-                                                const x = 100 + labelRadius * Math.cos(angle);
-                                                const y = 100 + labelRadius * Math.sin(angle);
-
-                                                let textAnchor: 'start' | 'end' | 'middle' = "middle";
-                                                if (Math.cos(angle) > 0.1) textAnchor = "start";
-                                                else if (Math.cos(angle) < -0.1) textAnchor = "end";
-
-                                                const cleanLabel = d.label.split('(')[0];
-                                                const dimensionEnglishLabels: Record<string, string> = {
-                                                    loyalty: "Loyalty & Execution",
-                                                    adaptability: "Adaptability",
-                                                    teamwork: "Teamwork",
-                                                    personal_grooming: "Grooming & Ethics",
-                                                    job_capability: "Job Capability",
-                                                    mentorship: "Mentorship",
-                                                    stress_handling: "Stress Handling",
-                                                };
-                                                const engLabel = dimensionEnglishLabels[d.key] || "";
-
-                                                return (
-                                                    <g key={d.key}>
-                                                        {/* White outline/halo for Chinese */}
-                                                        <text
-                                                            x={x}
-                                                            y={y - 1}
-                                                            textAnchor={textAnchor}
-                                                            className="text-[7.5px] font-black tracking-tight"
-                                                            stroke="#ffffff"
-                                                            strokeWidth="3.5"
-                                                            strokeLinejoin="round"
-                                                            paintOrder="stroke"
-                                                            opacity="0.95"
-                                                        >
-                                                            {cleanLabel}
-                                                        </text>
-                                                        {/* Crisp main Chinese text */}
-                                                        <text
-                                                            x={x}
-                                                            y={y - 1}
-                                                            textAnchor={textAnchor}
-                                                            className="text-[7.5px] font-black fill-gray-700 tracking-tight"
-                                                        >
-                                                            {cleanLabel}
-                                                        </text>
-
-                                                        {/* White outline/halo for English */}
-                                                        <text
-                                                            x={x}
-                                                            y={y + 6}
-                                                            textAnchor={textAnchor}
-                                                            className="text-[5.5px] font-bold tracking-tight font-sans"
-                                                            stroke="#ffffff"
-                                                            strokeWidth="3"
-                                                            strokeLinejoin="round"
-                                                            paintOrder="stroke"
-                                                            opacity="0.95"
-                                                        >
-                                                            {engLabel}
-                                                        </text>
-                                                        {/* Crisp main English text */}
-                                                        <text
-                                                            x={x}
-                                                            y={y + 6}
-                                                            textAnchor={textAnchor}
-                                                            className="text-[5.5px] font-bold fill-gray-400 font-sans tracking-tight"
-                                                        >
-                                                            {engLabel}
-                                                        </text>
-                                                    </g>
-                                                );
-                                            })}
-                                        </svg>
-                                    </div>
-                                </div>
-
-                                {/* Dimension Details List */}
-                                <div className="col-span-7 space-y-1">
-                                    {activeDimensions.map((d) => {
-                                        const grade = getGradeInfo(d.score);
-                                        return (
-                                            <div key={d.key} className="flex items-center justify-between bg-gray-50 p-1.5 rounded-lg border border-gray-100">
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-1 leading-normal mb-1">
-                                                        <span className="text-[9px] font-black text-gray-800">{d.label.split('(')[0]}</span>
-                                                        {d.label.includes('(') && (
-                                                            <span className="text-[7px] text-gray-400 font-bold">{d.label.split('(')[1]?.replace(')', '')}</span>
-                                                        )}
-                                                    </div>
-                                                    {/* Progress bar */}
-                                                    <div className="w-full bg-gray-200 h-1 rounded-full overflow-hidden mt-1.5">
-                                                        <div 
-                                                            className="h-full bg-[#8B0000] rounded-full" 
-                                                            style={{ width: `${d.score}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                                                    <span className="text-[9px] font-mono font-bold text-gray-600">{d.score}分</span>
-                                                    <span className={`w-4 h-4 rounded flex items-center justify-center font-black text-[8px] border ${grade.color} shadow-sm`}>
-                                                        {grade.label}
-                                                    </span>
-                                                </div>
+                        <div className="col-span-2">
+                            <h3 className="text-xs font-black uppercase border-b-2 border-gray-200 pb-1.5 mb-2.5 text-[#8B0000]">岗位技能 (Skill Stars)</h3>
+                            {(() => {
+                                const positions = getEmployeePositions(form, skillCatalog);
+                                const ratings = form.skillRatings || {};
+                                const rated = positions.flatMap(pos => pos.items.filter(it => ratings[it.id]?.level).map(it => ({ pos, it, lv: ratings[it.id]!.level })));
+                                if (rated.length === 0) return <p className="text-[10px] text-gray-400 italic bg-gray-50 p-2 rounded-xl text-center border border-dashed border-gray-200">还没有评技能星级</p>;
+                                return (
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px]">
+                                        {rated.map(({ pos, it, lv }) => (
+                                            <div key={`${pos.category}-${it.id}`} className="flex items-center justify-between border-b border-gray-100 py-1">
+                                                <span className="font-bold text-gray-800 truncate pr-2">{it.name}</span>
+                                                <span className="shrink-0 whitespace-nowrap"><span className="text-[#C99A00]">{'★'.repeat(lv)}</span><span className="text-gray-300">{'★'.repeat(5 - lv)}</span> <span className="text-gray-500">{getStarLevel(lv)?.zh}</span></span>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div className="col-span-2">

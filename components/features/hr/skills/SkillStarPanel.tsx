@@ -10,7 +10,6 @@ import {
     getEmployeePositions,
     summarizeItems,
 } from '../../../../constants/skillCatalog';
-import { getSkillLevel } from '../../../../constants/hrSkill';
 
 /**
  * ⭐ 员工档案 → 工作能力
@@ -53,8 +52,6 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
     const ratings = employee.skillRatings || {};
     const primary = positions.find(p => p.isPrimary);
     const primarySummary = primary ? summarizeItems(primary.items, ratings) : null;
-    const hasAnyRating = Object.keys(ratings).length > 0;
-    const legacy = getSkillLevel(employee.skillLevel);
 
     const handleTap = (itemId: string, lv: StarLevel) => {
         const cur = ratings[itemId]?.level;
@@ -86,7 +83,7 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
                     <button
                         type="button"
                         onClick={onOpenPrint}
-                        className="flex items-center gap-1 px-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-[11px] font-black active:scale-95 min-h-[36px]"
+                        className="flex items-center gap-1 px-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-[11px] font-black active:scale-95 min-h-[44px]"
                         title="打印纸本评分表"
                     >
                         <Printer size={13} /> 评分表
@@ -95,7 +92,7 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
                         <button
                             type="button"
                             onClick={onOpenCatalog}
-                            className="flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 active:scale-95 min-h-[36px] min-w-[36px]"
+                            className="flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 active:scale-95 min-h-[44px] min-w-[44px]"
                             title="工作项目设定"
                             aria-label="工作项目设定"
                         >
@@ -172,7 +169,7 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
                                                                 aria-label={`${item.name} ★${n}`}
                                                                 aria-checked={lv === n}
                                                                 role="radio"
-                                                                className="w-9 h-10 md:w-8 md:h-9 flex items-center justify-center active:scale-90 transition-transform"
+                                                                className="w-11 h-11 md:w-9 md:h-9 flex items-center justify-center active:scale-90 transition-transform"
                                                             >
                                                                 <Star
                                                                     size={22}
@@ -196,11 +193,7 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
             <p className="text-[10px] text-gray-400 font-bold mt-3">
                 💡 点星星直接保存；再点同一颗 = 清除。{!canRateHigh && ` 主管最多给 ★${MAX_STAR_FOR_SUPERVISOR}。`}
             </p>
-            {!hasAnyRating && legacy && (
-                <p className="text-[10px] text-gray-400 font-bold mt-1">
-                    旧版技能等级：{legacy.zh}（{legacy.en}）{employee.skillLevelDate ? ` · ${employee.skillLevelDate}` : ''} —— 逐项评分后就不再使用
-                </p>
-            )}
+
         </div>
     );
 };
