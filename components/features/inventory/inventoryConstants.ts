@@ -23,6 +23,7 @@ export const CATEGORY_SECTIONS: Record<string, { id: string, label: string, colo
         { id: 'PACKAGING', label: '包装 (Pack)', color: 'bg-yellow-50 text-yellow-700' },
         { id: 'CLEANING', label: '清洁 (Clean)', color: 'bg-cyan-50 text-cyan-700' },
         { id: 'TOOLS', label: '工具 (Tools)', color: 'bg-gray-50 text-gray-700' },
+        { id: 'OFFICE', label: '办公用品 (Office)', color: 'bg-indigo-50 text-indigo-700' },
         { id: 'WASTE', label: '耗材 (Waste)', color: 'bg-gray-50 text-gray-700' },
         { id: 'GENERAL', label: '杂项 (General)', color: 'bg-gray-50 text-gray-700' },
     ],

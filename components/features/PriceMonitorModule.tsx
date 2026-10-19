@@ -99,6 +99,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   PACKAGING: '包装',
   CLEANING: '清洁',
   TOOLS: '工具',
+  OFFICE: '办公用品',
   WASTE: '消耗品',
   DAIRY: '奶制品',
   BEVERAGE: '饮料',
