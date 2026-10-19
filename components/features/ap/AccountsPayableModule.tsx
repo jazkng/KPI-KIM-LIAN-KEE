@@ -1427,6 +1427,10 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
         });
     };
 
+    // 一键选取画面上「还没开 PV」的账单（批量付款 / 补开 PV 用）
+    const billsWithoutPV = useMemo(() => filteredBills.filter(b => !expensesWithPV.has(b.id)), [filteredBills, expensesWithPV]);
+    const handleSelectWithoutPV = () => setSelectedBillIds(new Set(billsWithoutPV.map(b => b.id)));
+
     const handleSelectAll = () => {
         if (selectedBillIds.size === filteredBills.length) {
             setSelectedBillIds(new Set());
@@ -2896,6 +2900,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             })}
                             <div className="h-4 w-px bg-gray-200 shrink-0 mx-0.5"></div>
                             {filteredBills.length > 0 && <button onClick={handleSelectAll} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 ${selectedBillIds.size > 0 && selectedBillIds.size === filteredBills.length ? 'bg-[#111111] text-[#FFD200]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}><ListChecks size={12}/> {selectedBillIds.size > 0 ? '取消' : '全选'}</button>}
+                            {billsWithoutPV.length > 0 && <button onClick={handleSelectWithoutPV} title="选取画面上还没开付款凭单（PV）的账单" className="px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all whitespace-nowrap shrink-0 bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"><ListChecks size={12}/> 选未开 PV（{billsWithoutPV.length}）</button>}
                             
                             <div className="relative shrink-0 ml-auto"><select value={selectedTag} onChange={e => setSelectedTag(e.target.value)} className="bg-gray-50 border-none rounded-lg pl-2 pr-6 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD200] appearance-none"><option value="ALL">🔖 All Tags</option>{availableTags.map(t => <option key={t} value={t}>{t}</option>)}</select><div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDown size={10}/></div></div>
                         </div>
@@ -3006,7 +3011,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     <div className="flex flex-col items-center justify-center py-20 text-gray-300"><Filter size={64} className="mb-4 opacity-20"/><p className="font-black text-sm">没有找到相关账单</p></div>
                 ) : (
                     <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                         {filteredBills.map(bill => {
                             const isPaid = bill.paymentStatus === 'PAID';
                             const effectiveDueDate = getEffectiveDueDate(bill);
