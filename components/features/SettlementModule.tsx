@@ -7,7 +7,9 @@ import {
     RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft, Edit3, Save, ListChecks, FileSpreadsheet
 } from 'lucide-react';
 import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
-import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS } from '../../types';
+import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS, SpecialCondition, SPECIAL_CONDITION_OPTIONS } from '../../types';
+import { getMalaysiaHoliday, holidayLabel, hasHolidayDataForYear } from '../../utils/holidays/malaysiaHolidays';
+import { shiftDate } from '../../utils/apDueDate';
 import { guardWrite } from '../../utils/readOnlyMode';
 import { DataManager } from '../../utils/dataManager';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
@@ -50,6 +52,38 @@ const getCalendarTodayStr = () => {
 // isChannelReconciled / getReconActual 已搬到 utils/settlementRecon.ts（明细、列表、批量核对共用同一份）
 
 // 🟢 ReconItem：补回对账后的手续费/调节费的百分比展示
+/** 历史详情：平台名后面的「· 12 单」（没填就不显示） */
+const withOrders = (label: string, v: any) => (Number(v) > 0 ? `${label} · ${Number(v)} 单` : label);
+const orderTag = (v: any) => (Number(v) > 0 ? <span className="ml-1 text-[10px] font-bold text-[#6B7280]">· {Number(v)} 单</span> : null);
+
+/** 🇲🇾 营业日是公共假日 → 显示假日栏说明；明天是假日 → 提早提醒 */
+const HolidayNotice = ({ date }: { date: string }) => {
+    const today = getMalaysiaHoliday(date);
+    const tomorrow = getMalaysiaHoliday(shiftDate(date, 1));
+    if (!today && !tomorrow) {
+        const year = String(date || '').slice(0, 4);
+        if (year && !hasHolidayDataForYear(year)) {
+            return <p className="text-[10px] font-bold text-gray-400">ℹ️ {year} 年的马来西亚假日还没加入系统，暂时不会显示假日。</p>;
+        }
+        return null;
+    }
+    return (
+        <div className="space-y-2">
+            {today && (
+                <div className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3">
+                    <p className="text-sm font-black text-pink-700">🎉 今天是公共假日：{holidayLabel(today)}</p>
+                    <p className="text-[11px] font-bold text-pink-600/80">{today.en}</p>
+                    <p className="mt-1 text-xs font-medium leading-relaxed text-gray-700">{today.about}</p>
+                    {today.tentative && <p className="mt-1 text-[10px] font-bold text-gray-500">「预计」= 要看月亮或政府公布，日期可能差一天。</p>}
+                </div>
+            )}
+            {tomorrow && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">📅 明天是公共假日：{holidayLabel(tomorrow)}（{tomorrow.en}），记得准备人手与备料。</p>
+            )}
+        </div>
+    );
+};
+
 const ReconItem = ({ 
     label, 
     gross,
@@ -184,6 +218,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
             shopeeNet: Number(d.shopeeNet) || 0,
             shopeeAds: Number(d.shopeeAds) || 0,
             lalamove: Number(d.lalamove) || 0,
+            grabOrders: Number(d.grabOrders) || 0,
+            pandaOrders: Number(d.pandaOrders) || 0,
+            shopeeOrders: Number(d.shopeeOrders) || 0,
+            lalamoveOrders: Number(d.lalamoveOrders) || 0,
             // 📊 营运数据
             ...Object.fromEntries(OPS_FIELDS.map(f => [`ops_${f.key}`, getOps(r)[f.key]])),
         });
@@ -211,6 +249,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                     pandaGross: f.pandaGross, pandaNet: f.pandaNet, pandaAds: f.pandaAds,
                     shopeeGross: f.shopeeGross, shopeeNet: f.shopeeNet, shopeeAds: f.shopeeAds,
                     lalamove: f.lalamove,
+                    grabOrders: Math.max(0, Math.round(f.grabOrders || 0)),
+                    pandaOrders: Math.max(0, Math.round(f.pandaOrders || 0)),
+                    shopeeOrders: Math.max(0, Math.round(f.shopeeOrders || 0)),
+                    lalamoveOrders: Math.max(0, Math.round(f.lalamoveOrders || 0)),
                 } as any,
             },
         } as SettlementRecord);
@@ -309,6 +351,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
 
     // 🌤️ 天气状况（旧记录没有此字段时不显示）
     const recordWeather = WEATHER_OPTIONS.find(o => o.value === (localRecord as any).weather);
+    const recordSpecial = SPECIAL_CONDITION_OPTIONS.filter(o => ((localRecord as any).specialConditions || []).includes(o.value));
+    const recordHoliday = getMalaysiaHoliday(localRecord.date);
 
     // 📊 营运数据（旧记录没有 → 全 0）
     const recOps = getOps(localRecord);
@@ -533,6 +577,13 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                     <div>
                         <h3 className="font-black text-lg md:text-xl text-[#FFD200]">结算单详情 (Receipt Details)</h3>
                         <p className="text-[10px] md:text-xs text-gray-400 font-mono mt-1 font-bold tracking-widest">{localRecord.date} • {new Date(localRecord.timestamp).toLocaleTimeString()}</p>
+                        {(recordWeather || recordSpecial.length > 0 || recordHoliday) && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-black">
+                                {recordWeather && <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-white/80">{recordWeather.label}</span>}
+                                {recordSpecial.map(o => <span key={o.value} className="rounded-md bg-orange-400/20 px-1.5 py-0.5 text-orange-300">{o.emoji} {o.label}</span>)}
+                                {recordHoliday && <span className="rounded-md bg-pink-500/20 px-1.5 py-0.5 text-pink-300" title={recordHoliday.about}>🎉 {holidayLabel(recordHoliday)}</span>}
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleDownloadPDF} disabled={isGenerating} className="p-2 bg-[#FFD200] text-black rounded-full hover:bg-white hover:text-black transition-colors shadow-lg disabled:opacity-50" title="导出为 PDF">
@@ -582,10 +633,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                     <p className="text-[10px] font-black text-orange-800 uppercase flex items-center gap-1.5"><Truck size={12}/> Delivery Platforms</p>
                                     <span className="font-mono text-[10px] md:text-xs font-black text-orange-800 whitespace-nowrap bg-orange-100/50 px-2 py-0.5 rounded">记账总额: RM {totalDelivery.toFixed(2)}</span>
                                 </div>
-                                <ReconItem label="GrabFood" gross={grabGross} net={grabNet} ads={grabAds} isReconciled={isChannelReconciled(reconStatus, 'grab')} actualAmount={getReconActual(reconStatus, 'grab')} onReconcile={() => setReconTarget({key: 'grab', label: 'GrabFood', expectedAmount: grabExpected, grossAmount: grabGross})} />
-                                <ReconItem label="FoodPanda" gross={pandaGross} net={pandaNet} ads={pandaAds} isReconciled={isChannelReconciled(reconStatus, 'panda')} actualAmount={getReconActual(reconStatus, 'panda')} onReconcile={() => setReconTarget({key: 'panda', label: 'FoodPanda', expectedAmount: pandaReportValue, grossAmount: pandaGross})} />
+                                <ReconItem label={withOrders("GrabFood", deliveryBreakdown.grabOrders)} gross={grabGross} net={grabNet} ads={grabAds} isReconciled={isChannelReconciled(reconStatus, 'grab')} actualAmount={getReconActual(reconStatus, 'grab')} onReconcile={() => setReconTarget({key: 'grab', label: 'GrabFood', expectedAmount: grabExpected, grossAmount: grabGross})} />
+                                <ReconItem label={withOrders("FoodPanda", deliveryBreakdown.pandaOrders)} gross={pandaGross} net={pandaNet} ads={pandaAds} isReconciled={isChannelReconciled(reconStatus, 'panda')} actualAmount={getReconActual(reconStatus, 'panda')} onReconcile={() => setReconTarget({key: 'panda', label: 'FoodPanda', expectedAmount: pandaReportValue, grossAmount: pandaGross})} />
                                 {/* 🌟 修复：把拆分好的 net 和 ads 属性完美塞进 ShopeeFood 标签，对账期望改为 shopeeExpected */}
-                                <ReconItem label="ShopeeFood" gross={shopeeGross} net={shopeeNet} ads={shopeeAds} isReconciled={isChannelReconciled(reconStatus, 'shopee')} actualAmount={getReconActual(reconStatus, 'shopee')} onReconcile={() => setReconTarget({key: 'shopee', label: 'ShopeeFood', expectedAmount: shopeeExpected, grossAmount: shopeeGross})} />
+                                <ReconItem label={withOrders("ShopeeFood", deliveryBreakdown.shopeeOrders)} gross={shopeeGross} net={shopeeNet} ads={shopeeAds} isReconciled={isChannelReconciled(reconStatus, 'shopee')} actualAmount={getReconActual(reconStatus, 'shopee')} onReconcile={() => setReconTarget({key: 'shopee', label: 'ShopeeFood', expectedAmount: shopeeExpected, grossAmount: shopeeGross})} />
                             </div>
                         )}
                     </div>
@@ -708,25 +759,29 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                             </div>
                                         </div>
                                         <div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">外卖 (Delivery) — Gross / Net / 广告费</p>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">外卖 (Delivery) — Gross / Net / 广告费 / 单数</p>
                                             <div className="space-y-2">
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-4 gap-2">
                                                     {numField('grabGross', 'Grab Gross')}
                                                     {numField('grabNet', 'Grab Net')}
                                                     {numField('grabAds', 'Grab 广告')}
+                                                    {numField('grabOrders', 'Grab 单数')}
                                                 </div>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-4 gap-2">
                                                     {numField('pandaGross', 'Panda Gross')}
                                                     {numField('pandaNet', 'Panda Net')}
                                                     {numField('pandaAds', 'Panda 广告')}
+                                                    {numField('pandaOrders', 'Panda 单数')}
                                                 </div>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-4 gap-2">
                                                     {numField('shopeeGross', 'Shopee Gross')}
                                                     {numField('shopeeNet', 'Shopee Net')}
                                                     {numField('shopeeAds', 'Shopee 广告')}
+                                                    {numField('shopeeOrders', 'Shopee 单数')}
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {numField('lalamove', 'Lalamove')}
+                                                    {numField('lalamoveOrders', 'Lalamove 单数')}
                                                 </div>
                                             </div>
                                         </div>
@@ -806,6 +861,12 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                     {recordWeather && (
                                         <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Weather</span>: {recordWeather.en} ({recordWeather.label})</p>
                                     )}
+                                    {recordSpecial.length > 0 && (
+                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">特殊情况</span>: {recordSpecial.map(o => `${o.emoji}${o.label}`).join(' · ')}</p>
+                                    )}
+                                    {recordHoliday && (
+                                        <p className="whitespace-nowrap"><span className="font-black text-pink-600">🎉 公共假日</span>: {holidayLabel(recordHoliday)}</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -848,9 +909,9 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                     <p className="text-[9px] text-[#6B7280]">单数 · 单均</p>
                                 </div>
                                 <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">VIP</p>
-                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">+{recOps.vipNew} · {recOps.vipVisits}</p>
-                                    <p className="text-[9px] text-[#6B7280]">新会员 · 到店</p>
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Regulars · VIP</p>
+                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.vipNew} · {recOps.vipVisits}</p>
+                                    <p className="text-[9px] text-[#6B7280]">熟客 · 到店 VIP</p>
                                 </div>
                                 <div className="px-4 py-2.5">
                                     <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">WhatsApp</p>
@@ -886,10 +947,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                         <span className="font-mono font-black text-sm whitespace-nowrap">RM {totalDelivery.toFixed(2)}</span>
                                     </div>
                                     <div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">
-                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabReportValue.toFixed(2)}</span></div>}
-                                        {pandaReportValue > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda <span className="text-[9px] text-[#9CA3AF]">{hasPandaNet ? <>Net {pandaNet.toFixed(1)} · Ads -{pandaAds.toFixed(1)}</> : 'Legacy total'}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaReportValue.toFixed(2)}</span></div>}
-                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeReportValue.toFixed(2)}</span></div>}
-                                        {Number(deliveryBreakdown.lalamove) > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Lalamove</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span></div>}
+                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood{orderTag(deliveryBreakdown.grabOrders)} <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabReportValue.toFixed(2)}</span></div>}
+                                        {pandaReportValue > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda{orderTag(deliveryBreakdown.pandaOrders)} <span className="text-[9px] text-[#9CA3AF]">{hasPandaNet ? <>Net {pandaNet.toFixed(1)} · Ads -{pandaAds.toFixed(1)}</> : 'Legacy total'}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaReportValue.toFixed(2)}</span></div>}
+                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood{orderTag(deliveryBreakdown.shopeeOrders)} <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeReportValue.toFixed(2)}</span></div>}
+                                        {Number(deliveryBreakdown.lalamove) > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Lalamove{orderTag(deliveryBreakdown.lalamoveOrders)}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span></div>}
                                     </div>
                                 </div>}
                             </section>
@@ -976,13 +1037,29 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
         pandaGross: 0, pandaNet: 0, pandaAds: 0, // 👈 新增分拆 FoodPanda
         shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, // 👈 新增分拆
         lalamove: 0,
+        grabOrders: 0, pandaOrders: 0, shopeeOrders: 0, lalamoveOrders: 0, // 各平台单数（选填）
         // Legacy fields mapping
         grab: 0, panda: 0, shopee: 0
     });
 
+    const totalDeliveryOrders = (Number(salesData.grabOrders) || 0) + (Number(salesData.pandaOrders) || 0) + (Number(salesData.shopeeOrders) || 0) + (Number(salesData.lalamoveOrders) || 0);
+    /** 外卖平台的「单数」输入（整数，选填） */
+    const renderOrdersInput = (key: 'grabOrders' | 'pandaOrders' | 'shopeeOrders', color: 'green' | 'pink' | 'orange') => (
+        <div className="mt-2 flex items-center justify-end gap-2">
+            <label className={`text-[10px] font-black text-${color}-700`}>单数 (Orders)</label>
+            <input type="number" inputMode="numeric" min={0} step={1} placeholder="0"
+                aria-label={`${key} 单数`}
+                className="w-[96px] px-2 py-2 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-center font-mono font-black outline-none shadow-inner min-h-[40px] tabular-nums"
+                style={{ fontSize: '16px' }}
+                value={salesData[key] || ''}
+                onChange={e => setSalesData({ ...salesData, [key]: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+        </div>
+    );
+
     const [closingCashInput, setClosingCashInput] = useState<number>(0);
     const [varianceReason, setVarianceReason] = useState<string>('');
-    const [weather, setWeather] = useState<WeatherCondition | ''>('');
+    const [weather, setWeather] = useState<WeatherCondition | ''>('SUNNY'); // 默认晴天
+    const [specialConditions, setSpecialConditions] = useState<SpecialCondition[]>([]);
     
     // 🌟 新增：当日 Expected Cash 临时支出列表 (不连外部，仅当班记录)
     const [dayExpenses, setDayExpenses] = useState<{ id: string; company: string; item: string; amount: number }[]>([]);
@@ -1042,12 +1119,15 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     shopeeNet: savedSales.shopeeNet !== undefined ? savedSales.shopeeNet : (savedSales.shopee || 0), // 👈 新增
                     shopeeAds: savedSales.shopeeAds || 0, // 👈 新增
                     lalamove: savedSales.lalamove || 0,
+                    grabOrders: savedSales.grabOrders || 0, pandaOrders: savedSales.pandaOrders || 0,
+                    shopeeOrders: savedSales.shopeeOrders || 0, lalamoveOrders: savedSales.lalamoveOrders || 0,
                     grab: savedSales.grab || 0, panda: savedSales.panda || 0, shopee: savedSales.shopee || 0
                 });
                 
                 setClosingCashInput(shift.closingCashInput || 0);
                 setVarianceReason(shift.varianceReason || '');
-                setWeather(shift.weather || '');
+                setWeather(shift.weather || 'SUNNY');
+                setSpecialConditions(Array.isArray(shift.specialConditions) ? shift.specialConditions : []);
                 if (shift.dayExpenses) setDayExpenses(shift.dayExpenses);
                 if (shift.ownerWithdrawal !== undefined) setOwnerWithdrawal(shift.ownerWithdrawal);
                 setOps(getOps(shift));
@@ -1073,12 +1153,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                 openingTotal, salesData, 
                 closingCashInput, varianceReason: varianceReason || '',
                 weather: weather || '',
+                specialConditions,
                 dayExpenses, ownerWithdrawal, ops,
                 updatedAt: new Date().toISOString()
             };
             DataManager.saveActiveShift(shiftData);
         }
-    }, [isShiftOpen, businessDate, openingTotal, salesData, closingCashInput, varianceReason, weather, dayExpenses, ownerWithdrawal, ops, isLoading, activeTab, isSubmitting]);
+    }, [isShiftOpen, businessDate, openingTotal, salesData, closingCashInput, varianceReason, weather, specialConditions, dayExpenses, ownerWithdrawal, ops, isLoading, activeTab, isSubmitting]);
 
     // 🌟 核心计算引擎：自动化求和并剔除外卖水分
     const totals = useMemo(() => {
@@ -1210,12 +1291,15 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                 shopeeNet: bd.shopeeNet !== undefined ? bd.shopeeNet : (bd.shopee || 0), // 👈 新增
                 shopeeAds: bd.shopeeAds || 0, // 👈 新增
                 lalamove: bd.lalamove || 0,
+                grabOrders: bd.grabOrders || 0, pandaOrders: bd.pandaOrders || 0,
+                shopeeOrders: bd.shopeeOrders || 0, lalamoveOrders: bd.lalamoveOrders || 0,
                 grab: 0, panda: 0, shopee: 0
             });
             
             setClosingCashInput(record.closingCash || 0);
             setVarianceReason(record.varianceReason || '');
             setWeather((record as any).weather || '');
+            setSpecialConditions(Array.isArray((record as any).specialConditions) ? (record as any).specialConditions : []);
             setOwnerWithdrawal(record.ownerWithdrawal || 0);
             setDayExpenses(record.dayExpenses || []);
             setOps(getOps(record));
@@ -1269,12 +1353,17 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                     shopeeNet: effShopeeNet,
                     shopeeAds: Number(salesData.shopeeAds) || 0,
                     shopee: effShopeeNet - (Number(salesData.shopeeAds) || 0), 
-                    lalamove: Number(salesData.lalamove) || 0
+                    lalamove: Number(salesData.lalamove) || 0,
+                    grabOrders: Number(salesData.grabOrders) || 0,
+                    pandaOrders: Number(salesData.pandaOrders) || 0,
+                    shopeeOrders: Number(salesData.shopeeOrders) || 0,
+                    lalamoveOrders: Number(salesData.lalamoveOrders) || 0
                 }
             },
             expenses: [], // 保持原样不改动外部接口
             variance: totals.variance, varianceReason: varianceReason,
             weather: (weather || '') as any,  
+            ...(specialConditions.length > 0 ? { specialConditions } : {}),
             submittedBy: 'Manager', isClosed: true,
             dayExpenses: dayExpenses, 
             ops: ops,
@@ -1287,8 +1376,8 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
             window.dispatchEvent(new Event('klk-settlements-updated'));
             setBusinessDate(getBusinessDateStr(storeConfig.businessDayCutoff || 4));
             setOpeningTotal(0);
-            setSalesData({ storeHubTotal: 0, refundTotal: 0, cash: 0, tng: 0, duitnow: 0, card: 0, amex: 0, grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0, grab: 0, panda: 0, shopee: 0 });
-            setClosingCashInput(0); setVarianceReason(''); setWeather('');
+            setSalesData({ storeHubTotal: 0, refundTotal: 0, cash: 0, tng: 0, duitnow: 0, card: 0, amex: 0, grabGross: 0, grabNet: 0, grabAds: 0, pandaGross: 0, pandaNet: 0, pandaAds: 0, shopeeGross: 0, shopeeNet: 0, shopeeAds: 0, lalamove: 0, grabOrders: 0, pandaOrders: 0, shopeeOrders: 0, lalamoveOrders: 0, grab: 0, panda: 0, shopee: 0 });
+            setClosingCashInput(0); setVarianceReason(''); setWeather('SUNNY'); setSpecialConditions([]);
             setOwnerWithdrawal(0);
             setDayExpenses([]);
             setOps(EMPTY_OPS);
@@ -1406,7 +1495,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             <button
                                 key={opt.value}
                                 type="button"
-                                onClick={() => setWeather(prev => prev === opt.value ? '' : opt.value)}
+                                onClick={() => setWeather(opt.value)}
                                 className={`py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 border ${
                                     weather === opt.value
                                         ? 'bg-[#FFD200] text-black border-[#FFD200]'
@@ -1416,6 +1505,19 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                 {opt.label}
                             </button>
                         ))}
+                    </div>
+                    <label className="text-[10px] font-black text-white/50 uppercase block mt-3 mb-2 tracking-widest">特殊情况（可多选，没有就不用按）</label>
+                    <div className="flex flex-wrap gap-2">
+                        {SPECIAL_CONDITION_OPTIONS.map(opt => {
+                            const on = specialConditions.includes(opt.value);
+                            return (
+                                <button key={opt.value} type="button"
+                                    onClick={() => setSpecialConditions(prev => on ? prev.filter(v => v !== opt.value) : [...prev, opt.value])}
+                                    className={`min-h-[36px] px-3 rounded-xl text-xs font-black transition-all active:scale-95 border ${on ? 'bg-orange-400 text-black border-orange-400' : 'bg-black/30 text-white/60 border-white/10'}`}>
+                                    {opt.emoji} {opt.label}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
                 <div className="bg-white/10 p-6 rounded-[2rem] border border-white/10 relative">
@@ -1502,6 +1604,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                 <input type="date" value={businessDate} onChange={(e) => setBusinessDate(e.target.value)} className="w-full p-2.5 md:p-3 bg-white border-2 border-gray-200 rounded-xl font-black text-[#111111] outline-none focus:border-[#FFD200] text-center text-base md:text-lg shadow-sm min-h-[44px]"/>
                                                 <button onClick={handleForceToday} className="w-[44px] h-[44px] flex items-center justify-center bg-white border-2 border-gray-200 rounded-xl hover:border-[#FFD200] hover:text-[#FFD200] transition-colors"><RotateCcw size={18}/></button>
                                             </div>
+                                            <div className="mt-2"><HolidayNotice date={businessDate} /></div>
                                             {autoAdvancedFrom && autoAdvancedFrom !== businessDate && (
                                                 <p className="mt-2 text-[11px] font-bold text-emerald-700 text-center">✅ {autoAdvancedFrom} 已经结算过，自动跳到 {businessDate}</p>
                                             )}
@@ -1565,6 +1668,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                         <div><h2 className="text-2xl font-black text-[#111111]">{new Date(businessDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</h2><p className="text-xs font-bold text-gray-400">Business Date (Settlement Date)</p></div>
                                         <div className="text-right"><p className="text-[10px] font-bold text-gray-400 uppercase">Opening Float</p><p className="text-lg font-mono font-black text-blue-600">RM {openingTotal.toFixed(2)}</p></div>
                                     </div>
+                                    <HolidayNotice date={businessDate} />
                                     
                                     {/* 📦 StoreHub POS Total - 极简高雅栏目（右侧直接显示金额，已去除退款记录） */}
                                     <div className="bg-blue-50/65 p-4 rounded-2xl border border-blue-200/80 flex items-center justify-between gap-4">
@@ -1709,6 +1813,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                         />
                                                     </div>
                                                 </div>
+                                                {renderOrdersInput('grabOrders', 'green')}
                                             </div>
 
                                             {/* 🌟 Panda / Shopee 极简与三列模式 */}
@@ -1751,6 +1856,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                             />
                                                         </div>
                                                     </div>
+                                                    {renderOrdersInput('pandaOrders', 'pink')}
                                                 </div>
 
                                                 {/* 🌟 ShopeeFood 三列高精准输入区域 - 美化 */}
@@ -1791,6 +1897,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                             />
                                                         </div>
                                                     </div>
+                                                    {renderOrdersInput('shopeeOrders', 'orange')}
                                                 </div>
                                             </div>
                                             
@@ -1809,6 +1916,14 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                         onChange={e => setSalesData({...salesData, lalamove: parseFloat(e.target.value) || 0})} 
                                                     />
                                                 </div>
+                                                <div className="w-[88px] shrink-0">
+                                                    <input type="number" inputMode="numeric" min={0} step={1} placeholder="单数"
+                                                        aria-label="Lalamove 单数"
+                                                        className="w-full p-3 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-center font-mono font-black text-gray-900 outline-none focus:bg-white shadow-inner min-h-[44px] tabular-nums"
+                                                        style={{ fontSize: '16px' }}
+                                                        value={salesData.lalamoveOrders || ''}
+                                                        onChange={e => setSalesData({...salesData, lalamoveOrders: Math.max(0, parseInt(e.target.value, 10) || 0)})} />
+                                                </div>
                                             </div>
 
                                             <div className="pt-3.5 mt-3.5 border-t border-orange-200/65 space-y-1 flex flex-col items-end">
@@ -1817,6 +1932,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <span className="font-mono text-orange-600 text-lg">RM {totals.deliverySales.toFixed(2)}</span>
                                                 </div>
                                                 <p className="text-[9px] text-orange-700 font-black tracking-wide font-sans mt-0.5">Grab(Net) + FoodPanda(Net) + ShopeeFood(Net)</p>
+                                                {totalDeliveryOrders > 0 && <p className="text-[10px] text-orange-800 font-black">外卖共 {totalDeliveryOrders} 单</p>}
                                             </div>
                                         </div>
                                     </div>

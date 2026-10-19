@@ -811,6 +811,17 @@ export const WEATHER_OPTIONS: Array<{ value: WeatherCondition; label: string; en
   { value: 'HEAVY_RAIN', label: '大雨', en: 'Heavy Rain' },
 ];
 
+/** 每日结算的特殊情况（可多选，和天气分开存：天气照常选晴/阴/雨，烟霾等另外勾） */
+export type SpecialCondition = 'HAZE' | 'HEATWAVE' | 'FLOOD' | 'POWER_CUT' | 'ROAD_CLOSURE';
+
+export const SPECIAL_CONDITION_OPTIONS: Array<{ value: SpecialCondition; label: string; en: string; emoji: string }> = [
+  { value: 'HAZE',         label: '烟霾',     en: 'Haze',         emoji: '🌫️' },
+  { value: 'HEATWAVE',     label: '酷热',     en: 'Heatwave',     emoji: '🥵' },
+  { value: 'FLOOD',        label: '水灾/淹水', en: 'Flood',        emoji: '🌊' },
+  { value: 'POWER_CUT',    label: '停电/停水', en: 'Power/Water Cut', emoji: '🔌' },
+  { value: 'ROAD_CLOSURE', label: '封路/活动', en: 'Road Closure / Event', emoji: '🚧' },
+];
+
 export interface SettlementRecord {
   id: string;
   date: string;
@@ -840,6 +851,11 @@ export interface SettlementRecord {
       shopeeGross?: number;
       shopeeNet?: number;
       shopeeAds?: number;
+      /** 各平台单数（选填，旧记录没有） */
+      grabOrders?: number;
+      pandaOrders?: number;
+      shopeeOrders?: number;
+      lalamoveOrders?: number;
     };
   };
   expenses: any[]; 
@@ -847,6 +863,8 @@ export interface SettlementRecord {
   varianceReason?: string;
   /** 当日天气状况（可选） */
   weather?: WeatherCondition;
+  /** 当日特殊情况（烟霾、停电…，可多选，选填） */
+  specialConditions?: SpecialCondition[];
   submittedBy: string;
   isClosed: boolean;
   createdAt?: string;

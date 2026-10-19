@@ -71,7 +71,7 @@ export const SettlementHistoryTable: React.FC<Props> = ({ records, onSelect }) =
               <th className={`${th} text-right`}>外卖</th>
               <th className={`${th} text-right text-violet-700`}>人数</th>
               <th className={`${th} text-right text-violet-700`}>人均</th>
-              <th className={`${th} text-right text-violet-700`}>VIP新</th>
+              <th className={`${th} text-right text-violet-700`}>熟客</th>
               <th className={`${th} text-right text-violet-700`}>WA新</th>
               <th className={`${th} text-right text-red-600`}>现金支出</th>
               <th className={`${th} text-right text-orange-600`}>提支</th>
@@ -93,6 +93,7 @@ export const SettlementHistoryTable: React.FC<Props> = ({ records, onSelect }) =
                     <span className="font-mono font-black text-[#111111] text-sm">{f.date.slice(8, 10)}</span>
                     <span className={`ml-1.5 text-[11px] font-bold ${weekend ? "text-amber-600" : "text-gray-400"}`}>{f.weekday}</span>
                     {f.weather && <span className="ml-1 text-[10px] text-gray-400">{f.weather}</span>}
+                    {f.holiday && <span className="ml-1 rounded bg-pink-50 px-1 text-[10px] font-bold text-pink-600" title="马来西亚公共假日">🎉{f.holiday}</span>}
                   </td>
                   <td className={`${td} font-black text-[#111111]`}>{m(f.netRevenue)}</td>
                   <td className={td}>{m(f.storeHubTotal)}</td>
