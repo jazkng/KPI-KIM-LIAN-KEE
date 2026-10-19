@@ -35,6 +35,8 @@ import { POCart } from './POCart';
 import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './SupplierDeleteModals';
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
+import { isFrozenBill, withoutFrozen } from '../../../utils/ap/frozenBills';
+import { isTrivialConversion, splitStockName } from '../../../utils/inventory/stockName';
 import { categoryShortLabel, outstandingBySupplier, SUPPLIER_GROUPS, supplierGroupInfo, supplierGroupOf, type SupplierGroupId } from '../../../utils/supplier/supplierGroups';
 
 const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
@@ -201,6 +203,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
     const billStats = useMemo(() => {
         let total = 0, outstanding = 0;
         supplierExpenses.forEach(b => {
+            if (isFrozenBill(b)) return; // 冻结的账单不计入
             total += b.totalBillAmount || b.amount || 0;
             outstanding += b.outstandingAmount || 0;
         });
@@ -254,7 +257,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
         if (mainTab !== 'SUPPLIERS' || view !== 'LIST') return;
         // 只读：未付清的账单（回到列表时重读，付款后金额会更新）
         getDocs(query(collection(db, 'standalone_expenses'), where('paymentStatus', 'in', ['UNPAID', 'PARTIAL'])))
-            .then(snap => setUnpaidBills(snap.docs.map(d => d.data() as ExpenseItem)))
+            .then(snap => setUnpaidBills(withoutFrozen(snap.docs.map(d => d.data() as ExpenseItem))))
             .catch(err => console.error('读取未付款失败', err));
     }, [mainTab, view]);
     const outstandingMap = useMemo(() => outstandingBySupplier(suppliers, unpaidBills), [suppliers, unpaidBills]);
@@ -1770,7 +1773,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
                                                             </div>
                                                         </div>
-                                                        <h4 className="font-bold text-sm text-[#111111] mb-1 line-clamp-2 min-h-[2.5em] leading-snug group-hover:text-blue-700">{item.name}</h4>
+                                                        <h4 className="font-bold text-sm text-[#111111] leading-snug group-hover:text-blue-700 line-clamp-2">{splitStockName(item.name).primary}</h4>
+                                                        {splitStockName(item.name).secondary ? <div className="mb-1 text-[11px] font-medium text-gray-500 line-clamp-1">{splitStockName(item.name).secondary}</div> : <div className="mb-1" />}
                                                         {(item.status === 'DISCONTINUED' || item.packDesc || item.brand || item.spec || item.storage) && (
                                                             <div className="mb-1.5 flex flex-wrap gap-1 text-[9px] font-black">
                                                                 {item.status === 'DISCONTINUED' && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-gray-600">停售</span>}
@@ -1804,7 +1808,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                     <span className="text-blue-700">{linkedStock.name}</span>
                                                                     {isWeightItem(item)
                                                                         ? ` · 1 ${item.orderUnit || item.unit} ≈ ${item.estimatedWeightPerUnit || '?'} ${item.billingUnit || 'kg'}（称重）`
-                                                                        : ` · 1 ${item.purchaseUnitName || item.unit} = ${item.toBaseRatio || 1} ${item.baseUnit || linkedStock.baseUnit || 'pcs'}`}
+                                                                        : isTrivialConversion(item.purchaseUnitName || item.unit, item.toBaseRatio, item.baseUnit || linkedStock.baseUnit) ? '' : ` · 1 ${item.purchaseUnitName || item.unit} = ${item.toBaseRatio || 1} ${item.baseUnit || linkedStock.baseUnit || 'pcs'}`}
                                                                 </span>
                                                             </div>
                                                         ) : (
@@ -1920,7 +1924,8 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                         </div>
                                                                         <div className="flex-1 text-right">
                                                                             <div className="font-mono font-black text-xs text-[#111111]">RM {(bill.totalBillAmount || bill.amount || 0).toFixed(2)}</div>
-                                                                            {bill.outstandingAmount && bill.outstandingAmount > 0 ? (
+                                                                            {isFrozenBill(bill) && <div className="text-[9px] text-sky-700 font-black mt-0.5 leading-none">❄️ 已冻结（不计入）</div>}
+                                                                            {!isFrozenBill(bill) && bill.outstandingAmount && bill.outstandingAmount > 0 ? (
                                                                                 <div className="text-[9px] text-rose-500 font-bold mt-0.5 leading-none">未付: RM {bill.outstandingAmount.toFixed(2)}</div>
                                                                             ) : (
                                                                                 <div className="text-[8px] text-emerald-600 font-black mt-0.5 leading-none">已付讫</div>

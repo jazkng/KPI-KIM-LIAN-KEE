@@ -6,6 +6,7 @@
 import { collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import type { PayableLike } from '../apDueDate';
+import { isFrozenBill } from '../ap/frozenBills';
 
 const TIMEOUT_MS = 20000;
 
@@ -15,7 +16,7 @@ export const loadUnpaidPayables = async (): Promise<PayableLike[]> => {
         read,
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('读取逾时，请检查网络')), TIMEOUT_MS)),
     ]);
-    return snap.docs.map(d => {
+    return snap.docs.filter(d => !isFrozenBill(d.data())).map(d => {
         const x = d.data() as Record<string, unknown>;
         return {
             id: d.id,

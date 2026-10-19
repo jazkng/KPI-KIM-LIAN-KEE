@@ -10,6 +10,7 @@ import { getBusinessDateString } from '../utils/dateHelper';
 import { needsReplenishment } from '../utils/unitConversion';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { OnlineOrderCenter, SettlementModule, RosterModule, LogbookModule, InventoryModule, SOPInspection, QueueManager, SupplierModule, AttendanceConsole, ProcurementModule, MenuManagement, EmployeeAssessmentModule, AccountsPayableModule, SelfInvoiceModule, StaffCashModule } from './lazyModules';
+import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
 
 // --- NEW GENERIC IMPORTS ---
 
@@ -252,6 +253,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
       }
   }
 
+  // --- 快速切换（库存总览 / 供应商 / 采购管理）---
+  const QUICK_NAV: { key: typeof activeTab; keys: string[]; icon: string; label: string }[] = [
+      { key: 'INVENTORY_VIEW', keys: ['INVENTORY_VIEW', 'INVENTORY_CHECK'], icon: '📦', label: '库存总览' },
+      { key: 'SUPPLIER_CONTACTS', keys: ['SUPPLIER_CONTACTS'], icon: '🚚', label: '供应商' },
+      { key: 'PROCUREMENT', keys: ['PROCUREMENT'], icon: '🛒', label: '采购管理' },
+  ];
+  const quickNavTabs = QUICK_NAV.some(q => q.keys.includes(activeTab))
+      ? QUICK_NAV.filter(q => availableTabs.some(t => t.key === q.key))
+      : [];
+
   // --- NAVIGATION HANDLER ---
   const handleNavigateToStock = (stockId: string) => {
       setTargetStockId(stockId);
@@ -360,6 +371,20 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
                 )}
             </div>
           </div>
+          {/* 快速切换：库存总览 / 供应商 / 采购管理 互相关联，不用关掉再从首页打开 */}
+          {quickNavTabs.length > 1 && (
+              <div className="flex shrink-0 items-center gap-1 rounded-xl bg-black/5 p-1">
+                  {quickNavTabs.map(t => {
+                      const active = t.keys.includes(activeTab);
+                      return (
+                          <button key={t.key} type="button" onClick={() => { if (!active) { setTargetStockId(''); setActiveTab(t.key); } }}
+                              className={`min-h-[36px] rounded-lg px-2.5 text-xs font-black transition-colors md:px-3 ${active ? 'bg-[#FFD200] text-[#111111]' : isManagementStaff ? 'text-stone-600 hover:bg-white' : 'text-gray-300 hover:bg-white/10'}`}>
+                              <span className="md:hidden">{t.icon}</span><span className="hidden md:inline">{t.icon} {t.label}</span>
+                          </button>
+                      );
+                  })}
+              </div>
+          )}
         </div>
       </div>
 
@@ -448,6 +473,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
          {activeTab === 'AP' && (
              <AccountsPayableModule 
                 onClose={handleModuleExit} 
+                canFreeze={canManageStockCodes(currentEmployee)}
                 onNavigateToSelfVoucher={(prefill) => {
                     const isBoss = !allowedModules || allowedModules.length === 0;
                     if (isBoss || allowedModules.includes('SELF_INVOICE')) {

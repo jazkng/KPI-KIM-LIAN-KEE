@@ -722,6 +722,12 @@ export interface ExpenseItem {
     company: string;
     amount: number;
     paymentStatus: 'PAID' | 'UNPAID' | 'PARTIAL';
+    /** 应付账款冻结（V2）：疑似错误、暂不处理；冻结的账单不计入任何财务计算。只新增可选字段，V1 会忽略 */
+    frozen?: boolean;
+    frozenAt?: string;
+    frozenBy?: string;
+    frozenReason?: string;
+    frozenHistory?: { action: 'FREEZE' | 'UNFREEZE'; at: string; by: string; reason?: string }[];
     paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'DUITNOW';
     time: string;
     createdAt?: string;  // 👑 加这行：审计时间戳(实际操作发生的时间)
@@ -932,6 +938,8 @@ export interface UnitConversionRule {
 export interface StockItem {
     id: string;
     name: string;
+    /** 使用说明（选填，例如稀释比例、用法）；没有就空白。V2 新增，V1 会忽略 */
+    description?: string;
     category: string;
     unit: string; // Legacy field
     maxQty: number; // Legacy field

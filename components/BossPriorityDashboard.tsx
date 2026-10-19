@@ -23,6 +23,8 @@ const MODAL_REFETCH_COOLDOWN_MS = 60 * 1000;
 // Import Modals so we can open them directly from the Priority Dashboard
 import { canUseBossTarget } from '../utils/bossPortalAccess';
 import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
+import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
+import { isFrozenBill } from '../utils/ap/frozenBills';
 
 interface BossPriorityDashboardProps {
     currentEmployee: Employee;
@@ -308,7 +310,8 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             try {
                 const expensesSnap = await unpaidExpensesRead;
                 const apItems = expensesSnap.docs
-                    .map(doc => doc.data() as ExpenseItem);
+                    .map(doc => doc.data() as ExpenseItem)
+                    .filter(e => !isFrozenBill(e)); // 冻结的应付账款不计入
                 
                 setUnpaidAPCount(apItems.length);
                 const unpaidTotal = apItems.reduce((acc, item) => acc + (item.outstandingAmount !== undefined ? item.outstandingAmount : item.amount), 0);
@@ -663,7 +666,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
             'LABOUR_PROFIT': <LabourProfitDashboard onClose={close} />,
             'BOSS_COCKPIT': <BossCockpit onClose={close} />,
             'ATTENDANCE': <AttendanceConsole onClose={close} currentEmployee={currentEmployee} />,
-            'AP': <AccountsPayableModule onClose={close} onNavigateToSelfVoucher={(prefill) => {
+            'AP': <AccountsPayableModule onClose={close} canFreeze={canManageStockCodes(currentEmployee, !currentEmployee)} onNavigateToSelfVoucher={(prefill) => {
                 localStorage.setItem('klk_prefill_self_invoice', JSON.stringify(prefill));
                 setActiveModal('SELF_INVOICE');
             }} />,
