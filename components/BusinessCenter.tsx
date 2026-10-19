@@ -11,6 +11,10 @@ import { loadBusinessCenterWith, profitStory, type BusinessCenterData, type Busi
 import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics';
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { AIOperationsAssistant, HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
+import { DataManager } from '../utils/dataManager';
+import { summarizePayables, unpaidRecurringBills, latestClosing, payThisWeek, type PayRow } from '../utils/cashOverview';
 import './businessCenter.css';
 
 interface Props {
@@ -87,8 +91,8 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                     {loading && <div className="bc-card bc-loading" role="status">正在读取已结算记录、成本与薪资…</div>}
                     {error && <div role="alert" className="bc-card bc-error">{error}<button onClick={() => setRevision(v => v + 1)}>重试</button></div>}
                     {data && k && <>
-                        {data.draftCount > 0 && <p className="bc-warning">月度报表沿用现有利润引擎，包含 {data.draftCount} 笔未结算记录，金额待核对；下方日报只显示已结算日。</p>}
-                        {salesEmpty && <div className="bc-empty bc-card">本月暂无已结算营业额；未结算日期不当作 0。</div>}
+                        {data.draftCount > 0 && tab !== 'cash' && <p className="bc-warning">月度报表沿用现有利润引擎，包含 {data.draftCount} 笔未结算记录，金额待核对；下方日报只显示已结算日。</p>}
+                        {salesEmpty && tab === 'sales' && <div className="bc-empty bc-card">本月暂无已结算营业额；未结算日期不当作 0。</div>}
                         {tab === 'sales' && <>
                             <div className="bc-overview"><div><section className="bc-card"><div className="bc-card-heading"><h2>经营日报</h2><select aria-label="选择已结算日" value={selectedDate} disabled={!monthDays.length} onChange={e => setSelectedDate(e.target.value)}>{!monthDays.length && <option value="">未结算</option>}{monthDays.map(d => <option key={d.date} value={d.date}>{d.date.slice(5).replace('-', '月')}日</option>)}</select></div>
                                 {day ? <><div className="bc-sales-hero"><div><small>{day.date} · 已结算</small>{settlementAllowed && <span className="bc-weather">{day.weather === 'SUNNY' ? <Sun size={17} /> : day.weather === 'CLOUDY' ? <CloudSun size={17} /> : day.weather === 'HEAVY_RAIN' ? <CloudLightning size={17} /> : day.weather === 'RAIN' ? <CloudRain size={17} /> : null}{WEATHER_OPTIONS.find(w => w.value === day.weather)?.label || (day.weatherMixed ? '天气记录不同' : '天气未填写')}</span>}</div><strong>{money(day.revenue)}</strong><p>{previous && previous.revenue > 0 ? `较上周同日${day.revenue >= previous.revenue ? '增加' : '减少'} ${money(Math.abs(day.revenue - previous.revenue))}（${(Math.abs(day.revenue - previous.revenue) / previous.revenue * 100).toFixed(1)}%）` : '暂无上周同日对照'}</p></div>
@@ -108,7 +112,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                         </>}
                         {tab === 'profit' && <><ProfitView story={profitStory(data.result, month, today)} month={month} integrity={data.result.integrity} onDetail={key => k[key] && setDetail(k[key])} />
                             <details className="bc-card bc-all-metrics"><summary>全部指标（给会计看的原始数字）</summary><div className="bc-metric-grid">{['actualProfit', 'revenue', 'food', 'foodRatio', 'labour', 'labourRatio', 'grossMargin', 'netMargin', 'breakEvenDay', 'breakEvenMonth'].map(key => <React.Fragment key={key}>{metric(key)}</React.Fragment>)}</div></details></>}
-                        {tab === 'cash' && <section className="bc-card"><h2>现金与账款</h2><p className="bc-muted">按实际收付款查看；销售和经营利润仍使用业务发生制。</p><div className="bc-hr-grid">{[['TREASURY', '资金与现金'], ['AP', '应付账款'], ['BILLS', '经常性支出']].map(([target, label]) => can(target) && <button key={target} className="bc-cash-entry" onClick={() => { if (!can(target)) return; if (target === 'AP') navigate('AP'); else setAccountModal(target as 'TREASURY' | 'BILLS'); }}>{label}<ChevronRight size={16} /></button>)}</div><p className="bc-muted">打开现有账款模块，保留原来的操作与记录。</p></section>}
+                        {tab === 'cash' && <CashView today={today} canAP={can('AP')} canBills={can('BILLS')} canTreasury={can('TREASURY')} onOpen={target => { if (!can(target)) return; if (target === 'AP') navigate('AP'); else setAccountModal(target as 'TREASURY' | 'BILLS'); }} />}
                         <details className="bc-sources"><summary>数据依据与口径</summary><p>来源：现有日结、应付账款、固定账单与薪资。营业额使用利润引擎：店内扣退款后金额＋外卖平台总额；抽佣和广告单列成本。旧 Grab 缺总额时沿用引擎暂计净额并提示。日报仅显示已结算记录；月度金额沿用原引擎，若存在未结算记录会单独提示。缺记录不作 0；食材是采购成本，不代表实际耗用。更新于 {new Date(data.result.loadedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur' })}。</p></details>
                     </>}
                 </>}
@@ -218,5 +222,60 @@ const ProfitView = ({ story, month, integrity, onDetail }: { story: ProfitStory;
             <summary>{story.pending.length ? <><AlertCircle size={16} />为什么还不是最终数字？（{story.pending.length} 项待补）</> : <><CheckCircle2 size={16} />资料检查：都齐了</>}</summary>
             <ul>{integrity.map(i => <li key={i.label} className={i.ok ? 'ok' : 'bad'}>{i.ok ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}<b>{i.label}</b><span>{i.detail}{!i.ok && FIX_HINT[i.label] && <small>怎么补：{FIX_HINT[i.label]}</small>}</span></li>)}</ul>
         </details>
+    </div>;
+};
+
+/** 现金与账款：要付的钱一眼看完（只读），点一行打开原来的模块处理 */
+const CashView = ({ today, canAP, canBills, canTreasury, onOpen }: { today: string; canAP: boolean; canBills: boolean; canTreasury: boolean; onOpen: (target: 'AP' | 'BILLS' | 'TREASURY') => void }) => {
+    type Data = { ap: ReturnType<typeof summarizePayables> | null; bills: PayRow[] | null; closing: ReturnType<typeof latestClosing> | undefined };
+    const [data, setData] = useState<Data | null>(null);
+    const [error, setError] = useState('');
+    const [reload, setReload] = useState(0);
+    useEffect(() => {
+        let active = true;
+        setData(null); setError('');
+        Promise.all([
+            canAP ? getDocs(query(collection(db, 'standalone_expenses'), where('paymentStatus', 'in', ['UNPAID', 'PARTIAL']))).then(snap => summarizePayables(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)), today)) : Promise.resolve(null),
+            canBills ? DataManager.getRecurringBills().then(b => unpaidRecurringBills(b as any, today)) : Promise.resolve(null),
+            canTreasury ? getDocs(collection(db, 'treasury_monthly_closings')).then(snap => latestClosing(snap.docs.map(d => d.data() as any))) : Promise.resolve(undefined),
+        ]).then(([ap, bills, closing]) => { if (active) setData({ ap, bills, closing }); })
+            .catch(() => { if (active) setError('暂时无法读取账款资料，请检查网络后重试。'); });
+        return () => { active = false; };
+    }, [today, canAP, canBills, canTreasury, reload]);
+
+    const amt = (n: number) => `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const when = (r: PayRow) => r.days < 0 ? `逾期 ${-r.days} 天` : r.days === 0 ? '今天到期' : `${r.days} 天后`;
+    if (!canAP && !canBills && !canTreasury) return <p className="bc-card">当前账号未获账款或资金模块权限。</p>;
+    if (error) return <div role="alert" className="bc-card bc-error">{error}<button onClick={() => setReload(v => v + 1)}>重试</button></div>;
+    if (!data) return <div className="bc-card bc-loading" role="status">正在读取未付账单与资金…</div>;
+
+    const { ap, bills, closing } = data;
+    const overdueBills = (bills || []).filter(b => b.days < 0);
+    const soonBills = (bills || []).filter(b => b.days >= 0 && b.days <= 7);
+    const overdue = [...(ap?.overdue || []), ...overdueBills].sort((a, b) => a.days - b.days);
+    const soon = [...(ap?.dueSoon || []), ...soonBills].sort((a, b) => a.days - b.days);
+    const week = ap ? payThisWeek(ap, bills || []) : soon.concat(overdue).reduce((n, r) => n + r.amount, 0);
+    const Row = ({ r }: { r: PayRow }) => <button className="bc-pay-row" onClick={() => onOpen(r.kind === 'AP' ? 'AP' : 'BILLS')}>
+        <span><b>{r.name}</b><small>{r.kind === 'BILL' ? '固定账单' : '应付账款'}{r.note ? ` · ${r.note}` : ''} · 到期 {r.due.slice(5)}</small></span>
+        <em className={r.days < 0 ? 'is-late' : ''}>{when(r)}</em><strong>{amt(r.amount)}</strong></button>;
+    const List = ({ rows, empty, limit = 8 }: { rows: PayRow[]; empty: string; limit?: number }) => rows.length === 0 ? <p className="bc-muted">{empty}</p> : <div className="bc-pay-list">{rows.slice(0, limit).map(r => <Row key={`${r.kind}-${r.id}`} r={r} />)}{rows.length > limit && <p className="bc-muted">还有 {rows.length - limit} 笔，打开模块看全部。</p>}</div>;
+
+    return <div className="bc-cash">
+        <p className="bc-muted bc-cash-asof">以今天（{today.slice(5).replace('-', '/')}）为准，不受上面的月份影响。</p>
+        <div className="bc-cash-tiles">
+            <section className={`bc-card bc-cash-tile ${overdue.length ? 'is-late' : ''}`}><span>已逾期未付</span><strong>{amt(overdue.reduce((n, r) => n + r.amount, 0))}</strong><small>{overdue.length ? `${overdue.length} 笔，最久逾期 ${-overdue[0].days} 天` : '没有逾期'}</small></section>
+            <section className="bc-card bc-cash-tile"><span>这 7 天要付（含逾期）</span><strong>{amt(week)}</strong><small>{soon.length} 笔即将到期</small></section>
+            {ap && <section className="bc-card bc-cash-tile"><span>应付账款未付总额</span><strong>{amt(ap.total)}</strong><small>{ap.count} 张账单（不含冻结）</small></section>}
+            {canTreasury && <section className="bc-card bc-cash-tile"><span>{closing ? `${Number(closing.month.slice(5))} 月底资金${closing.counted ? '（实点）' : ''}` : '月底资金'}</span><strong>{closing ? amt(closing.total) : '—'}</strong><small>{closing ? `现金 ${amt(closing.cash)} · 银行 ${amt(closing.bank)}` : '还没有做过月结'}</small></section>}
+        </div>
+        <div className="bc-cash-grid">
+            <section className="bc-card"><div className="bc-card-heading"><h2>已逾期，先处理</h2><small>点一行去付款</small></div><List rows={overdue} empty="没有逾期的账单。" /></section>
+            <section className="bc-card"><div className="bc-card-heading"><h2>7 天内到期</h2></div><List rows={soon} empty="这 7 天没有要到期的账单。" /></section>
+        </div>
+        <section className="bc-card"><div className="bc-card-heading"><h2>打开模块处理</h2></div><div className="bc-cash-links">
+            {canAP && <button onClick={() => onOpen('AP')}><b>应付账款</b><small>供应商账单、付款、开 PV</small><ChevronRight size={16} /></button>}
+            {canBills && <button onClick={() => onOpen('BILLS')}><b>经常性支出</b><small>租金、水电等固定账单</small><ChevronRight size={16} /></button>}
+            {canTreasury && <button onClick={() => onOpen('TREASURY')}><b>资金与现金</b><small>现金、银行流水与月结</small><ChevronRight size={16} /></button>}
+        </div><p className="bc-muted">这里只看不改；付款、记账都在原来的模块里做。销售和经营利润仍按业务发生制计算。</p></section>
     </div>;
 };
