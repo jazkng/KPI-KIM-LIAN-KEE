@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { PortalRole, Employee, DeviceScreen } from './types';
 import { Login } from './components/Login';
-import { LogOut, Settings, User, Sparkles, Target, Layout } from 'lucide-react';
+import { LogOut, Settings, Target, Layout, Users } from 'lucide-react';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getPortalRole } from './utils/orgAccess';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
 import { currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
 import { NotificationCenter } from './components/ui/NotificationCenter';
-import { BossDashboard, BossPriorityDashboard, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal, preloadHomeFor } from './components/lazyModules';
+import { BossDashboard, BusinessCenter, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal, preloadHomeFor } from './components/lazyModules';
 
 // Fix #8: bossTab 明确类型，消灭 `as any` 逃脱口
 // 与 ManagerDashboard 的 initialTab prop 类型保持一致
@@ -119,7 +119,7 @@ export default function App() {
     });
 
     const [bossTab,         setBossTab]         = useState<BossTab>(null);
-    const [bossHomeView,    setBossHomeView]    = useState<'PRIORITY' | 'FUNCTIONS'>('PRIORITY');
+    const [bossHomeView,    setBossHomeView]    = useState<'PRIORITY' | 'HR' | 'FUNCTIONS'>('PRIORITY');
     const [isConfigOpen,    setIsConfigOpen]    = useState(false);
     const [isAiOpen,        setIsAiOpen]        = useState(false);
     const [showWhatsNew,    setShowWhatsNew]    = useState(false);
@@ -397,7 +397,7 @@ export default function App() {
         <div className="min-h-screen flex flex-col relative font-sans bg-[#F6F7FB] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0">
 
             {/* Header（仅登录后且在老板首页时显示，避免电脑端重复顶部栏） */}
-            {currentUser === PortalRole.BOSS && !bossTab && (
+            {currentUser === PortalRole.BOSS && !bossTab && bossHomeView === 'FUNCTIONS' && (
                 <header className="bg-gradient-to-r from-[#8B0000] via-[#A00000] to-[#8B0000] text-[#FFD200]
                                    px-4 pb-2.5 pt-[max(env(safe-area-inset-top),0.5rem)]
                                    md:px-6 md:pb-4 md:pt-[max(env(safe-area-inset-top),1rem)]
@@ -455,12 +455,12 @@ export default function App() {
                             <button
                                 onClick={() => setBossHomeView('PRIORITY')}
                                 className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
-                                    bossHomeView === 'PRIORITY'
+                                    false
                                         ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
                                         : 'text-stone-300 hover:text-[#FFD200]'
                                 }`}
                             >
-                                经营重点
+                                经营中心
                             </button>
                             <button
                                 onClick={() => setBossHomeView('FUNCTIONS')}
@@ -527,8 +527,10 @@ export default function App() {
                             />
                         )}
                         {!bossTab ? (
-                            bossHomeView === 'PRIORITY' ? (
-                                <BossPriorityDashboard
+                            bossHomeView !== 'FUNCTIONS' ? (
+                                <BusinessCenter
+                                    section={bossHomeView === 'HR' ? 'hr' : 'business'}
+                                    onSection={setBossHomeView}
                                     onNavigate={tab => setBossTab(tab as BossTab)}
                                     currentEmployee={currentEmployee!}
                                     onOpenConfig={() => setIsConfigOpen(true)}
@@ -584,67 +586,7 @@ export default function App() {
                         <div className="flex justify-between items-center w-full px-2">
                             {currentUser === PortalRole.BOSS ? (
                                 <>
-                                    {/* 重点 */}
-                                    <button
-                                        onClick={() => {
-                                            setBossTab(null);
-                                            setBossHomeView('PRIORITY');
-                                        }}
-                                        className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
-                                            !bossTab && bossHomeView === 'PRIORITY'
-                                                ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-800'
-                                        }`}
-                                    >
-                                        <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'PRIORITY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
-                                            <Target size={16} className={!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600' : ''} />
-                                        </div>
-                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${!bossTab && bossHomeView === 'PRIORITY' ? 'text-amber-600 font-black' : ''}`}>重点</span>
-                                    </button>
-
-                                    {/* 全部功能 */}
-                                    <button
-                                        onClick={() => {
-                                            setBossTab(null);
-                                            setBossHomeView('FUNCTIONS');
-                                        }}
-                                        className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
-                                            !bossTab && bossHomeView === 'FUNCTIONS'
-                                                ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-800'
-                                        }`}
-                                    >
-                                        <div className={`p-1.5 rounded-lg transition-all ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
-                                            <Layout size={16} className={!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600' : ''} />
-                                        </div>
-                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${!bossTab && bossHomeView === 'FUNCTIONS' ? 'text-amber-600 font-black' : ''}`}>全部功能</span>
-                                    </button>
-
-                                    {/* AI智脑 */}
-                                    <button
-                                        onClick={() => setIsAiOpen(true)}
-                                        className={`flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl transition-all active:scale-95 shrink-0 ${
-                                            isAiOpen
-                                                ? 'text-amber-600'
-                                                : 'text-stone-400 active:text-stone-800'
-                                        }`}
-                                    >
-                                        <div className={`p-1.5 rounded-lg transition-all ${isAiOpen ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-100'}`}>
-                                            <Sparkles size={16} className="text-amber-500 animate-pulse" />
-                                        </div>
-                                        <span className={`text-[11px] leading-tight whitespace-nowrap font-extrabold ${isAiOpen ? 'text-amber-600 font-black' : ''}`}>AI智脑</span>
-                                    </button>
-
-                                    {/* 我的 */}
-                                    <button
-                                        onClick={() => setIsConfigOpen(true)}
-                                        className="flex flex-col items-center gap-0.5 py-0.5 px-1.5 rounded-xl text-stone-400 active:text-amber-600 active:scale-95 transition-all shrink-0"
-                                    >
-                                        <div className="p-1.5 rounded-lg active:bg-stone-100">
-                                            <User size={16} />
-                                        </div>
-                                        <span className="text-[11px] leading-tight whitespace-nowrap font-extrabold">我的</span>
-                                    </button>
+                                    {([['PRIORITY', '经营中心', Target], ['HR', '人事', Users], ['FUNCTIONS', '全部功能', Layout]] as const).map(([id, label, Icon]) => <button key={id} onClick={() => { setBossTab(null); setBossHomeView(id); }} aria-current={!bossTab && bossHomeView === id ? 'page' : undefined} className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold ${!bossTab && bossHomeView === id ? 'text-stone-900' : 'text-stone-400'}`}><span className={`rounded-lg px-4 py-1.5 ${!bossTab && bossHomeView === id ? 'bg-[#f2e4bc]' : ''}`}><Icon size={19} /></span>{label}</button>)}
                                 </>
                             ) : (
                                 <>
