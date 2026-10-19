@@ -63,7 +63,7 @@ const HolidayNotice = ({ date }: { date: string }) => {
     if (!today && !tomorrow) {
         const year = String(date || '').slice(0, 4);
         if (year && !hasHolidayDataForYear(year)) {
-            return <p className="text-[10px] font-bold text-gray-400">ℹ️ {year} 年的马来西亚假日还没加入系统，暂时不会显示假日。</p>;
+            return <p className="text-[10px] font-bold text-gray-400">{year} 年的马来西亚假日还没加入系统，暂时不会显示假日。</p>;
         }
         return null;
     }
@@ -71,14 +71,14 @@ const HolidayNotice = ({ date }: { date: string }) => {
         <div className="space-y-2">
             {today && (
                 <div className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3">
-                    <p className="text-sm font-black text-pink-700">🎉 今天是公共假日：{holidayLabel(today)}</p>
+                    <p className="text-sm font-black text-pink-700">今天是公共假日：{holidayLabel(today)}</p>
                     <p className="text-[11px] font-bold text-pink-600/80">{today.en}</p>
                     <p className="mt-1 text-xs font-medium leading-relaxed text-gray-700">{today.about}</p>
                     {today.tentative && <p className="mt-1 text-[10px] font-bold text-gray-500">「预计」= 要看月亮或政府公布，日期可能差一天。</p>}
                 </div>
             )}
             {tomorrow && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">📅 明天是公共假日：{holidayLabel(tomorrow)}（{tomorrow.en}），记得准备人手与备料。</p>
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">明天是公共假日：{holidayLabel(tomorrow)}（{tomorrow.en}），记得准备人手与备料。</p>
             )}
         </div>
     );
@@ -580,8 +580,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         {(recordWeather || recordSpecial.length > 0 || recordHoliday) && (
                             <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-black">
                                 {recordWeather && <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-white/80">{recordWeather.label}</span>}
-                                {recordSpecial.map(o => <span key={o.value} className="rounded-md bg-orange-400/20 px-1.5 py-0.5 text-orange-300">{o.emoji} {o.label}</span>)}
-                                {recordHoliday && <span className="rounded-md bg-pink-500/20 px-1.5 py-0.5 text-pink-300" title={recordHoliday.about}>🎉 {holidayLabel(recordHoliday)}</span>}
+                                {recordSpecial.map(o => <span key={o.value} className="rounded-md bg-orange-400/20 px-1.5 py-0.5 text-orange-300">{o.label}</span>)}
+                                {recordHoliday && <span className="rounded-md bg-pink-500/20 px-1.5 py-0.5 text-pink-300" title={recordHoliday.about}>假日：{holidayLabel(recordHoliday)}</span>}
                             </div>
                         )}
                     </div>
@@ -862,10 +862,10 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                         <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Weather</span>: {recordWeather.en} ({recordWeather.label})</p>
                                     )}
                                     {recordSpecial.length > 0 && (
-                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">特殊情况</span>: {recordSpecial.map(o => `${o.emoji}${o.label}`).join(' · ')}</p>
+                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">特殊情况</span>: {recordSpecial.map(o => o.label).join(' · ')}</p>
                                     )}
                                     {recordHoliday && (
-                                        <p className="whitespace-nowrap"><span className="font-black text-pink-600">🎉 公共假日</span>: {holidayLabel(recordHoliday)}</p>
+                                        <p className="whitespace-nowrap"><span className="font-black text-pink-600">公共假日</span>: {holidayLabel(recordHoliday)}</p>
                                     )}
                                 </div>
                             </div>
@@ -1514,7 +1514,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                 <button key={opt.value} type="button"
                                     onClick={() => setSpecialConditions(prev => on ? prev.filter(v => v !== opt.value) : [...prev, opt.value])}
                                     className={`min-h-[36px] px-3 rounded-xl text-xs font-black transition-all active:scale-95 border ${on ? 'bg-orange-400 text-black border-orange-400' : 'bg-black/30 text-white/60 border-white/10'}`}>
-                                    {opt.emoji} {opt.label}
+                                    {opt.label}
                                 </button>
                             );
                         })}
