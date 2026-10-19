@@ -212,6 +212,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply, autoSplitName = false, otherCopies, onKeepCopy
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -400,6 +401,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
             alert("图片上传失败，请重试 (Upload failed)");
         } finally {
             setIsUploading(false);
+            e.target.value = ''; // 同一张照片可以再选 / 再拍一次
         }
     };
 
@@ -635,11 +637,23 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 ) : (
                                     <div className="flex flex-col items-center justify-center text-gray-400 gap-1 p-2">
                                         {isUploading ? <Loader2 size={20} className="animate-spin text-[#FFD200]" /> : <ImageIcon size={20} />}
-                                        <span className="text-[11px] font-bold">{isUploading ? '正在上传...' : '点击上传照片'}</span>
+                                        <span className="text-[11px] font-bold">{isUploading ? '正在上传...' : '还没有照片'}</span>
                                     </div>
                                 )}
                             </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                <button type="button" disabled={isUploading} onClick={() => cameraInputRef.current?.click()}
+                                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-black text-[#FFD200] active:scale-95 disabled:opacity-50">
+                                    <Camera size={15} /> 拍照 <span className="text-[10px] font-medium opacity-70">Camera</span>
+                                </button>
+                                <button type="button" disabled={isUploading} onClick={() => fileInputRef.current?.click()}
+                                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white text-xs font-black text-gray-700 active:scale-95 disabled:opacity-50">
+                                    <ImageIcon size={15} /> 选照片 <span className="text-[10px] font-medium text-gray-400">Gallery</span>
+                                </button>
+                            </div>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                            {/* 手机直接开相机（后镜头）；电脑会改成选档案 */}
+                            <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
                             {editingItem.image && (
                                 <button
                                     type="button"
