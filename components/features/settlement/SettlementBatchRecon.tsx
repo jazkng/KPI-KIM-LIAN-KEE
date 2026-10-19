@@ -8,6 +8,7 @@
 // ==========================================
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { OPS_ICONS } from './settlementIcons';
 import { X, Loader2, Search, CheckCircle2, Pencil, ShieldCheck, RotateCcw, Calendar, AlertTriangle } from 'lucide-react';
 import { SettlementRecord } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
@@ -381,7 +382,7 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                                             <div className="grid grid-cols-3 md:grid-cols-6 gap-1.5">
                                                 {OPS_FIELDS.map(f => (
                                                     <label key={f.key} className="min-w-0">
-                                                        <span className="block text-[9px] font-black text-gray-500 truncate mb-0.5">{f.emoji} {f.short}</span>
+                                                        <span className="flex items-center gap-0.5 text-[9px] font-black text-gray-500 truncate mb-0.5">{React.createElement(OPS_ICONS[f.key], { size: 10, className: 'shrink-0 text-violet-500' })}{f.short}</span>
                                                         <input type="number" inputMode="numeric" min={0} step={1}
                                                             value={o[f.key] || ''}
                                                             onChange={e => setOpsField(r, f.key, e.target.value)}
