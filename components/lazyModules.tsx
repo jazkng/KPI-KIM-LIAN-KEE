@@ -76,6 +76,7 @@ function lazyNamed<M, K extends keyof M>(
 
 // ── 仪表板（登录后按角色载入） ──────────────────────────────────────────────
 export const BossDashboard = lazyNamed(() => import('./BossDashboard'), 'BossDashboard');
+export const BusinessCenter = lazyNamed(() => import('./BusinessCenter'), 'BusinessCenter');
 export const BossPriorityDashboard = lazyNamed(() => import('./BossPriorityDashboard'), 'BossPriorityDashboard');
 export const ManagerDashboard = lazyNamed(() => import('./AdminDashboard'), 'ManagerDashboard');
 export const StaffDashboard = lazyNamed(() => import('./StaffDashboard'), 'StaffDashboard');
@@ -88,7 +89,7 @@ export const DeviceScreenPortal = lazyNamed(() => import('./features/device/Devi
  * 只下载程序档，不读写任何资料。
  */
 export const preloadHomeFor = (portalMode: 'STAFF' | 'BOSS'): Promise<void> =>
-    portalMode === 'BOSS' ? BossPriorityDashboard.preload() : StaffDashboard.preload();
+    portalMode === 'BOSS' ? BusinessCenter.preload() : StaffDashboard.preload();
 
 // ── 弹窗 ────────────────────────────────────────────────────────────────────
 export const StoreConfigModal = lazyNamed(() => import('./features/StoreConfigModal'), 'StoreConfigModal', <Silent />);
