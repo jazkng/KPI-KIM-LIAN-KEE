@@ -43,3 +43,14 @@ export const stockNameLines = (item: { name?: string; subName?: string }): { pri
     if (sub) return { primary: String(item.name || '').trim(), secondary: sub };
     return splitStockName(item.name || '');
 };
+
+/**
+ * 编辑库存时：旧品名「中文 (English)」、还没填第二行 → 建议拆成 品名=中文、第二行=English。
+ * 只是预填表单，按保存才写入。已有第二行、或拆不出来（全英文 / 没括号）→ null。
+ */
+export const suggestNameFields = (item: { name?: string; subName?: string }): { name: string; subName: string } | null => {
+    if (String(item.subName || '').trim()) return null;
+    const { primary, secondary } = splitStockName(item.name || '');
+    if (!primary || !secondary) return null;
+    return { name: primary, subName: secondary };
+};

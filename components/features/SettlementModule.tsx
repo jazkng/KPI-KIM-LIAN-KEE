@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { 
     Trash2, Check, AlertTriangle, Calculator, Play, Power, History, 
     Wallet, Banknote, CreditCard, X, Calendar, Truck, CheckCircle2, 
-    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft, Edit3, Save, ListChecks, FileSpreadsheet
+    RotateCcw, AlertCircle, Loader2, FileDown, ShieldCheck, Zap, ArrowLeft, Edit3, Save, ListChecks, FileSpreadsheet, Users
 } from 'lucide-react';
 import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
 import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS, SpecialCondition, SPECIAL_CONDITION_OPTIONS } from '../../types';
@@ -1963,34 +1963,39 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                         )
                     ) : (
                         <div className="h-full flex flex-col bg-[#F6F7FB]">
-                            <div className="p-3 md:p-6 bg-white border-b border-gray-200 shadow-sm shrink-0">
-                                <div className="max-w-4xl mx-auto flex justify-between items-center gap-2">
-                                    <div className="flex items-center gap-2 md:gap-3">
-                                        <div className="bg-[#111111] p-1.5 md:p-2 rounded-xl text-[#FFD200] shadow-md"><Calendar className="w-5 h-5 md:w-5 md:h-5"/></div>
-                                        <div>
-                                            <h4 className="font-black text-[#111111] text-base md:text-lg">历史账单</h4>
-                                            <p className="hidden md:block text-[10px] text-gray-400 font-bold uppercase mt-0.5">Archive & Reconciliation History</p>
+                            <div className="px-4 py-3 md:p-6 bg-white border-b border-gray-200 shadow-sm shrink-0">
+                                <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
+                                    <div className="flex items-center justify-between gap-2 min-w-0">
+                                        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                                            <div className="bg-[#111111] p-1.5 md:p-2 rounded-xl text-[#FFD200] shadow-md shrink-0"><Calendar className="w-4 h-4 md:w-5 md:h-5"/></div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-black text-[#111111] text-base md:text-lg whitespace-nowrap">历史账单</h4>
+                                                <p className="hidden md:block text-[10px] text-gray-400 font-bold uppercase mt-0.5">Archive & Reconciliation History</p>
+                                            </div>
+                                        </div>
+                                        <div className="md:hidden flex items-center bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-200 shrink-0">
+                                            <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm outline-none w-[120px]" />
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="grid grid-cols-3 md:flex md:items-center gap-2">
                                         <button onClick={() => setIsExcelExportOpen(true)}
-                                            className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            className="flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="批量导出 Excel：选日期范围，每日汇总 + 现金支出明细 + 外卖明细">
-                                            <FileSpreadsheet size={15}/> <span className="hidden sm:inline">导出 Excel</span>
+                                            <FileSpreadsheet size={15} className="shrink-0"/> Excel
                                         </button>
                                         <button onClick={() => { setBatchMode('EXTRA'); setIsBatchReconOpen(true); }}
-                                            className="flex items-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            className="flex items-center justify-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="补填：已结算的日子补外卖单数、天气、特殊情况">
-                                            <ClipboardPen size={15}/> <span className="hidden sm:inline">补填</span>
+                                            <ClipboardPen size={15} className="shrink-0"/> 补填
                                         </button>
                                         <button onClick={() => { setBatchMode('RECON'); setIsBatchReconOpen(true); }}
-                                            className="flex items-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            className="flex items-center justify-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="批量核对：整个月的账目摊开来对，也可以只对 TNG">
-                                            <ListChecks size={15}/> <span className="hidden sm:inline">批量核对</span>
+                                            <ListChecks size={15} className="shrink-0"/> 核对
                                         </button>
-                                        <div className="flex items-center gap-2 bg-gray-50 p-1.5 md:p-2 rounded-xl border border-gray-200">
-                                            <span className="hidden md:inline text-xs font-black text-gray-400 px-2">月份:</span>
-                                            <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm md:text-base outline-none w-[110px] md:w-auto" />
+                                        <div className="hidden md:flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
+                                            <span className="text-xs font-black text-gray-400 px-2">月份:</span>
+                                            <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-base outline-none" />
                                         </div>
                                     </div>
                                 </div>
@@ -2060,80 +2065,57 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             if (shopeeExpected > 0 && !isChannelReconciled(rs, 'shopee')) hasPending = true;
 
                                             return (
-                                                <div key={record.id} onClick={() => setSelectedRecord(record)} className={`bg-white p-5 md:p-6 rounded-2xl border ${hasPending ? 'border-amber-200 border-l-4 border-l-amber-500 shadow-sm bg-gradient-to-br from-white to-amber-50/[0.01]' : 'border-gray-200 border-l-4 border-l-emerald-500 shadow-sm'} hover:shadow-md hover:border-r-gray-300 hover:border-t-gray-300 hover:border-b-gray-300 active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-4`}>
-                                                    {/* Card Header Info */}
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3.5">
-                                                            {/* Date Box - Omitted month as requested, only showing day */}
-                                                            <div className="w-12 h-12 bg-gray-50 border border-gray-200/85 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
-                                                                <span className="text-xl font-extrabold text-gray-950 font-mono tracking-tight">{record.date.split('-')[2]}</span>
-                                                            </div>
-                                                            {/* Totals Title & Value */}
-                                                            <div>
-                                                                <div className="text-xs font-bold text-gray-400">当日总营业额</div>
-                                                                <div className="text-lg md:text-xl font-black text-gray-95" style={{ color: '#111111' }}>RM {record.sales.total.toFixed(2)}</div>
-                                                                {(() => {
-                                                                    const exps = ((record as any).dayExpenses || []) as any[];
-                                                                    const expTotal = exps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-                                                                    const wd = Number((record as any).ownerWithdrawal) || 0;
-                                                                    if (expTotal <= 0 && wd <= 0) return null;
-                                                                    return (
-                                                                        <div className="text-[11px] font-bold text-red-600 mt-0.5">
-                                                                            {expTotal > 0 && <>现金支出 RM {expTotal.toFixed(2)} · {exps.length} 笔</>}
-                                                                            {expTotal > 0 && wd > 0 && ' · '}
-                                                                            {wd > 0 && <>提支 RM {wd.toFixed(2)}</>}
-                                                                        </div>
-                                                                    );
-                                                                })()}
-                                                                {(() => {
-                                                                    const o = getOps(record);
-                                                                    if (!o.pax) return null;
-                                                                    const avg = perPax(record.sales.storeHubTotal, o);
-                                                                    return (
-                                                                        <div className="text-[11px] font-bold text-violet-700 mt-0.5">
-                                                                            👥 {o.pax} 人 · 人均 RM {fmtMoneyOrDash(avg)}
-                                                                        </div>
-                                                                    );
-                                                                })()}
-                                                            </div>
+                                                <div key={record.id} onClick={() => setSelectedRecord(record)} className={`bg-white p-4 md:p-6 rounded-2xl border ${hasPending ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-gray-200 border-l-4 border-l-emerald-500'} shadow-sm hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-3`}>
+                                                    {/* 第一行：日期 · 营业额 · 状态 */}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-11 h-11 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center shrink-0">
+                                                            <span className="text-lg font-extrabold text-gray-950 font-mono tracking-tight">{record.date.split('-')[2]}</span>
                                                         </div>
-                                                        {/* Right side Status Badges */}
-                                                        <div className="flex flex-col items-end gap-1.5">
-                                                            {hasPending ? (
-                                                                 <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-amber-800 bg-amber-50 border border-amber-300/80 px-2 py-0.5 rounded-lg shrink-0 shadow-sm">
-                                                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                                                     待核对
-                                                                 </span>
-                                                             ) : (
-                                                                 <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300/80 px-2 py-0.5 rounded-lg shrink-0">
-                                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                                                     已核对
-                                                                 </span>
-                                                             )}
-                                                            <div className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded-md leading-none ${record.variance >= 0 ? 'text-emerald-700 bg-emerald-50 border border-emerald-300' : 'text-rose-700 bg-rose-50 border border-rose-200'}`}>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-[11px] font-bold text-gray-400 leading-tight">当日营业额</div>
+                                                            <div className="text-lg md:text-xl font-black text-[#111111] leading-tight whitespace-nowrap">RM {record.sales.total.toFixed(2)}</div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                                            <span className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-black px-2 py-0.5 rounded-lg border ${hasPending ? 'text-amber-800 bg-amber-50 border-amber-300/80' : 'text-emerald-800 bg-emerald-50 border-emerald-300/80'}`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasPending ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                                                                {hasPending ? '待核对' : '已核对'}
+                                                            </span>
+                                                            <span className={`text-[11px] font-extrabold font-mono px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${record.variance >= 0 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>
                                                                 {record.variance >= 0 ? '+' : ''}{record.variance.toFixed(2)}
-                                                            </div>
+                                                            </span>
                                                         </div>
                                                     </div>
 
-                                                    {/* 4-Column breakdown grid - Single line, Math.round to avoid decimals */}
-                                                    <div className="grid grid-cols-4 gap-2">
-                                                        <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
-                                                            <div className="text-[10px] text-gray-400 font-bold truncate">💵 Cash</div>
-                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(cash)}</div>
-                                                        </div>
-                                                        <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
-                                                            <div className="text-[10px] text-gray-400 font-bold truncate">🔵 TNG</div>
-                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(tng)}</div>
-                                                        </div>
-                                                        <div className="bg-slate-50/80 p-2 text-center flex flex-col justify-center rounded-xl border border-slate-100/70">
-                                                            <div className="text-[10px] text-gray-400 font-bold truncate">💳 Card</div>
-                                                            <div className="text-xs md:text-[13px] font-black font-mono text-gray-950 mt-1 whitespace-nowrap">RM {Math.round(totalCardVal)}</div>
-                                                        </div>
-                                                        <div className="bg-amber-50/70 p-2 text-center flex flex-col justify-center rounded-xl border border-amber-100">
-                                                            <div className="text-[10px] text-amber-800 font-bold truncate">🛵 Delivery</div>
-                                                            <div className="text-xs md:text-[13px] font-black font-mono text-amber-900 mt-1 whitespace-nowrap">RM {Math.round(totalDeliveryVal)}</div>
-                                                        </div>
+                                                    {/* 现金支出 / 提支 / 人数 */}
+                                                    {(() => {
+                                                        const exps = ((record as any).dayExpenses || []) as any[];
+                                                        const expTotal = exps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                                                        const wd = Number((record as any).ownerWithdrawal) || 0;
+                                                        const o = getOps(record);
+                                                        const avg = o.pax ? perPax(record.sales.storeHubTotal, o) : null;
+                                                        if (expTotal <= 0 && wd <= 0 && !o.pax) return null;
+                                                        return (
+                                                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-bold leading-snug">
+                                                                {expTotal > 0 && <span className="text-red-600 whitespace-nowrap">支出 RM {expTotal.toFixed(2)}（{exps.length} 笔）</span>}
+                                                                {wd > 0 && <span className="text-red-600 whitespace-nowrap">提支 RM {wd.toFixed(2)}</span>}
+                                                                {o.pax ? <span className="text-violet-700 whitespace-nowrap inline-flex items-center gap-1"><Users size={12} className="shrink-0"/>{o.pax} 人 · 人均 RM {fmtMoneyOrDash(avg)}</span> : null}
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* 四个通道（整数） */}
+                                                    <div className="grid grid-cols-4 gap-1.5">
+                                                        {([
+                                                            ['现金', cash, false],
+                                                            ['TNG', tng, false],
+                                                            ['卡', totalCardVal, false],
+                                                            ['外卖', totalDeliveryVal, true],
+                                                        ] as const).map(([lb, v, hl]) => (
+                                                            <div key={lb} className={`px-1 py-1.5 text-center rounded-xl border ${hl ? 'bg-amber-50/70 border-amber-100' : 'bg-slate-50/80 border-slate-100'}`}>
+                                                                <div className={`text-[10px] font-bold leading-tight ${hl ? 'text-amber-800' : 'text-gray-400'}`}>{lb}</div>
+                                                                <div className={`text-xs md:text-[13px] font-black font-mono mt-0.5 whitespace-nowrap ${hl ? 'text-amber-900' : 'text-gray-950'}`}>{Math.round(v)}</div>
+                                                            </div>
+                                                        ))}
                                                     </div>
 
                                                     {/* Delivery Detail Badges - Color dot representation, no text labels, no decimals */}

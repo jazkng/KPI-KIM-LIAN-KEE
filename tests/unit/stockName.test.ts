@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitStockName, chineseFirstName, stockNameLines } from '../../utils/inventory/stockName';
+import { splitStockName, chineseFirstName, stockNameLines, suggestNameFields } from '../../utils/inventory/stockName';
 
 describe('splitStockName', () => {
     it('中文 (English) 拆两行', () => {
@@ -44,4 +44,19 @@ describe('stockNameLines（品名 + 第二行）', () => {
     expect(stockNameLines({ name: '洗布水 (Towel Detergent)', subName: '  ' })).toEqual({ primary: '洗布水', secondary: 'Towel Detergent' });
     expect(stockNameLines({ name: 'Plastic bag (30GG)' })).toEqual({ primary: 'Plastic bag (30GG)', secondary: '' });
   });
+});
+
+describe('suggestNameFields', () => {
+    it('「中文 (English)」拆成品名 + 第二行', () => {
+        expect(suggestNameFields({ name: '洗碗液 (Dish Soap)' })).toEqual({ name: '洗碗液', subName: 'Dish Soap' });
+        expect(suggestNameFields({ name: '打包纸（Packing plastic 20×20）' })).toEqual({ name: '打包纸', subName: 'Packing plastic 20×20' });
+    });
+    it('英文在前、中文在括号 → 中文当品名', () => {
+        expect(suggestNameFields({ name: 'SQ1500 Box (单座饭盒)' })).toEqual({ name: '单座饭盒', subName: 'SQ1500 Box' });
+    });
+    it('已有第二行、全英文、没括号 → 不动', () => {
+        expect(suggestNameFields({ name: '洗碗液 (Dish Soap)', subName: 'x' })).toBeNull();
+        expect(suggestNameFields({ name: 'Plastic bag (30GG)' })).toBeNull();
+        expect(suggestNameFields({ name: '大白面' })).toBeNull();
+    });
 });
