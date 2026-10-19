@@ -436,35 +436,33 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                 <label className="text-[10px] font-bold text-blue-600 uppercase mb-1 block flex items-center gap-1">
                                     <Layers size={12}/> Category (会计科目 - 必选)
                                 </label>
-                                <select
-                                    className="w-full p-3 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD200] text-[#111111]"
-                                    value={editingBill.category || ''}
-                                    onChange={e => {
-                                        const newCat = e.target.value;
-                                        setEditingBill(prev => ({
-                                            ...prev,
-                                            category: newCat,
-                                            ...(newCat !== 'MARKETING'
-                                                ? { marketingSubCategory: undefined, adChannel: undefined, campaignTag: undefined }
-                                                : {}),
-                                            ...(newCat !== 'BEVERAGE'
-                                                ? { beverageSubCategory: undefined }
-                                                : {}),
-                                            ...(newCat !== 'INGREDIENT_SEAFOOD'
-                                                ? { seafoodSubCategory: undefined }
-                                                : {})
-                                        }));
-                                    }}
-                                >
-                                    <option value="">-- Select Category --</option>
+                                {/* 会计科目：按钮直接选，不用展开下拉 */}
+                                <div className="space-y-2">
                                     {Object.entries(ACCOUNTING_CATEGORIES).map(([group, { options }]) => (
-                                        <optgroup key={group} label={group}>
-                                            {options.map(opt => (
-                                                <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                            ))}
-                                        </optgroup>
+                                        <div key={group}>
+                                            <div className="mb-1 text-[9px] font-black uppercase tracking-wider text-gray-400">{group}</div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {options.map(opt => {
+                                                    const active = editingBill.category === opt.id;
+                                                    return (
+                                                        <button key={opt.id} type="button"
+                                                            onClick={() => setEditingBill(prev => ({
+                                                                ...prev,
+                                                                category: opt.id,
+                                                                ...(opt.id !== 'MARKETING' ? { marketingSubCategory: undefined, adChannel: undefined, campaignTag: undefined } : {}),
+                                                                ...(opt.id !== 'BEVERAGE' ? { beverageSubCategory: undefined } : {}),
+                                                                ...(opt.id !== 'INGREDIENT_SEAFOOD' ? { seafoodSubCategory: undefined } : {}),
+                                                            }))}
+                                                            className={`min-h-[32px] rounded-lg border px-2.5 text-[11px] font-bold transition-colors ${active ? 'border-[#111111] bg-[#111111] text-[#FFD200]' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'}`}>
+                                                            {opt.label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     ))}
-                                </select>
+                                    {!editingBill.category && <p className="text-[10px] font-bold text-red-500">请选择一个会计科目</p>}
+                                </div>
                             </div>
 
                             {/* ═══════════════════════════════════════════
@@ -772,27 +770,25 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                             <h4 className="text-xs font-black text-orange-800 uppercase flex items-center gap-2">
                                 <DollarSign size={14}/> Payment Details
                             </h4>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-orange-700 uppercase mb-1 block">Status</label>
-                                    <select 
-                                        className="w-full p-2 bg-white border border-orange-200 rounded-lg text-xs font-bold outline-none" 
-                                        value={editingBill.paymentStatus || 'UNPAID'} 
-                                        onChange={e => {
-                                            const nextStatus = e.target.value as ExpenseItem['paymentStatus'];
-                                            setEditingBill(prev => ({
-                                                ...prev,
-                                                paymentStatus: nextStatus,
-                                                dueDate: nextStatus !== 'PAID' && !prev.dueDate
-                                                    ? getDefaultDueDate(prev.time)
-                                                    : prev.dueDate,
-                                            }));
-                                        }}
-                                    >
-                                        <option value="UNPAID">UNPAID (未付)</option>
-                                        <option value="PAID">PAID (已付)</option>
-                                        <option value="PARTIAL">PARTIAL (部分)</option>
-                                    </select>
+                                    <label className="text-[10px] font-bold text-orange-700 uppercase mb-1 block">付款状态 (Status)</label>
+<div className="grid grid-cols-3 gap-1.5">
+                                        {([['UNPAID', '未付'], ['PARTIAL', '部分付'], ['PAID', '已付']] as const).map(([val, label]) => {
+                                            const active = (editingBill.paymentStatus || 'UNPAID') === val;
+                                            return (
+                                                <button key={val} type="button"
+                                                    onClick={() => setEditingBill(prev => ({
+                                                        ...prev,
+                                                        paymentStatus: val as ExpenseItem['paymentStatus'],
+                                                        dueDate: val !== 'PAID' && !prev.dueDate ? getDefaultDueDate(prev.time) : prev.dueDate,
+                                                    }))}
+                                                    className={`min-h-[40px] rounded-lg border text-xs font-black transition-colors ${active ? (val === 'PAID' ? 'border-green-600 bg-green-600 text-white' : val === 'PARTIAL' ? 'border-amber-500 bg-amber-500 text-white' : 'border-red-600 bg-red-600 text-white') : 'border-orange-200 bg-white text-gray-600'}`}>
+                                                    {label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                             
