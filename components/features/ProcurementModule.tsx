@@ -942,6 +942,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 supplierGroups.get(supplier.id)!.items.push({
                     stockId: catalog.id,
                     name: catalog.name,
+                    ...(stockItem.subName && catalog.name === stockItem.name ? { subName: stockItem.subName } : {}),
                     orderQty: orderQty,
                     unit: resolved.unitName,
                     ratio: resolved.purchaseToBaseRatio,
@@ -979,6 +980,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 adhocItems.push({
                     stockId: draft.stockId,
                     name: stockItem.name || draft.stockId,
+                    ...(stockItem.subName ? { subName: stockItem.subName } : {}),
                     orderQty: orderQty,
                     unit: resolved.unitName,
                     ratio: resolved.purchaseToBaseRatio,
@@ -2647,7 +2649,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     <tr key={i} className={`border-b border-[#E5E7EB] ${i % 2 === 0 ? 'bg-[#FFFFFF]' : 'bg-[#F6F7FB]'}`}>
                                                         <td className="py-3 text-xs text-[#9CA3AF] align-top">{pageIndex * itemsPerPage + i + 1}</td>
                                                         <td className="py-3">
-                                                            {(() => { const n = chineseFirstName(item.name); return <>
+                                                            {(() => { const n = item.subName ? { primary: item.name, secondary: item.subName } : chineseFirstName(item.name); return <>
                                                                 <span className="block text-[15px] font-bold text-[#111111] leading-snug">{n.primary}</span>
                                                                 {n.secondary && <span className="block text-[11px] font-medium text-[#6B7280] leading-snug mt-0.5">{n.secondary}</span>}
                                                             </>; })()}

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
     Edit3, X, Trash2, Link as LinkIcon, Loader2, Save,
-    Camera, Image as ImageIcon, Info, Percent, Coins, Layers, Check, ArrowRightLeft
+    Camera, Image as ImageIcon, Info, Coins, Layers, Check, ArrowRightLeft
 } from 'lucide-react';
 import { CATEGORY_SECTIONS, INPUT_STYLE, LABEL_STYLE } from './inventoryConstants';
 import { StockItem, Supplier, UnitConversionRule } from '../../../types';
@@ -44,6 +44,14 @@ interface StockEditModalProps {
 }
 
 
+/** 标签：中文在上，英文小字在下（不再挤在同一行被遮住） */
+const Bi: React.FC<{ zh: React.ReactNode; en?: string }> = ({ zh, en }) => (
+    <span className="block leading-tight">
+        <span className="block">{zh}</span>
+        {en && <span className="block mt-0.5 text-[10px] font-medium normal-case tracking-normal text-gray-400">{en}</span>}
+    </span>
+);
+
 const StepHeading: React.FC<{ step: string; color: string; title: string; sub: string }> = ({ step, color, title, sub }) => (
     <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
         <span className={`w-1.5 h-4 ${color} rounded-full`}></span>
@@ -62,7 +70,7 @@ const UNIT_EXAMPLES = [
 
 const UnitSetupOverview: React.FC<{ summary: UnitSetupSummary }> = ({ summary }) => (
     <div className="bg-white p-4 rounded-2xl border-2 border-[#111111] shadow-sm space-y-2">
-        <div className="text-xs font-black text-[#111111]">单位设定一览（自动生成，按下面 ①②③ 修改）</div>
+        <div className="text-xs font-black text-[#111111]">单位一览 <span className="font-medium text-gray-400">（在下面 ①②③ 修改）</span></div>
         <ul className="space-y-1 text-[12px] font-bold leading-relaxed text-gray-800">
             <li>① {summary.stock}</li>
             <li>② {summary.count}</li>
@@ -97,7 +105,7 @@ const MoveAreaSection: React.FC<{ currentArea: string; disabled: boolean; onMove
         return (
             <button type="button" onClick={() => setOpen(true)} disabled={disabled}
                 className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 text-xs font-black text-gray-600 hover:border-gray-500 disabled:opacity-50">
-                <ArrowRightLeft size={14} /> 移动到其他区域（例如 厨房 → 燃料）
+                <ArrowRightLeft size={14} /> 移到其他区域
             </button>
         );
     }
@@ -437,12 +445,9 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                 <div className="p-5 pb-4 pt-[calc(1.25rem+env(safe-area-inset-top))] md:pt-5 shrink-0 bg-white border-b border-[#E5E7EB] z-10">
                     <div className="flex justify-between items-center">
                         <div>
-                            <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#FFD200] bg-[#111111] px-2.5 py-1 rounded-full">
-                                ERP Stock Master Data
-                            </span>
-                            <h3 className="font-black text-lg md:text-2xl text-[#111111] mt-1.5 flex items-center gap-2">
+                            <h3 className="font-black text-lg md:text-2xl text-[#111111] flex items-center gap-2">
                                 <Edit3 size={20} className="text-[#111111]"/> 
-                                {editingItem.id ? '编辑库存基础档案' : '新建库存基础档案'}
+                                {editingItem.id ? '编辑库存' : '新增库存'}
                             </h3>
                         </div>
                         <button 
@@ -462,11 +467,11 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                         <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
                             <span className="w-1.5 h-4 bg-[#FFD200] rounded-full"></span>
-                            <h4 className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">基本信息 (Basic Info)</h4>
+                            <h4 className="text-sm font-black text-[#111111]">基本信息 <span className="text-[11px] font-medium text-gray-400">Basic info</span></h4>
                         </div>
                         
                         <div>
-                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>品名 (Material Name)</label>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="品名" en="Name" /></label>
                             <input 
                                 className={`${INPUT_STYLE} focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200] transition-all`} 
                                 value={editingItem.name || ''} 
@@ -475,9 +480,20 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             />
                         </div>
 
+                        <div>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="第二行（选填）" en="English name / style" /></label>
+                            <input 
+                                className={`${INPUT_STYLE} focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200] transition-all`} 
+                                value={editingItem.subName || ''} 
+                                onChange={e => onChange({...editingItem, subName: e.target.value})} 
+                                placeholder="例如: Packing plastic 20×20；没有就留空" 
+                            />
+                            <p className="mt-1 text-[11px] font-medium text-gray-400">显示在品名下面、字较小；留空就照品名自动分两行</p>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>库存编号 (Stock Code)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="编号" en="Stock code" /></label>
                                 <input 
                                     className={`${INPUT_STYLE} font-mono bg-gray-50 text-gray-400 cursor-not-allowed`} 
                                     value={editingItem.stockCode || (editingItem.id ? '未编号' : '存档后自动配号')} 
@@ -485,7 +501,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 />
                             </div>
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>物料分类 (Sub Category)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="分类" en="Category" /></label>
                                 <select 
                                     className={`${INPUT_STYLE} focus:border-[#FFD200] focus:ring-1 focus:ring-[#FFD200] transition-all`} 
                                     value={editingItem.category || CATEGORY_SECTIONS[currentStockView]?.[0]?.id} 
@@ -503,7 +519,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         )}
 
                         <div>
-                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>使用说明（选填）</label>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="使用说明（选填）" en="Notes" /></label>
                             <textarea
                                 rows={2}
                                 className={`${INPUT_STYLE} focus:border-[#FFD200] resize-y`}
@@ -515,7 +531,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                         {/* Image Upload Area */}
                         <div>
-                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>商品照片 (Photo)</label>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="照片" en="Photo" /></label>
                             <div
                                 className="relative h-32 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl overflow-hidden cursor-pointer group flex items-center justify-center bg-cover bg-center transition-all hover:border-[#FFD200]"
                                 onClick={() => fileInputRef.current?.click()}
@@ -549,14 +565,14 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                     {/* Card Section 2: System Stock & Cost Unit */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                        <StepHeading step="①" color="bg-blue-500" title="库存用什么单位记？" sub="系统库存与成本单位 (System Stock & Cost Unit)" />
+                        <StepHeading step="①" color="bg-blue-500" title="库存用什么单位记？" sub="Base unit" />
                         <p className="text-[11px] text-gray-500 leading-relaxed">
-                            选<strong>最小、最常用来算成本</strong>的单位：肉、菜用 kg，饮料用瓶 / 罐，鸡蛋用 pcs。菜谱扣库存、成本都用这个单位。
+                            选<strong>最小的计算单位</strong>：肉菜 kg、饮料 BTL、鸡蛋 pcs。
                         </p>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>系统库存单位 (Base Unit)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="库存单位" en="Base unit" /></label>
                                 <input 
                                     className={`${INPUT_STYLE} font-bold text-center focus:border-[#FFD200] ${validationErrors.baseUnit ? 'border-red-500 ring-1 ring-red-500' : ''}`} 
                                     value={baseUnit} 
@@ -585,7 +601,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 {validationErrors.baseUnit && <p className="text-[10px] text-red-500 font-bold mt-1">⚠️ {validationErrors.baseUnit}</p>}
                             </div>
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>当前基础库存 (Current Base Qty)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="现有库存" en="Current qty" /></label>
                                 <input 
                                     type="number" 
                                     className={`${INPUT_STYLE} font-black text-center focus:border-[#FFD200]`} 
@@ -602,7 +618,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>安全警报量 (Min Level)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="最低警报量" en="Min level" /></label>
                                 <input 
                                     type="number" 
                                     className={`${INPUT_STYLE} text-center focus:border-[#FFD200] text-red-600 font-bold`} 
@@ -616,7 +632,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 />
                             </div>
                             <div>
-                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>最大容量 (Max Capacity)</label>
+                                <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="最大容量" en="Max" /></label>
                                 <input 
                                     type="number" 
                                     className={`${INPUT_STYLE} text-center focus:border-[#FFD200] text-gray-600 font-bold`} 
@@ -702,14 +718,14 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                     {/* New Card Section: Display / Ordering Unit */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                        <StepHeading step="②" color="bg-[#FFD200]" title="员工盘点时怎么数？" sub="盘点显示单位 (Stock Count Display Unit)" />
+                        <StepHeading step="②" color="bg-[#FFD200]" title="员工盘点时怎么数？" sub="Count unit" />
                         
                         <p className="text-[11px] text-gray-500 leading-relaxed">
-                            员工习惯数「几盘、几箱」就选「按包装数」，系统会自动换成 {baseUnit} 保存。这里不会改变第 ① 步的库存单位。
+                            习惯数「几盘、几箱」就选「按包装数」，系统自动换成 {baseUnit}。
                         </p>
 
                         <div>
-                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>盘点时数什么？ (Preferred View Unit)</label>
+                            <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="盘点时数什么？" en="Count by" /></label>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                                 <button
                                     type="button"
@@ -741,7 +757,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         {editingItem.preferredStockViewUnit === 'DISPLAY' && (
                             <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-150">
                                 <div>
-                                    <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}>员工盘点单位 (Display Unit)</label>
+                                    <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="盘点单位" en="Count unit" /></label>
                                     <input 
                                         className={`${INPUT_STYLE} font-bold text-center focus:border-[#FFD200]`} 
                                         value={editingItem.displayUnit || ''} 
@@ -845,7 +861,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     {/* Card Section 3: Purchase Unit Conversion */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                         <div className="flex justify-between items-center border-b border-[#F6F7FB] pb-2.5 mb-1">
-                            <StepHeading step="③" color="bg-emerald-500" title="供应商怎么卖给你？" sub="供应商采购规格 (Supplier Purchase Unit)" />
+                            <StepHeading step="③" color="bg-emerald-500" title="供应商怎么卖给你？" sub="Purchase unit" />
                             <button 
                                 type="button" 
                                 onClick={addPurchaseUnit} 
@@ -856,7 +872,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         </div>
                         
                         <p className="text-[11px] text-gray-500 leading-relaxed">
-                            供应商报价、采购单、Invoice 用的包装，例如 CTN、PACK、BOX。每箱数量固定（24 罐）选「固定数量」；每箱重量不一样（花肉、鱼）选「每次称重」，收货时填实际重量。
+                            采购单 / Invoice 用的包装（CTN、PACK…）。数量固定选「固定数量」；重量每次不同（肉、鱼）选「每次称重」。
                         </p>
 
                         <div className="space-y-3">
@@ -992,7 +1008,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                                             {/* Mode Selector - Stretch buttons equally on mobile */}
                                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-t border-b border-gray-200/50 py-2.5 text-xs">
-                                                <span className="font-bold text-gray-400">每个包装的数量:</span>
+                                                <span className="font-bold text-gray-400">每包数量</span>
                                                 <div className="flex gap-1.5 w-full md:w-auto">
                                                     <button
                                                         type="button"
@@ -1003,7 +1019,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                                         }`}
                                                     >
-                                                        📦 固定数量 (Fixed)
+                                                        固定数量
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1014,7 +1030,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                                 : 'bg-white text-gray-500 border-[#E5E7EB] hover:bg-gray-50'
                                                         }`}
                                                     >
-                                                        ⚖️ 每次称重 (Actual)
+                                                        每次称重
                                                     </button>
                                                 </div>
                                             </div>
@@ -1117,7 +1133,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                             </div>
                                                             
                                                             <div className="text-left md:text-right border-t md:border-t-0 border-gray-100 pt-1.5 md:pt-0 mt-1 md:mt-0">
-                                                                <span className="text-[10px] text-gray-400 block font-bold">折合成本 (Base Cost)</span>
+                                                                <span className="text-[11px] text-gray-400 block font-bold">每 {baseUnit} 成本</span>
                                                                 <span className="font-black text-emerald-600 text-xs font-mono">
                                                                     RM {costPerBase.toFixed(4)} / {baseUnit}
                                                                 </span>
@@ -1126,24 +1142,16 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                                     )}
 
                                                     {/* Business Language Conversion Results Card */}
-                                                    {isDisplaySameAsBase(editingItem.displayUnit, baseUnit) ? (
-                                                        !isSame && (
-                                                            <div className="bg-blue-50/40 border border-blue-200/50 rounded-xl p-3 text-[11px] leading-relaxed text-blue-800">
-                                                                <strong>🔄 换算关系：</strong> 采购 1 {pu.unitName} (RM {pu.pricePerUnit?.toFixed(2)}) 等于 <strong>{pu.toBaseRatio} {baseUnit}</strong>。<br />
-                                                                <strong>折合库存成本：</strong> <strong>RM {costPerBase.toFixed(4)}</strong> / {baseUnit}。
-                                                            </div>
-                                                        )
-                                                    ) : (
+                                                    {/* 盘点单位 = 库存单位时，上面「1 X = N 单位 · 折合成本」已经写清楚，不再重复 */}
+                                                    {isDisplaySameAsBase(editingItem.displayUnit, baseUnit) ? null : (
                                                         editingItem.displayUnit && (
                                                             isSame ? (
                                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-[11px] leading-relaxed text-emerald-800">
-                                                                    <strong>📦 换算关系：</strong> 采购 1 {pu.unitName} 等于 1 {editingItem.displayUnit} (折合系统库存 <strong>{editingItem.displayToBaseRatio} {baseUnit}</strong>)。<br />
-                                                                    <strong>折合库存成本：</strong> <strong>RM {costPerBase.toFixed(4)}</strong> / {baseUnit}。
+                                                                    1 {pu.unitName} = 1 {editingItem.displayUnit} = <strong>{editingItem.displayToBaseRatio} {baseUnit}</strong> · 每 {baseUnit} <strong>RM {costPerBase.toFixed(4)}</strong>
                                                                 </div>
                                                             ) : (
                                                                 <div className="bg-blue-50/40 border border-[#E5E7EB] rounded-xl p-3 text-[11px] leading-relaxed text-blue-800">
-                                                                    <strong>🔄 换算关系：</strong> 采购 1 {pu.unitName} (RM {pu.pricePerUnit?.toFixed(2)}) 等于 <strong>{pu.toDisplayRatio} {editingItem.displayUnit}</strong> (折合系统库存 <strong>{pu.toBaseRatio} {baseUnit}</strong>)。<br />
-                                                                    <strong>折合库存成本：</strong> <strong>RM {costPerBase.toFixed(4)}</strong> / {baseUnit}。
+                                                                    1 {pu.unitName} = <strong>{pu.toDisplayRatio} {editingItem.displayUnit}</strong> = {pu.toBaseRatio} {baseUnit} · 每 {baseUnit} <strong>RM {costPerBase.toFixed(4)}</strong>
                                                                 </div>
                                                             )
                                                         )
@@ -1165,14 +1173,14 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     <div className="bg-[#111111] text-white p-5 rounded-2xl border border-[#111111] shadow-md space-y-3">
                         <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-1">
                             <Coins size={16} className="text-[#FFD200]"/>
-                            <h4 className="text-xs font-extrabold text-[#FFD200] uppercase tracking-wide">ERP 成本结算看板 (Cost Insights)</h4>
+                            <h4 className="text-sm font-black text-[#FFD200]">成本 <span className="text-[11px] font-medium text-white/50">Cost</span></h4>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 text-xs">
                             <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                                <span className="text-[10px] text-gray-400 font-bold block mb-1">结算基底单位成本</span>
+                                <span className="text-[11px] text-gray-400 font-bold block mb-1">每 {baseUnit} 成本</span>
                                 <span className="text-sm font-black text-[#FFD200]">
-                                    RM {computedCostPerBaseUnit.toFixed(4)} <span className="text-[10px] text-white/50">/ {baseUnit}</span>
+                                    RM {computedCostPerBaseUnit.toFixed(4)}
                                 </span>
                                 {sstPercent > 0 && (
                                     <span className="text-[10px] text-orange-400 font-bold block mt-1">
@@ -1181,7 +1189,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 )}
                             </div>
                             <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                                <span className="text-[10px] text-gray-400 font-bold block mb-1">当前库存总资产价值</span>
+                                <span className="text-[11px] text-gray-400 font-bold block mb-1">库存价值</span>
                                 <span className="text-sm font-black text-white">
                                     RM {(currentQtyBase * computedCostPerBaseUnit * (1 + sstPercent / 100)).toFixed(2)}
                                 </span>
@@ -1194,12 +1202,12 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                         </div>
 
                         {defaultPU ? (
-                            <p className="text-[10px] text-gray-400 leading-tight">
-                                💡 采购首选规格为 <span className="text-white font-extrabold">{defaultPU.unitName || '未命名'}</span> (单价 RM {defaultPU.pricePerUnit?.toFixed(2)}，内含 {defaultPU.toBaseRatio} {baseUnit})。
+                            <p className="text-[11px] text-gray-400 leading-snug">
+                                进货：1 <span className="text-white font-extrabold">{defaultPU.unitName || '未命名'}</span> = {defaultPU.toBaseRatio} {baseUnit} · RM {defaultPU.pricePerUnit?.toFixed(2)}
                             </p>
                         ) : (
-                            <p className="text-[10px] text-gray-400 leading-tight">
-                                💡 当前暂未设定大包装换算，每基底单位默认定价为 RM {computedCostPerBaseUnit.toFixed(2)}。
+                            <p className="text-[11px] text-gray-400 leading-snug">
+                                还没设定进货包装，按每 {baseUnit} RM {computedCostPerBaseUnit.toFixed(2)} 计算
                             </p>
                         )}
                     </div>
@@ -1208,14 +1216,12 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                         <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
                             <Layers size={16} className="text-[#111111]"/>
-                            <h4 className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">高级公式加权 (Yield & Overhead)</h4>
+                            <h4 className="text-sm font-black text-[#111111]">出成与附加费 <span className="text-[11px] font-medium text-gray-400">Yield & extras</span></h4>
                         </div>
 
                         <div className="grid grid-cols-3 gap-3">
                             <div>
-                                <label className="text-[10px] font-black text-gray-400 flex items-center gap-1 mb-1 whitespace-nowrap">
-                                    <Percent size={11}/> 出成率 (Yield %)
-                                </label>
+                                <label className="text-xs font-bold text-gray-500 mb-1 block"><Bi zh="出成率" en="Yield" /></label>
                                 <div className="relative">
                                     <input 
                                         type="number" 
@@ -1228,9 +1234,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-gray-400 flex items-center gap-1 mb-1 whitespace-nowrap">
-                                    <Coins size={11}/> 杂项折损 (Overhead %)
-                                </label>
+                                <label className="text-xs font-bold text-gray-500 mb-1 block"><Bi zh="折损" en="Overhead" /></label>
                                 <div className="relative">
                                     <input 
                                         type="number" 
@@ -1243,9 +1247,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-gray-400 flex items-center gap-1 mb-1 whitespace-nowrap">
-                                    <Coins size={11} className="text-orange-500"/> SST (政府附加费 %)
-                                </label>
+                                <label className="text-xs font-bold text-gray-500 mb-1 block"><Bi zh="SST 税" en="Gov. tax" /></label>
                                 <div className="relative">
                                     <input 
                                         type="number" 
@@ -1263,7 +1265,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                     {/* 编号资料（只读）：一般员工只看到编号，内部 ID 只给负责人 / 系统管理员 */}
                     {editingItem.id && (
                         <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-2 text-xs">
-                            <h4 className="text-xs font-black text-gray-600 uppercase">编号 (Stock Code)</h4>
+                            <h4 className="text-sm font-black text-[#111111]">编号 <span className="text-[11px] font-medium text-gray-400">Stock code</span></h4>
                             <div className="flex justify-between"><span className="text-gray-500 font-bold">编号</span><span className="font-mono font-black">{editingItem.stockCode || '未编号'}</span></div>
                             {showInternalIds && (
                                 <>
@@ -1289,7 +1291,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                     {/* Card Section 6: Supplier Links */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-3">
-                        <h4 className="text-xs font-black text-gray-600 uppercase flex items-center gap-2"><LinkIcon size={14}/> 供应商比价 (Suppliers)</h4>
+                        <h4 className="text-xs font-black text-gray-600 uppercase flex items-center gap-2"><LinkIcon size={14}/> 供应商比价 <span className="normal-case font-medium text-gray-400">Suppliers</span></h4>
                         {editingItem.id ? (
                             <SupplierComparison
                                 stock={editingItem as Partial<StockItem> & { id: string }}

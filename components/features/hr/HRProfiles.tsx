@@ -78,7 +78,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
     const MODULE_GROUPS = [
         {
             title: '核心管理 (Core Management)',
-            modules: ['HR_FILES', 'REPORTS', 'ASSESSMENT', 'TREASURY', 'AP', 'BILLS', 'DAILY_ALERT', 'SELF_INVOICE'] as AppModule[],
+            modules: ['HR_FILES', 'REPORTS', 'TREASURY', 'AP', 'BILLS', 'DAILY_ALERT', 'SELF_INVOICE'] as AppModule[],
             color: 'bg-red-50 text-red-700 border-red-100'
         },
         {

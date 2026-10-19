@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     FileBarChart, CreditCard, Wallet, ShieldCheck, Banknote,
-    AlertTriangle, TrendingUp, Award, ChevronRight, RefreshCw, Gauge,
+    AlertTriangle, TrendingUp, ChevronRight, RefreshCw, Gauge,
     CalendarDays, Sun, CloudSun, CloudRain, CloudLightning, Crown, HeartHandshake, ShoppingBag, MessageCircle, ListChecks, LayoutGrid
 } from 'lucide-react';
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -1130,7 +1130,6 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                             { label: '人工与盈利', target: 'LABOUR_PROFIT', Icon: TrendingUp, action: () => setActiveModal('LABOUR_PROFIT') },
                                             { label: '资金状况', target: 'TREASURY', Icon: Wallet, action: () => setActiveModal('TREASURY') },
                                             { label: '成本监控', target: 'PRICE_MONITOR', Icon: TrendingUp, action: () => setActiveModal('PRICE_MONITOR') },
-                                            { label: '员工表现', target: 'ASSESSMENT', Icon: Award, action: () => setActiveModal('ASSESSMENT') },
                                             { label: '兼职与预支', target: 'STAFF_CASH', Icon: Banknote, action: () => onNavigate('STAFF_CASH') },
                                         ].filter(link => canUse(link.target)).map(link => (
                                             <button key={link.label} onClick={link.action} className="flex min-h-[48px] items-center gap-2.5 bg-white px-3.5 text-[13.5px] font-semibold text-stone-700 transition-colors hover:bg-stone-50 active:bg-stone-100 sm:justify-center sm:gap-2 sm:rounded-2xl sm:border sm:border-stone-300 sm:bg-stone-50 sm:px-1 sm:text-[13px]">

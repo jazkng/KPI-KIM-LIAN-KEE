@@ -1,5 +1,6 @@
 // components/AdminDashboard.tsx
 
+import { isRetiredModule } from '../utils/retiredModules';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Calculator, BookOpen, CalendarOff, ClipboardCheck, ArrowLeft, Truck, Armchair, Eye, CheckSquare, Clock, ShoppingCart, Utensils, Award, CreditCard, FileText, Wallet } from 'lucide-react';
 import { StoreConfig, AppModule, Employee, AppLanguage } from '../types';
@@ -128,7 +129,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      if (showAll || allowedModules?.includes('ATTENDANCE_CONSOLE')) {
          tabs.push({ key: 'ATTENDANCE_CONSOLE', label: lang === 'my' ? 'တက်ရောက်မှု' : '考勤管理', icon: <Clock size={18} /> });
      }
-     if (showAll || allowedModules?.includes('ASSESSMENT')) {
+     if (!isRetiredModule('ASSESSMENT') && (showAll || allowedModules?.includes('ASSESSMENT'))) {
          tabs.push({ key: 'ASSESSMENT', label: lang === 'my' ? 'ကျွမ်းကျင်မှုစစ်' : '技能评估', icon: <Award size={18} /> });
      }
      if (showAll || allowedModules?.includes('PROCUREMENT')) {
