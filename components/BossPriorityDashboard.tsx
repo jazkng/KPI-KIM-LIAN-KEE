@@ -897,7 +897,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                     <div className="mt-3 grid grid-cols-2 gap-1.5">
                                                         {[
                                                             { label: '会员到店', value: r.ops.vipVisits, Icon: Crown },
-                                                            { label: '新会员', value: r.ops.vipNew, Icon: Star },
+                                                            { label: '熟客', value: r.ops.vipNew, Icon: Star },
                                                             { label: 'WA 订单', value: r.ops.waOrders, Icon: ShoppingBag },
                                                             { label: 'WA 新进群', value: r.ops.waJoin, Icon: MessageCircle },
                                                         ].map(c => (

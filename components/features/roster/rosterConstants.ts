@@ -1,3 +1,4 @@
+import { MALAYSIA_HOLIDAY_ITEMS } from '../../../utils/holidays/malaysiaHolidays';
 export interface ShiftConfig {
     id: string;
     name: string;
@@ -110,17 +111,8 @@ export interface HolidayItem {
     name: string;
 }
 
-export const DEFAULT_MALAYSIAN_HOLIDAYS: HolidayItem[] = [
-    { date: '2026-01-01', name: 'New Year Day' },
-    { date: '2026-02-17', name: 'Chinese New Year' },
-    { date: '2026-02-18', name: 'Chinese New Year 2nd Day' },
-    { date: '2026-05-01', name: 'Labour Day' },
-    { date: '2026-05-31', name: 'Wesak Day' },
-    { date: '2026-06-03', name: 'Agong Birthday' },
-    { date: '2026-08-31', name: 'Merdeka Day' },
-    { date: '2026-09-16', name: 'Malaysia Day' },
-    { date: '2026-12-25', name: 'Christmas Day' }
-];
+// 与每日结算共用 utils/holidays/malaysiaHolidays.ts（吉隆坡公共假日，含补假）
+export const DEFAULT_MALAYSIAN_HOLIDAYS: HolidayItem[] = MALAYSIA_HOLIDAY_ITEMS;
 
 export const DEFAULT_SHIFT_TIMES = {
     MORNING: '10:00–18:00',
