@@ -1,7 +1,8 @@
 import { loadExcelJS } from '../../../utils/lazyLibs';
 import type ExcelJSNS from 'exceljs';
 import type { SettlementRecord } from "../../../types";
-import { WEATHER_OPTIONS } from "../../../types";
+import { WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from "../../../types";
+import { getMalaysiaHoliday, holidayLabel } from "../../../utils/holidays/malaysiaHolidays";
 import { getReconActual } from "../../../utils/settlementRecon";
 import { getOps, perPax, perBill, type SettlementOps } from "./settlementOps";
 
@@ -23,6 +24,8 @@ export interface SettlementFigures {
   date: string;
   weekday: string;
   weather: string;
+  holiday: string;
+  deliveryOrders: number;
   netRevenue: number;
   storeHubTotal: number;
   cash: number;
@@ -94,11 +97,18 @@ export const getSettlementFigures = (r: SettlementRecord): SettlementFigures => 
 
   const d = new Date(`${r.date}T00:00:00`);
   const weather = WEATHER_OPTIONS.find((o) => o.value === (r as any).weather);
+  const special = SPECIAL_CONDITION_OPTIONS.filter((o) => ((r as any).specialConditions || []).includes(o.value)).map((o) => o.label);
+  const holiday = getMalaysiaHoliday(r.date);
+  const deliveryOrders = n(db.grabOrders) + n(db.pandaOrders) + n(db.shopeeOrders) + n(db.lalamoveOrders);
 
   return {
     date: r.date,
     weekday: isNaN(d.getTime()) ? "" : `周${WEEKDAYS[d.getDay()]}`,
-    weather: weather ? weather.label : "",
+    weather: [weather ? weather.label : "", ...special].filter(Boolean).join("·"),
+    /** 马来西亚公共假日名称（不是假日 = ""） */
+    holiday: holiday ? holidayLabel(holiday) : "",
+    /** 外卖各平台单数合计（旧记录没填 = 0） */
+    deliveryOrders,
     netRevenue: n(r.sales?.total),
     storeHubTotal: n(r.sales?.storeHubTotal),
     cash,
@@ -227,24 +237,24 @@ export async function exportSettlementsExcel(
   // ==================== 1. 每日汇总 ====================
   {
     const headers = [
-      "日期 Date", "星期", "天气",
+      "日期 Date", "星期", "天气", "假日 Holiday",
       "总营业额 Net Revenue", "店内实收 In-Store",
       "现金 Cash", "TNG", "Debit Card", "Credit Card", "Amex",
       "GrabFood", "FoodPanda", "ShopeeFood", "Lalamove", "外卖合计 Delivery",
       "开班备用金 Opening", "现金支出 Expenses", "业主提支 Drawings",
       "应余 Expected", "实点 Actual", "差异 Variance", "差异原因", "提交人",
-      "人数 Pax", "单数 Bills", "人均 Avg/Pax", "单均 Avg/Bill", "VIP 新会员", "到店 VIP", "WA 新加入", "WA 订单",
+      "人数 Pax", "单数 Bills", "人均 Avg/Pax", "单均 Avg/Bill", "熟客", "到店 VIP", "WA 新加入", "WA 订单", "外卖单数",
     ];
     const ws = wb.addWorksheet("每日汇总", {
       views: [{ state: "frozen", xSplit: 1, ySplit: 3 }],
       pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
-    ws.columns = headers.map((_, i) => ({ width: i === 0 ? 12 : i <= 2 ? 7 : i === 21 ? 24 : i >= 23 ? 10 : 12 }));
+    ws.columns = headers.map((_, i) => ({ width: i === 0 ? 12 : i <= 2 ? 7 : i === 3 ? 16 : i === 22 ? 24 : i >= 24 ? 10 : 12 }));
     titleBlock(ws, headers.length, `${store} — 每日结算汇总 Daily Settlement ${rangeText}`, `导出时间 ${generated} · 共 ${figs.length} 天 · 金额单位 RM · 外卖为「挤干水分」后金额（已核对的按实际到账）`);
     headerRow(ws, 3, headers);
     figs.forEach((f) => {
       const row = ws.addRow([
-        f.date, f.weekday, f.weather,
+        f.date, f.weekday, f.weather, f.holiday,
         r2(f.netRevenue), r2(f.storeHubTotal),
         r2(f.cash), r2(f.tng), r2(f.debit), r2(f.credit), r2(f.amex),
         r2(f.grab.report), r2(f.panda.report), r2(f.shopee.report), r2(f.lalamove), r2(f.totalDelivery),
@@ -252,10 +262,10 @@ export async function exportSettlementsExcel(
         r2(f.expectedCash), r2(f.closingCash), r2(f.variance), f.varianceReason, f.submittedBy,
         f.ops.pax || "", f.ops.bills || "",
         f.avgPerPax === null ? "" : f.avgPerPax, f.avgPerBill === null ? "" : f.avgPerBill,
-        f.ops.vipNew || "", f.ops.vipVisits || "", f.ops.waJoin || "", f.ops.waOrders || "",
+        f.ops.vipNew || "", f.ops.vipVisits || "", f.ops.waJoin || "", f.ops.waOrders || "", f.deliveryOrders || "",
       ]);
       if (f.variance !== 0) {
-        row.getCell(21).font = { name: "Arial", size: 10, bold: true, color: { argb: f.variance < 0 ? "FFDC2626" : "FF16A34A" } };
+        row.getCell(22).font = { name: "Arial", size: 10, bold: true, color: { argb: f.variance < 0 ? "FFDC2626" : "FF16A34A" } };
       }
       if (f.weekday === "周六" || f.weekday === "周日") {
         row.getCell(2).font = { name: "Arial", size: 10, bold: true, color: { argb: "FFB45309" } };
@@ -313,7 +323,7 @@ export async function exportSettlementsExcel(
       "月份 Month", "天数", "总营业额", "日均营业额", "店内实收",
       "现金", "TNG", "Debit", "Credit", "Amex",
       "外卖合计", "现金支出", "业主提支", "差异合计", "有差异的天数",
-      "人数", "人均消费", "单数", "单均", "VIP 新会员", "到店 VIP", "WA 新加入", "WA 订单",
+      "人数", "人均消费", "单数", "单均", "熟客", "到店 VIP", "WA 新加入", "WA 订单",
     ];
     const ws = wb.addWorksheet("月度汇总", {
       views: [{ state: "frozen", ySplit: 3 }],

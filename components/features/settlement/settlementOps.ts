@@ -14,7 +14,7 @@ export interface SettlementOps {
   pax: number;
   /** 单数（开了几张单） */
   bills: number;
-  /** VIP 新会员（当天新加入） */
+  /** 熟客人数（栏位名沿用 vipNew；2026-10 起画面改叫「熟客」） */
   vipNew: number;
   /** 到店 VIP（当天来吃的 VIP 人次） */
   vipVisits: number;
@@ -36,7 +36,7 @@ export const EMPTY_OPS: SettlementOps = {
 export const OPS_FIELDS: { key: keyof SettlementOps; label: string; short: string; emoji: string }[] = [
   { key: "pax", label: "顾客人数 (Pax)", short: "人数", emoji: "👥" },
   { key: "bills", label: "单数 (Bills)", short: "单数", emoji: "🧾" },
-  { key: "vipNew", label: "VIP 新会员", short: "VIP新", emoji: "⭐" },
+  { key: "vipNew", label: "熟客", short: "熟客", emoji: "🤝" }, // 栏位名沿用 vipNew（V1 兼容），画面一律叫「熟客」
   { key: "vipVisits", label: "到店 VIP", short: "VIP到店", emoji: "👑" },
   { key: "waJoin", label: "WhatsApp 新加入", short: "WA新加入", emoji: "💬" },
   { key: "waOrders", label: "WhatsApp 订单", short: "WA订单", emoji: "📲" },
