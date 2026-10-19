@@ -11,7 +11,8 @@ import {
 import { Supplier, CatalogItem, PurchaseOrder, StockItem, PurchaseOrderItem, UomOption, ExpenseItem } from '../../../types';
 import { normalizeCatalogItem } from '../../utils';
 import { DataManager } from '../../../utils/dataManager';
-import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../../utils/pdfStyleResolver';
+import { chineseFirstName } from '../../../utils/inventory/stockName';
 import {
     calculateWeightedAverageCost,
     getCostPerBaseUnit,
@@ -906,7 +907,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                         useCORS: true, 
                         backgroundColor: '#ffffff', 
                         windowWidth: 794,
-                        onclone: (clonedDoc) => {
+                        onclone: async (clonedDoc) => {
+                            // 克隆文档里的字体要真的载入后才能量宽度，不然字会叠在一起
+                            await prepareClonedDocumentForPdf(clonedDoc);
                             const clonedEl = clonedDoc.getElementById(`po-print-page-${i}`);
                             const originalEl = document.getElementById(`po-print-page-${i}`);
                             if (originalEl && clonedEl) {
@@ -918,7 +921,9 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, (canvas.height * pdfWidth) / canvas.width);
                 }
-                pdf.save(`PO_${po.id}.pdf`);
+                // 档名：单号 + 供应商（不再重复「PO_PO…」）
+                const supplierSlug = String(po.supplierName || '').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+                pdf.save(`${po.id}${supplierSlug ? `_${supplierSlug}` : ''}.pdf`);
             } catch (err) { console.error(err); alert("PDF Error"); }
             finally { setIsGeneratingPdf(false); setPrintingPO(null); }
         }, 800);
@@ -1993,22 +1998,23 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                 <div
                                     key={i}
                                     id={`po-print-page-${i}`}
-                                    className="w-[794px] min-h-[1123px] bg-white p-12 text-black font-sans relative flex flex-col justify-between"
+                                    className="w-[794px] min-h-[1123px] bg-white p-12 text-black relative flex flex-col justify-between"
+                                    style={{ fontFamily: 'Inter, "Noto Sans SC", sans-serif', fontKerning: 'none', textRendering: 'geometricPrecision' }}
                                 >
                                     <div>
                                         {/* Header */}
                                         <div className="flex justify-between items-start border-b-4 border-[#111111] pb-5 mb-8">
                                             <div>
-                                                <h1 className="text-2xl font-black uppercase tracking-wider text-[#111111] mb-1">采购订单</h1>
-                                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Purchase Order</p>
-                                                <p className="text-[9px] text-gray-400 font-bold mt-2 font-mono">
+                                                <h1 className="text-2xl font-black text-[#111111] mb-1">采购订单</h1>
+                                                <p className="text-[10px] font-black text-gray-500">PURCHASE ORDER</p>
+                                                <p className="text-[9px] text-gray-400 font-bold mt-2">
                                                     订单日期 Date: {printingPO.date.split('T')[0]}
                                                 </p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xl font-black text-[#111111]">KIM LIAN KEE (KEPONG)</p>
-                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1">金莲记（甲洞）</p>
-                                                <p className="text-[9px] text-gray-400 font-mono">PO No: {printingPO.id}</p>
+                                                <p className="text-xs font-bold text-gray-500 mt-1">金莲记（甲洞）</p>
+                                                <p className="text-[11px] font-bold text-[#111111] mt-1">{printingPO.id}</p>
                                             </div>
                                         </div>
 
@@ -2043,15 +2049,18 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                     const subtotal = item.totalCost || item.estimatedTotal || (item.orderQty * item.cost) || 0;
                                                     return (
                                                         <tr key={idx} className="hover:bg-gray-50/50">
-                                                            <td className="p-2 text-left font-mono font-bold text-gray-500">{itemNo}</td>
+                                                            <td className="p-2 text-left font-bold text-gray-500">{itemNo}</td>
                                                             <td className="p-2">
-                                                                <div className="font-bold text-[#111111]">{item.name}</div>
-                                                                {item.supplierCode && <span className="text-[8px] font-mono bg-gray-100 text-gray-600 px-1 py-0.5 rounded">Code: {item.supplierCode}</span>}
+                                                                {(() => { const n = chineseFirstName(item.name); return <>
+                                                                    <div className="text-[12px] font-bold text-[#111111] leading-snug">{n.primary}</div>
+                                                                    {n.secondary && <div className="text-[9px] text-gray-500 leading-snug">{n.secondary}</div>}
+                                                                </>; })()}
+                                                                {item.supplierCode && <span className="text-[8px] bg-gray-100 text-gray-600 px-1 py-0.5 rounded">供应商编号 {item.supplierCode}</span>}
                                                             </td>
-                                                            <td className="p-2 text-right font-mono font-bold">{item.orderQty}</td>
+                                                            <td className="p-2 text-right font-bold">{item.orderQty}</td>
                                                             <td className="p-2 text-center font-bold text-gray-600">{item.unit}</td>
-                                                            <td className="p-2 text-right font-mono font-bold">{(item.cost || 0).toFixed(2)}</td>
-                                                            <td className="p-2 text-right font-mono font-black text-[#111111]">{subtotal.toFixed(2)}</td>
+                                                            <td className="p-2 text-right font-bold">{(item.cost || 0).toFixed(2)}</td>
+                                                            <td className="p-2 text-right font-black text-[#111111]">{subtotal.toFixed(2)}</td>
                                                         </tr>
                                                     );
                                                 })}
@@ -2065,7 +2074,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                             <div className="border-t border-gray-200 pt-4 mb-8 flex justify-between items-end">
                                                 <div>
                                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Estimated Amount</p>
-                                                    <p className="text-xl font-mono font-black text-blue-700">RM {printingPO.totalEstimated.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-blue-700">RM {printingPO.totalEstimated.toFixed(2)}</p>
                                                 </div>
                                                 <div className="flex gap-12 text-center text-[9px] text-gray-500">
                                                     <div>

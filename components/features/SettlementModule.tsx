@@ -56,7 +56,6 @@ const getCalendarTodayStr = () => {
 // 🟢 ReconItem：补回对账后的手续费/调节费的百分比展示
 /** 历史详情：平台名后面的「· 12 单」（没填就不显示） */
 const withOrders = (label: string, v: any) => (Number(v) > 0 ? `${label} · ${Number(v)} 单` : label);
-const orderTag = (v: any) => (Number(v) > 0 ? <span className="ml-1 text-[10px] font-bold text-[#6B7280]">· {Number(v)} 单</span> : null);
 
 /** 🇲🇾 营业日是公共假日 → 显示假日栏说明；明天是假日 → 提早提醒 */
 const HolidayNotice = ({ date }: { date: string }) => {
@@ -843,156 +842,135 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         }}
                     >
                     <div ref={printRef} id="pdf-print-root-content"
-                        style={{ fontKerning: 'none', textRendering: 'geometricPrecision', wordSpacing: '0.08em' }}
-                        className="w-[794px] min-h-[1123px] bg-[#FFFFFF] px-[53px] py-[45px] font-sans text-[#111111] box-border flex flex-col leading-relaxed">
-                        
-                        {/* A4 头部：将报告身份、结算日期与编号分开，避免旧版流水号挤在一起。 */}
-                        <div className="border-b-2 border-[#111111] pb-3 mb-4 shrink-0">
-                            <div className="h-1.5 w-12 bg-[#FFD200] rounded-full mb-2.5" />
-                            <div className="flex items-start justify-between gap-6">
-                                <div>
-                                    <h1 className="text-[21px] leading-none font-black tracking-[0.12em] uppercase text-[#111111] whitespace-nowrap">KIM LIAN KEE GROUP</h1>
-                                    <p className="mt-2 text-[9px] leading-3.5 font-black tracking-[0.14em] uppercase text-[#6B7280] whitespace-nowrap">Kepong Branch</p>
-                                    <p className="text-[9px] leading-3.5 font-semibold text-[#6B7280]">甲洞分行</p>
+                        style={{ fontKerning: 'none', textRendering: 'geometricPrecision', fontFamily: 'Inter, "Noto Sans SC", sans-serif' }}
+                        className="w-[794px] min-h-[1123px] bg-[#FFFFFF] px-[56px] pt-[48px] pb-[40px] text-[#1F2328] box-border flex flex-col">
+                        {(() => {
+                            const rm = (n: number) => `RM ${(Number(n) || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            const expectedCash = localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses;
+                            const v = localRecord.variance;
+                            const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date(`${localRecord.date}T00:00:00`).getDay()];
+                            const conditions = [recordWeather ? `${recordWeather.label} ${recordWeather.en}` : '', ...recordSpecial.map(o => o.label)].filter(Boolean).join(' · ');
+                            const Row = ({ label, sub, value, strong, tone }: { label: React.ReactNode; sub?: React.ReactNode; value: string; strong?: boolean; tone?: string }) => (
+                                <div className="flex items-baseline justify-between gap-4 py-[7px] border-b border-[#EEF0F3] last:border-b-0">
+                                    <span className="min-w-0"><span className={`${strong ? 'font-bold text-[#1F2328]' : 'text-[#4B5563]'}`}>{label}</span>{sub && <span className="ml-1.5 text-[9px] text-[#9CA3AF] whitespace-nowrap">{sub}</span>}</span>
+                                    <span className={`whitespace-nowrap ${strong ? 'font-bold' : 'font-semibold'} ${tone || 'text-[#1F2328]'}`}>{value}</span>
                                 </div>
-                                <div className="text-right shrink-0 text-[9px] leading-4 text-[#6B7280]">
-                                    <p className="font-black tracking-[0.1em] uppercase text-[#111111]">Daily Settlement Report</p>
-                                    <p className="font-medium">每日结算报告</p>
-                                    <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Business date</span>: {localRecord.date}</p>
-                                    <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Report no.</span>: SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
-                                    {recordWeather && (
-                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">Weather</span>: {recordWeather.en} ({recordWeather.label})</p>
-                                    )}
-                                    {recordSpecial.length > 0 && (
-                                        <p className="whitespace-nowrap"><span className="font-black text-[#111111]">特殊情况</span>: {recordSpecial.map(o => o.label).join(' · ')}</p>
-                                    )}
-                                    {recordHoliday && (
-                                        <p className="whitespace-nowrap"><span className="font-black text-pink-600">公共假日</span>: {holidayLabel(recordHoliday)}</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 核心摘要：先让老板/主管看到最重要的数字，而不是先阅读付款细目。 */}
-                        <div className="grid grid-cols-4 border border-[#E5E7EB] rounded-xl overflow-hidden mb-5 shrink-0">
-                            <div className="px-4 py-3 border-r border-[#E5E7EB] bg-[#FFFBE6]">
-                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Net Revenue</p>
-                                <p className="mt-1 font-mono text-base font-black text-[#111111]">RM {localRecord.sales.total.toFixed(2)}</p>
-                                <p className="text-[9px] text-[#6B7280]">挤干水分总营业额</p>
-                            </div>
-                            <div className="px-4 py-3 border-r border-[#BBF7D0] bg-[#F0FDF4]">
-                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Cash Sales</p>
-                                <p className="mt-1 font-mono text-base font-black text-[#15803D]">RM {localRecord.sales.cash.toFixed(2)}</p>
-                                <p className="text-[9px] text-[#6B7280]">今日现金收入</p>
-                            </div>
-                            <div className="px-4 py-3 border-r border-[#BFDBFE] bg-[#EFF6FF]">
-                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Closing Cash</p>
-                                <p className="mt-1 font-mono text-base font-black text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p>
-                                <p className="text-[9px] text-[#6B7280]">实际点算现金</p>
-                            </div>
-                            <div className={`px-4 py-3 ${localRecord.variance === 0 ? 'bg-[#F6F7FB]' : localRecord.variance > 0 ? 'bg-[#F0FDF4]' : 'bg-[#FEF2F2]'}`}>
-                                <p className="text-[9px] font-black uppercase tracking-wider text-[#6B7280]">Cash Variance</p>
-                                <p className={`mt-1 font-mono text-base font-black ${localRecord.variance === 0 ? 'text-[#111111]' : localRecord.variance > 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>{localRecord.variance > 0 ? '+' : ''}RM {localRecord.variance.toFixed(2)}</p>
-                                <p className="text-[9px] text-[#6B7280]">对账差异</p>
-                            </div>
-                        </div>
-
-                        {/* 📊 营运数据：人数 / 人均 / 单均 / VIP / WhatsApp（旧记录没填就不显示这一行） */}
-                        {recHasOps && (
-                            <div className="grid grid-cols-4 border border-[#DDD6FE] rounded-xl overflow-hidden mb-5 shrink-0 bg-[#F5F3FF]">
-                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Pax · Avg Spend</p>
-                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.pax || '—'} 人 · RM {fmtMoneyOrDash(recPerPax)}</p>
-                                    <p className="text-[9px] text-[#6B7280]">顾客人数 · 人均消费</p>
-                                </div>
-                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Bills · Avg Bill</p>
-                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.bills || '—'} 单 · RM {fmtMoneyOrDash(recPerBill)}</p>
-                                    <p className="text-[9px] text-[#6B7280]">单数 · 单均</p>
-                                </div>
-                                <div className="px-4 py-2.5 border-r border-[#DDD6FE]">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">Regulars · VIP</p>
-                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">{recOps.vipNew} · {recOps.vipVisits}</p>
-                                    <p className="text-[9px] text-[#6B7280]">熟客 · 到店 VIP</p>
-                                </div>
-                                <div className="px-4 py-2.5">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#6D28D9]">WhatsApp</p>
-                                    <p className="mt-0.5 font-mono text-sm font-black text-[#111111] whitespace-nowrap">+{recOps.waJoin} · {recOps.waOrders}</p>
-                                    <p className="text-[9px] text-[#6B7280]">新加入 · 订单</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 一页式 A4 结算：左边看收入来源，右边完成现金结算。 */}
-                        <div className="grid grid-cols-2 gap-6 text-[10px]">
-                            <section className="space-y-3">
-                                <div className="border-b border-[#111111] pb-1.5">
-                                    <h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#FFD200]" />1. Revenue</h3>
-                                    <p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">营业收入明细</p>
-                                </div>
-                                <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] overflow-hidden">
-                                    <div className="flex justify-between items-center px-3 py-2.5">
-                                        <span><span className="block font-black uppercase tracking-wide text-[#111111]">In-Store Revenue</span><span className="block mt-0.5 text-[9px] text-[#6B7280]">店内实收</span></span>
-                                        <span className="font-mono font-black text-sm whitespace-nowrap">RM {localRecord.sales.storeHubTotal.toFixed(2)}</span>
+                            );
+                            const Section = ({ no, title, en, total, children }: { no: number; title: string; en: string; total?: string; children: React.ReactNode }) => (
+                                <section>
+                                    <div className="flex items-end justify-between border-b-[1.5px] border-[#1F2328] pb-1.5 mb-1">
+                                        <h3 className="flex items-center gap-2 whitespace-nowrap"><span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#1F2328] text-[9px] font-bold text-[#FFD200]">{no}</span><span className="text-[12px] font-bold">{title}</span><span className="text-[9px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">{en}</span></h3>
+                                        {total && <span className="text-[12px] font-bold whitespace-nowrap">{total}</span>}
                                     </div>
-                                    <div className="mx-3 border-t border-[#FDE68A] py-2 space-y-1.5 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash (现金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.sales.cash.toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>TNG eWallet</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.tng || 0).toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Debit Card</span><span className="font-mono whitespace-nowrap">RM {totalDebit.toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Credit Card</span><span className="font-mono whitespace-nowrap">RM {totalCard.toFixed(2)}</span></div>
-                                        {localRecord.sales.amex > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Amex</span><span className="font-mono whitespace-nowrap">RM {(localRecord.sales.amex || 0).toFixed(2)}</span></div>}
+                                    {children}
+                                </section>
+                            );
+                            const Tile = ({ label, en, value, tone, accent }: { label: string; en: string; value: string; tone?: string; accent: string }) => (
+                                <div className="rounded-lg border border-[#E5E7EB] px-3.5 pt-2.5 pb-3" style={{ borderTop: `3px solid ${accent}` }}>
+                                    <p className="text-[9px] font-semibold text-[#6B7280] whitespace-nowrap">{label} <span className="tracking-[0.06em] text-[#9CA3AF] uppercase">{en}</span></p>
+                                    <p className={`mt-1.5 text-[17px] leading-none font-bold whitespace-nowrap ${tone || 'text-[#1F2328]'}`}>{value}</p>
+                                </div>
+                            );
+                            const Stat = ({ label, value, unit, sub }: { label: string; value: React.ReactNode; unit?: string; sub?: string }) => (
+                                <div className="px-3.5 py-2.5">
+                                    <p className="text-[9px] font-semibold text-[#6B7280] whitespace-nowrap">{label}</p>
+                                    <p className="mt-1 whitespace-nowrap"><span className="text-[16px] font-bold leading-none">{value}</span>{unit && <span className="ml-1 text-[10px] text-[#6B7280]">{unit}</span>}</p>
+                                    {sub && <p className="mt-1 text-[9px] text-[#6B7280] whitespace-nowrap">{sub}</p>}
+                                </div>
+                            );
+                            return <>
+                                {/* 抬头 */}
+                                <div className="flex items-end justify-between gap-6 pb-4 border-b-2 border-[#1F2328]">
+                                    <div>
+                                        <div className="h-1 w-10 rounded-full bg-[#FFD200] mb-3" />
+                                        <h1 className="text-[22px] leading-none font-black tracking-[0.08em] whitespace-nowrap">KIM LIAN KEE GROUP</h1>
+                                        <p className="mt-2 text-[10px] font-semibold text-[#6B7280] whitespace-nowrap">Kepong Branch · 甲洞分行</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold tracking-[0.14em] text-[#6B7280] whitespace-nowrap">DAILY SETTLEMENT REPORT</p>
+                                        <p className="mt-1 text-[18px] leading-tight font-bold whitespace-nowrap">{localRecord.date} <span className="text-[12px] font-semibold text-[#6B7280]">{wd}</span></p>
+                                        <p className="mt-0.5 text-[9px] text-[#9CA3AF] whitespace-nowrap">Report no. SET-{localRecord.date.replace(/-/g, '')}-{new Date(localRecord.timestamp).getTime().toString().slice(-4)}</p>
                                     </div>
                                 </div>
-                                {totalDelivery > 0 && <div className="rounded-xl border border-[#BFDBFE] bg-white overflow-hidden">
-                                    <div className="flex justify-between items-center px-3 py-2.5 bg-[#EFF6FF]">
-                                        <span><span className="block font-black uppercase tracking-wide text-[#111111]">Delivery Revenue</span><span className="block mt-0.5 text-[9px] text-[#6B7280]">外卖实收</span></span>
-                                        <span className="font-mono font-black text-sm whitespace-nowrap">RM {totalDelivery.toFixed(2)}</span>
+                                {(conditions || recordHoliday) && (
+                                    <div className="flex items-center justify-between gap-4 py-2 border-b border-[#E5E7EB] text-[10px] whitespace-nowrap">
+                                        <span>{conditions && <><span className="font-bold">天气 Weather</span><span className="ml-2 text-[#4B5563]">{conditions}</span></>}</span>
+                                        {recordHoliday && <span><span className="font-bold text-[#BE185D]">公共假日</span><span className="ml-2 text-[#4B5563]">{holidayLabel(recordHoliday)}</span></span>}
                                     </div>
-                                    <div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">
-                                        {grabGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>GrabFood{orderTag(deliveryBreakdown.grabOrders)} <span className="text-[9px] text-[#9CA3AF]">Net {grabNet.toFixed(1)} · Ads -{grabAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {grabReportValue.toFixed(2)}</span></div>}
-                                        {pandaReportValue > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>FoodPanda{orderTag(deliveryBreakdown.pandaOrders)} <span className="text-[9px] text-[#9CA3AF]">{hasPandaNet ? <>Net {pandaNet.toFixed(1)} · Ads -{pandaAds.toFixed(1)}</> : 'Legacy total'}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {pandaReportValue.toFixed(2)}</span></div>}
-                                        {shopeeGross > 0 && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span>ShopeeFood{orderTag(deliveryBreakdown.shopeeOrders)} <span className="text-[9px] text-[#9CA3AF]">Net {shopeeNet.toFixed(1)} · Ads -{shopeeAds.toFixed(1)}</span></span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {shopeeReportValue.toFixed(2)}</span></div>}
-                                        {Number(deliveryBreakdown.lalamove) > 0 && <div className="grid grid-cols-[1fr_auto] gap-3"><span>Lalamove{orderTag(deliveryBreakdown.lalamoveOrders)}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(deliveryBreakdown.lalamove).toFixed(2)}</span></div>}
-                                    </div>
-                                </div>}
-                            </section>
+                                )}
 
-                            <section className="space-y-4">
-                                <div className="space-y-2.5">
-                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#F97316]" />2. Cash Deductions</h3><p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">临时现金扣除</p></div>
-                                    {recordWithdrawal > 0 && <div className="flex justify-between items-center rounded-lg border border-[#FDE7C7] bg-[#FFF7ED] px-3 py-2"><span><span className="block font-black text-[#431407] whitespace-nowrap">Owner's Drawings</span><span className="block text-[9px] text-[#9A3412] whitespace-nowrap">业主提支</span></span><span className="font-mono font-black text-[#431407] whitespace-nowrap">- RM {recordWithdrawal.toFixed(2)}</span></div>}
-                                    {totalRecordExpenses > 0 && <div className="rounded-lg border border-[#FECACA] overflow-hidden"><div className="flex justify-between items-center bg-[#FEF2F2] px-3 py-2"><span><span className="block font-black text-[#991B1B]">Cash Expenses</span><span className="block text-[9px] text-[#B91C1C]">当日钱箱现金支出</span></span><span className="font-mono font-black text-[#B91C1C] whitespace-nowrap">- RM {totalRecordExpenses.toFixed(2)}</span></div><div className="mx-3 py-2 space-y-1.5 text-[#6B7280]">{recordExpenses.map((e: any, idx: number) => <div key={e.id || idx} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3"><span className="truncate">{e.company || '未知商户'} · {e.item || '杂物'}</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {Number(e.amount).toFixed(2)}</span></div>)}</div></div>}
-                                    {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="rounded-lg bg-[#F6F7FB] px-3 py-2 text-[#6B7280]">今日无任何临时现金支出或业主提支</p>}
+                                {/* 核心数字 */}
+                                <div className="grid grid-cols-4 gap-2.5 mt-4">
+                                    <Tile label="总营业额" en="Net Revenue" value={rm(localRecord.sales.total)} accent="#FFD200" />
+                                    <Tile label="现金收入" en="Cash Sales" value={rm(localRecord.sales.cash)} accent="#16A34A" />
+                                    <Tile label="钱箱实点" en="Closing Cash" value={rm(localRecord.closingCash)} accent="#2563EB" />
+                                    <Tile label="现金差异" en="Variance" value={`${v > 0 ? '+' : v < 0 ? '−' : ''}${rm(Math.abs(v))}`} tone={v === 0 ? 'text-[#16A34A]' : v > 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'} accent={v === 0 ? '#16A34A' : v > 0 ? '#16A34A' : '#DC2626'} />
                                 </div>
-                                <div className="space-y-2.5 pt-1">
-                                    <div className="border-b border-[#111111] pb-1.5"><h3 className="flex items-center gap-2 font-black uppercase tracking-widest text-[#111111] text-xs"><span className="h-2 w-2 rounded-full bg-[#2563EB]" />3. Cash Counter Balance</h3><p className="mt-0.5 pl-4 text-[9px] font-medium text-[#6B7280]">钱箱结余审计</p></div>
-                                    <div className="space-y-1.5 px-1 text-[#6B7280]">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Opening Float (开班备用金)</span><span className="font-mono font-bold text-[#111111] whitespace-nowrap">RM {localRecord.openingCash.toFixed(2)}</span></div>
-                                        <div className="grid grid-cols-[1fr_auto] gap-3"><span>Cash Sales (今日现金收入)</span><span className="font-mono font-bold text-[#22C55E] whitespace-nowrap">+ RM {localRecord.sales.cash.toFixed(2)}</span></div>
-                                        {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <div className="grid grid-cols-[1fr_auto] gap-3 text-[#EF4444]"><span>Cash Deductions (现金扣除)</span><span className="font-mono font-bold whitespace-nowrap">- RM {(recordWithdrawal + totalRecordExpenses).toFixed(2)}</span></div>}
+
+                                {/* 营运数据（旧记录没填就不显示） */}
+                                {recHasOps && (
+                                    <div className="grid grid-cols-4 mt-2.5 rounded-lg bg-[#F7F8FA] divide-x divide-[#E5E7EB]">
+                                        <Stat label="顾客人数 Pax" value={recOps.pax || '—'} unit="人" sub={`人均 RM ${fmtMoneyOrDash(recPerPax)}`} />
+                                        <Stat label="单数 Bills" value={recOps.bills || '—'} unit="单" sub={`单均 RM ${fmtMoneyOrDash(recPerBill)}`} />
+                                        <Stat label="熟客 Regulars" value={recOps.vipNew || '—'} sub={`到店 VIP ${recOps.vipVisits || 0}`} />
+                                        <Stat label="WhatsApp" value={`+${recOps.waJoin || 0}`} unit="新加入" sub={`订单 ${recOps.waOrders || 0}`} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-2.5"><p className="font-black text-[#111111]">Expected Cash</p><p className="text-[9px] text-[#6B7280]">系统理论应余</p><p className="mt-1 font-mono font-black text-sm">RM {(localRecord.openingCash + localRecord.sales.cash - recordWithdrawal - totalRecordExpenses).toFixed(2)}</p></div><div className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] p-2.5"><p className="font-black text-[#1E40AF]">Actual Cash</p><p className="text-[9px] text-[#3B82F6]">钱箱实际点算</p><p className="mt-1 font-mono font-black text-sm text-[#1D4ED8]">RM {localRecord.closingCash.toFixed(2)}</p></div></div>
+                                )}
+
+                                {/* 明细：左收入、右现金 */}
+                                <div className="grid grid-cols-2 gap-7 mt-6 text-[10.5px]">
+                                    <div className="space-y-5">
+                                        <Section no={1} title="店内收入" en="In-store" total={rm(localRecord.sales.storeHubTotal)}>
+                                            <Row label="现金 Cash" value={rm(localRecord.sales.cash)} />
+                                            <Row label="TNG eWallet" value={rm(localRecord.sales.tng || 0)} />
+                                            <Row label="Debit Card" value={rm(totalDebit)} />
+                                            <Row label="Credit Card" value={rm(totalCard)} />
+                                            {localRecord.sales.amex > 0 && <Row label="Amex" value={rm(localRecord.sales.amex || 0)} />}
+                                        </Section>
+                                        {totalDelivery > 0 && <Section no={2} title="外卖收入" en="Delivery" total={rm(totalDelivery)}>
+                                            {grabGross > 0 && <Row label={<>GrabFood{Number(deliveryBreakdown.grabOrders) > 0 && <span className="text-[#6B7280]"> · {Number(deliveryBreakdown.grabOrders)} 单</span>}</>} sub={`Net ${grabNet.toFixed(2)}${grabAds > 0 ? ` · Ads −${grabAds.toFixed(2)}` : ''}`} value={rm(grabReportValue)} />}
+                                            {pandaReportValue > 0 && <Row label={<>FoodPanda{Number(deliveryBreakdown.pandaOrders) > 0 && <span className="text-[#6B7280]"> · {Number(deliveryBreakdown.pandaOrders)} 单</span>}</>} sub={hasPandaNet ? `Net ${pandaNet.toFixed(2)}${pandaAds > 0 ? ` · Ads −${pandaAds.toFixed(2)}` : ''}` : '旧记录合计'} value={rm(pandaReportValue)} />}
+                                            {shopeeGross > 0 && <Row label={<>ShopeeFood{Number(deliveryBreakdown.shopeeOrders) > 0 && <span className="text-[#6B7280]"> · {Number(deliveryBreakdown.shopeeOrders)} 单</span>}</>} sub={`Net ${shopeeNet.toFixed(2)}${shopeeAds > 0 ? ` · Ads −${shopeeAds.toFixed(2)}` : ''}`} value={rm(shopeeReportValue)} />}
+                                            {Number(deliveryBreakdown.lalamove) > 0 && <Row label={<>Lalamove{Number(deliveryBreakdown.lalamoveOrders) > 0 && <span className="text-[#6B7280]"> · {Number(deliveryBreakdown.lalamoveOrders)} 单</span>}</>} value={rm(Number(deliveryBreakdown.lalamove))} />}
+                                        </Section>}
+                                    </div>
+                                    <div className="space-y-5">
+                                        <Section no={totalDelivery > 0 ? 3 : 2} title="现金扣除" en="Cash out" total={recordWithdrawal + totalRecordExpenses > 0 ? `−${rm(recordWithdrawal + totalRecordExpenses)}` : undefined}>
+                                            {recordWithdrawal > 0 && <Row label="业主提支 Owner's drawings" value={`−${rm(recordWithdrawal)}`} />}
+                                            {recordExpenses.map((e: any, idx: number) => <Row key={e.id || idx} label={`${e.company || '未知商户'} · ${e.item || '杂物'}`} value={`−${rm(Number(e.amount) || 0)}`} />)}
+                                            {recordWithdrawal === 0 && totalRecordExpenses === 0 && <p className="py-[7px] text-[#9CA3AF]">今天没有现金支出或业主提支</p>}
+                                        </Section>
+                                        <Section no={totalDelivery > 0 ? 4 : 3} title="钱箱结余" en="Cash count">
+                                            <Row label="开班备用金 Opening float" value={rm(localRecord.openingCash)} />
+                                            <Row label="现金收入 Cash sales" value={`+${rm(localRecord.sales.cash)}`} tone="text-[#16A34A]" />
+                                            {(recordWithdrawal > 0 || totalRecordExpenses > 0) && <Row label="现金扣除 Cash out" value={`−${rm(recordWithdrawal + totalRecordExpenses)}`} tone="text-[#DC2626]" />}
+                                            <Row label="系统应余 Expected" value={rm(expectedCash)} strong />
+                                            <Row label="钱箱实点 Actual" value={rm(localRecord.closingCash)} strong tone="text-[#1D4ED8]" />
+                                        </Section>
+                                    </div>
                                 </div>
-                            </section>
-                        </div>
 
-                        <div className={`mt-5 flex items-center justify-between rounded-xl border-2 px-4 py-3 ${localRecord.variance === 0 ? 'border-[#111111] bg-[#111111] text-white' : localRecord.variance > 0 ? 'border-[#86EFAC] bg-[#F0FDF4]' : 'border-[#FCA5A5] bg-[#FEF2F2]'}`}>
-                            <span><span className={`block font-black uppercase tracking-widest text-xs ${localRecord.variance === 0 ? 'text-white' : 'text-[#111111]'}`}>Cash Variance</span><span className={`block mt-0.5 text-[9px] ${localRecord.variance === 0 ? 'text-white/70' : 'text-[#6B7280]'}`}>对账差异 {localRecord.varianceReason ? `· ${localRecord.varianceReason}` : ''}</span></span>
-                            <span className={`font-mono font-black text-lg whitespace-nowrap ${localRecord.variance === 0 ? 'text-white' : localRecord.variance > 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>{localRecord.variance > 0 ? '+ ' : localRecord.variance < 0 ? '- ' : ''}RM {Math.abs(localRecord.variance).toFixed(2)}</span>
-                        </div>
+                                {/* 差异 */}
+                                <div className={`mt-6 flex items-center justify-between rounded-lg px-4 py-3 ${v === 0 ? 'bg-[#F0FDF4] border border-[#BBF7D0]' : v > 0 ? 'bg-[#F0FDF4] border border-[#BBF7D0]' : 'bg-[#FEF2F2] border border-[#FECACA]'}`}>
+                                    <span className="min-w-0">
+                                        <span className="block text-[12px] font-bold">{v === 0 ? '现金对得上' : v > 0 ? '现金多出' : '现金短少'} <span className="text-[9px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">Cash variance</span></span>
+                                        {localRecord.varianceReason && <span className="block mt-0.5 text-[10px] text-[#4B5563]">原因：{localRecord.varianceReason}</span>}
+                                    </span>
+                                    <span className={`text-[18px] font-bold whitespace-nowrap ${v === 0 ? 'text-[#16A34A]' : v > 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>{v > 0 ? '+' : v < 0 ? '−' : ''}{rm(Math.abs(v))}</span>
+                                </div>
 
-                        {/* 审计页脚：保留系统留痕，也预留了每日关账的人工确认位置。 */}
-                        <div className="mt-5 pt-3 border-t border-[#E5E7EB] shrink-0">
-                            <div className="grid grid-cols-3 gap-8 text-center text-[9px] text-[#6B7280]">
-                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Prepared by</p><p>收银员</p></div>
-                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Verified by</p><p>主管</p></div>
-                                <div><div className="h-4 border-b border-[#9CA3AF] mb-1" /><p>Approved by</p><p>管理层</p></div>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between text-[8px] text-[#9CA3AF]">
-                                <span className="whitespace-nowrap">System-generated internal audit document</span>
-                                <span className="whitespace-nowrap">Kepong Branch (甲洞分行)</span>
-                            </div>
-                        </div>
+                                {/* 签名 */}
+                                <div className="mt-auto pt-8">
+                                    <div className="grid grid-cols-3 gap-10 text-center text-[9px] text-[#6B7280]">
+                                        {[['收银员', 'Prepared by'], ['主管', 'Verified by'], ['管理层', 'Approved by']].map(([zh, en]) => <div key={en}><div className="h-7 border-b border-[#9CA3AF] mb-1.5" /><p className="font-semibold text-[#4B5563]">{zh}</p><p>{en}</p></div>)}
+                                    </div>
+                                    <div className="mt-4 flex items-center justify-between text-[8px] text-[#9CA3AF] whitespace-nowrap">
+                                        <span>System-generated internal audit document</span>
+                                        <span>Kepong Branch · 甲洞分行</span>
+                                    </div>
+                                </div>
+                            </>;
+                        })()}
                     </div>
                 </div>,
                 document.body

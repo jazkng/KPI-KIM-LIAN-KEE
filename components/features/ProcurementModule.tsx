@@ -18,7 +18,8 @@ import {
     getBaseUnit, getDisplayToBaseRatio, needsReplenishment
 } from '../../utils/unitConversion';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
-import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../utils/pdfStyleResolver';
+import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
+import { chineseFirstName } from '../../utils/inventory/stockName';
 
 interface ProcurementModuleProps {
     onClose?: () => void;
@@ -1123,7 +1124,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                     scrollX: 0,
                     scrollY: 0,
 
-                    onclone: clonedDocument => {
+                    onclone: async clonedDocument => {
+                        // 克隆文档里的字体要真的载入后才能量宽度，不然字会叠在一起（与结算单 PDF 同一做法）
+                        await prepareClonedDocumentForPdf(clonedDocument);
                         const clonedElement =
                             clonedDocument.getElementById(`po-page-${i}`);
 
@@ -1154,7 +1157,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             }
-            pdf.save(`PO_${po.id}.pdf`);
+            // 档名：单号 + 供应商（不再重复「PO_PO…」）
+            const supplierSlug = String(po.supplierName || '').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+            pdf.save(`${po.id}${supplierSlug ? `_${supplierSlug}` : ''}.pdf`);
         } catch (err) {
             console.error(err);
             alert("PDF Generation Error: " + (err instanceof Error ? err.message : String(err)));
@@ -2605,25 +2610,25 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                              pages.push(printingPO.items.slice(i * itemsPerPage, (i + 1) * itemsPerPage));
                          }
                          return pages.map((pageItems, pageIndex) => (
-                             <div key={pageIndex} id={`po-page-${pageIndex}`} className="w-[794px] h-[1123px] bg-[#FFFFFF] text-[#111111] font-sans relative flex flex-col" style={{ fontFamily: 'sans-serif' }}>
+                             <div key={pageIndex} id={`po-page-${pageIndex}`} className="w-[794px] h-[1123px] bg-[#FFFFFF] text-[#111111] relative flex flex-col" style={{ fontFamily: 'Inter, "Noto Sans SC", sans-serif', fontKerning: 'none', textRendering: 'geometricPrecision' }}>
                                  <div className="h-2 bg-[#FFD200]"></div>
                                  
                                  <div className="flex flex-col flex-1 px-12 pt-8 pb-6">
                                     <div className="flex justify-between items-start mb-6">
                                         <div>
-                                            <h1 className="text-4xl font-black tracking-wider text-[#111111] leading-none">PURCHASE</h1>
-                                            <h1 className="text-4xl font-black tracking-wider text-[#111111] leading-none">ORDER</h1>
-                                            <p className="text-xs font-bold text-[#FFD200] mt-2 tracking-widest uppercase">Kim Lian Kee (Kepong)</p>
+                                            <h1 className="text-[30px] font-black text-[#111111] leading-none whitespace-nowrap">PURCHASE ORDER</h1>
+                                            <p className="text-[13px] font-bold text-[#111111] mt-2 whitespace-nowrap">采购单</p>
+                                            <p className="text-[11px] font-semibold text-[#6B7280] mt-1 whitespace-nowrap">Kim Lian Kee (Kepong) · 金莲记甲洞</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-2xl font-mono font-black text-[#111111] tracking-tight">{printingPO?.id}</p>
+                                            <p className="text-[22px] font-black text-[#111111] whitespace-nowrap">{printingPO?.id}</p>
                                             <p className="text-sm font-semibold text-[#6B7280] mt-1">{printingPO?.date.split('T')[0]}</p>
                                             {printingPO?.createdBy && <p className="text-xs text-[#9CA3AF] mt-1">By: <span className="font-semibold text-[#6B7280]">{printingPO.createdBy}</span></p>}
                                         </div>
                                     </div>
 
                                     <div className="mb-6 p-4 bg-[#F6F7FB] rounded-lg border border-[#E5E7EB]">
-                                        <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-0.5">To Supplier:</p>
+                                        <p className="text-[10px] font-bold text-[#9CA3AF] mb-0.5">供应商 To Supplier</p>
                                         <h2 className="text-xl font-bold text-[#111111]">{printingPO?.supplierName}</h2>
                                     </div>
 
@@ -2631,22 +2636,25 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                         <table className="w-full text-left">
                                             <thead>
                                                 <tr className="border-b-2 border-[#111111]">
-                                                    <th className="py-2 text-[10px] font-black uppercase text-[#6B7280] tracking-wider w-8">#</th>
-                                                    <th className="py-2 text-[10px] font-black uppercase text-[#6B7280] tracking-wider">Item Name</th>
-                                                    <th className="py-2 text-[10px] font-black uppercase text-[#6B7280] tracking-wider text-center w-24">Qty</th>
-                                                    <th className="py-2 text-[10px] font-black uppercase text-[#6B7280] tracking-wider text-center w-24">Unit</th>
+                                                    <th className="py-2 text-[10px] font-bold text-[#6B7280] w-8">#</th>
+                                                    <th className="py-2 text-[10px] font-bold text-[#6B7280]">品名 Item</th>
+                                                    <th className="py-2 text-[10px] font-bold text-[#6B7280] text-center w-24">数量 Qty</th>
+                                                    <th className="py-2 text-[10px] font-bold text-[#6B7280] text-center w-24">单位 Unit</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {pageItems.map((item, i) => (
                                                     <tr key={i} className={`border-b border-[#E5E7EB] ${i % 2 === 0 ? 'bg-[#FFFFFF]' : 'bg-[#F6F7FB]'}`}>
-                                                        <td className="py-3 text-xs text-[#D1D5DB] font-mono">{pageIndex * itemsPerPage + i + 1}</td>
+                                                        <td className="py-3 text-xs text-[#9CA3AF] align-top">{pageIndex * itemsPerPage + i + 1}</td>
                                                         <td className="py-3">
-                                                            <span className="text-base font-bold text-[#111111] leading-tight">{item.name}</span>
-                                                            {item.supplierCode && <span className="text-[10px] text-[#9CA3AF] block font-normal mt-0.5">{item.supplierCode}</span>}
+                                                            {(() => { const n = chineseFirstName(item.name); return <>
+                                                                <span className="block text-[15px] font-bold text-[#111111] leading-snug">{n.primary}</span>
+                                                                {n.secondary && <span className="block text-[11px] font-medium text-[#6B7280] leading-snug mt-0.5">{n.secondary}</span>}
+                                                            </>; })()}
+                                                            {item.supplierCode && <span className="text-[10px] text-[#9CA3AF] block font-normal mt-0.5">供应商编号 {item.supplierCode}</span>}
                                                         </td>
-                                                        <td className="py-3 text-lg font-mono text-center font-bold text-[#111111]">{item.orderQty}</td>
-                                                        <td className="py-3 text-xs font-semibold text-center uppercase text-[#6B7280] tracking-wide">{item.unit}</td>
+                                                        <td className="py-3 text-[17px] text-center font-bold text-[#111111]">{item.orderQty}</td>
+                                                        <td className="py-3 text-xs font-semibold text-center uppercase text-[#6B7280]">{item.unit}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -2655,7 +2663,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                         {pageIndex === pages.length - 1 && (
                                             <div className="mt-4 flex justify-end">
                                                 <div className="bg-[#F6F7FB] rounded-lg px-5 py-2 border border-[#E5E7EB]">
-                                                    <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Total Items: </span>
+                                                    <span className="text-[10px] font-bold text-[#9CA3AF]">共 Total items: </span>
                                                     <span className="text-sm font-black text-[#111111]">{printingPO.items.length}</span>
                                                 </div>
                                             </div>
@@ -2667,17 +2675,17 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                             <div className="flex justify-between items-end mt-4">
                                                 <div className="flex-1">
                                                     <div className="w-48 border-b-2 border-[#D1D5DB] mb-1"></div>
-                                                    <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Authorized Signature</p>
+                                                    <p className="text-[10px] font-bold text-[#9CA3AF]">授权签名 Authorized signature</p>
                                                 </div>
                                                 <div className="flex-1 text-right">
                                                     <div className="w-48 border-b-2 border-[#D1D5DB] mb-1 ml-auto"></div>
-                                                    <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Received By (Supplier)</p>
+                                                    <p className="text-[10px] font-bold text-[#9CA3AF]">供应商签收 Received by</p>
                                                 </div>
                                             </div>
                                         )}
                                         <div className="flex justify-between items-center mt-4 pt-3 border-t border-[#E5E7EB]">
                                             <p className="text-[9px] text-[#D1D5DB]">Generated by 御膳智控 ERP</p>
-                                            <p className="text-[9px] text-[#6B7280] font-mono">Page {pageIndex + 1} of {pages.length}</p>
+                                            <p className="text-[9px] text-[#6B7280] whitespace-nowrap">Page {pageIndex + 1} / {pages.length}</p>
                                         </div>
                                     </div>
                                  </div>
