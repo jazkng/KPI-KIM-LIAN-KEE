@@ -67,7 +67,7 @@ export const moveStockItem = async (db: Firestore, args: {
             return { oldCode: code, newCode: code, moveId, removedCopies: copies.length, cleanupOnly: true };
         }
         if (!src.exists()) throw new Error('这个商品已不在原本的区域（可能已被移动或删除），请刷新后再试。');
-        if (dst.exists()) throw new Error('新区域已经有同一个 ID 的商品（复制品），没有移动。请先到「库存资料审计」处理复制品。');
+        if (dst.exists()) throw new Error('新区域已经有同一个 ID 的商品（复制品），没有移动。重新打开这个商品，最上面可以选择保留哪一份。');
         const data = src.data();
         const oldCode: string | null = data.stockCode || null;
         const oldReg = oldCode ? await tx.get(doc(db, STOCK_CODES_COLLECTION, oldCode)) : null;
