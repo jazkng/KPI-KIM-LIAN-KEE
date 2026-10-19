@@ -43,7 +43,37 @@ import {
 import { getPortalRole } from '../../../utils/orgAccess';
 
 /** 停订的材料排在每一区最后面 */
-const sortDiscontinuedLast = <T,>(list: T[]): T[] => [...list].sort((a, b) => Number(isDiscontinued(a)) - Number(isDiscontinued(b)));
+/** 一个分类里的商品：正常的在上；停订的另外收在下面一组（预设收起） */
+const SectionItems: React.FC<{ items: StockItem[]; render: (item: StockItem) => React.ReactNode }> = ({ items, render }) => {
+    const [showStopped, setShowStopped] = useState(false);
+    const active = items.filter(i => !isDiscontinued(i));
+    const stopped = items.filter(i => isDiscontinued(i));
+    return (
+        <div className="mt-2 md:mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            {active.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">{active.map(render)}</div>}
+            {stopped.length > 0 && (
+                <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50/60 p-2">
+                    <button type="button" onClick={() => setShowStopped(v => !v)}
+                        className="flex w-full min-h-[40px] items-center justify-between rounded-xl px-2 text-xs font-black text-gray-500">
+                        <span>停订 <span className="text-[10px] font-medium">Discontinued</span> · {stopped.length}</span>
+                        {showStopped ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                    </button>
+                    {showStopped && <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">{stopped.map(render)}</div>}
+                </div>
+            )}
+        </div>
+    );
+};
+
+/** 分类标题的数量：有停订时显示「正常数 / 停订 N」 */
+const SectionCount: React.FC<{ items: StockItem[]; className: string }> = ({ items, className }) => {
+    const stopped = items.filter(i => isDiscontinued(i)).length;
+    return (
+        <span className={`${className} whitespace-nowrap`}>
+            {items.length - stopped}{stopped > 0 && <span className="opacity-60"> / 停订 {stopped}</span>}
+        </span>
+    );
+};
 
 // ============================================================
 // NEW TYPES for recurring task system
@@ -2377,16 +2407,14 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                         <div className="flex items-center gap-2">
                                             <Layers size={16}/> 
                                             <span className="truncate max-w-[150px] md:max-w-[200px]">{tCat(section.id)}</span>
-                                            <span className="bg-white/30 px-2 py-0.5 rounded-full text-[9px] text-current">{sectionItems.length}</span>
+                                            <SectionCount items={sectionItems} className="bg-white/30 px-2 py-0.5 rounded-full text-[9px] text-current" />
                                             {outOfStockCount > 0 && <div className="flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded-full shadow-sm ml-1 animate-pulse border border-red-400"><AlertTriangle size={10} fill="currentColor" /><span className="text-[10px] font-black">{outOfStockCount}</span></div>}
                                             {lowStockCount > 0 && <div className="flex items-center gap-1 bg-yellow-400 text-black px-2 py-0.5 rounded-full shadow-sm ml-1 border border-yellow-500"><AlertTriangle size={10} fill="currentColor" /><span className="text-[10px] font-black">{lowStockCount}</span></div>}
                                         </div>
                                         {isExpanded ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
                                     </div>
                                     {isExpanded && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 mt-2 md:mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                            {sortDiscontinuedLast(sectionItems).map(item => renderItemCard(item))}
-                                        </div>
+                                        <SectionItems items={sectionItems} render={item => renderItemCard(item)} />
                                     )}
                                 </div>
                             )
@@ -2409,7 +2437,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                         <div className="flex items-center gap-2">
                                             <AlertOctagon size={16} className="text-red-500 animate-pulse"/> 
                                             <span className="truncate max-w-[150px] md:max-w-[200px] text-gray-700">未分类 / 遗失区</span>
-                                            <span className="bg-gray-300 px-2 py-0.5 rounded-full text-[9px] text-gray-700">{orphanedItems.length}</span>
+                                            <SectionCount items={orphanedItems} className="bg-gray-300 px-2 py-0.5 rounded-full text-[9px] text-gray-700" />
                                             {outOfStockCount > 0 && <div className="flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded-full shadow-sm ml-1"><AlertTriangle size={10} fill="currentColor" /></div>}
                                             {lowStockCount > 0 && <div className="flex items-center gap-1 bg-yellow-400 text-black px-2 py-0.5 rounded-full shadow-sm ml-1"><AlertTriangle size={10} fill="currentColor" /></div>}
                                         </div>
@@ -2417,9 +2445,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                     </div>
                                     <div className="px-3 pt-2 text-[10px] font-bold text-gray-400">💡 提示：请点击这些物品编辑，赋予它们正确的分类，它们就会回到正常的列表里。</div>
                                     {isExpanded && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 mt-2 md:mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                            {sortDiscontinuedLast(orphanedItems).map(item => renderItemCard(item))}
-                                        </div>
+                                        <SectionItems items={orphanedItems} render={item => renderItemCard(item)} />
                                     )}
                                 </div>
                             );
