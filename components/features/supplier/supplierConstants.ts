@@ -18,16 +18,16 @@ export const INVENTORY_CATEGORIES = Object.entries(CATEGORY_SECTIONS).map(([key,
 
 export const ACCOUNTING_CATEGORIES_OPTIONS = {
     'COGS (销货成本)': [
-        { id: 'INGREDIENT_HQ', label: '食材-总店 (HQ Ingredients)' },
-        { id: 'INGREDIENT_MEAT', label: '食材-肉类 (Meat)' },
-        { id: 'INGREDIENT_SEAFOOD', label: '食材-海鲜 (Seafood)' },
-        { id: 'INGREDIENT_VEG', label: '食材-蔬果 (Veg)' },
-        { id: 'INGREDIENT_DRY', label: '食材-干货 (Dry)' },
-        { id: 'INGREDIENT_SAUCE', label: '食材-酱料 (Sauce)' },
-        { id: 'INGREDIENT_EGG', label: '食材-蛋类 (Egg)' },          // 新增
-        { id: 'INGREDIENT_NOODLE', label: '食材-面类 (Noodle)' },    // 新增
+        { id: 'INGREDIENT_HQ', label: '总店 (HQ Ingredients)' },
+        { id: 'INGREDIENT_MEAT', label: '肉类 (Meat)' },
+        { id: 'INGREDIENT_SEAFOOD', label: '海鲜 (Seafood)' },
+        { id: 'INGREDIENT_VEG', label: '蔬果 (Veg)' },
+        { id: 'INGREDIENT_DRY', label: '干货 (Dry)' },
+        { id: 'INGREDIENT_SAUCE', label: '酱料 (Sauce)' },
+        { id: 'INGREDIENT_EGG', label: '蛋类 (Egg)' },          // 新增
+        { id: 'INGREDIENT_NOODLE', label: '面类 (Noodle)' },    // 新增
         { id: 'BEVERAGE', label: '水吧 (Beverage)' },
-        { id: 'INGREDIENT_ICE', label: '食材-冰块 (Ice)' },
+        { id: 'INGREDIENT_ICE', label: '冰块 (Ice)' },
         { id: 'PACKAGING', label: '包装材料 (Packaging)' },
         { id: 'GAS_COGS', label: '烹饪煤气 (Cooking Gas)' },
         { id: 'CHARCOAL', label: '火炭 (Charcoal)' },                // 新增
