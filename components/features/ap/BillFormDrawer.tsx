@@ -131,15 +131,17 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
     const categoryGroups = Object.keys(ACCOUNTING_CATEGORIES).map(key => ({ key, short: key.replace(/\s*-[^)]*\)$/, ')') })); // 「COGS (销货成本 - 随销量浮动)」→「COGS (销货成本)」
     const selectedCategoryOption = allCategoryOptions.find(o => o.id === editingBill.category);
     const [categoryGroup, setCategoryGroup] = useState<string | null>(null);
-    React.useEffect(() => { setCategoryGroup(null); }, [editingBill.id]); // 换一张账单就回到它自己科目的那一组
+    const [categoryExpanded, setCategoryExpanded] = useState(false); // 已选科目时默认收起，按「更改」才展开
+    React.useEffect(() => { setCategoryGroup(null); setCategoryExpanded(false); }, [editingBill.id]); // 换一张账单就回到它自己科目的那一组
+    const showCategoryPicker = !editingBill.category || categoryExpanded;
     const activeCategoryGroup = categoryGroup || selectedCategoryOption?.group || categoryGroups[0]?.key || '';
-    const selectCategory = (id: string) => setEditingBill(prev => ({
+    const selectCategory = (id: string) => { setCategoryExpanded(false); setEditingBill(prev => ({
         ...prev,
         category: id,
         ...(id !== 'MARKETING' ? { marketingSubCategory: undefined, adChannel: undefined, campaignTag: undefined } : {}),
         ...(id !== 'BEVERAGE' ? { beverageSubCategory: undefined } : {}),
         ...(id !== 'INGREDIENT_SEAFOOD' ? { seafoodSubCategory: undefined } : {}),
-    }));
+    })); };
     const renderCategoryButton = (opt: { id: string; label: string }) => {
         const active = editingBill.category === opt.id;
         return (
@@ -462,8 +464,15 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                 {/* 会计科目：先给这家供应商常用的；其余按 COGS / OPEX / CAPEX 分页，一次只显示一组 */}
                                 <div className="space-y-2">
                                     {selectedCategoryOption && (
-                                        <div className="text-[11px] font-bold text-gray-600">已选：<span className="rounded-md bg-[#111111] px-2 py-0.5 text-[#FFD200]">{selectedCategoryOption.label}</span></div>
+                                        <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-gray-600">
+                                            <span>已选：<span className="rounded-md bg-[#111111] px-2 py-0.5 text-[#FFD200]">{selectedCategoryOption.label}</span></span>
+                                            <button type="button" onClick={() => setCategoryExpanded(v => !v)}
+                                                className="min-h-[32px] shrink-0 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-black text-blue-600">
+                                                {categoryExpanded ? '收起' : '更改'}
+                                            </button>
+                                        </div>
                                     )}
+                                    {showCategoryPicker && (<>
                                     {favouriteOptions.length > 0 && (
                                         <div>
                                             <div className="mb-1 text-[9px] font-black uppercase tracking-wider text-blue-500">⭐ 这家供应商常用</div>
@@ -481,6 +490,7 @@ export const BillFormDrawer: React.FC<BillFormDrawerProps> = ({
                                     <div className="flex flex-wrap gap-1.5">
                                         {(ACCOUNTING_CATEGORIES[activeCategoryGroup]?.options || []).map(opt => renderCategoryButton(opt))}
                                     </div>
+                                    </>)}
                                     {!editingBill.category && <p className="text-[10px] font-bold text-red-500">请选择一个会计科目</p>}
                                 </div>
                             </div>

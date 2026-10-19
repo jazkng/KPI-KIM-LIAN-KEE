@@ -69,11 +69,11 @@ interface DetailedExpenseItem {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-    'INGREDIENT_HQ': '食材-总店 (HQ)', 'INGREDIENT_MEAT': '食材-肉类 (Meat)', 'INGREDIENT_SEAFOOD': '食材-海鲜-其他 (Seafood Others)',
-    'INGREDIENT_FISH': '食材-鱼类 (Fish)', 'INGREDIENT_PRAWN': '食材-虾类 (Prawn)', 'INGREDIENT_SOTONG': '食材-苏东 (Sotong)', 'INGREDIENT_LALA': '食材-啦啦 (Lala)', 'INGREDIENT_SEAFOOD_PROCESSED': '食材-海鲜加工品 (Processed)', 'INGREDIENT_VEG': '食材-蔬菜 (Vegetables)', 'INGREDIENT_FRUIT': '食材-水果 (Fruits)',
-    'INGREDIENT_DRY': '食材-干货 (Dry)', 'INGREDIENT_SAUCE': '食材-酱料 (Sauce)', 'INGREDIENT_NOODLE': '食材-面条 (Noodle)', 'INGREDIENT_OIL': '食用油 (Cooking Oil)', 
-    'INGREDIENT_EGG': '食材-蛋类 (Eggs)', 'INGREDIENT_FROZEN': '食材-冷冻品 (Frozen)',
-    'BEVERAGE': '水吧-其他 (Beverage Others)', 'BEVERAGE_TEA': '水吧-茶叶 (Tea)', 'BEVERAGE_CANNED': '水吧-罐装水 (Canned)', 'BEVERAGE_ALCOHOL': '酒类 (Alcohol)', 'INGREDIENT_ICE': '食材-冰块 (Ice)', 'PACKAGING': '包装材料 (Packaging)', 
+    'INGREDIENT_HQ': '总店 (HQ)', 'INGREDIENT_MEAT': '肉类 (Meat)', 'INGREDIENT_SEAFOOD': '海鲜-其他 (Seafood Others)',
+    'INGREDIENT_FISH': '鱼类 (Fish)', 'INGREDIENT_PRAWN': '虾类 (Prawn)', 'INGREDIENT_SOTONG': '苏东 (Sotong)', 'INGREDIENT_LALA': '啦啦 (Lala)', 'INGREDIENT_SEAFOOD_PROCESSED': '海鲜加工品 (Processed)', 'INGREDIENT_VEG': '蔬菜 (Vegetables)', 'INGREDIENT_FRUIT': '水果 (Fruits)',
+    'INGREDIENT_DRY': '干货 (Dry)', 'INGREDIENT_SAUCE': '酱料 (Sauce)', 'INGREDIENT_NOODLE': '面条 (Noodle)', 'INGREDIENT_OIL': '食用油 (Cooking Oil)', 
+    'INGREDIENT_EGG': '蛋类 (Eggs)', 'INGREDIENT_FROZEN': '冷冻品 (Frozen)',
+    'BEVERAGE': '水吧-其他 (Beverage Others)', 'BEVERAGE_TEA': '水吧-茶叶 (Tea)', 'BEVERAGE_CANNED': '水吧-罐装水 (Canned)', 'BEVERAGE_ALCOHOL': '酒类 (Alcohol)', 'INGREDIENT_ICE': '冰块 (Ice)', 'PACKAGING': '包装材料 (Packaging)', 
     'GAS_COGS': '烹饪煤气 (Gas)', 'CHARCOAL': '火炭 (Charcoal)', /* 👈 新增：火炭标签 */ 'SUPPLIER': '一般进货 (General)', 'SUPPLIER_HQ': '总店进货 (HQ)', 'SALARY': '薪资支出 (Salary)',
     'RENT': '租金 (Rent)', 'RENT_STAFF': '宿舍租金 (Staff Hostel Rent)', 'UTILITIES': '水电杂费 (Utilities)', 'UTILITIES_ELECTRIC': '电费 (Electricity)', 'UTILITIES_WATER': '水费 (Water)', 'UTILITIES_ELECTRIC_STAFF': '宿舍电费 (Staff Electricity)', 'UTILITIES_WATER_STAFF': '宿舍水费 (Staff Water)', 
     'UTILITIES_GAS': '管道煤气 (Piped Gas)', 'INTERNET': '网络/电话 (Internet)', 'SALES': '营业收入 (Sales)', 'TRANSFER': '资金转账 (Transfer)', 
