@@ -2459,7 +2459,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             DataManager.clearCacheKeys(['stock_']);
                             setEditingItem(null);
                             setItems(prev => prev.filter(i => i.id !== id));
-                            alert(`✅ 已移动「${name}」。${r.newCode && r.newCode !== r.oldCode ? `\n新编号 ${r.newCode}（旧编号 ${r.oldCode} 仍可搜寻）` : ''}`);
+                            alert(r.cleanupOnly
+                                ? `✅ 「${name}」早已在 ${STOCK_AREA_LABEL[to]}，这次清掉了 ${STOCK_AREA_LABEL[currentStockView]} 残留的 ${r.removedCopies} 份旧副本（资料已备份在移动记录）。`
+                                : `✅ 已移动「${name}」。${r.newCode && r.newCode !== r.oldCode ? `\n新编号 ${r.newCode}（旧编号 ${r.oldCode} 仍可搜寻）` : ''}${r.removedCopies ? `\n另外清掉了 ${r.removedCopies} 份旧副本。` : ''}`);
                         } catch (e: any) {
                             alert(`没有移动：${e?.message || e}`);
                         }
