@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Employee } from '../types';
 import { WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from '../types';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
@@ -7,7 +7,7 @@ import { getBusinessDateString } from '../utils/dateHelper';
 import { browserCockpitSource } from '../utils/cockpit/loadCockpit';
 import { addDays, daysInMonth } from '../utils/cockpit/periods';
 import { holidayLabel } from '../utils/holidays/malaysiaHolidays';
-import { loadBusinessCenterWith, type BusinessCenterData, type BusinessDay } from '../utils/businessCenter';
+import { loadBusinessCenterWith, profitStory, type BusinessCenterData, type BusinessDay, type ProfitStory } from '../utils/businessCenter';
 import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics';
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { AIOperationsAssistant, HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
@@ -106,7 +106,8 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                             <div className="bc-chart-tabs"><button aria-pressed={chart === 'week'} onClick={() => setChart('week')}>近7天对比</button><button aria-pressed={chart === 'month'} onClick={() => setChart('month')}>本月与保本</button></div>
                             <div className={`bc-charts bc-show-${chart}`}><BusinessChart days={data.days} month={month} end={monthDays.slice(-1)[0]?.date || data.result.period.end} kind="week" onSelect={setSelectedDate} /><BusinessChart days={data.days} month={month} end={data.result.period.end} kind="month" breakEven={k.breakEvenDay} onSelect={setSelectedDate} onDetail={setDetail} /></div>
                         </>}
-                        {tab === 'profit' && <><div className="bc-metric-grid">{['actualProfit', 'revenue', 'food', 'foodRatio', 'labour', 'labourRatio', 'grossMargin', 'netMargin', 'breakEvenDay', 'breakEvenMonth'].map(key => <React.Fragment key={key}>{metric(key)}</React.Fragment>)}</div><section className="bc-card bc-integrity"><h2>资料完整性</h2>{data.result.integrity.map(item => <details key={item.label}><summary>{item.ok ? '✓' : '!'} {item.label}</summary><p>{item.detail}</p></details>)}</section></>}
+                        {tab === 'profit' && <><ProfitView story={profitStory(data.result, month, today)} month={month} integrity={data.result.integrity} onDetail={key => k[key] && setDetail(k[key])} />
+                            <details className="bc-card bc-all-metrics"><summary>全部指标（给会计看的原始数字）</summary><div className="bc-metric-grid">{['actualProfit', 'revenue', 'food', 'foodRatio', 'labour', 'labourRatio', 'grossMargin', 'netMargin', 'breakEvenDay', 'breakEvenMonth'].map(key => <React.Fragment key={key}>{metric(key)}</React.Fragment>)}</div></details></>}
                         {tab === 'cash' && <section className="bc-card"><h2>现金与账款</h2><p className="bc-muted">按实际收付款查看；销售和经营利润仍使用业务发生制。</p><div className="bc-hr-grid">{[['TREASURY', '资金与现金'], ['AP', '应付账款'], ['BILLS', '经常性支出']].map(([target, label]) => can(target) && <button key={target} className="bc-cash-entry" onClick={() => { if (!can(target)) return; if (target === 'AP') navigate('AP'); else setAccountModal(target as 'TREASURY' | 'BILLS'); }}>{label}<ChevronRight size={16} /></button>)}</div><p className="bc-muted">打开现有账款模块，保留原来的操作与记录。</p></section>}
                         <details className="bc-sources"><summary>数据依据与口径</summary><p>来源：现有日结、应付账款、固定账单与薪资。营业额使用利润引擎：店内扣退款后金额＋外卖平台总额；抽佣和广告单列成本。旧 Grab 缺总额时沿用引擎暂计净额并提示。日报仅显示已结算记录；月度金额沿用原引擎，若存在未结算记录会单独提示。缺记录不作 0；食材是采购成本，不代表实际耗用。更新于 {new Date(data.result.loadedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur' })}。</p></details>
                     </>}
@@ -156,4 +157,66 @@ const BusinessChart = ({ days, month, end, kind, breakEven, onSelect, onDetail }
         </svg>}
         <small className="bc-chart-note">{kind === 'week' ? '金色：本7天 · 灰蓝：前7天；缺记录不按零计算。' : '虚线：预估每日保本；空白为未结算。负销售额请查看表格。'}</small>
     </section>;
+};
+
+/** 资料待补时，告诉老板去哪里补 */
+const FIX_HINT: Record<string, string> = {
+    '每日结算': '每日结算 → 补上缺的日子',
+    '外送平台对账': '每日结算 → 历史 → 批量核对，填平台实际到账',
+    '薪资': '人事 → 员工档案补底薪；月底发薪后会变成实际数字',
+    '经营费用': '应付账款 / 经常性支出 → 记录租金、水电等账单',
+    '食材采购': '应付账款 → 记录供应商的食材账单',
+};
+
+/** 成本与利润：白话版。数字全部来自利润引擎，点任何一行看计算依据。 */
+const ProfitView = ({ story, month, integrity, onDetail }: { story: ProfitStory; month: string; integrity: { label: string; ok: boolean; detail: string }[]; onDetail: (key: string) => void }) => {
+    const m = Number(month.slice(5));
+    const amt = (n: number) => `RM ${Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const be = story.breakEven;
+    return <div className="bc-profit">
+        <section className={`bc-card bc-profit-hero ${story.isProfit ? 'is-profit' : 'is-loss'}`}>
+            <small>{m} 月{story.monthDone ? '' : '截至目前'}</small>
+            <h2>{story.isProfit ? '赚了' : '亏了'} <strong>{amt(story.profit)}</strong></h2>
+            {story.profitPer100 !== null && <p>每做 RM100 生意，{story.isProfit ? `最后留下 RM${story.profitPer100.toFixed(2)}` : `反而倒贴 RM${Math.abs(story.profitPer100).toFixed(2)}`}。</p>}
+            <p className="bc-profit-final">{story.isFinal ? '这是最终数字：月份已结束，资料都齐了。' : `还不是最终数字${story.monthDone ? '' : '：月份还没结束'}${story.pending.length ? `${story.monthDone ? '：' : '，'}还有 ${story.pending.length} 项资料待补（看最下面）` : ''}。`}</p>
+        </section>
+
+        <section className="bc-card">
+            <div className="bc-card-heading"><h2>钱去了哪里</h2><small>点任何一行看怎么算</small></div>
+            <div className="bc-statement">
+                <button className="bc-statement-row is-total" onClick={() => onDetail('revenue')}><span><b>营业额</b><small>店内实收 + 外卖平台总额</small></span><em /><strong>{amt(story.revenue)}</strong></button>
+                {story.lines.map(l => <button key={l.key} className="bc-statement-row" onClick={() => onDetail(l.kpi)}>
+                    <span><b>− {l.label}</b><small>{l.hint}</small></span>
+                    <em>{l.per100 !== null && <>每 RM100 花 <i>RM{l.per100.toFixed(2)}</i>{l.reference && <u>{l.reference}</u>}</>}</em>
+                    <strong>{amt(l.amount)}</strong>
+                </button>)}
+                <button className={`bc-statement-row is-result ${story.isProfit ? 'is-profit' : 'is-loss'}`} onClick={() => onDetail('actualProfit')}><span><b>= {story.isProfit ? '赚' : '亏'}</b></span><em>{story.profitPer100 !== null && <>每 RM100 {story.isProfit ? '留下' : '倒贴'} <i>RM{Math.abs(story.profitPer100).toFixed(2)}</i></>}</em><strong>{story.isProfit ? '' : '−'}{amt(story.profit)}</strong></button>
+            </div>
+            {story.revenue > 0 && <div className="bc-split" role="img" aria-label="每 RM100 营业额的去向">
+                {story.lines.filter(l => l.amount > 0 && l.per100).map(l => <i key={l.key} className={`bc-split-${l.key}`} style={{ flexGrow: l.amount }} title={`${l.label} RM${l.per100!.toFixed(2)}`} />)}
+                {story.isProfit && story.profit > 0 && <i className="bc-split-profit" style={{ flexGrow: story.profit }} title="留下的利润" />}
+            </div>}
+            {story.revenue > 0 && <div className="bc-split-legend">{story.lines.filter(l => l.amount > 0).map(l => <span key={l.key}><i className={`bc-split-${l.key}`} />{l.label}</span>)}{story.isProfit && story.profit > 0 && <span><i className="bc-split-profit" />利润</span>}</div>}
+        </section>
+
+        {be && <section className="bc-card bc-breakeven">
+            <div className="bc-card-heading"><h2>要做多少生意才不亏</h2><button onClick={() => onDetail('breakEvenMonth')}>怎么算 ↗</button></div>
+            <p className="bc-be-line">这个月要做到 <b>{amt(be.target)}</b> 才打平{be.perDay !== null && <>（平均每天 <b>{amt(be.perDay)}</b>）</>}。</p>
+            <div className="bc-be-bar"><i style={{ width: `${be.progress * 100}%` }} /></div>
+            <div className="bc-be-legend"><span>已经做了 {amt(story.revenue)}</span><span>{Math.round(be.progress * 100)}%</span></div>
+            {story.monthDone
+                ? <p className="bc-be-line">{story.revenue >= be.target ? `超过保本 ${amt(story.revenue - be.target)}。` : `还差 ${amt(be.target - story.revenue)} 才打平。`}</p>
+                : <>
+                    {be.gap !== null && be.remaining !== 0 && <p className="bc-be-line">{be.gap >= 0 ? <>比打平的进度<b className="is-good">超前 {amt(be.gap)}</b>。</> : <>比打平的进度<b className="is-bad">落后 {amt(be.gap)}</b>（照已经结算的天数，本来应该做到更多）。</>}</p>}
+                    {be.remaining !== null && be.remaining > 0 && be.needPerDayLeft !== null && <p className="bc-be-line">剩下 {be.daysLeft} 天（含今天），每天要做 <b>{amt(be.needPerDayLeft)}</b> 才能打平。</p>}
+                    {be.remaining === 0 && <p className="bc-be-line"><b className="is-good">这个月已经过了保本线</b>，之后每一单都在赚。</p>}
+                </>}
+            <p className="bc-muted">保本额 =（员工薪资 + 租金水电等固定开销）÷ 扣掉食材和外卖抽成后剩下的比例。</p>
+        </section>}
+
+        <details className="bc-card bc-why">
+            <summary>{story.pending.length ? <><AlertCircle size={16} />为什么还不是最终数字？（{story.pending.length} 项待补）</> : <><CheckCircle2 size={16} />资料检查：都齐了</>}</summary>
+            <ul>{integrity.map(i => <li key={i.label} className={i.ok ? 'ok' : 'bad'}>{i.ok ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}<b>{i.label}</b><span>{i.detail}{!i.ok && FIX_HINT[i.label] && <small>怎么补：{FIX_HINT[i.label]}</small>}</span></li>)}</ul>
+        </details>
+    </div>;
 };

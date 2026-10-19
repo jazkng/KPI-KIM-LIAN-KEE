@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { businessMonthPeriod, dailyBusiness, loadBusinessCenterWith } from '../../utils/businessCenter';
+import { businessMonthPeriod, dailyBusiness, loadBusinessCenterWith, profitStory } from '../../utils/businessCenter';
 import { computePnL } from '../../utils/pnl/engine/pnlEngine';
 import type { CockpitDataSource } from '../../utils/cockpit/cockpitLoader';
 import type { SettlementRecord } from '../../types';
@@ -87,4 +87,45 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(dailyBusiness([a, b], a.date)!.channels[1]).toMatchObject({ amount: 160, orders: 4, needsReview: true, average: null });
     });
 
+});
+
+describe('成本与利润白话版 profitStory', () => {
+    const kpi = (key: string, value: number | null, extra: any = {}) => ({ key, label: key, value, unit: 'RM', status: 'ESTIMATED', statusNote: '', basis: [], sources: [], rows: [], ...extra });
+    const result = (over: any = {}) => ({
+        period: { start: '2026-10-01', end: '2026-10-19', label: '' },
+        integrity: [{ label: '每日结算', ok: true, detail: '' }, { label: '薪资', ok: false, detail: '预估' }],
+        kpis: {
+            revenue: kpi('revenue', 10000),
+            food: kpi('food', 4000),
+            labour: kpi('labour', 3000),
+            actualProfit: kpi('actualProfit', 500, { rows: [{ label: '营业额', amount: 10000 }, { label: '− 食材（采购暂估）', amount: -4000 }, { label: '− 外送平台扣款', amount: -1000 }, { label: '− 人工总成本', amount: -3000 }, { label: '− 其他经营费用', amount: -1500 }, { label: '= 净利', amount: 500 }] }),
+            breakEvenMonth: kpi('breakEvenMonth', 31000), breakEvenDay: kpi('breakEvenDay', 1000), breakEvenGap: kpi('breakEvenGap', -9000),
+            ...over,
+        },
+    } as any);
+
+    it('splits revenue into plain cost lines that add up to the profit', () => {
+        const s = profitStory(result(), '2026-10', '2026-10-19');
+        expect(s.lines.map(l => [l.key, l.amount, l.per100])).toEqual([['food', 4000, 40], ['platform', 1000, 10], ['labour', 3000, 30], ['opex', 1500, 15]]);
+        expect(s).toMatchObject({ profit: 500, isProfit: true, profitPer100: 5, isFinal: false, monthDone: false });
+        expect(s.pending.map(p => p.label)).toEqual(['薪资']);
+    });
+
+    it('break-even: remaining and per-day need for the rest of the month (incl. today)', () => {
+        const be = profitStory(result(), '2026-10', '2026-10-19').breakEven!;
+        expect(be).toMatchObject({ target: 31000, remaining: 21000, daysLeft: 13, gap: -9000 });
+        expect(be.needPerDayLeft).toBeCloseTo(21000 / 13, 2);
+        expect(profitStory(result(), '2026-09', '2026-10-19').breakEven!.daysLeft).toBe(0);
+    });
+
+    it('shows an explicit adjustment line when the engine total differs', () => {
+        const s = profitStory(result({ actualProfit: kpi('actualProfit', 300, { rows: result().kpis.actualProfit.rows }) }), '2026-10', '2026-10-19');
+        expect(s.lines.at(-1)).toMatchObject({ key: 'other', amount: 200 });
+    });
+
+    it('loss month and missing break-even', () => {
+        const s = profitStory(result({ actualProfit: kpi('actualProfit', -500, { rows: [] }), breakEvenMonth: kpi('breakEvenMonth', null) }), '2026-10', '2026-10-19');
+        expect(s.isProfit).toBe(false);
+        expect(s.breakEven).toBeNull();
+    });
 });
