@@ -2437,6 +2437,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     canDelete={canDeactivateItem}
                     canSave={!editingItem.id ? canAddItem : canEditExistingItem}
                     showInternalIds={canManageCodes}
+                    autoSplitName={canInventory('EDIT_BASIC_INFO')}
                     onMoveArea={canManageCodes && editingItem.id ? async (to, category) => {
                         const id = editingItem.id!;
                         const name = editingItem.name || id;

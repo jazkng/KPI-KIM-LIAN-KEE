@@ -42,6 +42,8 @@ interface StockEditModalProps {
     /** 没有供应商连到这个商品时，同名却连到别处的供应商品项与改连 */
     sameNameSupply?: SameNameRef[];
     onRelinkSupply?: (ref: SameNameRef) => Promise<void>;
+    /** 有「编辑基本资料」权限才自动把旧品名括号英文移到第二行（没权限的人改别的栏位时不会被挡） */
+    autoSplitName?: boolean;
 }
 
 
@@ -166,7 +168,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply, autoSplitName = false
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -249,7 +251,7 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     // 旧品名「中文 (English)」：打开时把括号里的英文移到第二行（只改表单，按保存才写入）
     const [autoSplitFrom, setAutoSplitFrom] = useState<string | null>(null);
     useEffect(() => {
-        const next = suggestNameFields(editingItem);
+        const next = autoSplitName ? suggestNameFields(editingItem) : null;
         if (!next) { setAutoSplitFrom(null); return; }
         setAutoSplitFrom(editingItem.name || '');
         onChange({ ...editingItem, ...next });
