@@ -29,7 +29,7 @@ export const CATEGORY_SECTIONS: Record<string, { id: string, label: string, colo
     'FUEL': [
         { id: 'GAS', label: '煤气 (Gas)', color: 'bg-indigo-50 text-indigo-700' },
         { id: 'CHARCOAL', label: '木炭 (Charcoal)', color: 'bg-slate-100 text-slate-700' },
-        { id: 'OIL', label: '柴油/油 (Oil)', color: 'bg-orange-50 text-orange-700' }
+        { id: 'OIL', label: '食用油 (Cooking Oil)', color: 'bg-orange-50 text-orange-700' }
     ]
 };
 

@@ -27,7 +27,7 @@ const CATEGORY_SECTIONS: Record<string, { id: string, label: string }[]> = {
     ],
     'FUEL': [
         { id: 'GAS', label: '煤气 (Gas)' }, { id: 'CHARCOAL', label: '木炭 (Charcoal)' },
-        { id: 'OIL', label: '柴油/油 (Oil)' },
+        { id: 'OIL', label: '食用油 (Cooking Oil)' },
     ]
 };
 
