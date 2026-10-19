@@ -454,11 +454,7 @@ export default function App() {
                         <div className="hidden md:flex items-center gap-1 bg-black/40 p-1 rounded-full border border-[#FFD200]/25 relative z-20 mx-4 shrink-0">
                             <button
                                 onClick={() => setBossHomeView('PRIORITY')}
-                                className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none ${
-                                    false
-                                        ? 'bg-[#FFD200] text-stone-950 shadow-[0_2px_8px_rgba(255,210,0,0.3)]'
-                                        : 'text-stone-300 hover:text-[#FFD200]'
-                                }`}
+                                className="px-4 py-1.5 rounded-full text-xs font-black tracking-wider transition-all duration-150 outline-none text-stone-300 hover:text-[#FFD200]"
                             >
                                 经营中心
                             </button>

@@ -9,8 +9,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { OPS_ICONS } from './settlementIcons';
-import { X, Loader2, Search, CheckCircle2, Pencil, ShieldCheck, RotateCcw, Calendar, AlertTriangle } from 'lucide-react';
-import { SettlementRecord } from '../../../types';
+import { X, Loader2, Search, CheckCircle2, Pencil, ShieldCheck, RotateCcw, Calendar, AlertTriangle, Wallet, Users, ClipboardPen } from 'lucide-react';
+import { SettlementRecord, WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from '../../../types';
+import { SettlementExtras, getExtras, platformsWithSales, extrasUpdate, applyExtrasLocally } from './settlementExtras';
+import { SPECIAL_CONDITION_ICONS } from './settlementIcons';
+import { getMalaysiaHoliday, holidayLabel } from '../../../utils/holidays/malaysiaHolidays';
+import { guardWrite } from '../../../utils/readOnlyMode';
 import { DataManager } from '../../../utils/dataManager';
 import { getReconChannels, applyRecon, ReconChannelKey } from '../../../utils/settlementRecon';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -23,7 +27,11 @@ interface Props {
     defaultMonth: string;
     /** 有任何一笔核对成功后通知外面刷新 */
     onChanged: () => void;
+    /** 打开时先显示哪一页（历史页的「补填」按钮直接开 EXTRA） */
+    initialMode?: 'RECON' | 'OPS' | 'EXTRA';
 }
+
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
 
 const CHANNELS: { key: ReconChannelKey; label: string; short: string; cls: string }[] = [
     { key: 'tng',    label: 'TNG eWallet',     short: 'TNG',    cls: 'bg-sky-100 text-sky-800 border-sky-300' },
@@ -49,7 +57,7 @@ interface Row {
     isReconciled: boolean;
 }
 
-export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, defaultMonth, onChanged }) => {
+export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, defaultMonth, onChanged, initialMode = 'RECON' }) => {
     const [month, setMonth] = useState(defaultMonth);
     const [records, setRecords] = useState<SettlementRecord[]>([]);
     const [loading, setLoading] = useState(false);
@@ -60,11 +68,14 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
     const [savingKey, setSavingKey] = useState<string | null>(null);
     const [bulk, setBulk] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
     // 👥 营运数据模式：整个月一次过补填 人数 / 单数 / VIP / WhatsApp
-    const [mode, setMode] = useState<'RECON' | 'OPS'>('RECON');
+    const [mode, setMode] = useState<'RECON' | 'OPS' | 'EXTRA'>(initialMode);
     const [opsDrafts, setOpsDrafts] = useState<Record<string, SettlementOps>>({});
     const [opsSaving, setOpsSaving] = useState(false);
+    // 📝 补填模式：外卖单数 / 天气 / 特殊情况
+    const [extraDrafts, setExtraDrafts] = useState<Record<string, SettlementExtras>>({});
+    const [extraSaving, setExtraSaving] = useState(false);
 
-    useEffect(() => { if (isOpen) setMonth(defaultMonth); }, [isOpen, defaultMonth]);
+    useEffect(() => { if (isOpen) { setMonth(defaultMonth); setMode(initialMode); } }, [isOpen, defaultMonth, initialMode]);
 
     const load = async (m: string) => {
         setLoading(true);
@@ -72,6 +83,7 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
             const list = await DataManager.getSettlements(m);
             setRecords(list.sort((a, b) => a.date.localeCompare(b.date)));
             setOpsDrafts({});
+            setExtraDrafts({});
         } catch (e) {
             console.error('批量核对：读取结算失败', e);
             alert('❌ 读取账目失败，请检查网络');
@@ -159,6 +171,52 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
         onChanged();
         alert(failed.length === 0
             ? `✅ 已保存 ${Object.keys(saved).length} 天的营运数据`
+            : `⚠️ 成功 ${Object.keys(saved).length} 天，失败 ${failed.length} 天：${failed.join('、')}`);
+    };
+
+    // 📝 补填：有改过的日子
+    const extraUpdates = Object.fromEntries(Object.keys(extraDrafts).map(id => {
+        const r = records.find(x => x.id === id);
+        return [id, r ? extrasUpdate(getExtras(r), extraDrafts[id]) : {}];
+    }).filter(([, u]) => Object.keys(u as object).length > 0)) as Record<string, Record<string, any>>;
+    const extraDirtyIds = Object.keys(extraUpdates);
+    const missingOrdersDays = records.filter(r => {
+        const ex = getExtras(r);
+        return platformsWithSales(r).some(p => !(ex.orders[p.key]! > 0));
+    }).length;
+
+    const editExtra = (r: SettlementRecord, fn: (d: SettlementExtras) => SettlementExtras) =>
+        setExtraDrafts(prev => {
+            const cur = prev[r.id] || getExtras(r);
+            return { ...prev, [r.id]: fn({ ...cur, orders: { ...cur.orders }, specialConditions: [...cur.specialConditions] }) };
+        });
+
+    const saveExtras = async () => {
+        if (extraDirtyIds.length === 0 || !guardWrite('补填结算资料')) return;
+        setExtraSaving(true);
+        const failed: string[] = [];
+        const saved: Record<string, Record<string, any>> = {};
+        for (const id of extraDirtyIds) {
+            const r = records.find(x => x.id === id)!;
+            try {
+                // 只写改动的栏位（栏位路径更新），营业额、核对状态等完全不动
+                await updateDoc(doc(db, 'settlements', id), extraUpdates[id]);
+                saved[id] = extraUpdates[id];
+            } catch (e) {
+                console.error('补填失败', id, e);
+                failed.push(r.date);
+            }
+        }
+        setRecords(prev => prev.map(r => saved[r.id] ? applyExtrasLocally(r, saved[r.id]) : r));
+        setExtraDrafts(prev => {
+            const n = { ...prev };
+            Object.keys(saved).forEach(id => delete n[id]);
+            return n;
+        });
+        setExtraSaving(false);
+        onChanged();
+        alert(failed.length === 0
+            ? `✅ 已补填 ${Object.keys(saved).length} 天`
             : `⚠️ 成功 ${Object.keys(saved).length} 天，失败 ${failed.length} 天：${failed.join('、')}`);
     };
 
@@ -297,16 +355,19 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                 <div className="flex items-start justify-between p-4 md:p-5 border-b border-gray-100 shrink-0">
                     <div className="min-w-0">
                         <h3 className="font-black text-base text-stone-900 flex items-center gap-2">
-                            <ShieldCheck size={17} className="text-[#FFD200]" /> 批量核对
+                            <ShieldCheck size={17} className="text-[#FFD200]" /> {mode === 'EXTRA' ? '补填结算资料' : '批量核对'}
                         </h3>
                         <p className="text-[11px] text-gray-500 mt-0.5">
-                            {loading ? '读取中…' : mode === 'OPS'
+                            {loading ? '读取中…' : mode === 'EXTRA'
+                                ? <>共 {records.length} 天 · 外卖缺单数 <b className="text-amber-600">{missingOrdersDays}</b> 天</>
+                                : mode === 'OPS'
                                 ? <>共 {records.length} 天 · 已填人数 <b className="text-violet-600">{records.filter(r => getOps(r).pax > 0).length}</b> 天</>
                                 : <>共 {rows.length} 行 · 待核对 <b className="text-amber-600">{summary.pending}</b> · 已核对 <b className="text-emerald-600">{summary.done}</b></>}
                         </p>
                         <div className="flex bg-gray-100 rounded-xl p-1 mt-2 w-fit">
-                            <button onClick={() => setMode('RECON')} className={`px-3 rounded-lg text-xs font-black ${mode === 'RECON' ? 'bg-white shadow text-stone-900' : 'text-gray-500'}`} style={{ minHeight: '36px' }}>💰 对账</button>
-                            <button onClick={() => setMode('OPS')} className={`px-3 rounded-lg text-xs font-black ${mode === 'OPS' ? 'bg-white shadow text-violet-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}>👥 人数 / VIP / WhatsApp</button>
+                            <button onClick={() => setMode('RECON')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'RECON' ? 'bg-white shadow text-stone-900' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Wallet size={13} />对账</button>
+                            <button onClick={() => setMode('OPS')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'OPS' ? 'bg-white shadow text-violet-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Users size={13} />人数 / 熟客 / WhatsApp</button>
+                            <button onClick={() => setMode('EXTRA')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'EXTRA' ? 'bg-white shadow text-amber-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><ClipboardPen size={13} />补填 单数 / 天气</button>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex justify-center items-center shrink-0"><X size={18} /></button>
@@ -320,7 +381,7 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                             <input type="month" value={month} onChange={e => setMonth(e.target.value)}
                                 className="bg-transparent font-black text-stone-900 outline-none w-full md:w-[150px]" style={{ fontSize: '16px' }} />
                         </div>
-                        <div className={`flex gap-1.5 flex-1 ${mode === 'OPS' ? 'hidden' : ''}`}>
+                        <div className={`flex gap-1.5 flex-1 ${mode !== 'RECON' ? 'hidden' : ''}`}>
                             {([['PENDING', '待核对'], ['DONE', '已核对'], ['ALL', '全部']] as const).map(([id, lb]) => (
                                 <button key={id} onClick={() => setStatus(id)}
                                     className={`flex-1 rounded-xl text-xs font-black transition-all ${status === id ? 'bg-[#FFD200] text-stone-900' : 'bg-gray-100 text-gray-500'}`}
@@ -362,6 +423,69 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                             <Loader2 size={36} className="animate-spin mb-3 text-[#FFD200]" />
                             <p className="text-xs font-bold">正在拉取 {month} 的账目…</p>
                         </div>
+                    ) : mode === 'EXTRA' ? (
+                        records.length === 0 ? (
+                            <p className="text-center py-16 text-xs font-black text-gray-400">{month} 没有结算记录</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {records.map(r => {
+                                    const ex = extraDrafts[r.id] || getExtras(r);
+                                    const dirty = extraDirtyIds.includes(r.id);
+                                    const plats = platformsWithSales(r);
+                                    const hol = getMalaysiaHoliday(r.date);
+                                    const wd = new Date(`${r.date}T00:00:00`).getDay();
+                                    return (
+                                        <div key={r.id} className={`rounded-xl border px-3 py-2.5 space-y-2 ${dirty ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200 bg-white'}`}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="font-mono text-[12px] font-black text-stone-900">
+                                                    {r.date.slice(5)} <span className={`text-[10px] ${wd === 0 || wd === 6 ? 'text-amber-600' : 'text-gray-400'}`}>周{WEEKDAY[wd]}</span>
+                                                    {hol && <span className="ml-1.5 rounded bg-pink-50 px-1 text-[10px] font-bold text-pink-600">{holidayLabel(hol)}</span>}
+                                                </span>
+                                                {dirty && <span className="text-[11px] font-black text-amber-600">未保存</span>}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-1">
+                                                {WEATHER_OPTIONS.map(o => (
+                                                    <button key={o.value} type="button" onClick={() => editExtra(r, d => ({ ...d, weather: o.value }))}
+                                                        className={`min-w-[44px] rounded-lg border px-2 text-[11px] font-black ${ex.weather === o.value ? 'border-stone-900 bg-stone-900 text-[#FFD200]' : 'border-gray-200 bg-white text-gray-500'}`}
+                                                        style={{ minHeight: '34px' }}>{o.label}</button>
+                                                ))}
+                                                <span className="mx-1 h-5 w-px bg-gray-200" />
+                                                {SPECIAL_CONDITION_OPTIONS.map(o => {
+                                                    const on = ex.specialConditions.includes(o.value);
+                                                    return (
+                                                        <button key={o.value} type="button"
+                                                            onClick={() => editExtra(r, d => ({ ...d, specialConditions: on ? d.specialConditions.filter(v => v !== o.value) : [...d.specialConditions, o.value] }))}
+                                                            className={`flex items-center gap-1 rounded-lg border px-2 text-[11px] font-black ${on ? 'border-orange-400 bg-orange-400 text-black' : 'border-gray-200 bg-white text-gray-500'}`}
+                                                            style={{ minHeight: '34px' }}>
+                                                            {React.createElement(SPECIAL_CONDITION_ICONS[o.value], { size: 12, className: 'shrink-0' })}{o.label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {plats.length > 0 ? (
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                                                    {plats.map(p => {
+                                                        const v = ex.orders[p.key];
+                                                        const missing = !(v! > 0);
+                                                        return (
+                                                            <label key={p.key} className="min-w-0">
+                                                                <span className={`block text-[9px] font-black truncate mb-0.5 ${missing ? 'text-amber-600' : 'text-gray-500'}`}>{p.label} 单数 · RM {money(p.amount)}</span>
+                                                                <input type="number" inputMode="numeric" min={0} step={1}
+                                                                    value={v === undefined || v === 0 ? '' : v}
+                                                                    onChange={e => { const n = parseInt(e.target.value, 10); editExtra(r, d => ({ ...d, orders: { ...d.orders, [p.key]: Number.isFinite(n) && n >= 0 ? n : undefined } })); }}
+                                                                    placeholder="待补"
+                                                                    className={`w-full bg-white border rounded-lg px-2 text-right font-mono font-black text-stone-900 outline-none focus:border-amber-400 ${missing ? 'border-amber-300' : 'border-gray-300'}`}
+                                                                    style={{ fontSize: '16px', minHeight: '40px' }} />
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : <p className="text-[10px] font-bold text-gray-400">这天没有外卖营业额</p>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )
                     ) : mode === 'OPS' ? (
                         records.length === 0 ? (
                             <p className="text-center py-16 text-xs font-black text-gray-400">{month} 没有结算记录</p>
@@ -493,6 +617,19 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                     )}
                 </div>
 
+                {mode === 'EXTRA' && (
+                    <div className="p-3 md:p-4 border-t border-gray-100 shrink-0 flex gap-2" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+                        <button onClick={saveExtras} disabled={extraSaving || extraDirtyIds.length === 0}
+                            className="flex-1 rounded-xl bg-amber-500 text-black text-sm font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95" style={{ minHeight: '48px' }}>
+                            {extraSaving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                            保存 {extraDirtyIds.length} 天
+                        </button>
+                        <button onClick={onClose} disabled={extraSaving} className="px-5 rounded-xl bg-stone-900 text-[#FFD200] text-xs font-black shrink-0 disabled:opacity-40" style={{ minHeight: '48px' }}>
+                            关闭
+                        </button>
+                    </div>
+                )}
+
                 {mode === 'OPS' && (
                     <div className="p-3 md:p-4 border-t border-gray-100 shrink-0 flex gap-2" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
                         <button onClick={saveOps} disabled={opsSaving || opsDirtyIds.length === 0}
@@ -507,7 +644,7 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                 )}
 
                 {/* 底部合计 */}
-                <div className={`p-3 md:p-4 border-t border-gray-100 shrink-0 space-y-2 ${mode === 'OPS' ? 'hidden' : ''}`}>
+                <div className={`p-3 md:p-4 border-t border-gray-100 shrink-0 space-y-2 ${mode !== 'RECON' ? 'hidden' : ''}`}>
                     <div className="grid grid-cols-3 gap-2">
                         <div className="bg-gray-50 rounded-xl px-2 py-1.5 text-center border border-gray-100">
                             <div className="text-[9px] font-black text-gray-400 uppercase">系统预估合计</div>
