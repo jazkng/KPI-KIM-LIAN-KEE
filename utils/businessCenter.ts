@@ -17,11 +17,14 @@ export const dailyBusiness = (records: SettlementRecord[], date: string) => {
     const ops = rows.map(getOps);
     const count = (key: 'bills' | 'pax') => ops.every(o => o[key] > 0) ? ops.reduce((n, o) => n + o[key], 0) : null;
     const bills = count('bills'), pax = count('pax'), store = pnl.classic.inStoreSales;
-    const platformCount = (key: 'grabOrders' | 'pandaOrders' | 'shopeeOrders' | 'lalamoveOrders') => {
+    const perRecord = rows.length === 1 ? [pnl] : rows.map(r => computePnL({ settlements: [r], standaloneExpenses: [], billPayments: [], employees: [], payrollRecords: [] }, date, date, date));
+    const platform = (label: string, grossKey: 'grab' | 'panda' | 'shopee' | 'lalamove', key: 'grabOrders' | 'pandaOrders' | 'shopeeOrders' | 'lalamoveOrders') => {
         const values = rows.map(r => r.sales?.deliveryBreakdown?.[key]);
-        return values.every(v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) ? values.reduce<number>((n, v) => n + v!, 0) : null;
+        const complete = values.every(v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
+        return { label, amount: pnl.classic.platformGross[grossKey], orders: complete ? values.reduce<number>((n, v) => n + v!, 0) : null,
+            needsReview: values.some((v, i) => v === 0 && perRecord[i].classic.platformGross[grossKey] !== 0) };
     };
-    const channels = [{ label: '店内', amount: store, orders: bills }, { label: 'Grab', amount: pnl.classic.platformGross.grab, orders: platformCount('grabOrders') }, { label: 'Foodpanda', amount: pnl.classic.platformGross.panda, orders: platformCount('pandaOrders') }, { label: 'ShopeeFood', amount: pnl.classic.platformGross.shopee, orders: platformCount('shopeeOrders') }, { label: 'Lalamove', amount: pnl.classic.platformGross.lalamove, orders: platformCount('lalamoveOrders') }].map(c => ({ ...c, average: c.orders && c.orders > 0 ? c.amount / c.orders : null, needsReview: c.orders === 0 && c.amount !== 0 }));
+    const channels = [{ label: '店内', amount: store, orders: bills, needsReview: false }, platform('Grab', 'grab', 'grabOrders'), platform('Foodpanda', 'panda', 'pandaOrders'), platform('ShopeeFood', 'shopee', 'shopeeOrders'), platform('Lalamove', 'lalamove', 'lalamoveOrders')].map(c => ({ ...c, average: !c.needsReview && c.orders && c.orders > 0 ? c.amount / c.orders : null }));
     const weather = [...new Set(rows.map(r => r.weather).filter(Boolean))];
     return { date, revenue: pnl.revenue, channels, bills, pax, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
         weather: weather.length === 1 ? weather[0] : undefined, weatherMixed: weather.length > 1,

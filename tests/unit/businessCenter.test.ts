@@ -80,4 +80,11 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(dailyBusiness([r, row(r.date)], r.date)!.channels[1].orders).toBeNull();
     });
 
+    it('同日一笔0单待核对，不能被另一笔有效单数掩盖', () => {
+        const a = row('2026-10-18'), b = row('2026-10-18');
+        a.sales.deliveryBreakdown!.grabOrders = 0;
+        b.sales.deliveryBreakdown!.grabOrders = 4;
+        expect(dailyBusiness([a, b], a.date)!.channels[1]).toMatchObject({ amount: 160, orders: 4, needsReview: true, average: null });
+    });
+
 });
