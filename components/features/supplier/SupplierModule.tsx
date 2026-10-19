@@ -14,7 +14,7 @@ import { DataManager } from '../../../utils/dataManager';
 import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../../utils/pdfStyleResolver';
 import { chineseFirstName } from '../../../utils/inventory/stockName';
 import {
-    calculateWeightedAverageCost,
+    applyReceivedStock, isConsumeOnReceive,
     getCostPerBaseUnit,
     getCurrentQtyBase,
     isWeightUnit,
@@ -779,19 +779,15 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             allStockList.forEach(stockItem => {
                 const update = stockUpdates.get(stockItem.id);
                 if (update && update.qtyDelta > 0) {
-                    const weighted = calculateWeightedAverageCost({
-                        oldQtyBase: getCurrentQtyBase(stockItem),
-                        oldCostPerBaseUnit: getCostPerBaseUnit(stockItem),
-                        receivedQtyBase: update.qtyDelta,
-                        receivedTotalCost: update.receivedTotalCost
-                    });
+                    // 一般商品：数量相加、移动平均成本；当天用完：数量不变、成本改用这次进价
+                    const next = applyReceivedStock(stockItem, update.qtyDelta, update.receivedTotalCost);
                     changedItems.push({
                         ...stockItem,
-                        currentQtyBase: weighted.newQtyBase,
-                        currentQty: weighted.newQtyBase,
-                        costPerBaseUnit: weighted.newCostPerBaseUnit,
-                        cost: weighted.newCostPerBaseUnit,
-                        diff: update.qtyDelta
+                        currentQtyBase: next.newQtyBase,
+                        currentQty: next.newQtyBase,
+                        costPerBaseUnit: next.newCostPerBaseUnit,
+                        cost: next.newCostPerBaseUnit,
+                        diff: next.diff
                     } as StockItem & { diff: number });
                 }
             });
@@ -816,11 +812,14 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     date: getMalaysiaDateString(), timestamp: new Date().toISOString(),
                     entries: changedItems.map(item => {
                         const diff = Number((item as StockItem & { diff?: number }).diff) || 0;
+                        const consumed = isConsumeOnReceive(item);
                         return {
                             area: resolveStockArea(item)!, stockId: item.id, stockName: item.name,
                             unit: item.baseUnit || item.unit || '', newAvgCost: getCostPerBaseUnit(item),
-                            oldQty: getCurrentQtyBase(item) - diff, receivedQty: diff,
+                            oldQty: getCurrentQtyBase(item) - diff,
+                            receivedQty: consumed ? stockUpdates.get(item.id)?.qtyDelta || 0 : diff,
                             totalCost: stockUpdates.get(item.id)?.receivedTotalCost || 0,
+                            consumed,
                         };
                     }),
                 });
@@ -882,18 +881,13 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             setAllStockList(prev => prev.map(stockItem => {
                 const update = stockUpdates.get(stockItem.id);
                 if (!update || update.qtyDelta <= 0) return stockItem;
-                const weighted = calculateWeightedAverageCost({
-                    oldQtyBase: getCurrentQtyBase(stockItem),
-                    oldCostPerBaseUnit: getCostPerBaseUnit(stockItem),
-                    receivedQtyBase: update.qtyDelta,
-                    receivedTotalCost: update.receivedTotalCost
-                });
+                const next = applyReceivedStock(stockItem, update.qtyDelta, update.receivedTotalCost);
                 return {
                     ...stockItem,
-                    currentQtyBase: weighted.newQtyBase,
-                    currentQty: weighted.newQtyBase,
-                    costPerBaseUnit: weighted.newCostPerBaseUnit,
-                    cost: weighted.newCostPerBaseUnit
+                    currentQtyBase: next.newQtyBase,
+                    currentQty: next.newQtyBase,
+                    costPerBaseUnit: next.newCostPerBaseUnit,
+                    cost: next.newCostPerBaseUnit
                 };
             }));
             const poData = await DataManager.getPurchaseOrders();

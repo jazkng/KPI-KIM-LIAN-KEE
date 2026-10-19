@@ -292,6 +292,8 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
     // 旧品名「中文 (English)」：打开时把括号里的英文移到第二行（只改表单，按保存才写入）
     const [autoSplitFrom, setAutoSplitFrom] = useState<string | null>(null);
+    /** 勾「当天用完」前的库存数量：同一次编辑里取消勾选时还原 */
+    const [qtyBeforeConsume, setQtyBeforeConsume] = useState<number | null>(null);
     useEffect(() => {
         const next = autoSplitName ? suggestNameFields(editingItem) : null;
         if (!next) { setAutoSplitFrom(null); return; }
@@ -583,6 +585,28 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                     onChange={e => onChange({ ...editingItem, discontinued: e.target.checked, discontinuedAt: e.target.checked ? new Date().toISOString() : editingItem.discontinuedAt })} />
                             </label>
                         )}
+
+                        <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 cursor-pointer ${editingItem.consumeOnReceive ? 'border-sky-300 bg-sky-50' : 'border-[#E5E7EB] bg-white'}`}>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-black text-[#111111]">当天用完（不计库存） <span className="text-[11px] font-medium text-gray-400">Used same day</span></span>
+                                <span className="block text-[11px] font-medium text-gray-500 leading-snug">例如冰块：收货不加库存，只更新每单位成本；不提醒补货、不用盘点。应付账款照常。</span>
+                                {editingItem.consumeOnReceive && qtyBeforeConsume !== null && qtyBeforeConsume > 0 && (
+                                    <span className="block mt-1 text-[11px] font-bold text-sky-700">现有库存 {qtyBeforeConsume} {editingItem.baseUnit || editingItem.unit} 会改成 0 · 按保存才生效</span>
+                                )}
+                            </span>
+                            <input type="checkbox" className="w-5 h-5 shrink-0 accent-sky-600" checked={!!editingItem.consumeOnReceive}
+                                onChange={e => {
+                                    if (e.target.checked) {
+                                        const before = Number(editingItem.currentQtyBase ?? editingItem.currentQty ?? 0) || 0;
+                                        setQtyBeforeConsume(before);
+                                        onChange({ ...editingItem, consumeOnReceive: true, currentQtyBase: 0, currentQty: 0 });
+                                    } else {
+                                        const restore = qtyBeforeConsume;
+                                        setQtyBeforeConsume(null);
+                                        onChange({ ...editingItem, consumeOnReceive: false, ...(restore !== null ? { currentQtyBase: restore, currentQty: restore } : {}) });
+                                    }
+                                }} />
+                        </label>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>

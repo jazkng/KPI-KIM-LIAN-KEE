@@ -14,7 +14,7 @@ import { getMalaysiaDateString } from '../../utils/dateHelper';
 import { matchesStockSearch } from '../../utils/inventory/stockCode';
 import { MOBILE_BREAKPOINT } from '../../utils/useIsMobile';
 import {
-    calculateWeightedAverageCost, calculateReceivedLine, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
+    calculateReceivedLine, applyReceivedStock, isConsumeOnReceive, getCurrentQtyBase, getMinLevelBase, getMaxQtyBase, getCostPerBaseUnit,
     getBaseUnit, getDisplayToBaseRatio, needsReplenishment
 } from '../../utils/unitConversion';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
@@ -1327,21 +1327,9 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 const original = latestStockItems.find(s => s.id === stockId);
                 if (original) {
                     const baseUnit = original.baseUnit || original.unit || 'pcs';
-                    const oldQtyBase = Math.max(0, getCurrentQtyBase(original));
-                    const oldCostPerBaseUnit = getCostPerBaseUnit(original);
-                    
-                    const qtyDelta = update.qtyDelta;
-                    const costDelta = update.costDelta;
-                    
-                    const costResult = calculateWeightedAverageCost({
-                        oldQtyBase,
-                        oldCostPerBaseUnit,
-                        receivedQtyBase: qtyDelta,
-                        receivedTotalCost: costDelta
-                    });
-
-                    const newCostPerBaseUnit = costResult.newCostPerBaseUnit;
-                    const newQty = costResult.newQtyBase;
+                    // 一般商品：数量相加、移动平均成本；当天用完：数量不变、成本改用这次进价
+                    const { newQtyBase: newQty, newCostPerBaseUnit, diff: qtyDelta } =
+                        applyReceivedStock(original, update.qtyDelta, update.costDelta);
 
                     changedItems.push({
                         ...original,
@@ -1388,11 +1376,14 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                     date: getMalaysiaDateString(), timestamp: new Date().toISOString(),
                     entries: changedItems.map(item => {
                         const diff = Number(item.diff) || 0;
+                        const consumed = isConsumeOnReceive(item);
                         return {
                             area: resolveStockArea(item)!, stockId: item.id, stockName: item.name,
                             unit: item.baseUnit || item.unit || '', newAvgCost: getCostPerBaseUnit(item),
-                            oldQty: getCurrentQtyBase(item) - diff, receivedQty: diff,
+                            oldQty: getCurrentQtyBase(item) - diff,
+                            receivedQty: consumed ? stockUpdates.get(item.id)?.qtyDelta || 0 : diff,
                             totalCost: stockUpdates.get(item.id)?.costDelta || 0,
+                            consumed,
                         };
                     }),
                 });
@@ -2424,7 +2415,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                                 <Calculator size={9}/> 折合每{item.unit}: RM {displayUnitCost}
                                                             </div>
                                                         ) : null}
-                                                        {item.billByWeight && previewLine.receivedBaseQty > 0 ? (
+                                                        {isConsumeOnReceive(previewStock) && (
+                                                            <div className="mt-1 text-[10px] font-black text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded w-fit">当天用完 · 不加库存，只更新进价</div>
+                                                        )}
+                                                        {item.billByWeight && previewLine.receivedBaseQty > 0 && !isConsumeOnReceive(previewStock) ? (
                                                             <div className="mt-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded w-fit">
                                                                 库存 +{previewLine.receivedBaseQty} {previewUnit} · 应付 RM {previewLine.finalLineTotal.toFixed(2)}
                                                             </div>

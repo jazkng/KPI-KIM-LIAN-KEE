@@ -961,6 +961,8 @@ export interface StockItem {
     /** 停订：这个材料不再进货。不算无货 / 低库存，不提醒补货。V2 新增，V1 会忽略 */
     discontinued?: boolean;
     discontinuedAt?: string;
+    /** 当天用完（不计库存）：例如冰块。收货不加库存，只更新每单位成本；不提醒补货、不列入盘点。V2 新增，V1 会忽略 */
+    consumeOnReceive?: boolean;
     /** 使用说明（选填，例如稀释比例、用法）；没有就空白。V2 新增，V1 会忽略 */
     description?: string;
     category: string;
@@ -1063,6 +1065,9 @@ export interface InventoryLogItem {
     valueChange: number;
     /** 收货记录才有：这次的进货单价（每基础单位）。cost 一律是平均成本，与盘点记录同口径 */
     purchaseUnitCost?: number;
+    /** 收货记录、当天用完的商品才有：这次收了多少（基础单位）、花多少钱；库存数量没有增加 */
+    consumedQty?: number;
+    consumedCost?: number;
 }
 
 export interface InventoryLog {

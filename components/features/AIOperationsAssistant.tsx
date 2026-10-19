@@ -62,7 +62,7 @@ function normalizeInventoryForAI(item: any) {
     displayToBaseRatio: safeDisplayRatio,
 
     isLowStock:
-      item?.discontinued !== true && currentQtyBase <= minLevelBase,
+      item?.discontinued !== true && item?.consumeOnReceive !== true && currentQtyBase <= minLevelBase,
 
     deficitBase:
       Math.max(
