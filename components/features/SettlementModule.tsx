@@ -9,7 +9,7 @@ import {
 import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
 import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS, SpecialCondition, SPECIAL_CONDITION_OPTIONS } from '../../types';
 import { OPS_ICONS, SPECIAL_CONDITION_ICONS } from './settlement/settlementIcons';
-import { PartyPopper, CalendarClock, BarChart3 } from 'lucide-react';
+import { PartyPopper, CalendarClock, BarChart3, ClipboardPen } from 'lucide-react';
 import { getMalaysiaHoliday, holidayLabel, hasHolidayDataForYear } from '../../utils/holidays/malaysiaHolidays';
 import { shiftDate } from '../../utils/apDueDate';
 import { guardWrite } from '../../utils/readOnlyMode';
@@ -1087,6 +1087,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
     const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7)); 
     const [selectedRecord, setSelectedRecord] = useState<SettlementRecord | null>(null);
     const [isBatchReconOpen, setIsBatchReconOpen] = useState(false);   // 批量核对
+    const [batchMode, setBatchMode] = useState<'RECON' | 'EXTRA'>('RECON'); // 「补填」按钮直接开补填页
     const [isExcelExportOpen, setIsExcelExportOpen] = useState(false); // 📊 批量导出 Excel
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -1999,7 +2000,12 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             title="批量导出 Excel：选日期范围，每日汇总 + 现金支出明细 + 外卖明细">
                                             <FileSpreadsheet size={15}/> <span className="hidden sm:inline">导出 Excel</span>
                                         </button>
-                                        <button onClick={() => setIsBatchReconOpen(true)}
+                                        <button onClick={() => { setBatchMode('EXTRA'); setIsBatchReconOpen(true); }}
+                                            className="flex items-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
+                                            title="补填：已结算的日子补外卖单数、天气、特殊情况">
+                                            <ClipboardPen size={15}/> <span className="hidden sm:inline">补填</span>
+                                        </button>
+                                        <button onClick={() => { setBatchMode('RECON'); setIsBatchReconOpen(true); }}
                                             className="flex items-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all shrink-0 min-h-[44px] md:min-h-0"
                                             title="批量核对：整个月的账目摊开来对，也可以只对 TNG">
                                             <ListChecks size={15}/> <span className="hidden sm:inline">批量核对</span>
@@ -2193,6 +2199,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                     onClose={() => { setIsBatchReconOpen(false); loadHistory(); }}
                                     defaultMonth={filterMonth}
                                     onChanged={loadHistory}
+                                    initialMode={batchMode}
                                 />
                             )}
                         </div>

@@ -26,7 +26,10 @@ export const dailyBusiness = (records: SettlementRecord[], date: string) => {
     };
     const channels = [{ label: '店内', amount: store, orders: bills, needsReview: false }, platform('Grab', 'grab', 'grabOrders'), platform('Foodpanda', 'panda', 'pandaOrders'), platform('ShopeeFood', 'shopee', 'shopeeOrders'), platform('Lalamove', 'lalamove', 'lalamoveOrders')].map(c => ({ ...c, average: !c.needsReview && c.orders && c.orders > 0 ? c.amount / c.orders : null }));
     const weather = [...new Set(rows.map(r => r.weather).filter(Boolean))];
-    return { date, revenue: pnl.revenue, channels, bills, pax, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
+    // 熟客 / VIP 到店 / WhatsApp：同日多笔相加（没填 = 0，画面显示「—」）
+    const sum = (key: 'vipNew' | 'vipVisits' | 'waJoin' | 'waOrders') => ops.reduce((n, o) => n + o[key], 0);
+    const community = { regulars: sum('vipNew'), vipVisits: sum('vipVisits'), waJoin: sum('waJoin'), waOrders: sum('waOrders') };
+    return { date, revenue: pnl.revenue, channels, bills, pax, community, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
         weather: weather.length === 1 ? weather[0] : undefined, weatherMixed: weather.length > 1,
         legacyGrab: pnl.reasons.some(r => r.code === 'LEGACY_GRAB'),
         specialConditions: SPECIAL_CONDITION_OPTIONS.filter(o => rows.some(r => Array.isArray(r.specialConditions) && r.specialConditions.includes(o.value))).map(o => o.value),
