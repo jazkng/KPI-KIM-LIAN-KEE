@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitStockName, chineseFirstName, stockNameLines, suggestNameFields } from '../../utils/inventory/stockName';
+import { splitStockName, chineseFirstName, stockNameLines, suggestNameFields, sameSupplyName } from '../../utils/inventory/stockName';
 
 describe('splitStockName', () => {
     it('中文 (English) 拆两行', () => {
@@ -58,5 +58,13 @@ describe('suggestNameFields', () => {
         expect(suggestNameFields({ name: '洗碗液 (Dish Soap)', subName: 'x' })).toBeNull();
         expect(suggestNameFields({ name: 'Plastic bag (30GG)' })).toBeNull();
         expect(suggestNameFields({ name: '大白面' })).toBeNull();
+    });
+});
+
+describe('sameSupplyName', () => {
+    it('忽略空格、括号、大小写；品名 + 第二行算同一个叫法', () => {
+        expect(sameSupplyName('洗地水 (Floor Cleaner)', { name: '洗地水', subName: 'Floor Cleaner' })).toBe(true);
+        expect(sameSupplyName('洗手液', { name: '洗手液', subName: 'Hand Sanitizer' })).toBe(true);
+        expect(sameSupplyName('Floor Cleaner 5L', { name: '洗地水', subName: 'Floor Cleaner' })).toBe(false);
     });
 });

@@ -54,3 +54,10 @@ export const suggestNameFields = (item: { name?: string; subName?: string }): { 
     if (!primary || !secondary) return null;
     return { name: primary, subName: secondary };
 };
+
+const nameKey = (v: unknown) => String(v || '').toLowerCase().replace(/[\s()（）\-_/.,]/g, '');
+/** 供应商品项的名称跟库存是不是同一个叫法（忽略空格、括号、大小写；「洗地水 (Floor Cleaner)」= 洗地水 + Floor Cleaner） */
+export const sameSupplyName = (supplierName: string, stock: { name?: string; subName?: string }): boolean => {
+    const k = nameKey(supplierName);
+    return k === nameKey(stock.name) || k === nameKey(`${stock.name || ''}${stock.subName || ''}`);
+};

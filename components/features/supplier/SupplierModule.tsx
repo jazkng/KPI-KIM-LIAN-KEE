@@ -39,7 +39,7 @@ import { DeleteProductModal, DeletePOModal, DeleteSupplierModal } from './Suppli
 import { resolveStockArea } from '../../../utils/inventory/stockArea';
 import { catalogPerBaseCost, listSupplyOptions } from '../../../utils/inventory/supplyOptions';
 import { isFrozenBill, withoutFrozen } from '../../../utils/ap/frozenBills';
-import { isTrivialConversion, stockNameLines } from '../../../utils/inventory/stockName';
+import { isTrivialConversion, sameSupplyName, stockNameLines } from '../../../utils/inventory/stockName';
 import { categoryShortLabel, outstandingBySupplier, SUPPLIER_GROUPS, supplierGroupInfo, supplierGroupOf, type SupplierGroupId } from '../../../utils/supplier/supplierGroups';
 
 const isWeightItem = (c: { pricingMode?: string; conversionMode?: string }) => c.pricingMode === 'WEIGHT_BASED' || c.conversionMode === 'ACTUAL_WEIGHT';
@@ -1799,8 +1799,17 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                                                 <button onClick={(e) => { e.stopPropagation(); setDeleteProductCandidate(item); }} className="text-gray-300 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={12}/></button>
                                                             </div>
                                                         </div>
-                                                        <h4 className="font-bold text-sm text-[#111111] leading-snug group-hover:text-blue-700 line-clamp-2">{stockNameLines({ name: item.name, subName: linkedStock?.subName }).primary}</h4>
-                                                        {stockNameLines({ name: item.name, subName: linkedStock?.subName }).secondary ? <div className="mb-1 text-[11px] font-medium text-gray-500 line-clamp-1">{stockNameLines({ name: item.name, subName: linkedStock?.subName }).secondary}</div> : <div className="mb-1" />}
+                                                        {(() => {
+                                                            // 有连结库存：名称跟库存总览一样；供应商自己的叫法不同时，另外小字显示（对单用）
+                                                            const lines = linkedStock ? stockNameLines(linkedStock) : stockNameLines({ name: item.name });
+                                                            const ownName = linkedStock && !sameSupplyName(item.name, linkedStock) ? item.name : '';
+                                                            return (<>
+                                                                <h4 className="font-bold text-sm text-[#111111] leading-snug group-hover:text-blue-700 line-clamp-2">{lines.primary}</h4>
+                                                                {lines.secondary ? <div className="text-[11px] font-medium text-gray-500 line-clamp-1">{lines.secondary}</div> : null}
+                                                                {ownName ? <div className="text-[10px] font-medium text-gray-400 line-clamp-1">供应商叫法：{ownName}</div> : null}
+                                                                <div className="mb-1" />
+                                                            </>);
+                                                        })()}
                                                         {(item.status === 'DISCONTINUED' || item.packDesc || item.brand || item.spec || item.storage) && (
                                                             <div className="mb-1.5 flex flex-wrap gap-1 text-[9px] font-black">
                                                                 {item.status === 'DISCONTINUED' && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-gray-600">停售</span>}

@@ -26,3 +26,10 @@ describe('supplierGroups', () => {
         expect(r).toEqual({ '8001': 120.5 });
     });
 });
+
+describe('面类单独一组', () => {
+    it('INGREDIENT_NOODLE 归「面类」，不再算干货杂货', () => {
+        expect(supplierGroupOf('INGREDIENT_NOODLE')).toBe('NOODLE');
+        expect(supplierGroupOf('INGREDIENT_DRY')).toBe('DRY');
+    });
+});

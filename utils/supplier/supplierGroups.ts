@@ -6,12 +6,13 @@
 import type { ExpenseItem, Supplier } from '../../types';
 import { ACCOUNTING_CATEGORIES_OPTIONS } from '../../components/features/supplier/supplierConstants';
 
-export type SupplierGroupId = 'MEAT' | 'SEAFOOD' | 'VEG' | 'DRY' | 'FUEL' | 'PACKAGING' | 'BAR' | 'CLEANING' | 'OTHER';
+export type SupplierGroupId = 'MEAT' | 'SEAFOOD' | 'VEG' | 'NOODLE' | 'DRY' | 'FUEL' | 'PACKAGING' | 'BAR' | 'CLEANING' | 'OTHER';
 
 export const SUPPLIER_GROUPS: { id: SupplierGroupId; label: string; icon: string; color: string }[] = [
     { id: 'MEAT', label: '肉类', icon: '🥩', color: 'bg-red-50 text-red-700 border-red-200' },
     { id: 'SEAFOOD', label: '海鲜类', icon: '🦐', color: 'bg-sky-50 text-sky-700 border-sky-200' },
     { id: 'VEG', label: '蔬果类', icon: '🥬', color: 'bg-green-50 text-green-700 border-green-200' },
+    { id: 'NOODLE', label: '面类', icon: '🍜', color: 'bg-orange-50 text-orange-800 border-orange-200' },
     { id: 'DRY', label: '干货杂货', icon: '🧂', color: 'bg-amber-50 text-amber-800 border-amber-200' },
     { id: 'FUEL', label: '燃料类', icon: '🔥', color: 'bg-orange-50 text-orange-700 border-orange-200' },
     { id: 'PACKAGING', label: '包装类', icon: '📦', color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
@@ -24,7 +25,7 @@ const GROUP_OF_CATEGORY: Record<string, SupplierGroupId> = {
     INGREDIENT_MEAT: 'MEAT',
     INGREDIENT_SEAFOOD: 'SEAFOOD', INGREDIENT_SEAFOOD_PROCESSED: 'SEAFOOD', INGREDIENT_LALA: 'SEAFOOD',
     INGREDIENT_VEG: 'VEG',
-    INGREDIENT_DRY: 'DRY', INGREDIENT_SAUCE: 'DRY', INGREDIENT_EGG: 'DRY', INGREDIENT_NOODLE: 'DRY', INGREDIENT_HQ: 'DRY', INGREDIENT_OIL: 'DRY', SUPPLIER: 'DRY',
+    INGREDIENT_DRY: 'DRY', INGREDIENT_SAUCE: 'DRY', INGREDIENT_EGG: 'DRY', INGREDIENT_NOODLE: 'NOODLE', INGREDIENT_HQ: 'DRY', INGREDIENT_OIL: 'DRY', SUPPLIER: 'DRY',
     GAS_COGS: 'FUEL', CHARCOAL: 'FUEL',
     PACKAGING: 'PACKAGING',
     BEVERAGE: 'BAR', INGREDIENT_ICE: 'BAR',
