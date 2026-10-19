@@ -131,7 +131,7 @@ const getInventoryScopeForCategory = (category?: string): InventoryScope => {
 const MemoizedStockCard = React.memo(({ 
     item, mode, isChecked, currentCount, assignedTo, 
     onCountChange, onToggleCheck, onEdit, onAssignToggle, isSelectedForAssign, 
-    tItem, tUnit, getCategoryColor, getCategoryLabel, onImageClick
+    tItem, tUnit, getCategoryColor, getCategoryLabel, onImageClick, supplyDetails
 }: any) => {
     const baseUnit = getBaseUnit(item);
     const minLevelBase = getMinLevelBase(item);
@@ -289,6 +289,11 @@ const MemoizedStockCard = React.memo(({
                                 <div className="flex flex-col text-left leading-tight min-w-0 flex-1"><div className="font-extrabold text-sm text-[#111111] truncate">{topName}</div>{subName && <div className="text-[11px] text-stone-500 font-medium mt-0.5 truncate">{subName}</div>}</div>
                                 {onEdit && <div className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors shrink-0"><Edit3 size={12}/></div>}
                             </div>
+                            {supplyDetails?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {supplyDetails.map((d: string) => <span key={d} className="text-[10px] font-bold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded-md">{d}</span>)}
+                                </div>
+                            )}
                             <div className="flex items-center gap-2 mt-1 empty:hidden">
                                 {item.stockCode && (
                                     <span className="text-[9px] text-gray-400 font-mono font-black bg-[#F6F7FB] border border-[#E5E7EB] px-1.5 py-0.5 rounded-md">
@@ -758,6 +763,24 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
         findOtherAreaCopies(db, id, currentStockView).then(c => { if (!cancelled) setOtherCopies(c); }).catch(() => {});
         return () => { cancelled = true; };
     }, [editingItem?.id, currentStockView, canManageCodes]);
+
+    // 供应商品项的规格 / 包装 / 品牌，显示在库存卡片上（只读，按库存 ID 汇总、去重）
+    const [supplyDetailsByStock, setSupplyDetailsByStock] = useState<Record<string, string[]>>({});
+    useEffect(() => {
+        let cancelled = false;
+        DataManager.getSuppliers().then(all => {
+            if (cancelled) return;
+            const map: Record<string, string[]> = {};
+            all.forEach(s => (s.catalog || []).forEach(c => {
+                if (!c.linkedStockId || c.status === 'DISCONTINUED') return;
+                const list = map[c.linkedStockId] || (map[c.linkedStockId] = []);
+                [c.spec, c.packDesc, c.brand].forEach(v => { const t = String(v || '').trim(); if (t && !list.includes(t)) list.push(t); });
+            }));
+            Object.keys(map).forEach(k => { if (!map[k].length) delete map[k]; else map[k] = map[k].slice(0, 3); });
+            setSupplyDetailsByStock(map);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [supplierRefresh]);
 
     const loadStock = async (view: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL') => {
         const data = await DataManager.getStock(view);
@@ -1684,6 +1707,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 getCategoryColor={getCategoryColor}
                 getCategoryLabel={getCategoryLabel}
                 onImageClick={(url: string, name: string) => setPreviewImage({ url, name })}
+                supplyDetails={supplyDetailsByStock[item.id]}
             />
         );
     };
