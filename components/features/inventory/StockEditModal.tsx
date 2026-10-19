@@ -85,7 +85,7 @@ const DuplicateCopyBanner: React.FC<{ here: StockArea; hereQty: number; unit: st
 /** 库存单位快捷按钮（仍可在输入框自己打） */
 const BASE_UNIT_CHOICES: { value: string; hint?: string }[] = [
     { value: 'kg', hint: '公斤' }, { value: 'g', hint: '克' }, { value: 'pcs', hint: '个/粒' }, { value: 'Btl', hint: '瓶' },
-    { value: 'Can', hint: '罐' }, { value: 'pkt', hint: '包' }, { value: 'L', hint: '公升' }, { value: 'ml' }, { value: '尾', hint: '鱼' }, { value: 'tank', hint: '桶' },
+    { value: 'Can', hint: '罐' }, { value: 'pkt', hint: '包' }, { value: 'L', hint: '公升' }, { value: 'ml', hint: '毫升' }, { value: 'Tail', hint: '尾' }, { value: 'tank', hint: '桶' },
 ];
 
 /** 标签：中文在上，英文小字在下（不再挤在同一行被遮住） */
