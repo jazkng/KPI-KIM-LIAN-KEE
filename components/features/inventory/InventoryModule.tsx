@@ -21,6 +21,7 @@ import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
 import { moveStockAreaRegistration, resolveStockArea } from '../../../utils/inventory/stockArea';
+import { findOtherAreaCopies, removeDuplicateCopy, type StockCopy } from '../../../utils/inventory/duplicateStock';
 import { moveStockItem, STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
 import { findSameNameCatalog, relinkCatalogItem } from '../../../utils/inventory/sameNameSupply';
 import type { SameNameRef } from './SupplierComparison';
@@ -716,6 +717,17 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             setSameNameSupply([]);
         }
     }, [editingItem?.id, supplierRefresh]);
+
+    // 负责人打开商品时：检查其他区域有没有同一 ID 的副本（只读 3 个文件）
+    const [otherCopies, setOtherCopies] = useState<StockCopy[]>([]);
+    useEffect(() => {
+        setOtherCopies([]);
+        const id = editingItem?.id;
+        if (!id || !canManageCodes) return;
+        let cancelled = false;
+        findOtherAreaCopies(db, id, currentStockView).then(c => { if (!cancelled) setOtherCopies(c); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [editingItem?.id, currentStockView, canManageCodes]);
 
     const loadStock = async (view: 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL') => {
         const data = await DataManager.getStock(view);
@@ -2467,6 +2479,30 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                         }
                     } : undefined}
                     sameNameSupply={sameNameSupply}
+                    otherCopies={otherCopies}
+                    onKeepCopy={canManageCodes ? async (keep, other) => {
+                        const id = editingItem.id;
+                        if (!id) return;
+                        const name = editingItem.name || id;
+                        const here = currentStockView;
+                        const keepArea = keep === 'HERE' ? here : keep;
+                        const removeArea = keep === 'HERE' ? other : here;
+                        const short = (a: typeof here) => STOCK_AREA_LABEL[a].split(' ')[0];
+                        if (!confirm(`保留${short(keepArea)}的「${name}」，删除${short(removeArea)}那一份？\n\n删除的资料会备份在移动记录。`)) return;
+                        try {
+                            await removeDuplicateCopy(db, { stockId: id, removeFrom: removeArea, keepIn: keepArea, by: employee?.name || 'Admin' });
+                            moveStockAreaRegistration(id, keepArea);
+                            DataManager.clearCacheKeys(['stock_']);
+                            setOtherCopies([]);
+                            if (removeArea === here) {
+                                setEditingItem(null);
+                                setItems(prev => prev.filter(i => i.id !== id));
+                            }
+                            alert(`✅ 已删除${short(removeArea)}那一份，「${name}」现在只在${short(keepArea)}。`);
+                        } catch (e: any) {
+                            alert(`没有删除：${e?.message || e}`);
+                        }
+                    } : undefined}
                     onRelinkSupply={canEditExistingItem ? async ref => {
                         const id = editingItem.id;
                         if (!id) return;

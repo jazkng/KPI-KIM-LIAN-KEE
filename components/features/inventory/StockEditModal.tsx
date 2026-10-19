@@ -11,6 +11,7 @@ import { SupplierComparison, type SameNameRef } from './SupplierComparison';
 import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { STOCK_AREAS, type StockArea } from '../../../utils/inventory/stockArea';
 import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
+import type { StockCopy } from '../../../utils/inventory/duplicateStock';
 import { summarizeUnitSetup, type UnitSetupSummary } from '../../../utils/inventory/unitSetupSummary';
 import { suggestNameFields } from '../../../utils/inventory/stockName';
 
@@ -44,7 +45,41 @@ interface StockEditModalProps {
     onRelinkSupply?: (ref: SameNameRef) => Promise<void>;
     /** 有「编辑基本资料」权限才自动把旧品名括号英文移到第二行（没权限的人改别的栏位时不会被挡） */
     autoSplitName?: boolean;
+    /** 同一 ID 也出现在其他区域的副本（负责人可选择保留哪一份） */
+    otherCopies?: StockCopy[];
+    /** keep = 'HERE' 保留这里、删其他区域那份；keep = 区域 → 保留那里、删这里 */
+    onKeepCopy?: (keep: 'HERE' | StockArea, other: StockArea) => Promise<void>;
 }
+
+/** 同一个商品在两个区域各有一份：说明两份的数量，让负责人选保留哪一份 */
+const DuplicateCopyBanner: React.FC<{ here: StockArea; hereQty: number; unit: string; copies: StockCopy[]; onKeep: (keep: 'HERE' | StockArea, other: StockArea) => Promise<void> }> = ({ here, hereQty, unit, copies, onKeep }) => {
+    const [busy, setBusy] = useState(false);
+    const run = async (keep: 'HERE' | StockArea, other: StockArea) => { setBusy(true); try { await onKeep(keep, other); } finally { setBusy(false); } };
+    const short = (a: StockArea) => STOCK_AREA_LABEL[a].split(' ')[0];
+    return (
+        <div className="space-y-2.5 rounded-2xl border border-red-300 bg-red-50 p-4">
+            <div className="text-sm font-black text-red-800">这个商品有两份</div>
+            {copies.map(c => (
+                <div key={c.area} className="space-y-2">
+                    <p className="text-[12px] font-medium leading-relaxed text-red-900">
+                        {short(here)}这里一份（{hereQty} {unit}），{short(c.area)}也有一份（{c.qty} {c.unit || unit}{c.stockCode ? ` · ${c.stockCode}` : ''}）。
+                        保留一份，另一份删除（资料会备份）。供应商连结和菜谱会自动连到留下的那份。
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button type="button" disabled={busy} onClick={() => run(c.area, c.area)}
+                            className="min-h-[44px] rounded-xl bg-red-700 px-2 text-xs font-black text-white disabled:opacity-50">
+                            保留{short(c.area)}，删除这里
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => run('HERE', c.area)}
+                            className="min-h-[44px] rounded-xl border border-red-300 bg-white px-2 text-xs font-black text-red-800 disabled:opacity-50">
+                            保留这里，删除{short(c.area)}的
+                        </button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 
 /** 标签：中文在上，英文小字在下（不再挤在同一行被遮住） */
@@ -168,7 +203,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply, autoSplitName = false
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply, autoSplitName = false, otherCopies, onKeepCopy
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -475,7 +510,10 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
 
                 {/* Form Body - Card Sections - Optimized scroll container with standard flex layout */}
                 <div className="p-5 space-y-5 overflow-y-auto flex-grow pb-6">
-                    
+                    {editingItem.id && onKeepCopy && otherCopies && otherCopies.length > 0 && (
+                        <DuplicateCopyBanner here={currentStockView as StockArea} hereQty={currentQtyBase} unit={baseUnit} copies={otherCopies} onKeep={onKeepCopy} />
+                    )}
+
                     {/* Card Section 1: Basic Info */}
                     <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                         <div className="flex items-center gap-2 border-b border-[#F6F7FB] pb-2.5 mb-2">
