@@ -22,7 +22,7 @@ const CATEGORY_SECTIONS: Record<string, { id: string, label: string }[]> = {
     ],
     'GENERAL': [
         { id: 'PACKAGING', label: '包装 (Pack)' }, { id: 'CLEANING', label: '清洁 (Clean)' },
-        { id: 'TOOLS', label: '工具 (Tools)' }, { id: 'WASTE', label: '耗材 (Waste)' },
+        { id: 'TOOLS', label: '工具 (Tools)' }, { id: 'OFFICE', label: '办公用品 (Office)' }, { id: 'WASTE', label: '耗材 (Waste)' },
         { id: 'GENERAL', label: '杂项 (General)' },
     ],
     'FUEL': [
