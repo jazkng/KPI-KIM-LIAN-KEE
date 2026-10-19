@@ -74,4 +74,24 @@ describe('移动区域', () => {
         await expect(moveStockItem(db, { stockId: 'NOPE', from: 'KITCHEN', to: 'FUEL', category: 'OIL', by: 'BEN' })).rejects.toThrow('已不在原本的区域');
         await expect(moveStockItem(db, { stockId: 'K_OIL', from: 'KITCHEN', to: 'KITCHEN', category: 'SAUCE', by: 'BEN' })).rejects.toThrow('一样');
     });
+
+    it('旧区域有「文件名不同、id 相同」的残留副本：移动时一起删掉，资料备份在移动记录', async () => {
+        await seed([['stock_kitchen', 'K_OIL', oil], ['stock_kitchen', 'legacyDoc', { ...oil, currentQtyBase: 10 }], ['stock_kitchen', 'OTHER', { id: 'OTHER', name: '酱油' }]]);
+        const r = await moveStockItem(db, { stockId: 'K_OIL', from: 'KITCHEN', to: 'FUEL', category: 'OIL', by: 'BEN' });
+        expect(r).toMatchObject({ removedCopies: 1, cleanupOnly: false });
+        expect((await getDoc(doc(db, 'stock_kitchen', 'legacyDoc'))).exists()).toBe(false);
+        expect((await getDoc(doc(db, 'stock_kitchen', 'OTHER'))).exists()).toBe(true);
+        expect((await getDoc(doc(db, 'stock_fuel', 'K_OIL'))).data()!.currentQtyBase).toBe(16);
+        const log = (await getDoc(doc(db, STOCK_AREA_MOVES_COLLECTION, r.moveId))).data()!;
+        expect(log.removedDuplicates).toEqual([{ docId: 'legacyDoc', data: { ...oil, currentQtyBase: 10 } }]);
+    });
+
+    it('之前已移过去、旧区域只剩残留副本：再按一次只清副本，新区域资料不动', async () => {
+        await seed([['stock_fuel', 'K_OIL', { ...oil, category: 'OIL', currentQtyBase: 9 }], ['stock_kitchen', 'legacyDoc', oil]]);
+        const r = await moveStockItem(db, { stockId: 'K_OIL', from: 'KITCHEN', to: 'FUEL', category: 'OIL', by: 'BEN' });
+        expect(r).toMatchObject({ removedCopies: 1, cleanupOnly: true });
+        expect((await getDoc(doc(db, 'stock_kitchen', 'legacyDoc'))).exists()).toBe(false);
+        expect((await getDoc(doc(db, 'stock_fuel', 'K_OIL'))).data()).toMatchObject({ category: 'OIL', currentQtyBase: 9 });
+        expect((await getDoc(doc(db, STOCK_AREA_MOVES_COLLECTION, r.moveId))).data()).toMatchObject({ cleanupOnly: true, removedDuplicates: [{ docId: 'legacyDoc', data: oil }] });
+    });
 });
