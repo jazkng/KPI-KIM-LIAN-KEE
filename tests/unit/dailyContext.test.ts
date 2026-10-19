@@ -5,10 +5,12 @@ import { runDailyContext,type ContextStore } from '../../server/context/service'
 import type { DailyContext,CalendarYear } from '../../shared/dailyContext';
 const date='2026-10-19',at=new Date('2026-10-19T07:00:00Z');
 const hourly={time:[16,17,18,19,20,21].map(h=>`${date}T${h}:00`),temperature_2m:[30,29,28,27,26,25],precipitation:[100,2,1,0,0,0],weather_code:[1,61,61,2,2,1],pm2_5:[10,20,30,40,50,60],pm10:[20,20,20,20,20,20]};
-const env={CONTEXT_LATITUDE:'3.2',CONTEXT_LONGITUDE:'101.6',CONTEXT_OPEN_METEO_KEY:'test-key',CONTEXT_REGION:'MY-14'};
+const env={CONTEXT_LATITUDE:'3.2',CONTEXT_LONGITUDE:'101.6',CONTEXT_OPENWEATHER_KEY:'test-key',CONTEXT_REGION:'MY-14'};
 const calendar:CalendarYear={year:2026,region:'MY-14',reviewedAt:'2026-10-19',sourceUrl:'https://www.kabinet.gov.my/hari-kelepasan-am/',days:[{date,name:'测试节日',kind:'public'}]};
 function memoryStore(){let claimed=false,snapshot:DailyContext|null=null;return {claim:vi.fn(async()=>{if(claimed)return false;claimed=true;return true;}),get:vi.fn(async(_date:string)=>snapshot),save:vi.fn(async(_d:string,data:DailyContext)=>{snapshot=data;}),calendar:vi.fn(async()=>calendar),saveCalendar:vi.fn(async()=>{})} satisfies ContextStore;}
-const goodFetch=()=>vi.fn(async()=>new Response(JSON.stringify({hourly}),{status:200})) as unknown as typeof fetch;
+const weatherList=[14,17,20,23].map(h=>({dt:Date.parse(`${date}T${h}:00:00+08:00`)/1000,main:{temp:30-h/10},weather:[{id:800}]}));
+const airList=[16,17,18,19,20,21].map(h=>({dt:Date.parse(`${date}T${h}:00:00+08:00`)/1000,components:{pm2_5:h,pm10:h*2}}));
+const goodFetch=()=>vi.fn(async(url:URL)=>new Response(JSON.stringify({list:url.pathname.endsWith('/air_pollution/forecast')?airList:weatherList}),{status:200})) as unknown as typeof fetch;
 describe('daily context window and source integrity',()=>{
  it('uses Malaysia time independently of the host clock',()=>expect(malaysiaClock(at)).toEqual({date,minutes:900}));
  it.each(['2026-02-30','wrong','2026-13-01'])('rejects invalid date %s',d=>expect(validDate(d)).toBe(false));
@@ -19,8 +21,8 @@ describe('daily context window and source integrity',()=>{
  it('calculates time-weighted PM2.5 for 4.5 hours, not a national pollution index',()=>expect(summarizeAir(hourly,date)).toEqual({pm25Mean:37.5,pm25Max:60,pm10Mean:20}));
  it('does not turn null upstream values into 0 or sunny',()=>expect(()=>summarizeWeather({...hourly,precipitation:[0,null,0,0,0,0]},date)).toThrow());
  it('requires configured coordinates and licensed key',()=>{expect(()=>forecastConfig({})).toThrow();expect(()=>forecastConfig({...env,CONTEXT_LATITUDE:'NaN'})).toThrow();});
- it('uses fixed provider hosts and explicit local date',()=>{const url=forecastUrl('air',date,forecastConfig(env));expect(url.hostname).toBe('customer-air-quality-api.open-meteo.com');expect(url.searchParams.get('timezone')).toBe('Asia/Kuala_Lumpur');expect(url.searchParams.get('end_date')).toBe(date);});
- it('keeps partial failures separate and redacts upstream errors',async()=>{const f=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({hourly}))).mockRejectedValueOnce(new Error('SECRET_KEY'));const r=await fetchForecasts(date,forecastConfig(env),f);expect(r.weather).not.toBeNull();expect(r.air).toBeNull();expect(JSON.stringify(r)).not.toContain('SECRET_KEY');});
+ it('uses fixed provider hosts and explicit local date',()=>{const url=forecastUrl('air',date,forecastConfig(env));expect(url.hostname).toBe('api.openweathermap.org');expect(url.pathname).toBe('/data/2.5/air_pollution/forecast');expect(url.searchParams.get('appid')).toBe('test-key');expect(url.pathname).not.toContain('onecall');});
+ it('keeps partial failures separate and redacts upstream errors',async()=>{const f=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({list:weatherList}))).mockRejectedValueOnce(new Error('SECRET_KEY'));const r=await fetchForecasts(date,forecastConfig(env),f);expect(r.weather).not.toBeNull();expect(r.air).toBeNull();expect(JSON.stringify(r)).not.toContain('SECRET_KEY');});
  it.each(['2026-10-19T06:59:00Z','2026-10-19T08:30:00Z'])('does not fetch outside the 15:00–16:30 dispatch window %s',async time=>{const store=memoryStore(),f=goodFetch();expect(await runDailyContext(store,new Date(time),env,f)).toEqual({status:'outside-sync-window'});expect(f).not.toHaveBeenCalled();expect(store.claim).not.toHaveBeenCalled();});
  it('fetches once per source/day across duplicate scheduler calls',async()=>{const store=memoryStore(),f=goodFetch();const results=await Promise.all([runDailyContext(store,at,env,f),runDailyContext(store,at,env,f)]);expect(results.map(r=>r.status).sort()).toEqual(['already-claimed','saved']);expect(f).toHaveBeenCalledTimes(2);expect(store.save).toHaveBeenCalledTimes(1);expect((await store.get(date))?.holidays.names).toEqual(['测试节日']);});
  it('does not silently retry failed sources on repeated job delivery',async()=>{const store=memoryStore(),f=vi.fn().mockRejectedValue(new Error('unavailable'));await runDailyContext(store,at,env,f);await runDailyContext(store,at,env,f);expect(f).toHaveBeenCalledTimes(2);expect((await store.get(date))?.issues).toHaveLength(2);});

@@ -38,7 +38,7 @@ export async function runDailyContext(store:ContextStore,now=new Date(),env:Node
     }
   }catch {calendar=null;}
   const data=await fetchForecasts(date,config,fetcher);
-  const snapshot:DailyContext={date,fetchedAt:now.toISOString(),timezone:'Asia/Kuala_Lumpur',window:{start:'16:30',end:'21:00'},kind:'forecast',...data,holidays:holidaySummary(calendar,date),attribution:'天气：Open-Meteo；空气质量：CAMS / Open-Meteo（模型预报，非环境局实测API）'};
+  const snapshot:DailyContext={date,fetchedAt:now.toISOString(),timezone:'Asia/Kuala_Lumpur',window:{start:'16:30',end:'21:00'},kind:'forecast',...data,holidays:holidaySummary(calendar,date),attribution:'Weather data © OpenWeather（天气3小时、空气质量小时模型预报；非环境局实测API）'};
   if(!calendar)snapshot.issues.push('全年节日日历未就绪');
   await store.save(date,snapshot);
   return {status:'saved' as const,date,partial:snapshot.issues.length>0};

@@ -28,7 +28,7 @@ export function summarizeWeather(h: Hourly,date: string): NonNullable<DailyConte
   const t=numbers(h,'temperature_2m',date),r=numbers(h,'precipitation',date),c=numbers(h,'weather_code',date);
   if(r.some(n=>n<0)||c.some(n=>!Number.isInteger(n)||n<0||n>99)) throw new Error('INVALID_FORECAST');
   const rain=r[1]*0.5+r.slice(2).reduce((a,b)=>a+b,0),temps=[(t[0]+t[1])/2,...t.slice(1)];
-  const label=c.slice(1).some(n=>n>=95)?'可能雷雨':rain>0?'可能有雨':c.slice(1).some(n=>n>=2)?'多云':'晴';
+  const label=c.slice(1).some(n=>n>=95)?'可能雷雨':rain>0||c.slice(1).some(n=>[51,53,55,56,57,61,63,65,66,67,80,81,82].includes(n))?'可能有雨':c.slice(1).some(n=>n>=2)?'多云':'晴';
   return {label,rainMm:round(rain),minC:round(Math.min(...temps)),maxC:round(Math.max(...temps))};
 }
 export function summarizeAir(h: Hourly,date: string): NonNullable<DailyContext['air']> {
