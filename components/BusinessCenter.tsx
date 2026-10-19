@@ -15,6 +15,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { DataManager } from '../utils/dataManager';
 import { summarizePayables, unpaidRecurringBills, latestClosing, payThisWeek, type PayRow } from '../utils/cashOverview';
+import { HrOverviewPanel } from './hr/HrOverviewPanel';
 import './businessCenter.css';
 
 interface Props {
@@ -80,11 +81,9 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
             <button onClick={onOpenConfig} aria-label="设置"><Settings size={18} /></button><button onClick={onLogout} aria-label="退出登录"><LogOut size={18} /></button>
         </div></header>
         <main className="bc-main">
-            {section === 'hr' ? <><h1>人事中心</h1><p className="bc-muted">沿用现有员工档案与排班。</p><div className="bc-hr-grid">
-                {can('HR') && <button className="bc-card bc-hr-entry" onClick={() => setHrOpen(true)}><Users size={26} /><b>员工档案</b><span>档案、薪资与职位标准 <ChevronRight size={16} /></span></button>}
-                {can('ROSTER') && <button className="bc-card bc-hr-entry" onClick={() => navigate('ROSTER')}><LayoutGrid size={26} /><b>排班</b><span>查看与安排班表 <ChevronRight size={16} /></span></button>}
-                {!can('HR') && !can('ROSTER') && <p className="bc-card">当前账号未获人事模块权限。</p>}
-            </div></> : <>
+            {section === 'hr' ? <><h1>人事中心</h1>
+                <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} />
+            </> : <>
                 <div className="bc-toolbar"><span>经营月份</span><button aria-label="上一个月" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={17} /></button><input aria-label="经营月份" type="month" value={month} max={today.slice(0, 7)} min="2000-01" onChange={e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value) && e.target.value <= today.slice(0, 7)) setMonth(e.target.value); }} /><button aria-label="下一个月" disabled={month >= today.slice(0, 7)} onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={17} /></button></div>
                 <nav className="bc-tabs" aria-label="经营中心视图">{([['sales', '销售概况'], ['profit', '成本与利润'], ['cash', '现金与账款']] as const).map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
                 {!reportsAllowed ? <p className="bc-card">当前账号未获经营报表权限。其他已授权模块可从「全部功能」进入。</p> : <>
