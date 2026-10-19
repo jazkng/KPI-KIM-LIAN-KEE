@@ -236,13 +236,13 @@ const MemoizedStockCard = React.memo(({
                                 e.stopPropagation();
                                 onImageClick?.(item.image, tItem(item));
                             }}
-                            className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50 bg-cover bg-center cursor-zoom-in hidden md:block" 
+                            className="w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50 bg-cover bg-center cursor-zoom-in" 
                             style={{ backgroundImage: `url(${item.image})` }} 
                         />
                     ) : (
-                        <div className="w-20 h-20 rounded-xl shrink-0 border border-[#E5E7EB] bg-[#F6F7FB] flex flex-col items-center justify-center text-gray-300 hidden md:flex">
-                            <ImageIcon size={24}/>
-                            <span className="text-[8px] font-bold text-gray-400 mt-1 uppercase">NO PHOTO</span>
+                        <div className="w-14 h-14 md:w-20 md:h-20 rounded-xl shrink-0 border border-[#E5E7EB] bg-[#F6F7FB] flex flex-col items-center justify-center text-gray-300">
+                            <ImageIcon size={20}/>
+                            <span className="hidden md:block text-[8px] font-bold text-gray-400 mt-1 uppercase">NO PHOTO</span>
                         </div>
                     )}
                     
@@ -2437,6 +2437,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                     canDelete={canDeactivateItem}
                     canSave={!editingItem.id ? canAddItem : canEditExistingItem}
                     showInternalIds={canManageCodes}
+                    autoSplitName={canInventory('EDIT_BASIC_INFO')}
                     onMoveArea={canManageCodes && editingItem.id ? async (to, category) => {
                         const id = editingItem.id!;
                         const name = editingItem.name || id;

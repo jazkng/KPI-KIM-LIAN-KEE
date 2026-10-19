@@ -12,6 +12,7 @@ import type { SupplyOption } from '../../../utils/inventory/supplyOptions';
 import { STOCK_AREAS, type StockArea } from '../../../utils/inventory/stockArea';
 import { STOCK_AREA_LABEL } from '../../../utils/inventory/moveStockArea';
 import { summarizeUnitSetup, type UnitSetupSummary } from '../../../utils/inventory/unitSetupSummary';
+import { suggestNameFields } from '../../../utils/inventory/stockName';
 
 const isPurchaseSameAsDisplay = (purchaseUnitName: string, displayUnitName?: string): boolean => {
     return normalizeUnitName(purchaseUnitName) === normalizeUnitName(displayUnitName);
@@ -41,6 +42,8 @@ interface StockEditModalProps {
     /** 没有供应商连到这个商品时，同名却连到别处的供应商品项与改连 */
     sameNameSupply?: SameNameRef[];
     onRelinkSupply?: (ref: SameNameRef) => Promise<void>;
+    /** 有「编辑基本资料」权限才自动把旧品名括号英文移到第二行（没权限的人改别的栏位时不会被挡） */
+    autoSplitName?: boolean;
 }
 
 
@@ -165,7 +168,7 @@ const getAutoConversionRatio = (oldUnit: string, newUnit: string): number | null
 
 export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
     editingItem, currentStockView, linkedSuppliers, isSubmitting,
-    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply
+    onSave, onDelete, onClose, onChange, canDelete = true, canSave = true, showInternalIds = false, onSetPreferred, onMoveArea, sameNameSupply, onRelinkSupply, autoSplitName = false
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -243,6 +246,16 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
         setOriginalMinLevelBase(minL);
         setOriginalMaxQtyBase(maxQ);
         setConversionRatio(1);
+    }, [editingItem.id]);
+
+    // 旧品名「中文 (English)」：打开时把括号里的英文移到第二行（只改表单，按保存才写入）
+    const [autoSplitFrom, setAutoSplitFrom] = useState<string | null>(null);
+    useEffect(() => {
+        const next = autoSplitName ? suggestNameFields(editingItem) : null;
+        if (!next) { setAutoSplitFrom(null); return; }
+        setAutoSplitFrom(editingItem.name || '');
+        onChange({ ...editingItem, ...next });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editingItem.id]);
 
     // Automatically suggest conversionRatio when baseUnit is modified by user
@@ -488,7 +501,9 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 onChange={e => onChange({...editingItem, subName: e.target.value})} 
                                 placeholder="例如: Packing plastic 20×20；没有就留空" 
                             />
-                            <p className="mt-1 text-[11px] font-medium text-gray-400">显示在品名下面、字较小；留空就照品名自动分两行</p>
+                            {autoSplitFrom
+                                ? <p className="mt-1 text-[11px] font-bold text-amber-700">已把括号里的英文移到这里（原名：{autoSplitFrom}）· 按保存才生效 · <button type="button" className="underline" onClick={() => { onChange({ ...editingItem, name: autoSplitFrom, subName: '' }); setAutoSplitFrom(null); }}>还原</button></p>
+                                : <p className="mt-1 text-[11px] font-medium text-gray-400">显示在品名下面、字较小；留空就照品名自动分两行</p>}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
