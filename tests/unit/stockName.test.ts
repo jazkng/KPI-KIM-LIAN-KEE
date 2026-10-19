@@ -8,6 +8,9 @@ describe('splitStockName', () => {
         expect(splitStockName('洗碗液 (Dish Soap)(A)')).toEqual({ primary: '洗碗液', secondary: '(Dish Soap)(A)' });
         expect(splitStockName('洗手液')).toEqual({ primary: '洗手液', secondary: '' });
         expect(splitStockName('(Only English)')).toEqual({ primary: '(Only English)', secondary: '' });
+        // 全英文：括号是名称的一部分，不拆
+        expect(splitStockName('Plastic bag (30GG)')).toEqual({ primary: 'Plastic bag (30GG)', secondary: '' });
+        expect(splitStockName('打包纸20X20 (Packing plastic20X20)')).toEqual({ primary: '打包纸20X20', secondary: 'Packing plastic20X20' });
     });
 });
 
