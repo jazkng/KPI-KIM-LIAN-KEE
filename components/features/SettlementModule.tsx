@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { applyResolvedStylesForPdf, waitForPdfFonts, prepareClonedDocumentForPdf } from '../../utils/pdfStyleResolver';
 import { SettlementRecord, StoreConfig, WeatherCondition, WEATHER_OPTIONS, SpecialCondition, SPECIAL_CONDITION_OPTIONS } from '../../types';
+import { OPS_ICONS, SPECIAL_CONDITION_ICONS } from './settlement/settlementIcons';
+import { PartyPopper, CalendarClock, BarChart3 } from 'lucide-react';
 import { getMalaysiaHoliday, holidayLabel, hasHolidayDataForYear } from '../../utils/holidays/malaysiaHolidays';
 import { shiftDate } from '../../utils/apDueDate';
 import { guardWrite } from '../../utils/readOnlyMode';
@@ -71,14 +73,14 @@ const HolidayNotice = ({ date }: { date: string }) => {
         <div className="space-y-2">
             {today && (
                 <div className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3">
-                    <p className="text-sm font-black text-pink-700">今天是公共假日：{holidayLabel(today)}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-black text-pink-700"><PartyPopper size={15} className="shrink-0" />今天是公共假日：{holidayLabel(today)}</p>
                     <p className="text-[11px] font-bold text-pink-600/80">{today.en}</p>
                     <p className="mt-1 text-xs font-medium leading-relaxed text-gray-700">{today.about}</p>
                     {today.tentative && <p className="mt-1 text-[10px] font-bold text-gray-500">「预计」= 要看月亮或政府公布，日期可能差一天。</p>}
                 </div>
             )}
             {tomorrow && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">明天是公共假日：{holidayLabel(tomorrow)}（{tomorrow.en}），记得准备人手与备料。</p>
+                <p className="flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800"><CalendarClock size={14} className="mt-px shrink-0" />明天是公共假日：{holidayLabel(tomorrow)}（{tomorrow.en}），记得准备人手与备料。</p>
             )}
         </div>
     );
@@ -580,8 +582,8 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                         {(recordWeather || recordSpecial.length > 0 || recordHoliday) && (
                             <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-black">
                                 {recordWeather && <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-white/80">{recordWeather.label}</span>}
-                                {recordSpecial.map(o => <span key={o.value} className="rounded-md bg-orange-400/20 px-1.5 py-0.5 text-orange-300">{o.label}</span>)}
-                                {recordHoliday && <span className="rounded-md bg-pink-500/20 px-1.5 py-0.5 text-pink-300" title={recordHoliday.about}>假日：{holidayLabel(recordHoliday)}</span>}
+                                {recordSpecial.map(o => <span key={o.value} className="flex items-center gap-1 rounded-md bg-orange-400/20 px-1.5 py-0.5 text-orange-300">{React.createElement(SPECIAL_CONDITION_ICONS[o.value], { size: 11 })}{o.label}</span>)}
+                                {recordHoliday && <span className="rounded-md bg-pink-500/20 px-1.5 py-0.5 text-pink-300" title={recordHoliday.about}><PartyPopper size={11} className="mr-1 inline" />{holidayLabel(recordHoliday)}</span>}
                             </div>
                         )}
                     </div>
@@ -643,7 +645,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                     
                     {/* 📊 营运数据 */}
                     <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
-                        <p className="text-[10px] font-black text-violet-800 uppercase flex items-center gap-1.5">📊 营运数据 (Operations)</p>
+                        <p className="text-[10px] font-black text-violet-800 uppercase flex items-center gap-1.5"><BarChart3 size={12} className="shrink-0" />营运数据 (Operations)</p>
                         {recHasOps ? (
                             <>
                                 <div className="grid grid-cols-2 gap-2">
@@ -659,7 +661,7 @@ const HistoryDetailModal = ({ record, onClose, onDelete, onRefresh, onUndoEdit }
                                 <div className="grid grid-cols-3 gap-2">
                                     {OPS_FIELDS.map(f => (
                                         <div key={f.key} className="bg-[#F6F7FB] rounded-xl px-2.5 py-2 min-w-0">
-                                            <p className="text-[10px] font-bold text-gray-500 truncate">{f.emoji} {f.short}</p>
+                                            <p className="flex items-center gap-1 text-[10px] font-bold text-gray-500 truncate">{React.createElement(OPS_ICONS[f.key], { size: 12, className: 'shrink-0 text-violet-500' })}{f.short}</p>
                                             <p className="font-mono font-black text-[#111111]">{recOps[f.key] || '—'}</p>
                                         </div>
                                     ))}
@@ -1513,8 +1515,8 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                             return (
                                 <button key={opt.value} type="button"
                                     onClick={() => setSpecialConditions(prev => on ? prev.filter(v => v !== opt.value) : [...prev, opt.value])}
-                                    className={`min-h-[36px] px-3 rounded-xl text-xs font-black transition-all active:scale-95 border ${on ? 'bg-orange-400 text-black border-orange-400' : 'bg-black/30 text-white/60 border-white/10'}`}>
-                                    {opt.label}
+                                    className={`flex items-center gap-1.5 min-h-[36px] px-3 rounded-xl text-xs font-black transition-all active:scale-95 border ${on ? 'bg-orange-400 text-black border-orange-400' : 'bg-black/30 text-white/60 border-white/10'}`}>
+                                    {React.createElement(SPECIAL_CONDITION_ICONS[opt.value], { size: 14, className: 'shrink-0' })}{opt.label}
                                 </button>
                             );
                         })}
@@ -1910,7 +1912,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-gray-300 text-xs font-bold pointer-events-none">RM</span>
                                                     <input 
                                                         type="number" 
-                                                        placeholder="填入实收到账 (Net)" 
+                                                        placeholder="实收 (Net)" 
                                                         className="w-full p-3 pl-10 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-right font-mono font-black text-base text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 shadow-inner min-h-[44px] tabular-nums" 
                                                         value={salesData.lalamove || ''} 
                                                         onChange={e => setSalesData({...salesData, lalamove: parseFloat(e.target.value) || 0})} 
@@ -1954,7 +1956,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
                                             {OPS_FIELDS.map(f => (
                                                 <div key={f.key} className="min-w-0">
-                                                    <label className="text-[10px] font-black text-gray-500 block mb-1 truncate">{f.emoji} {f.label}</label>
+                                                    <label className="flex items-center gap-1 text-[10px] font-black text-gray-500 mb-1 truncate">{React.createElement(OPS_ICONS[f.key], { size: 12, className: 'shrink-0 text-violet-500' })}{f.label}</label>
                                                     <input type="number" inputMode="numeric" min={0} step={1}
                                                         value={ops[f.key] || ''}
                                                         onChange={e => setOps(prev => ({ ...prev, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) }))}

@@ -33,13 +33,13 @@ export const EMPTY_OPS: SettlementOps = {
   waOrders: 0,
 };
 
-export const OPS_FIELDS: { key: keyof SettlementOps; label: string; short: string; emoji: string }[] = [
-  { key: "pax", label: "顾客人数 (Pax)", short: "人数", emoji: "👥" },
-  { key: "bills", label: "单数 (Bills)", short: "单数", emoji: "🧾" },
-  { key: "vipNew", label: "熟客", short: "熟客", emoji: "🤝" }, // 栏位名沿用 vipNew（V1 兼容），画面一律叫「熟客」
-  { key: "vipVisits", label: "到店 VIP", short: "VIP到店", emoji: "👑" },
-  { key: "waJoin", label: "WhatsApp 新加入", short: "WA新加入", emoji: "💬" },
-  { key: "waOrders", label: "WhatsApp 订单", short: "WA订单", emoji: "📲" },
+export const OPS_FIELDS: { key: keyof SettlementOps; label: string; short: string }[] = [
+  { key: "pax", label: "顾客人数 (Pax)", short: "人数" },
+  { key: "bills", label: "单数 (Bills)", short: "单数" },
+  { key: "vipNew", label: "熟客", short: "熟客" }, // 栏位名沿用 vipNew（V1 兼容），画面一律叫「熟客」
+  { key: "vipVisits", label: "到店 VIP", short: "VIP到店" },
+  { key: "waJoin", label: "WhatsApp 新加入", short: "WA新加入" },
+  { key: "waOrders", label: "WhatsApp 订单", short: "WA订单" },
 ];
 
 const n = (v: any) => {
