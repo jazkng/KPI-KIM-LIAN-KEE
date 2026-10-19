@@ -18,7 +18,7 @@ const CATEGORY_SECTIONS: Record<string, { id: string, label: string }[]> = {
     'BAR': [
         { id: 'TEA', label: '茶叶 (Tea)' }, { id: 'FRUIT', label: '水果 (Fruit)' },
         { id: 'RTD', label: '罐装 (Drinks)' }, { id: 'MISC', label: '其他 (Misc)' },
-        { id: 'DRINK', label: '饮品 (Drink)' },
+        { id: 'DRINK', label: '酒类 (Alcohol)' },
     ],
     'GENERAL': [
         { id: 'PACKAGING', label: '包装 (Pack)' }, { id: 'CLEANING', label: '清洁 (Clean)' },

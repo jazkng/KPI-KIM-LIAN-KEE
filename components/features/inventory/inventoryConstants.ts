@@ -17,7 +17,7 @@ export const CATEGORY_SECTIONS: Record<string, { id: string, label: string, colo
         { id: 'FRUIT', label: '水果 (Fruit)', color: 'bg-orange-50 text-orange-700' },
         { id: 'RTD', label: '罐装 (Drinks)', color: 'bg-blue-50 text-blue-700' },
         { id: 'MISC', label: '其他 (Misc)', color: 'bg-gray-50 text-gray-700' },
-        { id: 'DRINK', label: '饮品 (Drink)', color: 'bg-blue-50 text-blue-700' }
+        { id: 'DRINK', label: '酒类 (Alcohol)', color: 'bg-blue-50 text-blue-700' }
     ],
     'GENERAL': [
         { id: 'PACKAGING', label: '包装 (Pack)', color: 'bg-yellow-50 text-yellow-700' },

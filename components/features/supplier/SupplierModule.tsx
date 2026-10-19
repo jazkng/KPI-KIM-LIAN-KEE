@@ -17,6 +17,8 @@ import {
     calculateWeightedAverageCost,
     getCostPerBaseUnit,
     getCurrentQtyBase,
+    isWeightUnit,
+    normalizeUnitName,
     roundQuantity,
     toPositiveNumber
 } from '../../../utils/unitConversion';
@@ -708,6 +710,14 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     alert(`❌ 实际重量不能为负数：${item.name}`);
                     return;
                 }
+                if (item.billByWeight && receivedWeight > 0 && !(receivedQty > 0)) {
+                    const linkedId = suppliers.find(s => s.id === receivingPO.supplierId)?.catalog?.find(c => c.id === item.stockId)?.linkedStockId;
+                    const st = allStockList.find(s => s.id === linkedId);
+                    if (st && !isWeightUnit(st.baseUnit || st.unit)) {
+                        alert(`❌ 「${item.name}」按尾数记库存：请填收到的数量（尾数），重量只用来算钱。`);
+                        return;
+                    }
+                }
                 if (!Number.isFinite(finalCost) || finalCost < 0) {
                     alert(`❌ 最终价格不能为负数：${item.name}`);
                     return;
@@ -742,9 +752,16 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                     const receivedQty = Math.max(0, Number(item.receivedQty) || 0);
                     const ratio = toPositiveNumber(item.ratio ?? item.toBaseRatio, 1);
                     const isWeightBased = (item.pricingMode === 'WEIGHT_BASED' || item.conversionMode === 'ACTUAL_WEIGHT') && item.billByWeight;
-                    const baseQtyDelta = roundQuantity(isWeightBased
-                        ? Math.max(0, Number(item.receivedWeight) || 0)
-                        : receivedQty * ratio);
+                    // 称重品项：库存单位是重量 → 加实际重量；库存单位是尾 / 件 → 加收到的数量（成本仍按重量）
+                    const linkedStock = allStockList.find(s => s.id === inventoryId);
+                    const countByPiece = isWeightBased && !!linkedStock && !isWeightUnit(linkedStock.baseUnit || linkedStock.unit);
+                    const orderUnit = item.orderUnit || item.purchaseUnitName || item.unit;
+                    const pieceRatio = linkedStock && orderUnit && normalizeUnitName(orderUnit) === normalizeUnitName(linkedStock.baseUnit || linkedStock.unit) ? 1 : ratio;
+                    const baseQtyDelta = roundQuantity(countByPiece
+                        ? receivedQty * pieceRatio
+                        : isWeightBased
+                            ? Math.max(0, Number(item.receivedWeight) || 0)
+                            : receivedQty * ratio);
                     const pricingQty = item.billByWeight
                         ? Math.max(0, Number(item.receivedWeight) || 0)
                         : receivedQty;

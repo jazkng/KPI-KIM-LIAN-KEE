@@ -412,7 +412,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             'VEG': 'ဟင်းသီးဟင်းရွက် (Veg)', 'NOODLE': 'ခေါက်ဆွဲ (Noodle)', 'SAUCE': 'ဆီ/ငံပြာရည် (Sauce)',
             'DRY': 'ခြောက်သွေ့ (Dry)', 'HQ': 'ရုံးချုပ် (HQ)',
             'TEA': 'လက်ဖက်ရည် (Tea)', 'FRUIT': 'သစ်သီး (Fruit)', 'RTD': 'ဗူးသွတ် (Drinks)',
-            'MISC': 'အခြား (Misc)', 'DRINK': 'အချိုရည် (Drink)',
+            'MISC': 'အခြား (Misc)', 'DRINK': 'အရက် (Alcohol)',
             'PACKAGING': 'ထုပ်ပိုး (Pack)', 'CLEANING': 'သန့်ရှင်းရေး (Clean)',
             'TOOLS': 'ကိရိယာ (Tools)', 'WASTE': 'စားသုံးကုန် (Waste)', 'GENERAL': 'အထွေထွေ (General)',
             'GAS': 'ဓာတ်ငွေ့ (Gas)', 'CHARCOAL': 'မီးသွေး (Charcoal)', 'OIL': 'ဆီ (Oil)',

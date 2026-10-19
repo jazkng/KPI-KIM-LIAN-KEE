@@ -320,6 +320,11 @@ export interface ReceivedLineCalculationInput {
   conversionMode?: "FIXED" | "ACTUAL_WEIGHT";
   toBaseRatio?: number;
   ratio?: number;
+  /** 库存的基础单位（收货时以库存目前的设定为准）；不是重量单位时，称重品项按「尾数」进库存 */
+  baseUnit?: string;
+  orderUnit?: string;
+  purchaseUnitName?: string;
+  unit?: string;
 }
 
 export interface ReceivedLineCalculationResult {
@@ -330,6 +335,16 @@ export interface ReceivedLineCalculationResult {
   finalUnitPrice: number;
   finalLineTotal: number;
   costPerBaseUnit: number;
+  /** 计价用的实际重量（不是称重品项为 0） */
+  weight: number;
+  /** true = 按重量计价、但库存按尾数 / 件数记（例如非洲鱼：库存 +8 尾，应付 = 6.9 kg × RM20） */
+  countByPiece: boolean;
+}
+
+const WEIGHT_UNITS = new Set(['KG', 'KGS', 'KILO', 'KILOS', 'KILOGRAM', 'KILOGRAMS', 'G', 'GM', 'GMS', 'GRAM', 'GRAMS', 'LB', 'LBS', '斤', '公斤', '克', '两']);
+/** 是不是重量单位（kg、g、斤…） */
+export function isWeightUnit(unit?: string): boolean {
+  return WEIGHT_UNITS.has(normalizeUnitName(unit));
 }
 
 /**
@@ -351,12 +366,19 @@ export function calculateReceivedLine(
   const isWeightBased =
     item.billByWeight === true ||
     (item.billByWeight !== false && configuredAsWeightBased);
-  const receivedBaseQty = isWeightBased
-    ? Number(item.receivedWeight || 0)
-    : receivedQty * ratio;
+  const weight = isWeightBased ? Number(item.receivedWeight || 0) : 0;
+  // 按重量计价、但库存单位不是重量（例如「尾」）：库存加尾数，成本仍按重量（2026-10-19 负责人批准）
+  const countByPiece = isWeightBased && !!item.baseUnit && !isWeightUnit(item.baseUnit);
+  const orderUnit = item.orderUnit || item.purchaseUnitName || item.unit;
+  const pieceRatio = orderUnit && normalizeUnitName(orderUnit) === normalizeUnitName(item.baseUnit) ? 1 : ratio;
+  const receivedBaseQty = countByPiece
+    ? roundQuantity(receivedQty * pieceRatio)
+    : isWeightBased
+      ? weight
+      : receivedQty * ratio;
   const finalLineTotal = roundQuantity(
     isWeightBased
-      ? receivedBaseQty * finalUnitPrice
+      ? weight * finalUnitPrice
       : receivedQty * finalUnitPrice,
     2
   );
@@ -371,6 +393,8 @@ export function calculateReceivedLine(
     finalUnitPrice,
     finalLineTotal,
     costPerBaseUnit,
+    weight,
+    countByPiece,
   };
 }
 

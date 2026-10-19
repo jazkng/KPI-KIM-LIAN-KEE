@@ -1220,11 +1220,18 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             // Re-read stock immediately before receiving so a completed stocktake is never overwritten
             // by quantities that were loaded when this procurement screen first opened.
             const latestStockItems = await loadLatestStock();
+            // 收货计算一律用库存「目前」的基础单位（不是下单时记在采购单上的）：称重品项库存若是尾数，就按尾数进库存
+            const receiveSupplier = suppliers.find(s => s.id === receivingPO.supplierId);
+            const lineOf = (item: typeof receivedItems[number]) => {
+                const linkedId = receiveSupplier?.catalog?.find(c => c.id === item.stockId)?.linkedStockId || item.stockId;
+                const st = latestStockItems.find(s => s.id === linkedId);
+                return calculateReceivedLine(st ? { ...item, baseUnit: st.baseUnit || st.unit } : item);
+            };
 
             // Pre-validation to avoid empty or negative received quantities
             let totalReceivedBaseQty = 0;
             for (const item of receivedItems) {
-                const line = calculateReceivedLine(item);
+                const line = lineOf(item);
 
                 if (!Number.isFinite(line.receivedQty) || line.receivedQty < 0) {
                     await (window as any).systemDialog.alert(`❌ 错误：数量不能为负数 (${item.name})`, "采购管理");
@@ -1232,6 +1239,10 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                 }
                 if (!Number.isFinite(line.ratio) || line.ratio <= 0) {
                     await (window as any).systemDialog.alert(`❌ 错误：采购规格换算无效 (${item.name})`, "采购管理");
+                    return;
+                }
+                if (line.countByPiece && line.weight > 0 && !(line.receivedQty > 0)) {
+                    await (window as any).systemDialog.alert(`❌ 「${item.name}」按尾数记库存：请填收到的数量（尾数），重量只用来算钱。`, "采购管理");
                     return;
                 }
                 if (line.isWeightBased) {
@@ -1255,7 +1266,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             if (weightMsg && !await (window as any).systemDialog.confirm(weightMsg, "采购管理")) return;
 
             const itemsTotal = receivedItems.reduce(
-                (sum: number, item) => sum + calculateReceivedLine(item).finalLineTotal,
+                (sum: number, item) => sum + lineOf(item).finalLineTotal,
                 0
             );
 
@@ -1270,7 +1281,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
             
             receivedItems.forEach((item) => {
                 let inventoryId: string | null = null;
-                const line = calculateReceivedLine(item);
+                const line = lineOf(item);
 
                 if (supplier && supplier.catalog) {
                     const catalogItem = supplier.catalog.find(c => c.id === item.stockId);
@@ -1399,14 +1410,14 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
 
             // Sync received fields onto PO items for record-keeping
             const receivedItemsWithNewFields = receivedItems.map(item => {
-                const line = calculateReceivedLine(item);
+                const line = lineOf(item);
                 
                 return {
                     ...item,
                     receivedBaseQty: line.receivedBaseQty,
                     receivedQty: item.receivedQty,
-                    receivedWeight: line.isWeightBased ? line.receivedBaseQty : undefined,
-                    actualWeight: line.isWeightBased ? line.receivedBaseQty : undefined,
+                    receivedWeight: line.isWeightBased ? line.weight : undefined,
+                    actualWeight: line.isWeightBased ? line.weight : undefined,
                     finalUnitPrice: line.finalUnitPrice,
                     finalLineTotal: line.finalLineTotal,
                     costPerBaseUnitAtReceive: line.costPerBaseUnit,
@@ -2383,6 +2394,11 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                     {receivedItems.map((item, idx) => {
                                         const isShort = item.receivedQty < item.orderQty;
                                         const weightUnitLabel = item.billingUnit || item.pricingUnit || item.baseUnit || 'KG';
+                                        // 入库预览：用库存目前的单位（称重品项库存若是尾数，就显示 +N 尾）
+                                        const previewStockId = suppliers.find(s => s.id === receivingPO?.supplierId)?.catalog?.find(c => c.id === item.stockId)?.linkedStockId || item.stockId;
+                                        const previewStock = stockItems.find(s => s.id === previewStockId);
+                                        const previewLine = calculateReceivedLine(previewStock ? { ...item, baseUnit: previewStock.baseUnit || previewStock.unit } : item);
+                                        const previewUnit = previewStock?.baseUnit || previewStock?.unit || item.baseUnit || '';
                                         const displayUnitCost = item.billByWeight && item.receivedWeight && item.receivedQty > 0
                                             ? ((item.receivedWeight * item.finalCost) / item.receivedQty).toFixed(2)
                                             : item.finalCost.toFixed(2);
@@ -2406,6 +2422,11 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                         {item.billByWeight && item.receivedWeight ? (
                                                             <div className="mt-1 text-[9px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded w-fit flex items-center gap-0.5">
                                                                 <Calculator size={9}/> 折合每{item.unit}: RM {displayUnitCost}
+                                                            </div>
+                                                        ) : null}
+                                                        {item.billByWeight && previewLine.receivedBaseQty > 0 ? (
+                                                            <div className="mt-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded w-fit">
+                                                                库存 +{previewLine.receivedBaseQty} {previewUnit} · 应付 RM {previewLine.finalLineTotal.toFixed(2)}
                                                             </div>
                                                         ) : null}
                                                     </div>
@@ -2479,7 +2500,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                 </div>
 
                                                 {(() => {
-                                                    const line = calculateReceivedLine(item);
+                                                    const line = previewLine;
                                                     let costPerBaseUnitPreview = line.costPerBaseUnit;
                                                     if (isNaN(costPerBaseUnitPreview) || !isFinite(costPerBaseUnitPreview)) {
                                                         costPerBaseUnitPreview = 0;
@@ -2498,7 +2519,7 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({ onClose })
                                                     return (
                                                         <div className="mt-1 text-[10px] font-bold text-blue-600 bg-blue-50/50 rounded-lg p-2 border border-blue-100 flex flex-wrap gap-x-4 gap-y-1">
                                                             {line.isWeightBased ? (
-                                                                <span>按实际重量入库，不使用预估重量换算</span>
+                                                                <span>{line.countByPiece ? `按数量入库（${line.weight} kg 只用来算钱）` : '按实际重量入库，不使用预估重量换算'}</span>
                                                             ) : (
                                                                 <span>
                                                                     规格: {toDisplayRatio && displayUnit && displayUnit !== baseUnit
