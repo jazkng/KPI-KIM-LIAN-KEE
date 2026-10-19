@@ -82,6 +82,12 @@ const DuplicateCopyBanner: React.FC<{ here: StockArea; hereQty: number; unit: st
 };
 
 
+/** 库存单位快捷按钮（仍可在输入框自己打） */
+const BASE_UNIT_CHOICES: { value: string; hint?: string }[] = [
+    { value: 'kg', hint: '公斤' }, { value: 'g', hint: '克' }, { value: 'pcs', hint: '个/粒' }, { value: 'Btl', hint: '瓶' },
+    { value: 'Can', hint: '罐' }, { value: 'pkt', hint: '包' }, { value: 'L', hint: '公升' }, { value: 'ml' }, { value: '尾', hint: '鱼' }, { value: 'tank', hint: '桶' },
+];
+
 /** 标签：中文在上，英文小字在下（不再挤在同一行被遮住） */
 const Bi: React.FC<{ zh: React.ReactNode; en?: string }> = ({ zh, en }) => (
     <span className="block leading-tight">
@@ -485,6 +491,27 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
         });
     };
 
+    /** 改库存单位（输入或按快捷按钮）：同步旧字段、重算采购换算 */
+    const setBaseUnit = (newBase: string) => {
+        const isSame = isDisplaySameAsBase(editingItem.displayUnit, newBase);
+        const nextRatio = isSame ? 1 : (editingItem.displayToBaseRatio ?? 1);
+        const updatedItem = {
+            ...editingItem,
+            baseUnit: newBase,
+            unit: newBase, // Sync with legacy field
+            displayToBaseRatio: nextRatio
+        };
+        if (updatedItem.purchaseUnits) {
+            updatedItem.purchaseUnits = revalidatePurchaseRules(updatedItem.purchaseUnits, updatedItem.displayUnit, nextRatio);
+        }
+        onChange(updatedItem);
+        setValidationErrors(prev => {
+            const copy = { ...prev };
+            delete copy.baseUnit;
+            return copy;
+        });
+    };
+
     return (
         <div className="fixed inset-0 bg-[#111111]/75 z-[200] flex items-center justify-center p-0 md:p-4 backdrop-blur-md animate-in fade-in duration-200">
             <div className="bg-[#F6F7FB] w-full h-[100dvh] md:h-auto md:max-w-xl md:max-h-[92vh] md:rounded-[24px] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col relative overflow-hidden border border-[#E5E7EB]">
@@ -634,32 +661,26 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                             选<strong>最小的计算单位</strong>：肉菜 kg、饮料 BTL、鸡蛋 pcs。
                         </p>
 
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-gray-400 mr-0.5">快速选：</span>
+                            {BASE_UNIT_CHOICES.map(u => {
+                                const on = normalizeUnitName(baseUnit) === normalizeUnitName(u.value);
+                                return (
+                                    <button key={u.value} type="button" onClick={() => setBaseUnit(u.value)}
+                                        className={`min-h-[36px] rounded-lg border px-2.5 text-xs font-black transition-colors ${on ? 'border-[#111111] bg-[#111111] text-[#FFD200]' : 'border-[#E5E7EB] bg-white text-gray-700 hover:border-gray-400'}`}>
+                                        {u.value}{u.hint && <span className={`ml-1 text-[10px] font-medium ${on ? 'text-[#FFD200]/80' : 'text-gray-400'}`}>{u.hint}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="库存单位" en="Base unit" /></label>
                                 <input 
                                     className={`${INPUT_STYLE} font-bold text-center focus:border-[#FFD200] ${validationErrors.baseUnit ? 'border-red-500 ring-1 ring-red-500' : ''}`} 
                                     value={baseUnit} 
-                                    onChange={e => {
-                                        const newBase = e.target.value;
-                                        const isSame = isDisplaySameAsBase(editingItem.displayUnit, newBase);
-                                        const nextRatio = isSame ? 1 : (editingItem.displayToBaseRatio ?? 1);
-                                        const updatedItem = {
-                                            ...editingItem,
-                                            baseUnit: newBase,
-                                            unit: newBase, // Sync with legacy field
-                                            displayToBaseRatio: nextRatio
-                                        };
-                                        if (updatedItem.purchaseUnits) {
-                                            updatedItem.purchaseUnits = revalidatePurchaseRules(updatedItem.purchaseUnits, updatedItem.displayUnit, nextRatio);
-                                        }
-                                        onChange(updatedItem);
-                                        setValidationErrors(prev => {
-                                            const copy = { ...prev };
-                                            delete copy.baseUnit;
-                                            return copy;
-                                        });
-                                    }} 
+                                    onChange={e => setBaseUnit(e.target.value)}
                                     placeholder="g, ml, pcs, kg" 
                                 />
                                 {validationErrors.baseUnit && <p className="text-[10px] text-red-500 font-bold mt-1">⚠️ {validationErrors.baseUnit}</p>}
