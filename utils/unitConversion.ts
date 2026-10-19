@@ -630,7 +630,13 @@ export function getStockValue(item: any): number {
   });
 }
 
+/** 停订的材料（不再进货）：不算无货 / 低库存，不提醒补货 */
+export function isDiscontinued(item: any): boolean {
+  return item?.discontinued === true;
+}
+
 export function getStockStatus(item: any): 'OUT_OF_STOCK' | 'LOW_STOCK' | 'NORMAL' {
+  if (isDiscontinued(item)) return 'NORMAL';
   const currentQtyBase = getCurrentQtyBase(item);
   const minLevelBase = getMinLevelBase(item);
 
@@ -640,6 +646,7 @@ export function getStockStatus(item: any): 'OUT_OF_STOCK' | 'LOW_STOCK' | 'NORMA
 }
 
 export function needsReplenishment(item: any): boolean {
+  if (isDiscontinued(item)) return false;
   return getCurrentQtyBase(item) <= getMinLevelBase(item);
 }
 

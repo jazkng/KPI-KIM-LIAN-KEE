@@ -506,6 +506,17 @@ export const StockEditModal: React.FC<StockEditModalProps> = React.memo(({
                                 : <p className="mt-1 text-[11px] font-medium text-gray-400">显示在品名下面、字较小；留空就照品名自动分两行</p>}
                         </div>
 
+                        {editingItem.id && (
+                            <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 cursor-pointer ${editingItem.discontinued ? 'border-gray-400 bg-gray-100' : 'border-[#E5E7EB] bg-white'}`}>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-black text-[#111111]">停订 <span className="text-[11px] font-medium text-gray-400">Discontinued</span></span>
+                                    <span className="block text-[11px] font-medium text-gray-500 leading-snug">不再进货：不算无货、不提醒补货，排到最后。资料和记录都保留，随时可以取消。</span>
+                                </span>
+                                <input type="checkbox" className="w-5 h-5 shrink-0 accent-[#111111]" checked={!!editingItem.discontinued}
+                                    onChange={e => onChange({ ...editingItem, discontinued: e.target.checked, discontinuedAt: e.target.checked ? new Date().toISOString() : editingItem.discontinuedAt })} />
+                            </label>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className={`${LABEL_STYLE} text-gray-500 font-bold text-xs`}><Bi zh="编号" en="Stock code" /></label>
