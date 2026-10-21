@@ -38,7 +38,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", isEdit
                 placeholder={placeholder} 
             />
         ) : (
-            <div className="text-sm font-bold text-[#111111] p-2 border border-transparent break-words min-h-[36px]">{value || '-'}</div>
+            <div className="text-sm font-bold text-[#111111] py-1.5 md:p-2 border border-transparent break-words min-h-[32px] md:min-h-[36px]">{value || '-'}</div>
         )}
     </div>
 );
@@ -61,7 +61,7 @@ const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
                 })}
             </select>
         ) : (
-            <div className="text-sm font-bold text-[#111111] p-2 border border-transparent truncate">{
+            <div className="text-sm font-bold text-[#111111] py-1.5 md:p-2 border border-transparent break-words leading-snug">{
                 typeof options[0] === 'string' ? (value || '-') : (options.find((o: any) => o.value === value)?.label || value || '-')
             }</div>
         )}
@@ -1230,15 +1230,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                                 {/* 左侧列：头像、考勤、薪资卡片 */}
                                 <div className="xl:col-span-4 flex flex-col gap-6">
-                                    <div className={`bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 flex-col items-center justify-center relative overflow-hidden group ${mobileDetailTab === 'basic' ? 'flex' : 'hidden'}`}>
-                                        <div className="relative w-32 h-32 md:w-40 md:h-40 mb-4 cursor-pointer" onClick={() => isEditing && fileInputRef.current?.click()}>
-                                            <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 shadow-xl bg-gray-100 relative z-10 ${form.isArchived ? 'border-gray-300 grayscale' : 'border-white'}`}>
-                                                {form.avatar ? <img src={form.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-4xl md:text-5xl text-gray-300 font-black">{(form.name || 'U').charAt(0)}</div>}
+                                    <div className={`bg-white rounded-[2rem] p-4 md:p-6 shadow-sm border border-gray-200 flex-row md:flex-col items-center justify-start md:justify-center gap-4 md:gap-0 relative overflow-hidden group ${mobileDetailTab === 'basic' ? 'flex' : 'hidden'}`}>
+                                        <div className="relative w-20 h-20 md:w-40 md:h-40 md:mb-4 cursor-pointer shrink-0" onClick={() => isEditing && fileInputRef.current?.click()}>
+                                            <div className={`w-20 h-20 md:w-40 md:h-40 rounded-full overflow-hidden border-4 shadow-xl bg-gray-100 relative z-10 ${form.isArchived ? 'border-gray-300 grayscale' : 'border-white'}`}>
+                                                {form.avatar ? <img src={form.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl md:text-5xl text-gray-300 font-black">{(form.name || 'U').charAt(0)}</div>}
                                             </div>
                                             {isEditing && <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-white z-20"><Camera size={24}/></div>}
                                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(!file) return; setIsUploading(true); try { const url = await uploadToCloudinary(file); setForm({...form, avatar: url}); } catch(err) { alert("❌ 上传失败"); } finally { setIsUploading(false); } }} />
                                         </div>
-                                        <div className="flex gap-2 flex-wrap justify-center">
+                                        <div className="flex gap-2 flex-wrap justify-start md:justify-center min-w-0">
                                             <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 shrink-0 ${form.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : form.status === 'TERMINATED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                                 {form.status === 'CONFIRMED' ? <CheckCircle2 size={12}/> : form.status === 'TERMINATED' ? <LogOut size={12}/> : <Clock size={12}/>}
                                                 {form.status}
@@ -1429,8 +1429,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                 <div className="xl:col-span-8 flex flex-col gap-6">
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><User size={14}/> 个人档案 (Personal)</h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-y-5 gap-x-3">
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><User size={14}/> 个人档案 (Personal)</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
                                             <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
                                             {isForeignWorker
                                                 ? <InputField label="护照号码 (Passport)" value={form.passportNo || (isEditing ? '' : form.icNumber)} onChange={(e: any) => setForm({...form, passportNo: e.target.value})} placeholder="Passport No" isEditing={isEditing} />
@@ -1440,15 +1440,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
                                             <SelectField label="雇佣状态 (Status)" value={form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, {label:'离职 (Terminated)', value:'TERMINATED'}]} isEditing={isEditing} />
                                             {/* 不计入员工：资料留在档案（例如老板），但不算人数、不排班、人事中心不显示 */}
-                                            <div className="col-span-2 md:col-span-1">
+                                            <div>
                                                 <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">计入员工 (Staff count)</label>
                                                 {isEditing ? (
                                                     <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 min-h-[48px] cursor-pointer ${form.excludeFromStaff ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
-                                                        <span className="text-xs font-bold text-[#111111]">不计入员工<span className="block text-[10px] font-medium text-gray-500">不算人数、不排班</span></span>
+                                                        <span className="text-xs font-bold text-[#111111] leading-tight">不计入员工<span className="block text-[10px] font-medium text-gray-500">不算人数、不排班</span></span>
                                                         <input type="checkbox" checked={!!form.excludeFromStaff} onChange={e => setForm({...form, excludeFromStaff: e.target.checked})} className="w-5 h-5 accent-orange-500 cursor-pointer shrink-0" />
                                                     </label>
                                                 ) : (
-                                                    <div className={`text-sm font-bold p-2 border border-transparent min-h-[36px] ${form.excludeFromStaff ? 'text-orange-600' : 'text-[#111111]'}`}>{form.excludeFromStaff ? '不计入员工' : '计入'}</div>
+                                                    <div className={`text-sm font-bold py-1.5 md:p-2 border border-transparent min-h-[32px] md:min-h-[36px] ${form.excludeFromStaff ? 'text-orange-600' : 'text-[#111111]'}`}>{form.excludeFromStaff ? '不计入员工' : '计入'}</div>
                                                 )}
                                             </div>
                                             <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
@@ -1466,7 +1466,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
                                             {/* 👥 排班分组：跟考勤（班次 1 / 2）、组织图同一个栏位 */}
                                             <div>
-                                                <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">排班分组 (Group)</label>
+                                                <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">排班分组 (Group)</label>
                                                 {isEditing ? (
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {([1, 2] as const).map(n => {
@@ -1484,7 +1484,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         })}
                                                     </div>
                                                 ) : (
-                                                    <div className="text-sm font-bold p-2 min-h-[36px]">
+                                                    <div className="text-sm font-bold py-1.5 md:p-2 min-h-[32px] md:min-h-[36px]">
                                                         {shiftGroupOf(form) === 'NONE'
                                                             ? <span className="text-gray-400">未分组（考勤按 Group A 时间）</span>
                                                             : <span style={{ color: SHIFT_GROUP_META[shiftGroupOf(form)].fg }}>{SHIFT_GROUP_META[shiftGroupOf(form)].label}</span>}
@@ -1498,20 +1498,20 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     <span className="text-xs font-black text-gray-700">🏢 组织架构图 (Org Chart)</span>
                                                     <span className="text-[10px] font-bold text-gray-400">只影响组织图显示，不改权限、不改薪资部门</span>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                                <div className="grid grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-4">
                                                     {(() => {
                                                         const autoTier = resolveTier({ ...form, orgChartTier: undefined });
                                                         const tierNow = resolveTier(form);
                                                         const others = employees.filter(x => x.id !== form.id && !x.isArchived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
                                                         const nameOf = (id?: string) => employees.find(x => x.id === id)?.name;
                                                         const sel = 'w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#111111] outline-none focus:border-[#FFD200]';
-                                                        const lab = 'text-[10px] font-bold text-gray-400 uppercase mb-1 block';
-                                                        const view = (v?: string, fallback = '-') => <div className="text-sm font-bold text-[#111111] p-2 min-h-[36px] break-words">{v || <span className="text-gray-400">{fallback}</span>}</div>;
+                                                        const lab = 'text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block';
+                                                        const view = (v?: string, fallback = '-') => <div className="text-sm font-bold text-[#111111] py-1.5 md:p-2 min-h-[32px] md:min-h-[36px] break-words">{v || <span className="text-gray-400">{fallback}</span>}</div>;
                                                         const tierLabel = (t: string) => ORG_TIER_OPTIONS.find(o => o.value === t)?.short || t;
                                                         return (
                                                             <>
                                                                 <div>
-                                                                    <label className={lab}>组织层级 (Organisation Level)</label>
+                                                                    <label className={lab}>组织层级 (Level)</label>
                                                                     {isEditing ? (
                                                                         <select value={form.orgChartTier || ''} onChange={e => setForm({ ...form, orgChartTier: (e.target.value || undefined) as any })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
                                                                             <option value="">自动（按职级：{tierLabel(autoTier)}）</option>
@@ -1532,7 +1532,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                     </div>
                                                                 )}
                                                                 {tierNow === 'MANAGEMENT' && (
-                                                                    <div className="md:col-span-2 xl:col-span-3">
+                                                                    <div className="col-span-2 xl:col-span-3">
                                                                         <label className={lab}>管理部门 (Manages) · 可多选</label>
                                                                         {isEditing ? (
                                                                             <div className="flex flex-wrap gap-2">
@@ -1565,9 +1565,9 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                         </select>
                                                                     ) : view(nameOf(form.reportsTo), '自动')}
                                                                 </div>
-                                                                <InputField label="第二身份 (Secondary Role)" value={form.orgSecondaryRole} onChange={(e: any) => setForm({ ...form, orgSecondaryRole: e.target.value || undefined })} placeholder="例如：Personal Assistant" isEditing={isEditing} />
+                                                                <InputField label="第二身份 (2nd Role)" value={form.orgSecondaryRole} onChange={(e: any) => setForm({ ...form, orgSecondaryRole: e.target.value || undefined })} placeholder="例如：Personal Assistant" isEditing={isEditing} />
                                                                 <div>
-                                                                    <label className={lab}>第二身份汇报 (Secondary Reports To)</label>
+                                                                    <label className={lab}>第二身份汇报给</label>
                                                                     {isEditing ? (
                                                                         <select value={form.orgSecondaryReportsTo || ''} onChange={e => setForm({ ...form, orgSecondaryReportsTo: e.target.value || undefined })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
                                                                             <option value="">没有</option>
@@ -1586,15 +1586,15 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Briefcase size={14}/> 政府与卫生 (Govt & Health)</h4>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Briefcase size={14}/> 政府与卫生 (Govt & Health)</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-blue-50 rounded text-blue-600"><Shield size={14}/></div><span className="text-xs font-bold text-gray-700">法定缴纳 (Statutory)</span></div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><InputField label="EPF No" value={form.epfNo} onChange={(e: any) => setForm({...form, epfNo: e.target.value})} placeholder="KWSP" isEditing={isEditing} /><InputField label="SOCSO No" value={form.socsoNo} onChange={(e: any) => setForm({...form, socsoNo: e.target.value})} placeholder="PERKESO" isEditing={isEditing} /></div>
+                                                <div className="grid grid-cols-2 gap-4"><InputField label="EPF No" value={form.epfNo} onChange={(e: any) => setForm({...form, epfNo: e.target.value})} placeholder="KWSP" isEditing={isEditing} /><InputField label="SOCSO No" value={form.socsoNo} onChange={(e: any) => setForm({...form, socsoNo: e.target.value})} placeholder="PERKESO" isEditing={isEditing} /></div>
                                             </div>
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-green-50 rounded text-green-600"><Stethoscope size={14}/></div><span className="text-xs font-bold text-gray-700">卫生认证 (Health)</span></div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><InputField label="打针有效 (Typhoid)" value={form.typhoidExpiry} onChange={(e: any) => setForm({...form, typhoidExpiry: e.target.value})} type="date" isEditing={isEditing} /><InputField label="餐馆课程 (Course Date)" value={form.foodHandlingDate} onChange={(e: any) => setForm({...form, foodHandlingDate: e.target.value})} type="date" isEditing={isEditing} /></div>
+                                                <div className="grid grid-cols-2 gap-4"><InputField label="打针有效 (Typhoid)" value={form.typhoidExpiry} onChange={(e: any) => setForm({...form, typhoidExpiry: e.target.value})} type="date" isEditing={isEditing} /><InputField label="餐馆课程 (Course Date)" value={form.foodHandlingDate} onChange={(e: any) => setForm({...form, foodHandlingDate: e.target.value})} type="date" isEditing={isEditing} /></div>
                                             </div>
                                         </div>
                                     </div>
@@ -1704,8 +1704,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
 
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Phone size={14}/> 紧急联系人 (Emergency Contact)</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Phone size={14}/> 紧急联系人 (Emergency Contact)</h4>
+                                        <div className="grid grid-cols-2 gap-4 md:gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
                                     </div>
  
                                     <div className={mobileDetailTab === 'access' ? 'block' : 'hidden'}>
