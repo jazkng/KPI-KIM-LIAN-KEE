@@ -1050,7 +1050,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                     const collapsed = (e.currentTarget as HTMLDivElement).scrollTop > 140;
                     if (collapsed !== headerCollapsed) setHeaderCollapsed(collapsed);
                 }}
-                className={`flex-grow flex flex-col h-full bg-[#F6F7FB] overflow-y-auto relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}
+                className={`flex-grow flex flex-col h-full bg-[#F6F7FB] overflow-y-auto overflow-x-hidden overscroll-x-none relative ${!selectedEmpId ? 'hidden md:flex' : 'flex'}`}
             >
                 {!selectedEmpId ? (
                     <div className="m-auto text-gray-400 flex flex-col items-center gap-4 px-6 text-center max-w-xs md:max-w-sm">
@@ -1085,7 +1085,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                         </div>
 
                         {/* Header Section */}
-                        <div className={`bg-gradient-to-br p-5 pb-20 md:p-6 md:pb-28 relative shadow-lg shrink-0 ${form.isArchived ? 'from-gray-800 to-gray-900 grayscale' : 'from-[#111111] to-[#2A2A2A]'}`}>
+                        <div className={`bg-gradient-to-br p-5 pb-20 md:p-6 md:pb-28 relative overflow-hidden shadow-lg shrink-0 ${form.isArchived ? 'from-gray-800 to-gray-900 grayscale' : 'from-[#111111] to-[#2A2A2A]'}`}>
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                             
                             {/* 顶部按钮栏 */}
