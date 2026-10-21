@@ -1600,7 +1600,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     {/* ⭐ 工作能力 + 🧹 PIC 负责项目 */}
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-3 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
                                         {/* ⭐ 工作能力星级：主职 / 副职 → 工作项目 → ★1–★5 */}
                                         <SkillStarPanel
                                             employee={form}
@@ -1669,7 +1669,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     {/* 其他专长（备注），放在技能星级之后 */}
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-3 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                             <Trophy size={14} className="text-[#FFD200]"/> 其他专长（备注）
                                         </h4>
