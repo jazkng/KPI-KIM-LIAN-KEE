@@ -1977,7 +1977,7 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent font-black text-[#111111] text-sm outline-none w-[120px]" />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-3 md:flex md:items-center gap-2">
+                                    <div className="grid grid-cols-2 md:flex md:items-center gap-2">
                                         <button onClick={() => setIsExcelExportOpen(true)}
                                             className="flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="批量导出 Excel：选日期范围，每日汇总 + 现金支出明细 + 外卖明细">
@@ -1986,10 +1986,10 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                         <button onClick={() => { setBatchMode('EXTRA'); setIsBatchReconOpen(true); }}
                                             className="flex items-center justify-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="补填：已结算的日子补外卖单数、天气、特殊情况">
-                                            <ClipboardPen size={15} className="shrink-0"/> 补填
+                                            <ClipboardPen size={15} className="shrink-0"/> 补填<span className="md:hidden"> / 对账</span>
                                         </button>
                                         <button onClick={() => { setBatchMode('RECON'); setIsBatchReconOpen(true); }}
-                                            className="flex items-center justify-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
+                                            className="hidden md:flex items-center justify-center gap-1.5 bg-[#111111] text-[#FFD200] px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all whitespace-nowrap min-h-[40px]"
                                             title="批量核对：整个月的账目摊开来对，也可以只对 TNG">
                                             <ListChecks size={15} className="shrink-0"/> 核对
                                         </button>
@@ -2072,7 +2072,13 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                             <span className="text-lg font-extrabold text-gray-950 font-mono tracking-tight">{record.date.split('-')[2]}</span>
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="text-[11px] font-bold text-gray-400 leading-tight">当日营业额</div>
+                                                            <div className="text-[11px] font-bold text-gray-400 leading-tight flex items-center gap-1.5 whitespace-nowrap">当日营业额
+                                                                {(() => {
+                                                                    const w = WEATHER_OPTIONS.find(o => o.value === (record as any).weather);
+                                                                    const sp = SPECIAL_CONDITION_OPTIONS.filter(o => ((record as any).specialConditions || []).includes(o.value));
+                                                                    return w || sp.length ? <span className="text-sky-700 bg-sky-50 border border-sky-100 rounded-md px-1.5 leading-[16px]">{[w?.label, ...sp.map(o => o.label)].filter(Boolean).join(' · ')}</span> : <span className="text-gray-300">天气未填</span>;
+                                                                })()}
+                                                            </div>
                                                             <div className="text-lg md:text-xl font-black text-[#111111] leading-tight whitespace-nowrap">RM {record.sales.total.toFixed(2)}</div>
                                                         </div>
                                                         <div className="flex flex-col items-end gap-1 shrink-0">
@@ -2103,44 +2109,42 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                                         );
                                                     })()}
 
-                                                    {/* 四个通道（整数） */}
-                                                    <div className="grid grid-cols-4 gap-1.5">
+                                                    {/* 店内三个通道（整数） */}
+                                                    <div className="grid grid-cols-3 gap-1.5">
                                                         {([
-                                                            ['现金', cash, false],
-                                                            ['TNG', tng, false],
-                                                            ['卡', totalCardVal, false],
-                                                            ['外卖', totalDeliveryVal, true],
-                                                        ] as const).map(([lb, v, hl]) => (
-                                                            <div key={lb} className={`px-1 py-1.5 text-center rounded-xl border ${hl ? 'bg-amber-50/70 border-amber-100' : 'bg-slate-50/80 border-slate-100'}`}>
-                                                                <div className={`text-[10px] font-bold leading-tight ${hl ? 'text-amber-800' : 'text-gray-400'}`}>{lb}</div>
-                                                                <div className={`text-xs md:text-[13px] font-black font-mono mt-0.5 whitespace-nowrap ${hl ? 'text-amber-900' : 'text-gray-950'}`}>{Math.round(v)}</div>
+                                                            ['现金', cash],
+                                                            ['TNG', tng],
+                                                            ['卡', totalCardVal],
+                                                        ] as const).map(([lb, v]) => (
+                                                            <div key={lb} className="px-1 py-1.5 text-center rounded-xl border bg-slate-50/80 border-slate-100">
+                                                                <div className="text-[10px] font-bold leading-tight text-gray-400">{lb}</div>
+                                                                <div className="text-xs md:text-[13px] font-black font-mono mt-0.5 whitespace-nowrap text-gray-950">{Math.round(v)}</div>
                                                             </div>
                                                         ))}
                                                     </div>
 
-                                                    {/* Delivery Detail Badges - Color dot representation, no text labels, no decimals */}
-                                                    {totalDeliveryVal > 0 && (
-                                                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5 px-0.5">
-                                                            {grabVal > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(grabVal)}</span>
-                                                                </span>
-                                                            )}
-                                                            {pandaVal > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-pink-900 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-lg">
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(pandaVal)}</span>
-                                                                </span>
-                                                            )}
-                                                            {shopeeVal > 0 && (
-                                                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-orange-950 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg">
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
-                                                                    <span className="font-mono font-extrabold">RM {Math.round(shopeeVal)}</span>
-                                                                </span>
-                                                            )}
+                                                    {/* 外卖：总额和三个平台放在同一个框里，一看就知道是外卖底下的 */}
+                                                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-2.5 py-2 flex items-center gap-2.5">
+                                                        <div className="shrink-0 pr-2.5 border-r border-amber-200 text-center">
+                                                            <div className="text-[10px] font-bold leading-tight text-amber-800">外卖</div>
+                                                            <div className="text-[13px] font-black font-mono text-amber-900 whitespace-nowrap">{Math.round(totalDeliveryVal)}</div>
                                                         </div>
-                                                    )}
+                                                        {totalDeliveryVal > 0 ? (
+                                                            <div className="flex flex-wrap items-center gap-1 min-w-0">
+                                                                {([
+                                                                    ['Grab', grabVal, 'text-emerald-800 bg-white border-emerald-200', 'bg-emerald-500'],
+                                                                    ['Panda', pandaVal, 'text-pink-900 bg-white border-pink-200', 'bg-pink-500'],
+                                                                    ['Shopee', shopeeVal, 'text-orange-950 bg-white border-orange-200', 'bg-orange-500'],
+                                                                    ['Lalamove', lalamoveVal, 'text-sky-900 bg-white border-sky-200', 'bg-sky-500'],
+                                                                ] as const).filter(([, v]) => v > 0).map(([lb, v, cls, dot]) => (
+                                                                    <span key={lb} className={`flex items-center gap-1 text-[10px] font-bold border px-1.5 py-0.5 rounded-lg whitespace-nowrap ${cls}`}>
+                                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`}></span>
+                                                                        {lb} <span className="font-mono font-extrabold">{Math.round(v)}</span>
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : <span className="text-[10px] font-bold text-amber-700/60">没有外卖</span>}
+                                                    </div>
                                                 </div>
                                             );
                                         })

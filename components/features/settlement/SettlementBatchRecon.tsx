@@ -9,7 +9,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { OPS_ICONS } from './settlementIcons';
-import { X, Loader2, Search, CheckCircle2, Pencil, ShieldCheck, RotateCcw, Calendar, AlertTriangle, Wallet, Users, ClipboardPen } from 'lucide-react';
+import { X, Loader2, Search, CheckCircle2, Pencil, ShieldCheck, RotateCcw, Calendar, AlertTriangle, Wallet, Users, ClipboardPen, SlidersHorizontal, MoreHorizontal } from 'lucide-react';
 import { SettlementRecord, WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from '../../../types';
 import { SettlementExtras, getExtras, platformsWithSales, extrasUpdate, applyExtrasLocally } from './settlementExtras';
 import { SPECIAL_CONDITION_ICONS } from './settlementIcons';
@@ -69,6 +69,9 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
     const [bulk, setBulk] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
     // 👥 营运数据模式：整个月一次过补填 人数 / 单数 / VIP / WhatsApp
     const [mode, setMode] = useState<'RECON' | 'OPS' | 'EXTRA'>(initialMode);
+    // 精简画面：付款方式筛选、合计与「一键填」收进按钮，按了才弹出
+    const [filterOpen, setFilterOpen] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
     const [opsDrafts, setOpsDrafts] = useState<Record<string, SettlementOps>>({});
     const [opsSaving, setOpsSaving] = useState(false);
     // 📝 补填模式：外卖单数 / 天气 / 特殊情况
@@ -352,45 +355,45 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
             <div className="bg-white w-full md:max-w-4xl md:rounded-3xl rounded-t-3xl max-h-[95vh] flex flex-col shadow-2xl">
 
                 {/* 标题 */}
-                <div className="flex items-start justify-between p-4 md:p-5 border-b border-gray-100 shrink-0">
-                    <div className="min-w-0">
-                        <h3 className="font-black text-base text-stone-900 flex items-center gap-2">
-                            <ShieldCheck size={17} className="text-[#FFD200]" /> {mode === 'EXTRA' ? '补填结算资料' : '批量核对'}
-                        </h3>
-                        <p className="text-[11px] text-gray-500 mt-0.5">
+                <div className="flex items-center justify-between gap-2 px-3 md:px-5 pt-3 pb-2 border-b border-gray-100 shrink-0">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex bg-gray-100 rounded-xl p-1 w-full md:w-fit">
+                            <button onClick={() => setMode('RECON')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-2.5 rounded-lg text-xs font-black whitespace-nowrap ${mode === 'RECON' ? 'bg-white shadow text-stone-900' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Wallet size={13} />对账</button>
+                            <button onClick={() => setMode('OPS')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-2.5 rounded-lg text-xs font-black whitespace-nowrap ${mode === 'OPS' ? 'bg-white shadow text-violet-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Users size={13} />人数</button>
+                            <button onClick={() => setMode('EXTRA')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-2.5 rounded-lg text-xs font-black whitespace-nowrap ${mode === 'EXTRA' ? 'bg-white shadow text-amber-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><ClipboardPen size={13} />单数 / 天气</button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5 px-0.5 truncate">
                             {loading ? '读取中…' : mode === 'EXTRA'
                                 ? <>共 {records.length} 天 · 外卖缺单数 <b className="text-amber-600">{missingOrdersDays}</b> 天</>
                                 : mode === 'OPS'
                                 ? <>共 {records.length} 天 · 已填人数 <b className="text-violet-600">{records.filter(r => getOps(r).pax > 0).length}</b> 天</>
-                                : <>共 {rows.length} 行 · 待核对 <b className="text-amber-600">{summary.pending}</b> · 已核对 <b className="text-emerald-600">{summary.done}</b></>}
+                                : <>待核对 <b className="text-amber-600">{summary.pending}</b> · 已核对 <b className="text-emerald-600">{summary.done}</b> · 共 {rows.length} 行</>}
                         </p>
-                        <div className="flex bg-gray-100 rounded-xl p-1 mt-2 w-fit">
-                            <button onClick={() => setMode('RECON')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'RECON' ? 'bg-white shadow text-stone-900' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Wallet size={13} />对账</button>
-                            <button onClick={() => setMode('OPS')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'OPS' ? 'bg-white shadow text-violet-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><Users size={13} />人数 / 熟客 / WhatsApp</button>
-                            <button onClick={() => setMode('EXTRA')} className={`flex items-center gap-1 px-3 rounded-lg text-xs font-black ${mode === 'EXTRA' ? 'bg-white shadow text-amber-700' : 'text-gray-500'}`} style={{ minHeight: '36px' }}><ClipboardPen size={13} />补填 单数 / 天气</button>
-                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex justify-center items-center shrink-0"><X size={18} /></button>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex justify-center items-center shrink-0 self-start"><X size={18} /></button>
                 </div>
 
                 {/* 筛选 */}
-                <div className="px-4 md:px-5 py-3 border-b border-gray-100 shrink-0 space-y-3">
-                    <div className="flex flex-col md:flex-row gap-2">
-                        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 shrink-0" style={{ minHeight: '44px' }}>
-                            <Calendar size={14} className="text-gray-400 shrink-0" />
+                <div className="px-3 md:px-5 py-2 border-b border-gray-100 shrink-0 space-y-2">
+                    <div className="flex gap-1.5">
+                        <div className="flex items-center gap-1.5 bg-gray-100 rounded-xl px-2 shrink-0" style={{ minHeight: '40px' }}>
+                            <Calendar size={13} className="text-gray-400 shrink-0" />
                             <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-                                className="bg-transparent font-black text-stone-900 outline-none w-full md:w-[150px]" style={{ fontSize: '16px' }} />
+                                className="bg-transparent font-black text-stone-900 outline-none w-[118px] md:w-[150px]" style={{ fontSize: '15px' }} />
                         </div>
-                        <div className={`flex gap-1.5 flex-1 ${mode !== 'RECON' ? 'hidden' : ''}`}>
-                            {([['PENDING', '待核对'], ['DONE', '已核对'], ['ALL', '全部']] as const).map(([id, lb]) => (
-                                <button key={id} onClick={() => setStatus(id)}
-                                    className={`flex-1 rounded-xl text-xs font-black transition-all ${status === id ? 'bg-[#FFD200] text-stone-900' : 'bg-gray-100 text-gray-500'}`}
-                                    style={{ minHeight: '44px' }}>{lb}</button>
-                            ))}
-                        </div>
+                        {mode === 'RECON' && <>
+                            <select value={status} onChange={e => setStatus(e.target.value as 'PENDING' | 'DONE' | 'ALL')} aria-label="核对状态"
+                                className="flex-1 min-w-0 rounded-xl bg-[#FFD200] text-stone-900 text-xs font-black px-2 outline-none" style={{ minHeight: '40px' }}>
+                                <option value="PENDING">待核对</option><option value="DONE">已核对</option><option value="ALL">全部</option>
+                            </select>
+                            <button onClick={() => setFilterOpen(v => !v)} aria-expanded={filterOpen}
+                                className={`shrink-0 flex items-center gap-1 rounded-xl px-2.5 text-xs font-black border ${picked.size > 0 || filterOpen ? 'bg-stone-900 text-[#FFD200] border-stone-900' : 'bg-white text-gray-600 border-gray-200'}`} style={{ minHeight: '40px' }}>
+                                <SlidersHorizontal size={13} /> {picked.size > 0 ? `${picked.size} 种` : '付款'}
+                            </button>
+                        </>}
                     </div>
 
-                    {mode === 'RECON' && (<div>
+                    {mode === 'RECON' && filterOpen && (<div>
                         <div className="flex items-center justify-between mb-1.5">
                             <span className="text-[10px] font-black text-gray-400 uppercase">付款方式（不选 = 全部）</span>
                             {picked.size > 0 && (
@@ -542,6 +545,8 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                                             row.isReconciled && !editing.has(row.rowKey) ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-white'
                                         }`}>
 
+                                        {/* 手机：日期 + 通道 + 预估同一行；电脑：各占一栏 */}
+                                        <div className="flex items-center justify-between gap-2 md:contents">
                                         {/* 日期 + 通道 */}
                                         <div className="flex items-center gap-2 min-w-0 md:w-[210px] shrink-0">
                                             <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black bg-gray-100 text-gray-600 border border-gray-200">
@@ -553,15 +558,18 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
 
                                         {/* 应收 */}
                                         <div className="flex items-center justify-between md:justify-start gap-2 md:w-[150px] shrink-0">
-                                            <span className="text-[10px] font-bold text-gray-400 md:hidden">系统预估</span>
+                                            <span className="text-[10px] font-bold text-gray-400 md:hidden">预估</span>
                                             <span className="font-mono text-[13px] font-black text-stone-800 tabular-nums">RM {money(row.expected)}</span>
                                         </div>
+                                        </div>
+
+                                        {/* 手机：实收 + 按钮同一行 */}
+                                        <div className="flex items-center gap-2 md:contents">
 
                                         {/* 实收 */}
                                         <div className="flex items-center gap-2 flex-1 min-w-0">
                                             {isEditing ? (
                                                 <>
-                                                    <span className="text-[10px] font-bold text-gray-400 shrink-0 md:hidden">实际到账</span>
                                                     <input type="number" inputMode="decimal" step="0.01" value={draft}
                                                         onChange={e => setDrafts(p => ({ ...p, [row.rowKey]: e.target.value }))}
                                                         placeholder="实际到账"
@@ -586,17 +594,17 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                                         </div>
 
                                         {/* 按钮 */}
-                                        <div className="flex gap-1.5 shrink-0 w-full md:w-auto">
+                                        <div className="flex gap-1.5 shrink-0">
                                             {isEditing ? (
                                                 <>
                                                     {row.isReconciled && (
                                                         <button onClick={() => cancelEdit(row.rowKey)} disabled={saving}
-                                                            className="px-3 rounded-lg bg-gray-100 text-gray-500 text-[11px] font-black shrink-0 flex-1 md:flex-none" style={{ minHeight: '40px' }}>
+                                                            className="px-3 rounded-lg bg-gray-100 text-gray-500 text-[11px] font-black shrink-0" style={{ minHeight: '40px' }}>
                                                             取消
                                                         </button>
                                                     )}
                                                     <button onClick={() => confirmRow(row)} disabled={saving}
-                                                        className="px-4 rounded-lg bg-stone-900 text-[#FFD200] text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40 active:scale-95 shrink-0 flex-1 md:flex-none"
+                                                        className="px-4 rounded-lg bg-stone-900 text-[#FFD200] text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40 active:scale-95 shrink-0"
                                                         style={{ minHeight: '40px' }}>
                                                         {saving ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
                                                         确认
@@ -604,11 +612,12 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                                                 </>
                                             ) : (
                                                 <button onClick={() => startEdit(row)}
-                                                    className="px-3 rounded-lg bg-white border border-gray-300 text-gray-600 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 shrink-0 flex-1 md:flex-none"
+                                                    className="px-3 rounded-lg bg-white border border-gray-300 text-gray-600 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 shrink-0"
                                                     style={{ minHeight: '40px' }}>
                                                     <Pencil size={12} /> 改
                                                 </button>
                                             )}
+                                        </div>
                                         </div>
                                     </div>
                                 );
@@ -644,7 +653,10 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                 )}
 
                 {/* 底部合计 */}
-                <div className={`p-3 md:p-4 border-t border-gray-100 shrink-0 space-y-2 ${mode !== 'RECON' ? 'hidden' : ''}`}>
+                <div className={`relative p-3 md:p-4 border-t border-gray-100 shrink-0 ${mode !== 'RECON' ? 'hidden' : ''}`} style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+                    {moreOpen && <>
+                    <div className="fixed inset-0 z-[1]" onClick={() => setMoreOpen(false)} />
+                    <div className="absolute left-3 right-3 bottom-full mb-2 z-[2] bg-white rounded-2xl border border-gray-200 shadow-2xl p-3 space-y-2">
                     <div className="grid grid-cols-3 gap-2">
                         <div className="bg-gray-50 rounded-xl px-2 py-1.5 text-center border border-gray-100">
                             <div className="text-[9px] font-black text-gray-400 uppercase">系统预估合计</div>
@@ -659,25 +671,31 @@ export const SettlementBatchRecon: React.FC<Props> = ({ isOpen, onClose, default
                             <div className="font-mono text-[13px] font-black text-amber-800 tabular-nums">{summary.pending} 笔</div>
                         </div>
                     </div>
-                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
-                        <button onClick={fillAllPerfect} disabled={loading || bulk.running || summary.pending === 0}
-                            className="flex-1 min-w-0 rounded-xl bg-gray-100 text-gray-700 text-[11px] font-black disabled:opacity-40" style={{ minHeight: '44px' }}>
-                            ① 一键填「完美对账」
+                        <button onClick={() => { setMoreOpen(false); fillAllPerfect(); }} disabled={loading || bulk.running || summary.pending === 0}
+                            className="w-full rounded-xl bg-gray-100 text-gray-700 text-xs font-black disabled:opacity-40" style={{ minHeight: '44px' }}>
+                            ① 一键填「完美对账」（还没填的都填成系统预估）
+                        </button>
+                        <p className="text-[10px] text-gray-400 font-bold flex items-start gap-1">
+                            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                            可以一行一行按「确认」，也可以填好之后按 ② 一次过写进去。差额会自动记成费用；重新核对同一笔时，旧的那笔自动费用会先清掉，不会重复记账。
+                        </p>
+                    </div>
+                    </>}
+                    <div className="flex items-stretch gap-2">
+                        <button onClick={() => setMoreOpen(v => !v)} aria-expanded={moreOpen} aria-label="更多：合计与一键填"
+                            className={`shrink-0 rounded-xl px-3 flex items-center justify-center gap-1 text-xs font-black border ${moreOpen ? 'bg-stone-900 text-[#FFD200] border-stone-900' : 'bg-white text-gray-600 border-gray-200'}`} style={{ minHeight: '44px' }}>
+                            <MoreHorizontal size={16} /> 更多
                         </button>
                         <button onClick={confirmAll} disabled={loading || bulk.running || readyRows.length === 0}
-                            className="flex-[1.4] min-w-0 rounded-xl bg-emerald-600 text-white text-xs font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95" style={{ minHeight: '44px' }}>
+                            className="flex-1 min-w-0 rounded-xl bg-emerald-600 text-white text-xs font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95" style={{ minHeight: '44px' }}>
                             {bulk.running
                                 ? <><Loader2 size={15} className="animate-spin" /> 写入中 {bulk.done}/{bulk.total}</>
                                 : <><ShieldCheck size={15} /> ② 确认已填的 {readyRows.length} 笔</>}
                         </button>
-                        <button onClick={onClose} disabled={bulk.running} className="px-5 rounded-xl bg-stone-900 text-[#FFD200] text-xs font-black shrink-0 disabled:opacity-40" style={{ minHeight: '44px' }}>
+                        <button onClick={onClose} disabled={bulk.running} className="px-4 rounded-xl bg-stone-900 text-[#FFD200] text-xs font-black shrink-0 disabled:opacity-40" style={{ minHeight: '44px' }}>
                             关闭
                         </button>
                     </div>
-                    <p className="text-[10px] text-gray-400 font-bold flex items-start gap-1">
-                        <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                        可以一行一行按「确认」，也可以填好之后按 ② 一次过写进去。差额会自动记成费用；重新核对同一笔时，旧的那笔自动费用会先清掉，不会重复记账。
-                    </p>
                 </div>
             </div>
         </div>
