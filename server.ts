@@ -20,7 +20,7 @@ import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 import { initFirebaseAdmin } from "./server/firebaseAdmin";
 import { mountAuthRoutes } from "./server/auth/authService";
 import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
-import { AI_ERROR_MESSAGE, classifyAiError, modelChain, runWithModelFallback } from "./server/aiFallback";
+import { AI_ERROR_MESSAGE, AiAllModelsFailed, aiErrorSummary, classifyAiError, modelChain, runWithModelFallback } from "./server/aiFallback";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -306,7 +306,10 @@ ${JSON.stringify(contextData, null, 2)}
       res.json({ ...verified, model });
     } catch (error: any) {
       console.error("Cockpit advisor error:", error?.message || error);
-      res.status(502).json({ error: AI_ERROR_MESSAGE[classifyAiError(error)] });
+      const kind = error instanceof AiAllModelsFailed ? error.kind : classifyAiError(error);
+      // 预览站有门禁，只有老板 / 授权的人看得到：附上 Google 回传的错误代码，方便判断是哪里的设定
+      const detail = error instanceof AiAllModelsFailed ? error.attempts.map(a => `${a.model}：${a.summary}`).join('\n') : aiErrorSummary(error);
+      res.status(502).json({ error: AI_ERROR_MESSAGE[kind], detail });
     }
   });
 

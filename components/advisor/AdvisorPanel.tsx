@@ -62,6 +62,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, evidence,
     const [points, setPoints] = useState<Point[] | null>(null);
     const [rejected, setRejected] = useState(0);
     const [error, setError] = useState('');
+    const [errorDetail, setErrorDetail] = useState('');
     const dialog = useRef<HTMLDialogElement>(null);
     useEffect(() => { dialog.current?.showModal(); }, []);
 
@@ -76,7 +77,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, evidence,
     const ask = async (q: string, shown?: string) => {
         const text = q.trim();
         if (!text || loading) return;
-        setAsked(shown || text); setLoading(true); setError(''); setPoints(null); setRejected(0);
+        setAsked(shown || text); setLoading(true); setError(''); setErrorDetail(''); setPoints(null); setRejected(0);
         try {
             const response = await fetch('/api/ai/cockpit-advisor', {
                 method: 'POST',
@@ -84,7 +85,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, evidence,
                 body: JSON.stringify({ question: text, periodLabel, evidence: evidence.map(({ id, label, value, note }) => ({ id, label, value, note })) }),
             });
             const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data.error || `服务暂时无法回应（${response.status}）`);
+            if (!response.ok) { setErrorDetail(String(data.detail || '')); throw new Error(data.error || `服务暂时无法回应（${response.status}）`); }
             setPoints(Array.isArray(data.points) ? data.points : []);
             setRejected(Array.isArray(data.rejected) ? data.rejected.length : 0);
             setQuestion('');
@@ -126,7 +127,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, evidence,
                 </form>
 
                 {loading && <p className="adv-muted"><Loader2 size={14} className="animate-spin" /> 正在根据资料回答…</p>}
-                {error && <p className="adv-error">{error}</p>}
+                {error && <div className="adv-error"><p>{error}</p>{errorDetail && <details className="adv-error-detail"><summary>错误代码（给管理员看）</summary><pre>{errorDetail}</pre></details>}</div>}
                 {points && <div className="adv-answer">
                     <p className="adv-q">「{asked}」</p>
                     {points.length === 0 && <p className="adv-muted">没有能核对依据的回答，换个问法试试。</p>}

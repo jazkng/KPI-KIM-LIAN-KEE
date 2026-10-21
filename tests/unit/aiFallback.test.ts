@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyAiError, modelChain, runWithModelFallback } from '../../server/aiFallback';
+import { AiAllModelsFailed, aiErrorSummary, classifyAiError, modelChain, runWithModelFallback } from '../../server/aiFallback';
 
 describe('classifyAiError', () => {
     it('分类', () => {
@@ -22,12 +22,19 @@ describe('runWithModelFallback', () => {
         expect(r).toEqual({ result: 'ok', model: 'new' });
         expect(tried).toEqual(['old', 'new']);
     });
-    it('金钥问题不再换模型，直接失败', async () => {
-        const tried: string[] = [];
-        await expect(runWithModelFallback(['a', 'b'], async m => { tried.push(m); throw { status: 403, message: 'PERMISSION_DENIED' }; }, { waitMs: 0 })).rejects.toBeTruthy();
-        expect(tried).toEqual(['a']);
+    it('某个模型没有权限 → 继续试下一个', async () => {
+        const r = await runWithModelFallback(['a', 'b'], async m => { if (m === 'a') throw { status: 403, message: 'PERMISSION_DENIED' }; return 'ok'; }, { waitMs: 0 });
+        expect(r.model).toBe('b');
     });
-    it('全部失败时丢出最后一个错误', async () => {
-        await expect(runWithModelFallback(['a', 'b'], async m => { throw { status: 503, message: `busy ${m}` }; }, { waitMs: 0 })).rejects.toMatchObject({ message: 'busy b' });
+    it('全部失败：附每个模型的原因；全是权限问题才算 AUTH', async () => {
+        const all403 = await runWithModelFallback(['a', 'b'], async () => { throw { status: 403, message: 'PERMISSION_DENIED' }; }, { waitMs: 0 }).catch(e => e);
+        expect(all403).toBeInstanceOf(AiAllModelsFailed);
+        expect(all403.kind).toBe('AUTH');
+        expect(all403.message).toBe('a: 403 PERMISSION_DENIED | b: 403 PERMISSION_DENIED');
+        const mixed = await runWithModelFallback(['a', 'b'], async m => { throw m === 'a' ? { status: 403, message: 'denied' } : { status: 404, message: 'not found' }; }, { waitMs: 0 }).catch(e => e);
+        expect(mixed.kind).toBe('MODEL_UNAVAILABLE');
+    });
+    it('错误摘要不会带出金钥', () => {
+        expect(aiErrorSummary({ status: 400, message: 'API key AIzaSyAbCdEfGhIjKlMnOpQrStUvWxYz123456 not valid' })).toBe('400 API key [key] not valid');
     });
 });

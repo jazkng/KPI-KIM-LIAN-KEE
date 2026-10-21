@@ -35,27 +35,51 @@ export const modelChain = (...models: (string | undefined)[]) =>
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/** 给老板看的错误摘要：只取状态码与讯息前段（Google 的错误讯息不含金钥） */
+export const aiErrorSummary = (error: unknown) => {
+    const e = error as { status?: unknown; code?: unknown; message?: unknown } | null;
+    const code = e?.status ?? e?.code ?? '';
+    const msg = String(e?.message ?? error ?? '').replace(/AIza[0-9A-Za-z_-]{20,}/g, '[key]').replace(/\s+/g, ' ').slice(0, 160);
+    return `${code ? `${code} ` : ''}${msg}`.trim();
+};
+
+export interface AiAttempt { model: string; kind: AiErrorKind; summary: string }
+
+/** 全部模型都失败时丢出的错误：带着每个模型失败的原因 */
+export class AiAllModelsFailed extends Error {
+    constructor(public attempts: AiAttempt[]) {
+        super(attempts.map(a => `${a.model}: ${a.summary}`).join(' | '));
+    }
+    /** 每个模型都是金钥 / 权限问题才算 AUTH；有任何一个是下架就算模型问题；否则忙碌 / 其他 */
+    get kind(): AiErrorKind {
+        const kinds = this.attempts.map(a => a.kind);
+        if (kinds.length && kinds.every(k => k === 'AUTH')) return 'AUTH';
+        if (kinds.includes('BUSY')) return 'BUSY';
+        if (kinds.includes('MODEL_UNAVAILABLE')) return 'MODEL_UNAVAILABLE';
+        return kinds.includes('AUTH') ? 'AUTH' : 'OTHER';
+    }
+}
+
 /**
- * 依序呼叫 run(model)：
- * - 模型不存在 / 忙碌 → 换下一个模型（忙碌时先等一下）
- * - 金钥 / 权限问题 → 换模型也没用，直接失败
+ * 依序呼叫 run(model)，任何一个成功就回传；每个模型都试过（某些金钥只是没有某个模型的权限），
+ * 全部失败才丢出 AiAllModelsFailed（附每个模型的失败原因）。忙碌时换下一个之前先等一下。
  */
 export const runWithModelFallback = async <T>(
     models: string[],
     run: (model: string) => Promise<T>,
     opts: { waitMs?: number; log?: (msg: string) => void } = {},
 ): Promise<{ result: T; model: string }> => {
-    let lastError: unknown = new Error('没有可用的模型');
+    const attempts: AiAttempt[] = [];
     for (const [i, model] of models.entries()) {
         try {
             return { result: await run(model), model };
         } catch (error) {
-            lastError = error;
             const kind = classifyAiError(error);
-            opts.log?.(`AI model ${model} failed (${kind}): ${String((error as Error)?.message || error).slice(0, 200)}`);
-            if (kind === 'AUTH') break;
+            const summary = aiErrorSummary(error);
+            attempts.push({ model, kind, summary });
+            opts.log?.(`AI model ${model} failed (${kind}): ${summary}`);
             if (kind === 'BUSY' && i < models.length - 1) await sleep(opts.waitMs ?? 600);
         }
     }
-    throw lastError;
+    throw new AiAllModelsFailed(attempts);
 };
