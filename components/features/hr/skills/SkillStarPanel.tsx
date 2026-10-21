@@ -147,7 +147,7 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
                                         const lv = r?.level || 0;
                                         const shared = item.categories.filter(c => positions.some(p => p.category === c)).length > 1;
                                         return (
-                                            <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                                            <div key={item.id} className="flex items-center justify-between gap-1.5 pl-3 pr-1.5 py-1">
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-[13px] font-black text-[#111111] leading-tight">
                                                         {item.name}
@@ -169,10 +169,10 @@ export const SkillStarPanel: React.FC<Props> = ({ employee, catalog, canRateHigh
                                                                 aria-label={`${item.name} ★${n}`}
                                                                 aria-checked={lv === n}
                                                                 role="radio"
-                                                                className="w-11 h-11 md:w-9 md:h-9 flex items-center justify-center active:scale-90 transition-transform"
+                                                                className="w-7 h-10 md:w-9 md:h-9 flex items-center justify-center active:scale-90 transition-transform"
                                                             >
                                                                 <Star
-                                                                    size={22}
+                                                                    size={19}
                                                                     strokeWidth={2}
                                                                     className={on ? 'text-amber-400 fill-amber-400' : locked ? 'text-gray-200' : 'text-gray-300'}
                                                                 />

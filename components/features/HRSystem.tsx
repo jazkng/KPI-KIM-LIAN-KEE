@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, User, DollarSign, Briefcase, MonitorSmartphone, X, ArrowLeft } from 'lucide-react';
+import { Users, User, DollarSign, Briefcase, X, ArrowLeft } from 'lucide-react';
 import { Employee, RoleDefinition, RoleGuide } from '../../types';
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES, ROLE_SOP_DETAILS } from '../constants';
 import { DataManager } from '../../utils/dataManager';
 import { ModuleGuideButton } from '../ui/ModuleGuide';
 import { HRProfiles } from './hr/HRProfiles';
-import { HRDeviceAccounts } from './hr/HRDeviceAccounts';
 import { HRPayroll } from './hr/HRPayroll';
 import { HRRoleStandards } from './hr/HRRoleStandards';
 import { isSystemAdminAccount } from '../../utils/orgAccess';
@@ -26,7 +25,7 @@ interface HRSystemProps {
 
 export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) => {
     const isSuperAdminMode = isSystemAdminAccount(currentEmployee);
-    const [activeTab, setActiveTab] = useState<'PROFILES' | 'DEVICES' | 'PAYROLL' | 'ROLES'>('PROFILES');
+    const [activeTab, setActiveTab] = useState<'PROFILES' | 'PAYROLL' | 'ROLES'>('PROFILES');
     const [payrollMode, setPayrollMode] = useState<'CALC' | 'PARTTIME'>('CALC');
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinition[]>(DEFAULT_ROLES);
@@ -72,7 +71,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
 
     const TABS = [
         { id: 'PROFILES' as const, label: '员工档案', Icon: User },
-        { id: 'DEVICES'  as const, label: '设备户口', Icon: MonitorSmartphone },
+        // 设备户口（DEVICES）已在 V2 停用（负责人 2026-10-21）；设备户口资料保留不动
         { id: 'PAYROLL'  as const, label: '薪资结算', Icon: DollarSign },
         { id: 'ROLES'    as const, label: '职位标准', Icon: Briefcase },
     ];
@@ -92,12 +91,12 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                         >
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
-                        <h3 className="font-black text-lg flex items-center gap-2">
-                            <Users className="text-[#FFD200]" />
+                        <h3 className="font-black text-lg flex items-center gap-2 whitespace-nowrap min-w-0">
+                            <Users className="text-[#FFD200] shrink-0" />
                             <span className="hidden md:inline">御膳智控 · </span>人事中心
                             {isSuperAdminMode && (
-                                <span className="text-[9px] md:text-[10px] bg-[#FFD200] text-black px-2 py-1 rounded-full tracking-wider">
-                                    SYSTEM ADMIN
+                                <span className="text-[9px] md:text-[10px] bg-[#FFD200] text-black px-2 py-1 rounded-full tracking-wider whitespace-nowrap">
+                                    ADMIN
                                 </span>
                             )}
                         </h3>
@@ -153,9 +152,6 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                                 setActiveTab('PROFILES');
                             }}
                         />
-                    )}
-                    {activeTab === 'DEVICES' && (
-                        <HRDeviceAccounts currentEmployee={currentEmployee} />
                     )}
                     {activeTab === 'ROLES' && (
                         <HRRoleStandards

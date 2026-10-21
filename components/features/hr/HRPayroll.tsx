@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  ChevronDown,
   LockOpen,
   Ban,
   History,
@@ -3433,26 +3434,24 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           />
         ) : currentMode === "HISTORY" ? (
           <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-sans font-black text-sm md:text-base text-[#111111]">
-                  📜 支薪历史与出账日志
-                </h3>
-                <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
-                  HR Payout & Salary Logs
-                </p>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h3 className="font-black text-base text-[#111111]">支薪历史</h3>
+              <div className="flex items-center gap-1.5">
+                <details className="relative">
+                  <summary className="list-none cursor-pointer select-none text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl px-3 min-h-[40px] flex items-center">说明</summary>
+                  <div className="absolute right-0 top-full mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-[11px] leading-relaxed text-gray-600">
+                    公司总成本 = 实发 + 预支 + 政府缴纳（已含微调 / 罚扣）。点任何一个月份看每位员工的明细。
+                  </div>
+                </details>
+                <button
+                  onClick={loadAllHistory}
+                  aria-label="刷新"
+                  className="bg-white border border-gray-200 text-gray-600 w-10 h-10 rounded-xl active:scale-95 flex items-center justify-center"
+                  disabled={isHistLoading}
+                >
+                  <RefreshCw size={15} className={isHistLoading ? "animate-spin" : ""} />
+                </button>
               </div>
-              <button
-                onClick={loadAllHistory}
-                className="bg-[#111111] hover:bg-black text-[#FFD200] px-3.5 py-2 rounded-xl text-xs font-black active:scale-95 transition-transform flex items-center gap-1.5 shadow-sm min-h-[44px] select-none"
-                disabled={isHistLoading}
-              >
-                <RefreshCw
-                  size={12}
-                  className={isHistLoading ? "animate-spin" : ""}
-                />{" "}
-                刷新列表
-              </button>
             </div>
 
             {isHistLoading ? (
@@ -3485,53 +3484,32 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                         }
                         className="p-4 bg-gray-50/50 flex justify-between items-center cursor-pointer border-b border-gray-100 hover:bg-gray-100/30 transition-all select-none"
                       >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono font-black text-xs md:text-sm text-blue-900 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-lg">
-                              {record.month}
-                            </span>
-                            <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-md border border-emerald-100">
-                              👤 {record.staffCount} 员工
-                            </span>
-                            <span className="bg-gray-100 text-gray-700 text-[9px] font-black px-1.5 py-0.5 rounded uppercase font-mono">
-                              {record.isStatutoryPaid
-                                ? "All Settled"
-                                : "Partially Unpaid"}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-gray-500 font-bold tracking-wide mt-1.5 space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 md:gap-x-3">
-                              <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-lg border border-emerald-100 font-black">
-                                💵 实发 NET: RM {Number(record.totalNetPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                              </span>
-                              <span className="flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-lg border border-amber-100 font-black">
-                                💰 预支 Advance: RM {totalAdvance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                              </span>
-                              <span className="flex items-center gap-1.5 bg-purple-50 text-purple-800 px-2 py-0.5 rounded-lg border border-purple-100 font-black">
-                                🏛️ 政府缴载 TO GOVT: RM {Number(record.totalGovtPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-black text-base text-[#111111]">{record.month}</span>
+                              <span className="text-[11px] font-bold text-gray-400">{record.staffCount} 人</span>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${record.isStatutoryPaid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                                {record.isStatutoryPaid ? "已全部发放" : "部分未发"}
                               </span>
                             </div>
-                            <div className="text-[9px] md:text-[10px] text-gray-400 font-black flex items-center gap-1 mt-1 pl-0.5 select-none">
-                              <span>💡</span>
-                              <span>
-                                计算公式：NET Payout + Advance + TO GOVT = Company Cost (含微调/罚扣)
-                              </span>
-                            </div>
+                            <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                           </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase block mb-0.5">
-                            Company Cost
+                          <div className="mt-2 flex items-baseline justify-between gap-2">
+                            <span className="text-[11px] font-bold text-gray-400">公司总成本</span>
+                            <span className="font-mono font-black text-lg text-[#111111]">RM {Number(record.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                           </div>
-                          <div className="text-sm md:text-base font-mono font-black text-[#111111]">
-                            RM{" "}
-                            {Number(record.totalAmount || 0).toLocaleString(
-                              undefined,
-                              { minimumFractionDigits: 2 },
-                            )}
-                          </div>
-                          <div className="text-[10px] font-black text-[#FFD200] bg-[#111111] inline-block px-1.5 py-0.5 rounded-md mt-1 scale-90 origin-right">
-                            {isExpanded ? "收起 ▲" : "详情 ▼"}
+                          <div className="mt-2 grid grid-cols-3 gap-1.5">
+                            {([
+                              ["实发", Number(record.totalNetPay || 0), "text-emerald-700"],
+                              ["预支", totalAdvance, "text-amber-700"],
+                              ["政府缴纳", Number(record.totalGovtPay || 0), "text-purple-700"],
+                            ] as const).map(([label, value, cls]) => (
+                              <div key={label} className="bg-white rounded-xl border border-gray-100 px-2 py-1.5">
+                                <div className="text-[10px] font-bold text-gray-400">{label}</div>
+                                <div className={`text-xs font-mono font-black ${cls} whitespace-nowrap`}>{value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -3624,41 +3602,26 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
         ) : (
           <>
             {/* 🎯 快速勾选 —— 手机横向滑动，一次选好一批再发 */}
-            <div className="max-w-5xl mx-auto mb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-auto md:px-0">
-              <button
-                onClick={handleSelectAll}
-                className="bg-white px-3 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 flex items-center gap-1.5 active:scale-95 transition-transform min-h-[44px] shrink-0"
-              >
-                {selectedEmpIds.size === displayEmployees.length &&
-                displayEmployees.length > 0 ? (
-                  <CheckSquare size={16} className="text-[#111111]" />
-                ) : (
-                  <Square size={16} />
-                )}
-                全选
-              </button>
-              {!isPosted && (
-                <>
-                  <button
-                    onClick={() => selectUnpaidBy()}
-                    className="bg-white px-3 rounded-xl text-xs font-bold text-orange-700 border border-orange-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
-                  >
-                    ⏳ 未发
+            <div className="max-w-5xl mx-auto mb-3 flex items-center gap-2 flex-wrap">
+              {/* 快速勾选收进一个「选择」菜单（全选 / 未发 / 未发·银行 / 未发·现金） */}
+              <details className="relative shrink-0" onClick={e => { if ((e.target as HTMLElement).closest('button')) (e.currentTarget as HTMLDetailsElement).open = false; }}>
+                <summary className="list-none cursor-pointer select-none bg-white px-3 rounded-xl text-xs font-bold text-gray-700 border border-gray-200 flex items-center gap-1.5 min-h-[44px]">
+                  {selectedEmpIds.size === displayEmployees.length && displayEmployees.length > 0 ? <CheckSquare size={16} className="text-[#111111]" /> : <Square size={16} />}
+                  选择 <ChevronDown size={14} />
+                </summary>
+                <div className="absolute left-0 top-full mt-1 z-30 w-52 bg-white border border-gray-200 rounded-2xl shadow-xl p-1.5 flex flex-col">
+                  <button onClick={handleSelectAll} className="text-left px-3 min-h-[44px] rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                    <CheckSquare size={15} /> {selectedEmpIds.size === displayEmployees.length && displayEmployees.length > 0 ? '取消全选' : '全选'}
                   </button>
-                  <button
-                    onClick={() => selectUnpaidBy("BANK")}
-                    className="bg-white px-3 rounded-xl text-xs font-bold text-blue-700 border border-blue-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
-                  >
-                    <Building2 size={14} /> 未发·银行
-                  </button>
-                  <button
-                    onClick={() => selectUnpaidBy("CASH")}
-                    className="bg-white px-3 rounded-xl text-xs font-bold text-green-700 border border-green-200 flex items-center gap-1.5 active:scale-95 min-h-[44px] shrink-0"
-                  >
-                    <Banknote size={14} /> 未发·现金
-                  </button>
-                </>
-              )}
+                  {!isPosted && (
+                    <>
+                      <button onClick={() => selectUnpaidBy()} className="text-left px-3 min-h-[44px] rounded-xl text-sm font-bold text-orange-700 hover:bg-orange-50 flex items-center gap-2">⏳ 未发</button>
+                      <button onClick={() => selectUnpaidBy("BANK")} className="text-left px-3 min-h-[44px] rounded-xl text-sm font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2"><Building2 size={15} /> 未发 · 银行</button>
+                      <button onClick={() => selectUnpaidBy("CASH")} className="text-left px-3 min-h-[44px] rounded-xl text-sm font-bold text-green-700 hover:bg-green-50 flex items-center gap-2"><Banknote size={15} /> 未发 · 现金</button>
+                    </>
+                  )}
+                </div>
+              </details>
               {selectedEmpIds.size > 0 && (
                 <button
                   onClick={() => setSelectedEmpIds(new Set())}
