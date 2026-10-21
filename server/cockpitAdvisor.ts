@@ -71,7 +71,8 @@ export const buildAdvisorPrompt = (periodLabel: string, evidence: AdvisorEvidenc
 3. 证据标示「预估」「资料不完整」「等待日结」的，要在文字中说明，不能当作已确认。
 4. 你是只读顾问：不能声称已修改、写入或执行任何操作；建议只能是「老板可以考虑」的行动。
 5. 资料不足以回答时，写一条 kind="gap"，说明缺什么资料。
-6. 最多 ${ADVISOR_LIMITS.maxPoints} 点，用简体中文，每点一到两句话。
+6. 最多 ${ADVISOR_LIMITS.maxPoints} 点，通常 3–5 点就够；用简体中文，每点一句话，尽量 40 字以内，先讲结论。
+7. 建议要具体、可以在餐厅执行（例如哪一天、哪个渠道、哪一项成本），并说明依据的数字。D 开头的证据是从已日结营业日算出的星期、天气、渠道、成本结构。
 
 # 输出格式（只输出 JSON）
 {"points":[{"kind":"finding|action|gap","text":"……","refs":["K1"]}]}

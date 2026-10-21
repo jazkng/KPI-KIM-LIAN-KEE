@@ -10,7 +10,9 @@ import { holidayLabel } from '../utils/holidays/malaysiaHolidays';
 import { loadBusinessCenterWith, profitStory, type BusinessCenterData, type BusinessDay, type ProfitStory } from '../utils/businessCenter';
 import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics';
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
-import { AIOperationsAssistant, HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
+import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
+import { AdvisorPanel } from './advisor/AdvisorPanel';
+import { buildAdvisorInsights } from '../utils/cockpit/advisorInsights';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { DataManager } from '../utils/dataManager';
@@ -125,7 +127,13 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         {accountModal === 'BILLS' && can('BILLS') && <RecurringBillsModule onClose={() => setAccountModal(null)} />}
         {detail && data && reportsAllowed && section === 'business' && <MetricDialog kpi={detail} onClose={() => setDetail(null)} />}
         {hrOpen && can('HR') && <HRSystem currentEmployee={currentEmployee} onClose={() => setHrOpen(false)} />}
-        {aiOpen && reportsAllowed && can('AI_ASSISTANT') && data && <AIOperationsAssistant isOpen onClose={() => setAiOpen(false)} advisor={{ periodLabel: data.result.period.label, evidence: buildAdvisorEvidence(data.result, null), onOpenKpi: key => { setAiOpen(false); if (k?.[key]) setDetail(k[key]); } }} />}
+        {aiOpen && reportsAllowed && can('AI_ASSISTANT') && data && (() => {
+            const story = profitStory(data.result, month, today);
+            const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue });
+            return <AdvisorPanel periodLabel={data.result.period.label} insights={extra.insights} settledDays={extra.settledDays}
+                evidence={[...buildAdvisorEvidence(data.result, null), ...extra.evidence]}
+                onClose={() => setAiOpen(false)} onOpenKpi={key => { setAiOpen(false); if (k?.[key]) setDetail(k[key]); }} />;
+        })()}
     </div>;
 };
 
