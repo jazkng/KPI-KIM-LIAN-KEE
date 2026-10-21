@@ -114,7 +114,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      
      const showAll = !allowedModules || allowedModules.length === 0;
 
-     if (showAll || allowedModules?.includes('QUEUE_MANAGER')) {
+     if (!isRetiredModule('QUEUE_MANAGER') && (showAll || allowedModules?.includes('QUEUE_MANAGER'))) {
          tabs.push({ key: 'QUEUE', label: lang === 'my' ? 'တန်းစီခြင်း' : '排队叫号', icon: <Armchair size={18} /> });
      }
      if (showAll || allowedModules?.includes('ONLINE_ORDERS')) {

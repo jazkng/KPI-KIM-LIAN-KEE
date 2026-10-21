@@ -77,7 +77,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         'INVENTORY_CHECK',
         'INVENTORY_VIEW',
         'SUPPLIER_CONTACTS',
-        'QUEUE',
+        // 排队叫号（QUEUE）已在 V2 停用
         'ATTENDANCE_CONSOLE',
         'PROCUREMENT',
         'MENU_MANAGEMENT',
