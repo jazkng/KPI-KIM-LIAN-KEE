@@ -26,13 +26,17 @@ interface Props {
     onOpenConfig: () => void;
     onLogout: () => void;
     loadData?: typeof loadBusinessCenterWith;
+    /** 通知铃铛：放在设置和退出中间 */
+    notifications?: React.ReactNode;
 }
+/** 日报小格子：标签已经说明是金额，不再加 RM */
+const plain = (n: number | null) => n === null ? '—' : n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const money = (n: number | null) => n === null ? '—' : `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const format = (k?: Kpi) => !k || k.value === null ? '—' : k.unit === 'PCT' ? `${(k.value * 100).toFixed(1)}%` : k.unit === 'DAYS' ? `${k.value} 天` : money(k.value);
 const Status = ({ k }: { k?: Kpi }) => k ? <span className={`bc-status bc-status-${k.status}`}>{COCKPIT_STATUS_LABEL[k.status]}</span> : null;
 const shiftMonth = (month: string, by: number) => addDays(`${month}-01`, by < 0 ? -1 : daysInMonth(month)).slice(0, 7);
 
-export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSection, onNavigate, onOpenConfig, onLogout, loadData = loadBusinessCenterWith }) => {
+export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSection, onNavigate, onOpenConfig, onLogout, loadData = loadBusinessCenterWith, notifications }) => {
     const today = getBusinessDateString();
     const [month, setMonth] = useState(today.slice(0, 7));
     const [tab, setTab] = useState<'sales' | 'profit' | 'cash'>('sales');
@@ -78,7 +82,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         </aside>
         <div className="bc-workspace"><header className="bc-header"><div><b>{section === 'hr' ? '人事中心' : '经营中心'}</b><small>{currentEmployee.name} · 金莲记</small></div><div className="bc-header-actions">
             {section === 'business' && reportsAllowed && <button aria-label="重新读取经营资料" disabled={loading} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>}
-            <button onClick={onOpenConfig} aria-label="设置"><Settings size={18} /></button><button onClick={onLogout} aria-label="退出登录"><LogOut size={18} /></button>
+            <button onClick={onOpenConfig} aria-label="设置"><Settings size={18} /></button>{notifications}<button onClick={onLogout} aria-label="退出登录"><LogOut size={18} /></button>
         </div></header>
         <main className="bc-main">
             {section === 'hr' ? <><h1>人事中心</h1>
@@ -95,7 +99,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                         {tab === 'sales' && <>
                             <div className="bc-overview"><div><section className="bc-card"><div className="bc-card-heading"><h2>经营日报</h2><select aria-label="选择已结算日" value={selectedDate} disabled={!monthDays.length} onChange={e => setSelectedDate(e.target.value)}>{!monthDays.length && <option value="">未结算</option>}{monthDays.map(d => <option key={d.date} value={d.date}>{d.date.slice(5).replace('-', '月')}日</option>)}</select></div>
                                 {day ? <><div className="bc-sales-hero"><div><small>{day.date} · 已结算</small>{settlementAllowed && <span className="bc-weather">{day.weather === 'SUNNY' ? <Sun size={17} /> : day.weather === 'CLOUDY' ? <CloudSun size={17} /> : day.weather === 'HEAVY_RAIN' ? <CloudLightning size={17} /> : day.weather === 'RAIN' ? <CloudRain size={17} /> : null}{WEATHER_OPTIONS.find(w => w.value === day.weather)?.label || (day.weatherMixed ? '天气记录不同' : '天气未填写')}</span>}</div><strong>{money(day.revenue)}</strong><p>{previous && previous.revenue > 0 ? `较上周同日${day.revenue >= previous.revenue ? '增加' : '减少'} ${money(Math.abs(day.revenue - previous.revenue))}（${(Math.abs(day.revenue - previous.revenue) / previous.revenue * 100).toFixed(1)}%）` : '暂无上周同日对照'}</p></div>
-                                    {settlementAllowed && <><div className="bc-daily-kpis">{[['店内单数', day.bills ?? '待补'], ['店内单均', money(day.perBill)], ['堂食人数', day.pax ?? '待补'], ['人均消费', money(day.perPax)]].map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
+                                    {settlementAllowed && <><div className="bc-daily-kpis">{[['店内单数', day.bills ?? '待补'], ['店内单均', plain(day.perBill)], ['堂食人数', day.pax ?? '待补'], ['人均消费', plain(day.perPax)]].map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
                                         <div className="bc-daily-kpis bc-community" aria-label="熟客与 WhatsApp">{[['熟客', day.community.regulars], ['VIP 到店', day.community.vipVisits], ['WA 新加入', day.community.waJoin], ['WA 订单', day.community.waOrders]].map(([label, value]) => <div key={label}><span>{label}</span><b>{Number(value) > 0 ? value : '—'}</b></div>)}</div>
                                         <RevenueComposition day={day} /></>}
                                     {settlementAllowed && <div className="bc-environment" aria-label="营业日环境因素">{day.holiday && <span className="bc-holiday" title={day.holiday.about}>假日 · {holidayLabel(day.holiday)}</span>}{SPECIAL_CONDITION_OPTIONS.filter(o => day.specialConditions.includes(o.value)).map(o => <span key={o.value}>{o.label}</span>)}{!day.holidayYearCovered && <small>该年假日日历待补充</small>}{day.tomorrowHoliday && <small>次日假日 · {holidayLabel(day.tomorrowHoliday)}</small>}</div>}
@@ -103,7 +107,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                                 </> : <p className="bc-muted">本月暂无已结算日报。</p>}
                             </section>{day && settlementAllowed && <details className="bc-channel-details"><summary>各渠道订单与均价 <span>展开明细</span></summary><table><thead><tr><th>渠道</th><th>销售额</th><th>单数</th><th>单均</th></tr></thead><tbody>{day.channels.map(c => <tr key={c.label}><td>{c.label}</td><td>{money(c.amount)}</td><td>{c.needsReview ? '待核对' : c.orders ?? '待补'}</td><td>{money(c.average)}</td></tr>)}</tbody></table><p>单均＝同渠道销售额÷完成单数。缺单数显示待补；有销售额但单数为0需核对。日报只读。</p></details>}</div>
                             <aside><section className="bc-card"><div className="bc-card-heading"><h2>本月经营</h2><small>{data.result.period.start.slice(5)}–{data.result.period.end.slice(5)}</small></div><button className="bc-month-revenue" onClick={() => setDetail(k.revenue)}><span>累计营业额</span><b>{format(k.revenue)}</b><Status k={k.revenue} /></button>
-                                <div className="bc-cost-bars">{([['foodRatio', 'food'], ['labourRatio', 'labour']] as const).map(([key, amountKey]) => k[key] && <button key={key} onClick={() => setDetail(k[key])}><span>{k[key].label}</span><b>{format(k[key])}</b>{k[amountKey] && <small className="bc-cost-amount">{format(k[amountKey])}</small>}<i><em style={{ width: `${Math.max(0, Math.min(100, (k[key].value ?? 0) * 100))}%` }} /></i><Status k={k[key]} /></button>)}</div><button className="bc-month-profit" onClick={() => setDetail(k.actualProfit)}><span>经营利润 <Status k={k.actualProfit} /></span><b>{format(k.actualProfit)}</b></button><div className="bc-links"><button onClick={() => setTab('profit')}>成本明细 ↗</button><button onClick={() => setTab('cash')}>现金与账款 ↗</button></div></section>
+                                <div className="bc-cost-bars">{([['foodRatio', 'food'], ['labourRatio', 'labour']] as const).map(([key, amountKey]) => k[key] && <button key={key} onClick={() => setDetail(k[key])}><span>{k[key].label}</span><b>{format(k[key])}</b>{k[amountKey] && <small className="bc-cost-amount">{format(k[amountKey])}</small>}<i><em style={{ width: `${Math.max(0, Math.min(100, (k[key].value ?? 0) * 100))}%` }} /></i><Status k={k[key]} /></button>)}{(() => { const opex = profitStory(data.result, month, today).lines.find(l => l.key === 'opex'); return opex && <button onClick={() => k.actualProfit && setDetail(k.actualProfit)}><span>经营费用率</span><b>{opex.per100 === null ? '—' : `${opex.per100.toFixed(1)}%`}</b><small className="bc-cost-amount">{money(opex.amount)}</small><i><em style={{ width: `${Math.max(0, Math.min(100, opex.per100 ?? 0))}%` }} /></i><span className="bc-status">租金水电等</span></button>; })()}</div><button className="bc-month-profit" onClick={() => setDetail(k.actualProfit)}><span>经营利润 <Status k={k.actualProfit} /></span><b>{format(k.actualProfit)}</b></button><div className="bc-links"><button onClick={() => setTab('profit')}>成本明细 ↗</button><button onClick={() => setTab('cash')}>现金与账款 ↗</button></div></section>
                                 <section className="bc-card bc-advice"><h2>经营提示</h2><p>{data.result.briefing[0] || '请先核对当前期间的资料完整性。'}</p>{data.result.alerts.slice(0, 2).map(a => <p key={a.title}>{a.title}</p>)}<button disabled={!can('AI_ASSISTANT')} onClick={() => setAiOpen(true)}>查看 AI 经营建议 ↗</button></section>
                             </aside></div>
                             <div className="bc-chart-tabs"><button aria-pressed={chart === 'week'} onClick={() => setChart('week')}>近7天对比</button><button aria-pressed={chart === 'month'} onClick={() => setChart('month')}>本月与保本</button></div>
