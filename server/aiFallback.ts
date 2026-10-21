@@ -83,3 +83,23 @@ export const runWithModelFallback = async <T>(
     }
     throw new AiAllModelsFailed(attempts);
 };
+
+/** 金钥去掉首尾空白、换行与引号（在 Secret Manager 贴上时常多带一个换行，Google 就会回 401） */
+export const normalizeApiKey = (raw: string | undefined) =>
+    String(raw ?? '').trim().replace(/^["']+|["']+$/g, '').trim();
+
+/**
+ * 描述金钥的「格式」给管理员看，绝不显示金钥内容：
+ * 长度、是否 AIza 开头、原始值是否带空白 / 换行 / 引号。
+ * Google AI Studio 的金钥通常是 39 个字元、AIza 开头。
+ */
+export const describeApiKeyShape = (raw: string | undefined) => {
+    const value = String(raw ?? '');
+    const key = normalizeApiKey(value);
+    if (!key) return '金钥格式：伺服器没有读到金钥';
+    const notes = [`${key.length} 个字元`, key.startsWith('AIza') ? 'AIza 开头' : '不是 AIza 开头（可能贴错了，例如贴成名称或别的金钥）'];
+    if (key.length !== 39) notes.push('一般应为 39 个字元');
+    if (value !== key) notes.push('原始值带有空白 / 换行 / 引号（已自动去掉）');
+    if (/\s/.test(key)) notes.push('中间有空白');
+    return `金钥格式：${notes.join('，')}`;
+};

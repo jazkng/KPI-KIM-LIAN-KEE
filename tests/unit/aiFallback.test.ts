@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AiAllModelsFailed, aiErrorSummary, classifyAiError, modelChain, runWithModelFallback } from '../../server/aiFallback';
+import { AiAllModelsFailed, aiErrorSummary, classifyAiError, modelChain, runWithModelFallback, describeApiKeyShape, normalizeApiKey } from '../../server/aiFallback';
 
 describe('classifyAiError', () => {
     it('分类', () => {
@@ -36,5 +36,22 @@ describe('runWithModelFallback', () => {
     });
     it('错误摘要不会带出金钥', () => {
         expect(aiErrorSummary({ status: 400, message: 'API key AIzaSyAbCdEfGhIjKlMnOpQrStUvWxYz123456 not valid' })).toBe('400 API key [key] not valid');
+    });
+});
+
+describe('API key normalize / shape', () => {
+    const fake = 'AIza' + 'x'.repeat(35);
+    it('strips whitespace, newlines and quotes', () => {
+        expect(normalizeApiKey(`${fake}\n`)).toBe(fake);
+        expect(normalizeApiKey(` "${fake}" `)).toBe(fake);
+        expect(normalizeApiKey(undefined)).toBe('');
+    });
+    it('describes the shape without leaking the key', () => {
+        const ok = describeApiKeyShape(fake);
+        expect(ok).toContain('39 个字元');
+        expect(ok).not.toContain('xxxx');
+        expect(describeApiKeyShape(`${fake}\n`)).toContain('已自动去掉');
+        expect(describeApiKeyShape('erp-v2-dev-gemini-api-key')).toContain('不是 AIza 开头');
+        expect(describeApiKeyShape('')).toContain('没有读到');
     });
 });

@@ -20,7 +20,7 @@ import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 import { initFirebaseAdmin } from "./server/firebaseAdmin";
 import { mountAuthRoutes } from "./server/auth/authService";
 import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
-import { AI_ERROR_MESSAGE, AiAllModelsFailed, aiErrorSummary, classifyAiError, modelChain, runWithModelFallback } from "./server/aiFallback";
+import { AI_ERROR_MESSAGE, AiAllModelsFailed, aiErrorSummary, classifyAiError, describeApiKeyShape, modelChain, normalizeApiKey, runWithModelFallback } from "./server/aiFallback";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -39,7 +39,7 @@ const ADVISOR_MODEL = process.env.GEMINI_ADVISOR_MODEL || "gemini-3.8-flash";
 let aiClient: GoogleGenAI | null = null;
 
 function getAiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = normalizeApiKey(process.env.GEMINI_API_KEY);
   if (!apiKey) {
     throw new Error(
       "GEMINI_API_KEY is not configured on the server. Please check Settings > Secrets.",
@@ -309,7 +309,8 @@ ${JSON.stringify(contextData, null, 2)}
       const kind = error instanceof AiAllModelsFailed ? error.kind : classifyAiError(error);
       // 预览站有门禁，只有老板 / 授权的人看得到：附上 Google 回传的错误代码，方便判断是哪里的设定
       const detail = error instanceof AiAllModelsFailed ? error.attempts.map(a => `${a.model}：${a.summary}`).join('\n') : aiErrorSummary(error);
-      res.status(502).json({ error: AI_ERROR_MESSAGE[kind], detail });
+      const keyNote = kind === 'AUTH' ? `\n${describeApiKeyShape(process.env.GEMINI_API_KEY)}` : '';
+      res.status(502).json({ error: AI_ERROR_MESSAGE[kind], detail: detail + keyNote });
     }
   });
 
