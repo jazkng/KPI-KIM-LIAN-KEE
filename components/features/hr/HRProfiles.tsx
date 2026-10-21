@@ -1357,18 +1357,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     )}
                                                 </div>
 
-                                                {/* 不计入员工：资料留在档案，但不算人数、不排班 */}
-                                                <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between mb-4">
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">不计入员工 (Not counted as staff)</label>
-                                                        <div className={`text-xs font-bold mt-0.5 ${form.excludeFromStaff ? 'text-orange-300' : 'text-white/40'}`}>
-                                                            {form.excludeFromStaff ? '不算员工人数，排班与人事中心不显示' : '正常计入员工'}
-                                                        </div>
-                                                    </div>
-                                                    {isEditing && (
-                                                        <input type="checkbox" checked={!!form.excludeFromStaff} onChange={e => setForm({...form, excludeFromStaff: e.target.checked})} className="w-5 h-5 accent-orange-400 cursor-pointer" />
-                                                    )}
-                                                </div>
 
                                                 <div className="flex flex-wrap items-end justify-between gap-3 mb-4 bg-white/5 p-3 rounded-xl">
                                                     <div className="flex-1 w-full md:w-auto">
@@ -1451,6 +1439,18 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="性别 (Gender)" value={form.gender} onChange={(e: any) => setForm({...form, gender: e.target.value})} options={['Male', 'Female']} isEditing={isEditing} />
                                             <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
                                             <SelectField label="雇佣状态 (Status)" value={form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, {label:'离职 (Terminated)', value:'TERMINATED'}]} isEditing={isEditing} />
+                                            {/* 不计入员工：资料留在档案（例如老板），但不算人数、不排班、人事中心不显示 */}
+                                            <div className="col-span-2 md:col-span-1">
+                                                <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">计入员工 (Staff count)</label>
+                                                {isEditing ? (
+                                                    <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 min-h-[48px] cursor-pointer ${form.excludeFromStaff ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
+                                                        <span className="text-xs font-bold text-[#111111]">不计入员工<span className="block text-[10px] font-medium text-gray-500">不算人数、不排班</span></span>
+                                                        <input type="checkbox" checked={!!form.excludeFromStaff} onChange={e => setForm({...form, excludeFromStaff: e.target.checked})} className="w-5 h-5 accent-orange-500 cursor-pointer shrink-0" />
+                                                    </label>
+                                                ) : (
+                                                    <div className={`text-sm font-bold p-2 border border-transparent min-h-[36px] ${form.excludeFromStaff ? 'text-orange-600' : 'text-[#111111]'}`}>{form.excludeFromStaff ? '不计入员工' : '计入'}</div>
+                                                )}
+                                            </div>
                                             <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
                                             <SelectField label={isSuperAdminMode ? "系统入口特殊覆盖 (Portal Override)" : "系统入口 (自动)"} value={isSuperAdminMode ? (form.portalRoleOverride || "") : getPortalRole(form as Employee)} onChange={(e: any) => setForm({...form, portalRoleOverride: e.target.value || undefined})} options={isSuperAdminMode ? [{label: `跟随职级（自动：${getPortalRole(form as Employee)}）`, value: ""}, ...PORTAL_ROLE_OPTIONS] : PORTAL_ROLE_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
                                             <SelectField 
