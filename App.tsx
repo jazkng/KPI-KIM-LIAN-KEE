@@ -514,7 +514,7 @@ export default function App() {
                 {/* Boss */}
                 {currentUser === PortalRole.BOSS && (
                     <>
-                        {currentEmployee && !bossTab && !isBossModalOpen && !isConfigOpen && !isAiOpen && (
+                        {currentEmployee && !bossTab && bossHomeView === 'FUNCTIONS' && !isBossModalOpen && !isConfigOpen && !isAiOpen && (
                             <NotificationCenter
                                 employee={currentEmployee}
                                 onOpenLog={openOperationalLogFromNotification}
@@ -531,6 +531,9 @@ export default function App() {
                                     currentEmployee={currentEmployee!}
                                     onOpenConfig={() => setIsConfigOpen(true)}
                                     onLogout={handleLogout}
+                                    notifications={currentEmployee && (
+                                        <NotificationCenter employee={currentEmployee} onOpenLog={openOperationalLogFromNotification} variant="header" />
+                                    )}
                                 />
                             ) : (
                                 <BossDashboard

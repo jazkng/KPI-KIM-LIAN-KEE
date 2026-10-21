@@ -33,7 +33,8 @@ type NotificationFilter = 'ALL' | 'UNREAD' | 'LOGBOOK';
 interface NotificationCenterProps {
     employee: Employee;
     onOpenLog: (logId: string) => void;
-    variant?: 'light' | 'dark' | 'floating';
+    /** header：放在页面标题列里（跟旁边的设置 / 退出按钮同样式） */
+    variant?: 'light' | 'dark' | 'floating' | 'header';
     className?: string;
 }
 
@@ -324,7 +325,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     const floatingClass = variant === 'floating'
         ? 'fixed top-[max(1rem,env(safe-area-inset-top))] right-4 z-[145]'
         : 'relative';
-    const buttonTheme = variant === 'dark' || variant === 'floating'
+    const buttonTheme = variant === 'header'
+        ? 'bg-white text-[#757d89] border-[#eceef1] !rounded-[10px] !w-[42px] !h-[42px] max-md:!w-[37px] max-md:!h-[37px] max-md:!border-0'
+        : variant === 'dark' || variant === 'floating'
         ? 'bg-[#111111] text-[#FFD200] border-white/15 shadow-lg'
         : 'bg-white text-stone-700 border-stone-200 shadow-sm';
 
