@@ -603,6 +603,8 @@ export interface Employee {
     misconductStats?: MisconductStats;
     isAttendanceExempt?: boolean; // 新增：免打卡标记
     isPayrollEligible?: boolean; // 新增：是否参与薪资结算 (接收薪资)
+    /** 不计入员工：资料留在档案（例如老板），但不算员工人数、不出现在排班与人事中心。V2 新增，V1 会忽略 */
+    excludeFromStaff?: boolean;
     shiftGroup?: number; // 新增：班次人群 (1 = 班次1, 2 = 班次2)
     /** 考勤机（FACE3000-U）上的员工编号；没设定时以员工 ID 比对（V2 新增，选填） */
     attendanceDeviceNo?: string;

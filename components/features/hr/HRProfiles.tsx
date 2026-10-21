@@ -1357,6 +1357,19 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     )}
                                                 </div>
 
+                                                {/* 不计入员工：资料留在档案，但不算人数、不排班 */}
+                                                <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between mb-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">不计入员工 (Not counted as staff)</label>
+                                                        <div className={`text-xs font-bold mt-0.5 ${form.excludeFromStaff ? 'text-orange-300' : 'text-white/40'}`}>
+                                                            {form.excludeFromStaff ? '不算员工人数，排班与人事中心不显示' : '正常计入员工'}
+                                                        </div>
+                                                    </div>
+                                                    {isEditing && (
+                                                        <input type="checkbox" checked={!!form.excludeFromStaff} onChange={e => setForm({...form, excludeFromStaff: e.target.checked})} className="w-5 h-5 accent-orange-400 cursor-pointer" />
+                                                    )}
+                                                </div>
+
                                                 <div className="flex flex-wrap items-end justify-between gap-3 mb-4 bg-white/5 p-3 rounded-xl">
                                                     <div className="flex-1 w-full md:w-auto">
                                                          <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Basic Salary / Mode</label>

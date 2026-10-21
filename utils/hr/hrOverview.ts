@@ -1,15 +1,18 @@
 // ============================================================================
-// 人事中心：员工、今天排班、今天打卡的汇总（纯函数，只读）
+// 人事中心：员工、今天排班、本月兼职 / 预支的汇总（纯函数，只读）
 // ----------------------------------------------------------------------------
-// 资料来源：employees、roster_months/{YYYY-MM}.roster[日期][员工ID]、attendance（当天）
+// 资料来源：employees、roster_months/{YYYY-MM}.roster[日期][员工ID]、
+//           standalone_expenses（STAFF_ADVANCE = 预支；SALARY 且 id 不是 salary_/payroll_ 开头 = 兼职）
 // 这里不写入任何资料。
 // ============================================================================
 
-import type { AttendanceRecord, Employee } from '../../types';
+import type { Employee, ExpenseItem } from '../../types';
 
 export const DEPT_LABEL: Record<string, string> = {
     KITCHEN: '厨房', FLOOR: '楼面', BAR: '水吧', DISHWASH: '洗碗', BACK_OFFICE: '后勤', OTHER: '其他', OWNER: '老板',
 };
+/** 人事中心 / 排班的部门顺序 */
+export const DEPT_ORDER = ['KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'];
 
 /** 排班里算「休息 / 请假」的状态 */
 const OFF_STATUSES = new Set(['OFF', 'LEAVE', 'MC', 'ABSENT', 'ANNUAL', 'HOLIDAY']);
@@ -20,103 +23,71 @@ export const ROSTER_STATUS_LABEL: Record<string, string> = {
     OFF: '休息', LEAVE: '请假', MC: '病假', ABSENT: '缺勤', ANNUAL: '年假', HOLIDAY: '公假',
 };
 
-export type ExpiryKind = 'WORK_PERMIT' | 'TYPHOID' | 'CONTRACT' | 'PROBATION';
-export const EXPIRY_LABEL: Record<ExpiryKind, string> = {
-    WORK_PERMIT: '准证到期', TYPHOID: '伤寒针到期', CONTRACT: '合约到期', PROBATION: '试用期结束',
-};
+/**
+ * 算不算员工（人数、排班、人事中心）：
+ * 离职 / 封存、老板部门、档案勾了「不计入员工」的都不算。
+ */
+export const isCountedStaff = (e: Employee) =>
+    !e.isArchived && e.status !== 'TERMINATED' && e.department !== 'OWNER' && e.excludeFromStaff !== true;
 
-export interface ExpiryItem { employeeId: string; name: string; kind: ExpiryKind; date: string; daysLeft: number }
-export interface PersonLine { employeeId: string; name: string; dept: string; status: string }
+export interface PersonLine { employeeId: string; name: string; status: string }
+export interface DeptToday {
+    dept: string;
+    label: string;
+    total: number;
+    working: PersonLine[];
+    off: PersonLine[];
+    unassigned: PersonLine[];
+}
+export interface StaffCashMonth {
+    advanceTotal: number;
+    advanceCount: number;
+    partTimeTotal: number;
+    partTimeCount: number;
+    /** 本月预支最多的几个人 */
+    topAdvances: { name: string; amount: number }[];
+}
 
 export interface HrOverview {
     active: number;
     probation: number;
-    byDept: { dept: string; label: string; count: number }[];
     monthlySalaryTotal: number;
-    roster: null | { working: PersonLine[]; off: PersonLine[]; unassigned: number };
-    attendance: null | { clockedIn: number; late: number; notClockedIn: PersonLine[] };
-    expiries: ExpiryItem[];
+    /** 有班表才有：今天上班 / 休息总数 */
+    working: number | null;
+    off: number | null;
+    /** 按部门：今天谁上班、谁休息（没有班表时 working / off 都是空的，人全部在 unassigned） */
+    depts: DeptToday[];
+    hasRoster: boolean;
     birthdays: { employeeId: string; name: string; day: string; isToday: boolean }[];
 }
-
-/** 在职员工（老板本人不算在人数里） */
-const isActive = (e: Employee) => !e.isArchived && e.status !== 'TERMINATED' && e.department !== 'OWNER';
-
-/** 'YYYY-MM-DD'（也接受带时间的字串）→ 两个日期相差几天；读不懂返回 null */
-export const daysBetween = (from: string, to: string): number | null => {
-    const a = Date.parse(`${String(from).slice(0, 10)}T00:00:00Z`);
-    const b = Date.parse(`${String(to).slice(0, 10)}T00:00:00Z`);
-    if (Number.isNaN(a) || Number.isNaN(b)) return null;
-    return Math.round((b - a) / 86400000);
-};
-
-const LATE_STATUSES = new Set(['LATE', 'COMPLETED_LATE', 'LATE_AND_EARLY']);
 
 export const buildHrOverview = (args: {
     employees: Employee[];
     today: string;
     /** 今天那一格：{ 员工ID: 状态 }；没有班表传 null */
     dayRoster: Record<string, string> | null;
-    /** 今天的打卡；没读到传 null */
-    attendance: AttendanceRecord[] | null;
-    /** 未来几天内到期的才列出（已过期的一律列出） */
-    expiryWindowDays?: number;
 }): HrOverview => {
-    const { today, dayRoster, attendance, expiryWindowDays = 60 } = args;
-    const staff = args.employees.filter(isActive).sort((a, b) => a.name.localeCompare(b.name));
-    const dept = (e: Employee) => e.department || 'OTHER';
-    const line = (e: Employee, status = ''): PersonLine => ({ employeeId: e.id, name: e.name, dept: dept(e), status });
+    const { today, dayRoster } = args;
+    const staff = args.employees.filter(isCountedStaff).sort((a, b) => a.name.localeCompare(b.name));
+    const deptOf = (e: Employee) => (e.department && DEPT_LABEL[e.department] ? e.department : 'OTHER');
 
-    const deptCount = new Map<string, number>();
-    staff.forEach(e => deptCount.set(dept(e), (deptCount.get(dept(e)) || 0) + 1));
-    const byDept = [...deptCount.entries()]
-        .map(([d, count]) => ({ dept: d, label: DEPT_LABEL[d] || d, count }))
-        .sort((a, b) => b.count - a.count);
+    const byDept = new Map<string, DeptToday>();
+    staff.forEach(e => {
+        const d = deptOf(e);
+        if (!byDept.has(d)) byDept.set(d, { dept: d, label: DEPT_LABEL[d], total: 0, working: [], off: [], unassigned: [] });
+        const row = byDept.get(d)!;
+        row.total++;
+        const s = String(dayRoster?.[e.id] || 'UNASSIGNED');
+        const line = { employeeId: e.id, name: e.name, status: s };
+        if (!dayRoster || NOT_WORKING.has(s) && !OFF_STATUSES.has(s)) row.unassigned.push(line);
+        else if (OFF_STATUSES.has(s)) row.off.push(line);
+        else row.working.push(line);
+    });
+    const depts = [...byDept.values()].sort((a, b) => DEPT_ORDER.indexOf(a.dept) - DEPT_ORDER.indexOf(b.dept));
 
     const monthlySalaryTotal = staff
         .filter(e => (e.salaryMode || 'MONTHLY') === 'MONTHLY')
         .reduce((s, e) => s + (Number(e.basicSalary) || 0), 0);
-
-    let roster: HrOverview['roster'] = null;
-    if (dayRoster) {
-        const working: PersonLine[] = [], off: PersonLine[] = [];
-        let unassigned = 0;
-        staff.forEach(e => {
-            const s = String(dayRoster[e.id] || 'UNASSIGNED');
-            if (OFF_STATUSES.has(s)) off.push(line(e, s));
-            else if (NOT_WORKING.has(s)) unassigned++;
-            else working.push(line(e, s));
-        });
-        roster = { working, off, unassigned };
-    }
-
-    let att: HrOverview['attendance'] = null;
-    if (attendance) {
-        const byEmp = new Map(attendance.filter(a => a.clockIn).map(a => [a.employeeId, a]));
-        const expected = roster ? roster.working : [];
-        att = {
-            clockedIn: byEmp.size,
-            late: [...byEmp.values()].filter(a => LATE_STATUSES.has(a.status)).length,
-            notClockedIn: expected.filter(p => !byEmp.has(p.employeeId)),
-        };
-    }
-
-    const expiries: ExpiryItem[] = [];
-    staff.forEach(e => {
-        const add = (kind: ExpiryKind, date?: string) => {
-            if (!date) return;
-            const d = daysBetween(today, date);
-            if (d === null || d > expiryWindowDays) return;
-            // 试用期结束 / 合约到期太久以前的就不再提（多半是忘了更新状态，但只提最近 30 天）
-            if ((kind === 'PROBATION' || kind === 'CONTRACT') && d < -30) return;
-            expiries.push({ employeeId: e.id, name: e.name, kind, date: String(date).slice(0, 10), daysLeft: d });
-        };
-        add('WORK_PERMIT', e.workPermitExpiry);
-        add('TYPHOID', e.typhoidExpiry);
-        add('CONTRACT', e.contractEndDate);
-        if (e.status === 'PROBATION') add('PROBATION', e.probationEndDate);
-    });
-    expiries.sort((a, b) => a.daysLeft - b.daysLeft);
 
     const month = today.slice(5, 7);
     const birthdays = staff
@@ -127,6 +98,30 @@ export const buildHrOverview = (args: {
     return {
         active: staff.length,
         probation: staff.filter(e => e.status === 'PROBATION').length,
-        byDept, monthlySalaryTotal, roster, attendance: att, expiries, birthdays,
+        monthlySalaryTotal,
+        working: dayRoster ? depts.reduce((s, d) => s + d.working.length, 0) : null,
+        off: dayRoster ? depts.reduce((s, d) => s + d.off.length, 0) : null,
+        depts,
+        hasRoster: !!dayRoster,
+        birthdays,
+    };
+};
+
+const dateOf = (e: ExpenseItem) => String(e.paymentDate || e.time || '').slice(0, 10);
+
+/** 本月预支 / 兼职（跟「兼职与预支」页同一套判断） */
+export const summarizeStaffCash = (args: { advances: ExpenseItem[]; salaries: ExpenseItem[]; month: string }): StaffCashMonth => {
+    const { month } = args;
+    const advances = args.advances.filter(e => dateOf(e).startsWith(month) || String(e.time || '').startsWith(month));
+    const partTimes = args.salaries.filter(e => e.id && !(e.id.startsWith('salary_') || e.id.startsWith('payroll_')) && String(e.time || '').startsWith(month));
+    const sum = (list: ExpenseItem[]) => Math.round(list.reduce((s, e) => s + (Number(e.amount) || 0), 0) * 100) / 100;
+    const perPerson = new Map<string, number>();
+    advances.forEach(e => perPerson.set(e.company || '?', (perPerson.get(e.company || '?') || 0) + (Number(e.amount) || 0)));
+    return {
+        advanceTotal: sum(advances),
+        advanceCount: advances.length,
+        partTimeTotal: sum(partTimes),
+        partTimeCount: partTimes.length,
+        topAdvances: [...perPerson.entries()].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 5),
     };
 };

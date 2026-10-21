@@ -105,7 +105,7 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
                 DataManager.getRosterConfig()
             ]);
             // Remove owner roles from operational list
-            setEmployees(emps.filter(e => !e.role.includes('Owner')));
+            setEmployees(emps.filter(e => !e.role.includes('Owner') && e.excludeFromStaff !== true));
 
             if (config) {
                 if (config.minCoverage) setMinCoverage(config.minCoverage);

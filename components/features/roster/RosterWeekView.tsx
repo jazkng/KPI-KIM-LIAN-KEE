@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RosterCell } from './RosterCell';
-import { getDayOfWeekText, getEmployeeDept } from './rosterUtils';
+import { getDayOfWeekText, getEmployeeDept, groupEmployeesByDept, countMonthRestDays } from './rosterUtils';
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle } from 'lucide-react';
 
 interface RosterWeekViewProps {
@@ -158,15 +158,25 @@ export const RosterWeekView: React.FC<RosterWeekViewProps> = ({
                         </tr>
                     </thead>
                     <tbody>
-                        {activeEmployees.map((emp) => {
+                        {groupEmployeesByDept(activeEmployees).map(group => (
+                        <React.Fragment key={group.dept}>
+                            <tr className="bg-gray-100">
+                                <td colSpan={2} className="sticky left-0 z-20 bg-gray-100 px-4 py-1.5 text-xs font-black text-gray-700 border-b border-gray-200 whitespace-nowrap">
+                                    {group.label} · {group.employees.length} 人
+                                </td>
+                                <td colSpan={weekDays.length} className="border-b border-gray-200" />
+                            </tr>
+                        {group.employees.map((emp) => {
                             const dept = getEmployeeDept(emp);
+                            const rest = countMonthRestDays(roster, monthKey, emp.id);
+                            const restTarget = emp.monthlyRestDays ?? 4;
                             return (
                                 <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors h-14">
                                     {/* Column 1: Name (sticky) */}
                                     <td className="sticky left-0 z-20 bg-white px-4 py-2 font-bold text-gray-800 border-r border-b border-gray-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)] whitespace-nowrap">
                                         <div className="flex flex-col">
                                             <span className="text-sm">{emp.name}</span>
-                                            <span className="text-[10px] text-gray-400 font-mono">ID: {emp.id}</span>
+                                            <span className={`text-[10px] font-bold ${rest === restTarget ? 'text-green-600' : rest > restTarget ? 'text-red-500' : 'text-gray-400'}`}>本月休 {rest}/{restTarget} 天</span>
                                         </div>
                                     </td>
                                     {/* Column 2: Role (sticky) */}
@@ -211,6 +221,8 @@ export const RosterWeekView: React.FC<RosterWeekViewProps> = ({
                                 </tr>
                             );
                         })}
+                        </React.Fragment>
+                        ))}
 
                         {/* Summary coverage */}
                         <tr className="bg-gray-900 text-white font-semibold border-t-2 border-gray-950">

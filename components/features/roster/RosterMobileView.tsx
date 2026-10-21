@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { getDayOfWeekText, getEmployeeDept, getDaysInMonth } from './rosterUtils';
+import { getDayOfWeekText, getEmployeeDept, getDaysInMonth, groupEmployeesByDept, countMonthRestDays } from './rosterUtils';
 import { 
     ChevronLeft, ChevronRight, MessageSquare, ShieldCheck, X, RefreshCw, 
     MoreHorizontal, Download, Save, Send, SlidersHorizontal, 
@@ -38,6 +38,17 @@ interface RosterMobileViewProps {
     lastSavedBy?: string | null;
 }
 
+/** 名字旁边：本月已排休息天数 / 每月应休天数 */
+const RestDays: React.FC<{ emp: any; roster: any; monthKey: string }> = ({ emp, roster, monthKey }) => {
+    const rest = countMonthRestDays(roster, monthKey, emp.id);
+    const target = emp.monthlyRestDays ?? 4;
+    return (
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${rest === target ? 'bg-green-50 text-green-700' : rest > target ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+            本月休 {rest}/{target} 天
+        </span>
+    );
+};
+
 export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
     const {
         employees, monthKey, roster, notes, onChangeCell, onSaveNote,
@@ -67,6 +78,13 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
 
     // Sync dates when monthKey shifts
     useEffect(() => {
+        // 打开的是本月 → 直接显示今天这一周 / 今天；其他月份从 1 号开始
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        if (todayStr.startsWith(monthKey)) {
+            setAnchorDate(new Date());
+            setSelectedDate(todayStr);
+            return;
+        }
         const [yr, mo] = monthKey.split('-');
         const d = new Date(parseInt(yr), parseInt(mo) - 1, 1);
         setAnchorDate(d);
@@ -331,9 +349,15 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                             没有找到该部门的员工
                         </div>
                     ) : (
-                        currentView === 'DAILY' ? (
+                        groupEmployeesByDept(filteredEmployees).map(group => (
+                        <div key={group.dept} className="space-y-3">
+                            <div className="sticky top-0 z-10 -mx-4 px-4 py-1.5 bg-[#F6F7FB]/95 backdrop-blur flex items-center justify-between">
+                                <span className="text-xs font-black text-gray-700">{group.label}</span>
+                                <span className="text-[11px] font-bold text-gray-400">{group.employees.length} 人</span>
+                            </div>
+                        {currentView === 'DAILY' ? (
                             /* DAILY VIEW: List of employees for a single day */
-                            filteredEmployees.map(emp => {
+                            group.employees.map(emp => {
                                 const dayRoster = roster[selectedDate] || {};
                                 const statusKey = dayRoster[emp.id] || 'UNASSIGNED';
                                 const statusConfig = ROSTER_STATUSES[statusKey] || ROSTER_STATUSES.UNASSIGNED;
@@ -348,9 +372,9 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                                     >
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
-                                                <div className="font-bold text-gray-900 text-sm">{emp.name}</div>
+                                                <div className="font-bold text-gray-900 text-sm flex items-center gap-2 flex-wrap">{emp.name}<RestDays emp={emp} roster={roster} monthKey={monthKey} /></div>
                                                 <div className="text-[11px] text-gray-500 mt-0.5">
-                                                    {emp.role} · {getEmployeeDept(emp)}
+                                                    {emp.role}
                                                 </div>
                                             </div>
                                             {note && (
@@ -374,7 +398,7 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                             })
                         ) : (
                             /* WEEK / MONTH / PERSONAL VIEW: Horizontal Scrolling Days */
-                            filteredEmployees.map(emp => {
+                            group.employees.map(emp => {
                                 const daysToRender = currentView === 'WEEK' ? weekDays : getDaysInMonth(monthKey);
                                 return (
                                     <div 
@@ -382,9 +406,9 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                                         className="bg-white rounded-[16px] shadow-sm border border-gray-100 overflow-hidden"
                                     >
                                         <div className="px-4 py-3 border-b border-gray-50 bg-gray-50/50">
-                                            <div className="font-bold text-gray-900 text-sm">{emp.name}</div>
+                                            <div className="font-bold text-gray-900 text-sm flex items-center gap-2 flex-wrap">{emp.name}<RestDays emp={emp} roster={roster} monthKey={monthKey} /></div>
                                             <div className="text-[11px] text-gray-500 mt-0.5">
-                                                {emp.role} · {getEmployeeDept(emp)}
+                                                {emp.role}
                                             </div>
                                         </div>
                                         <div className="flex overflow-x-auto overscroll-x-contain touch-pan-x flex-nowrap p-3 gap-2 hide-scrollbar">
@@ -425,7 +449,9 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                                     </div>
                                 );
                             })
-                        )
+                        )}
+                        </div>
+                        ))
                     )}
                 </div>
             </div>
