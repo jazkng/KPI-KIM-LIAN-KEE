@@ -2,7 +2,7 @@ import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  DollarSign,
+  ChevronUp,
   Save,
   Calendar,
   CheckCircle2,
@@ -310,6 +310,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 }) => {
   // 👑 Sub-tab mode: CALC (Monthly Settlement Workspace) vs HISTORY (Pristine separate payment logs)
   const [currentMode, setCurrentMode] = useState<"CALC" | "HISTORY" | "PARTTIME">(initialMode);
+  const [payMoreOpen, setPayMoreOpen] = useState(false);
   const [allHistoryRecords, setAllHistoryRecords] = useState<PayrollRecord[]>(
     [],
   );
@@ -3254,31 +3255,17 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
       >
         {/* Row 1: Title + Month Selector */}
         <div className="flex justify-between items-center gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="bg-[#FFD200] text-black p-1.5 md:p-3 rounded-lg md:rounded-xl shadow-gold shrink-0">
-              <DollarSign size={18} />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-sm md:text-xl font-black text-[#111111] tracking-wide truncate">
-                薪资管理
-              </h2>
-              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
-                {isPosted ? (
-                  isStatutoryPaid ? (
-                    <span className="text-green-400 flex items-center gap-1">
-                      <CheckCircle2 size={10} /> All Paid
-                    </span>
-                  ) : (
-                    <span className="text-blue-400 flex items-center gap-1">
-                      <CheckCircle2 size={10} /> Net Paid
-                    </span>
-                  )
-                ) : (
-                  "Draft"
-                )}
-              </p>
-            </div>
-          </div>
+          {/* 「薪资管理 · DRAFT」拿掉，改成「更多操作」（导出、预支、考勤设置） */}
+          {currentMode === "CALC" ? (
+            <button
+              type="button"
+              onClick={() => setPayMoreOpen(v => !v)}
+              aria-expanded={payMoreOpen}
+              className={`min-h-[44px] px-3 rounded-xl text-xs font-black flex items-center gap-1 border shrink-0 ${payMoreOpen ? "bg-[#111111] text-[#FFD200] border-[#111111]" : "bg-white text-gray-700 border-gray-200"}`}
+            >
+              更多操作 {payMoreOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          ) : <span />}
 
           <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 p-0.5 shrink-0">
             <button
@@ -3332,7 +3319,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
 
         {/* Row 2: Action buttons - compact horizontal scroll on mobile (Only visible in CALC mode) */}
         {currentMode === "CALC" && (
-          <details className="mt-3"><summary className="cursor-pointer text-sm font-bold py-2">更多操作 · 导出、预支、考勤设置</summary><div className="flex flex-wrap items-center gap-2 mt-2">
+          payMoreOpen && <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-150"><div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleExportExcel}
               disabled={isExportingExcel || isLoading}
@@ -3412,7 +3399,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
                 </div>
               )}
             </div>
-          </div></details>
+          </div></div>
         )}
       </div>
 

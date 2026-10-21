@@ -321,6 +321,8 @@ interface HRProfilesProps {
     isSuperAdminMode?: boolean;
     initialSelectedEmployeeId?: string | null;
     clearInitialSelectedEmployeeId?: () => void;
+    /** 打开 / 关闭某位员工的档案（手机版用来隐藏人事中心的分页列，让档案更大） */
+    onDetailOpenChange?: (open: boolean) => void;
 }
 
 export const HRProfiles: React.FC<HRProfilesProps> = ({ 
@@ -330,11 +332,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     currentEmployee,
     isSuperAdminMode = false,
     initialSelectedEmployeeId,
-    clearInitialSelectedEmployeeId
+    clearInitialSelectedEmployeeId,
+    onDetailOpenChange,
 }) => {
     const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [listMoreOpen, setListMoreOpen] = useState(false);
+    useEffect(() => { onDetailOpenChange?.(!!selectedEmpId); }, [selectedEmpId, onDetailOpenChange]);
     const [form, setForm] = useState<Partial<Employee>>({});
     const [newPicName, setNewPicName] = useState('');
     const [newSecondaryRole, setNewSecondaryRole] = useState('');   // 👑 自己打字新增副职
@@ -846,44 +851,41 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
             {/* 🍎 iOS 优化版侧边栏 (Sidebar) */}
             <div className={`w-full md:w-80 lg:w-96 bg-[#F6F7FB] border-r border-gray-200 flex flex-col shrink-0 h-full relative ${selectedEmpId ? 'hidden md:flex' : 'flex'}`}>
                 
-                {/* 顶部操作区 (带 iOS 毛玻璃效果) */}
-                <div className="sticky top-0 z-20 bg-[#F6F7FB]/80 backdrop-blur-xl border-b border-gray-200/60 p-4 pb-3 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-black text-xl text-[#111111] tracking-tight">员工通讯录</h3>
-                        <div className="flex gap-2">
-                            <button onClick={() => setIsSkillMatrixOpen(true)} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-amber-100 text-gray-700 hover:text-amber-700 rounded-full transition-all active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" title="技能总表 / 批量录入等级">
-                                <Grid3x3 size={16} />
-                            </button>
-                            <button onClick={() => setIsExportOpen(true)} className="w-8 h-8 flex items-center justify-center bg-gray-200/80 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded-full transition-all active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center" title="导出名录（可选格式、部门、内容）">
-                                <Printer size={16} />
-                            </button>
-                            <button onClick={handleAddNew} className="w-8 h-8 flex items-center justify-center bg-[#111111] text-[#FFD200] rounded-full hover:bg-black transition-all active:scale-90 shadow-md min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center">
-                                <Plus size={18} />
-                            </button>
+                {/* 顶部：只留一行；新增 / 打印 / 技能总表 / 搜寻 / 在职·已离职 都收进「更多」 */}
+                <div className="sticky top-0 z-20 bg-[#F6F7FB]/90 backdrop-blur-xl border-b border-gray-200/60 px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-sm font-black text-[#111111] truncate">
+                            {showResigned ? '已离职' : '在职员工'} · {filteredEmployees.length} 人
+                            {searchTerm && <span className="ml-1.5 text-xs font-bold text-amber-700">「{searchTerm}」</span>}
                         </div>
+                        <button type="button" onClick={() => setListMoreOpen(v => !v)} aria-expanded={listMoreOpen}
+                            className={`shrink-0 min-h-[40px] px-3 rounded-xl text-xs font-black flex items-center gap-1 border ${listMoreOpen ? 'bg-[#111111] text-[#FFD200] border-[#111111]' : 'bg-white text-gray-700 border-gray-200'}`}>
+                            更多 {listMoreOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
                     </div>
-                    
-                    {/* iOS 风格搜索框 */}
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <input 
-                            type="text" 
-                            placeholder="搜索姓名 / ID..." 
-                            value={searchTerm} 
-                            onChange={e => setSearchTerm(e.target.value)} 
-                            className="w-full pl-9 pr-4 py-2.5 bg-gray-200/60 border-transparent rounded-xl font-medium text-[#111111] placeholder-gray-500 outline-none focus:bg-white focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/30 transition-all"
-                            style={{ fontSize: '16px', minHeight: '40px' }}
-                        />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-200/60 p-1">
-                        {([[false, '在职员工'], [true, '已离职']] as const).map(([v, label]) => (
-                            <button key={label} type="button" onClick={() => { setShowResigned(v); setSelectedEmpId(null); }}
-                                className={`min-h-[40px] rounded-lg text-[13px] font-black flex items-center justify-center gap-1.5 ${showResigned === v ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500'}`}>
-                                {v && <Archive size={14} />}{label}
-                            </button>
-                        ))}
-                    </div>
+                    {listMoreOpen && (
+                        <div className="mt-2.5 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <input type="text" placeholder="搜索姓名 / ID..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl font-medium text-[#111111] placeholder-gray-500 outline-none focus:border-[#FFD200] focus:ring-2 focus:ring-[#FFD200]/30"
+                                    style={{ fontSize: '16px', minHeight: '40px' }} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-200/60 p-1">
+                                {([[false, '在职员工'], [true, '已离职']] as const).map(([v, label]) => (
+                                    <button key={label} type="button" onClick={() => { setShowResigned(v); setSelectedEmpId(null); }}
+                                        className={`min-h-[40px] rounded-lg text-[13px] font-black flex items-center justify-center gap-1.5 ${showResigned === v ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500'}`}>
+                                        {v && <Archive size={14} />}{label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                                <button onClick={() => { setListMoreOpen(false); handleAddNew(); }} className="min-h-[44px] rounded-xl bg-[#111111] text-[#FFD200] text-xs font-black flex items-center justify-center gap-1"><Plus size={15} /> 新增</button>
+                                <button onClick={() => { setListMoreOpen(false); setIsExportOpen(true); }} className="min-h-[44px] rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-black flex items-center justify-center gap-1"><Printer size={14} /> 打印</button>
+                                <button onClick={() => { setListMoreOpen(false); setIsSkillMatrixOpen(true); }} className="min-h-[44px] rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-black flex items-center justify-center gap-1"><Grid3x3 size={14} /> 技能总表</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* 员工列表区 */}
