@@ -41,7 +41,9 @@ const Chips = ({ list, off }: { list: PersonLine[]; off?: boolean }) => <ul clas
     {list.map(p => <li key={p.employeeId} className={`s-${p.status}`}><b>{p.name}</b>{ROSTER_STATUS_LABEL[p.status] && <small>{ROSTER_STATUS_LABEL[p.status]}</small>}</li>)}
 </ul>;
 
-export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canStaffCash, onOpenHr, onOpenRoster, onOpenStaffCash }) => {
+export const HrOverviewPanel: React.FC<Props> = ({ today: realToday, canHr, canRoster, canStaffCash, onOpenHr, onOpenRoster, onOpenStaffCash }) => {
+    // 可以切换日期看别天的班表；本月预支 / 兼职跟着选的月份
+    const [today, setToday] = useState(realToday);
     const [data, setData] = useState<HrOverview | null>(null);
     const [cash, setCash] = useState<StaffCashMonth | null>(null);
     const [error, setError] = useState('');
@@ -71,7 +73,11 @@ export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canS
     if (!canHr && !canRoster && !canStaffCash) return <p className="bc-card">当前账号未获人事模块权限。</p>;
 
     return <div className="hr-overview">
-        <div className="hr-toolbar"><span>{today}</span>
+        <div className="hr-toolbar">
+            <label className="hr-date">
+                <input type="date" value={today} onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setToday(e.target.value); }} aria-label="选择日期" />
+                {today !== realToday && <button type="button" onClick={() => setToday(realToday)}>回到今天</button>}
+            </label>
             <button aria-label="重新读取人事资料" disabled={loading} onClick={() => setReload(v => v + 1)}><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
         </div>
         {error && <p className="bc-card bc-error"><span><AlertCircle size={16} /> {error}</span><button onClick={() => setReload(v => v + 1)}>重试</button></p>}
@@ -79,14 +85,14 @@ export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canS
         {data && <>
             <div className="bc-metric-grid hr-metrics">
                 <div className="bc-metric"><span>在职员工</span><strong>{data.active}</strong><small>试用期 {data.probation} 人{canHr ? ` · 月薪底薪 ${money(data.monthlySalaryTotal)}` : ''}</small></div>
-                {canRoster && <div className="bc-metric"><span>今天上班 / 休息</span><strong>{data.working ?? '—'}<em> / {data.off ?? '—'}</em></strong><small>{data.hasRoster ? '按今天班表' : '本月班表还没建立'}</small></div>}
-                {canStaffCash && <div className="bc-metric"><span>本月预支</span><strong>{cash ? money(cash.advanceTotal) : '—'}</strong><small>{cash ? `${cash.advanceCount} 笔` : '读取失败'}</small></div>}
-                {canStaffCash && <div className="bc-metric"><span>本月兼职</span><strong>{cash ? money(cash.partTimeTotal) : '—'}</strong><small>{cash ? `${cash.partTimeCount} 笔` : '读取失败'}</small></div>}
+                {canRoster && <div className="bc-metric"><span>{today === realToday ? '今天' : today.slice(5)}上班 / 休息</span><strong>{data.working ?? '—'}<em> / {data.off ?? '—'}</em></strong><small>{data.hasRoster ? '按班表' : '本月班表还没建立'}</small></div>}
+                {canStaffCash && <div className="bc-metric"><span>{today.slice(0, 7) === realToday.slice(0, 7) ? '本月' : `${Number(today.slice(5, 7))}月`}预支</span><strong>{cash ? money(cash.advanceTotal) : '—'}</strong><small>{cash ? `${cash.advanceCount} 笔` : '读取失败'}</small></div>}
+                {canStaffCash && <div className="bc-metric"><span>{today.slice(0, 7) === realToday.slice(0, 7) ? '本月' : `${Number(today.slice(5, 7))}月`}兼职</span><strong>{cash ? money(cash.partTimeTotal) : '—'}</strong><small>{cash ? `${cash.partTimeCount} 笔` : '读取失败'}</small></div>}
             </div>
 
             <div className="hr-grid">
                 {canRoster && <section className="bc-card hr-today">
-                    <div className="bc-card-heading"><h2><LayoutGrid size={17} /> 今天班表</h2><button className="hr-link" onClick={onOpenRoster}>排班 <ChevronRight size={14} /></button></div>
+                    <div className="bc-card-heading"><h2><LayoutGrid size={17} /> {today === realToday ? '今天' : `${Number(today.slice(5, 7))}月${Number(today.slice(8))}日`}班表</h2><button className="hr-link" onClick={onOpenRoster}>排班 <ChevronRight size={14} /></button></div>
                     {!data.hasRoster && <p className="bc-muted">本月班表还没建立，下面只列各部门人数。</p>}
                     {data.depts.map(d => <div key={d.dept} className={`hr-dept d-${d.dept}`}>
                         <h3><span>{d.label}</span><small>{data.hasRoster ? <>上班 <b>{d.working.length}</b> · 休息 <b>{d.off.length}</b>{d.unassigned.length > 0 && <> · 未排 {d.unassigned.length}</>}</> : <>{d.total} 人</>}</small></h3>
@@ -102,8 +108,8 @@ export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canS
                         <div className="bc-card-heading"><h2><Wallet size={17} /> 兼职与预支</h2><button className="hr-link" onClick={onOpenStaffCash}>打开 <ChevronRight size={14} /></button></div>
                         {!cash ? <p className="bc-muted">读取失败。</p> : <>
                             <ul className="hr-depts">
-                                <li><span>本月预支</span><b>{money(cash.advanceTotal)} · {cash.advanceCount} 笔</b></li>
-                                <li><span>本月兼职</span><b>{money(cash.partTimeTotal)} · {cash.partTimeCount} 笔</b></li>
+                                <li><span>{today.slice(0, 7) === realToday.slice(0, 7) ? '本月' : `${Number(today.slice(5, 7))}月`}预支</span><b>{money(cash.advanceTotal)} · {cash.advanceCount} 笔</b></li>
+                                <li><span>{today.slice(0, 7) === realToday.slice(0, 7) ? '本月' : `${Number(today.slice(5, 7))}月`}兼职</span><b>{money(cash.partTimeTotal)} · {cash.partTimeCount} 笔</b></li>
                             </ul>
                             {cash.topAdvances.length > 0 && <>
                                 <h3 className="hr-sub">本月预支最多</h3>

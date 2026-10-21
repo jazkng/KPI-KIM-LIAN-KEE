@@ -24,9 +24,22 @@ import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_ME
 import type { StarLevel } from '../../../constants/skillCatalog';
 import { withoutRetiredModules } from '../../../utils/retiredModules';
 
+/** 「中文 (English)」→ 中文在上，英文在下（较小） */
+const BiLabel = ({ text, tone = 'light' }: { text: string; tone?: 'light' | 'dark' }) => {
+    const m = /^(.*?)\s*\(([^()]*)\)\s*(.*)$/.exec(text || '');
+    const zh = m ? `${m[1]}${m[3] ? ` ${m[3]}` : ''}`.trim() : text;
+    const en = m ? m[2] : '';
+    return (
+        <label className="block mb-1 leading-tight">
+            <span className={`block text-[12px] md:text-[11px] font-bold ${tone === 'dark' ? 'text-[#FFD200]' : 'text-gray-600'}`}>{zh}</span>
+            {en && <span className={`block text-[10px] font-medium mt-0.5 ${tone === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>{en}</span>}
+        </label>
+    );
+};
+
 const InputField = ({ label, value, onChange, placeholder, type = "text", isEditing, className = "" }: any) => (
     <div className={className}>
-        <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">{label}</label>
+        <BiLabel text={label} />
         {isEditing ? (
             <input 
                 type={type} 
@@ -45,7 +58,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", isEdit
 
 const SelectField = ({ label, value, onChange, options, isEditing }: any) => (
     <div>
-        <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">{label}</label>
+        <BiLabel text={label} />
         {isEditing ? (
             <select 
                 value={value || ''} 
@@ -1275,7 +1288,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
 
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> 登录密码 (Access PIN)</h4>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> <span className="leading-tight">登录密码<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Access PIN</span></span></h4>
                                         <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
                                             <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
                                             <button onClick={() => setShowPin(!showPin)} className="p-2 text-gray-400 hover:text-black transition-colors active:scale-90 min-h-[44px] md:min-h-0">{showPin ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
@@ -1313,7 +1326,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <div className="px-4 md:px-6 pb-6 relative z-10 animate-in slide-in-from-top-2">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                                                     <div className="bg-white/10 p-3 rounded-xl border border-white/10">
-                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Monthly Rest Days</label>
+                                                        <BiLabel tone="dark" text="Monthly Rest Days" />
                                                         {isEditing ? (
                                                             <select value={form.monthlyRestDays || 4} onChange={e => setForm({...form, monthlyRestDays: parseInt(e.target.value)})} className="bg-white/10 text-white font-bold rounded p-2 w-full outline-none border border-white/20" style={{ fontSize: '16px', minHeight: '40px' }}>
                                                                 <option className="text-black" value={2}>2 Days</option>
@@ -1326,7 +1339,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     </div>
                                                     <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between">
                                                         <div>
-                                                            <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Hostel</label>
+                                                            <BiLabel tone="dark" text="Hostel" />
                                                             <div className="text-xs font-bold text-white flex items-center gap-1 mt-0.5">
                                                                 <Home size={14} className={form.hasHostel ? "text-green-400" : "text-white/40"}/> 
                                                                 <span className={form.hasHostel ? "text-green-400" : "text-white/40"}>{form.hasHostel ? 'Provided' : 'No'}</span>
@@ -1341,7 +1354,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 {/* 👑 Payroll Eligibility Toggle */}
                                                 <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex items-center justify-between mb-4">
                                                     <div>
-                                                        <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">薪资结算资格 (Payroll Eligibility)</label>
+                                                        <BiLabel tone="dark" text="薪资结算资格 (Payroll Eligibility)" />
                                                         <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
                                                             <Wallet size={14} className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}/> 
                                                             <span className={(form.isPayrollEligible !== undefined ? form.isPayrollEligible : !(form.role || '').includes('Owner')) ? "text-green-400" : "text-white/40"}>
@@ -1362,7 +1375,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                                 <div className="flex flex-wrap items-end justify-between gap-3 mb-4 bg-white/5 p-3 rounded-xl">
                                                     <div className="flex-1 w-full md:w-auto">
-                                                         <label className="text-[10px] font-bold text-[#FFD200] uppercase mb-1 block">Basic Salary / Mode</label>
+                                                         <BiLabel tone="dark" text="Basic Salary / Mode" />
                                                          {isEditing ? (
                                                              <div className="flex flex-wrap items-center gap-2">
                                                                  <select value={form.salaryMode || 'MONTHLY'} onChange={(e) => setForm({...form, salaryMode: e.target.value as any})} className="bg-white/10 text-[#FFD200] font-bold uppercase tracking-widest border border-white/20 rounded px-2 py-2 outline-none cursor-pointer" style={{ fontSize: '16px', minHeight: '40px' }}>
@@ -1431,7 +1444,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                 <div className="xl:col-span-8 flex flex-col gap-6">
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><User size={14}/> 个人档案 (Personal)</h4>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><User size={14}/> <span className="leading-tight">个人档案<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Personal</span></span></h4>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
                                             <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
                                             {isForeignWorker
@@ -1443,7 +1456,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <SelectField label="雇佣状态 (Status)" value={form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, {label:'离职 (Terminated)', value:'TERMINATED'}]} isEditing={isEditing} />
                                             {/* 不计入员工：资料留在档案（例如老板），但不算人数、不排班、人事中心不显示 */}
                                             <div>
-                                                <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">计入员工 (Staff count)</label>
+                                                <BiLabel text="计入员工 (Staff count)" />
                                                 {isEditing ? (
                                                     <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 min-h-[48px] cursor-pointer ${form.excludeFromStaff ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
                                                         <span className="text-xs font-bold text-[#111111] leading-tight">不计入员工<span className="block text-[10px] font-medium text-gray-500">不算人数、不排班</span></span>
@@ -1465,10 +1478,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <div className="grid grid-cols-2 gap-2"><InputField label="身高 (cm)" type="number" value={form.height} onChange={(e: any) => setForm({...form, height: parseInt(e.target.value)})} placeholder="cm" isEditing={isEditing} /><InputField label="体重 (kg)" type="number" value={form.weight} onChange={(e: any) => setForm({...form, weight: parseInt(e.target.value)})} placeholder="kg" isEditing={isEditing} /></div>
                                             <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
                                             <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
-                                            <SelectField label="首选语言 (Preferred Lang)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
+                                            <SelectField label="语言 (Language)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
                                             {/* 👥 排班分组：跟考勤（班次 1 / 2）、组织图同一个栏位 */}
                                             <div>
-                                                <label className="text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block">排班分组 (Group)</label>
+                                                <BiLabel text="排班分组 (Group)" />
                                                 {isEditing ? (
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {([1, 2] as const).map(n => {
@@ -1507,13 +1520,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                         const others = employees.filter(x => x.id !== form.id && !x.isArchived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
                                                         const nameOf = (id?: string) => employees.find(x => x.id === id)?.name;
                                                         const sel = 'w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-[#111111] outline-none focus:border-[#FFD200]';
-                                                        const lab = 'text-[12px] md:text-[11px] font-bold text-gray-500 mb-1 block';
                                                         const view = (v?: string, fallback = '-') => <div className="text-sm font-bold text-[#111111] py-1.5 md:p-2 min-h-[32px] md:min-h-[36px] break-words">{v || <span className="text-gray-400">{fallback}</span>}</div>;
                                                         const tierLabel = (t: string) => ORG_TIER_OPTIONS.find(o => o.value === t)?.short || t;
                                                         return (
                                                             <>
                                                                 <div>
-                                                                    <label className={lab}>组织层级 (Level)</label>
+                                                                    <BiLabel text="组织层级 (Level)" />
                                                                     {isEditing ? (
                                                                         <select value={form.orgChartTier || ''} onChange={e => setForm({ ...form, orgChartTier: (e.target.value || undefined) as any })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
                                                                             <option value="">自动（按职级：{tierLabel(autoTier)}）</option>
@@ -1524,7 +1536,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                 <InputField label="组织图职位 (Position)" value={form.orgPosition} onChange={(e: any) => setForm({ ...form, orgPosition: e.target.value || undefined })} placeholder={`留空 = ${(form.role || '').split('(')[0].trim() || '职位'}`} isEditing={isEditing} />
                                                                 {(tierNow === 'MANAGEMENT' || form.orgUnit) && (
                                                                     <div>
-                                                                        <label className={lab}>负责单位 (Unit)</label>
+                                                                        <BiLabel text="负责单位 (Unit)" />
                                                                         {isEditing ? (
                                                                             <>
                                                                                 <input list="org-unit-suggestions" value={form.orgUnit || ''} onChange={e => setForm({ ...form, orgUnit: e.target.value || undefined })} placeholder="留空 = 按工作部门（厨房 / 楼面…）" className={sel} style={{ fontSize: '16px', minHeight: '48px' }} />
@@ -1535,7 +1547,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                 )}
                                                                 {tierNow === 'MANAGEMENT' && (
                                                                     <div className="col-span-2 xl:col-span-3">
-                                                                        <label className={lab}>管理部门 (Manages) · 可多选</label>
+                                                                        <BiLabel text="管理部门 (Manages) · 可多选" />
                                                                         {isEditing ? (
                                                                             <div className="flex flex-wrap gap-2">
                                                                                 {OPS_DEPTS.map(d => {
@@ -1559,7 +1571,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                     </div>
                                                                 )}
                                                                 <div>
-                                                                    <label className={lab}>直属上司 (Reports To)</label>
+                                                                    <BiLabel text="直属上司 (Reports To)" />
                                                                     {isEditing ? (
                                                                         <select value={form.reportsTo || ''} onChange={e => setForm({ ...form, reportsTo: e.target.value || undefined })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
                                                                             <option value="">自动（{tierNow === 'STAFF' ? '同部门的管理层' : tierNow === 'MANAGEMENT' ? 'BOD' : '—'}）</option>
@@ -1569,7 +1581,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                 </div>
                                                                 <InputField label="第二身份 (2nd Role)" value={form.orgSecondaryRole} onChange={(e: any) => setForm({ ...form, orgSecondaryRole: e.target.value || undefined })} placeholder="例如：Personal Assistant" isEditing={isEditing} />
                                                                 <div>
-                                                                    <label className={lab}>第二身份汇报给</label>
+                                                                    <BiLabel text="第二身份汇报给" />
                                                                     {isEditing ? (
                                                                         <select value={form.orgSecondaryReportsTo || ''} onChange={e => setForm({ ...form, orgSecondaryReportsTo: e.target.value || undefined })} className={sel} style={{ fontSize: '16px', minHeight: '48px' }}>
                                                                             <option value="">没有</option>
@@ -1588,7 +1600,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Briefcase size={14}/> 政府与卫生 (Govt & Health)</h4>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Briefcase size={14}/> <span className="leading-tight">政府与卫生<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Govt & Health</span></span></h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-blue-50 rounded text-blue-600"><Shield size={14}/></div><span className="text-xs font-bold text-gray-700">法定缴纳 (Statutory)</span></div>
@@ -1706,13 +1718,13 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
 
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Phone size={14}/> 紧急联系人 (Emergency Contact)</h4>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Phone size={14}/> <span className="leading-tight">紧急联系人<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Emergency Contact</span></span></h4>
                                         <div className="grid grid-cols-2 gap-4 md:gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
                                     </div>
  
                                     <div className={mobileDetailTab === 'access' ? 'block' : 'hidden'}>
                                         <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                            <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> 系统权限 (Access)</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
+                                            <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> <span className="leading-tight">系统权限<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Access</span></span></h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
                                             <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
                                             
                                         </div>
@@ -1721,7 +1733,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
                                         <div className="flex items-start justify-between gap-3 mb-4">
                                             <div>
-                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> 库存权限 (Inventory Access)</h4>
+                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> <span className="leading-tight">库存权限<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Inventory Access</span></span></h4>
                                                 <p className="mt-1 text-[10px] font-bold text-gray-400">控制库存范围与具体操作，不改变员工看到的其他模块</p>
                                             </div>
                                             {isEditing && canConfigureInventoryAccess && (
@@ -1752,7 +1764,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
-                                        <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> 奖惩记录 (Disciplinary)</h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95 min-h-[44px] md:min-h-0">+ Add Warning</button>}</div>
+                                        <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> <span className="leading-tight">奖惩记录<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Disciplinary</span></span></h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95 min-h-[44px] md:min-h-0">+ Add Warning</button>}</div>
                                         {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
                                         <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={16}/></button>}</div>); })}</div>
                                     </div>
