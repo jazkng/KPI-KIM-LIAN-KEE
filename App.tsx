@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { PortalRole, Employee, DeviceScreen } from './types';
 import { Login } from './components/Login';
 import { LogOut, Settings, Target, Layout, Users } from 'lucide-react';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
-import { getPortalRole } from './utils/orgAccess';
+import { getOrgLevel, getPortalRole } from './utils/orgAccess';
+import { TestSwitcher } from './components/dev/TestSwitcher';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
 import { currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
 import { NotificationCenter } from './components/ui/NotificationCenter';
@@ -118,6 +119,11 @@ export default function App() {
         return null;
     });
 
+    // 🧪 测试切换（临时）：老板暂时用别人的权限 / 别的页面看画面；只存在记忆体，重新整理就恢复
+    const [testReal, setTestReal] = useState<{ role: PortalRole; employee: Employee } | null>(null);
+    const testRealRef = useRef(testReal);
+    testRealRef.current = testReal;
+
     const [bossTab,         setBossTab]         = useState<BossTab>(null);
     const [bossHomeView,    setBossHomeView]    = useState<'PRIORITY' | 'HR' | 'FUNCTIONS'>('PRIORITY');
     const [isConfigOpen,    setIsConfigOpen]    = useState(false);
@@ -168,6 +174,7 @@ export default function App() {
 
     const handleLogout = useCallback(() => {
         console.log('🔄 User logged out. Clearing sessions.');
+        setTestReal(null);
         setCurrentUser(null);
         setCurrentEmployee(null);
         setBossTab(null);
@@ -186,7 +193,7 @@ export default function App() {
         serverAuthEnabled.then(async enabled => {
             if (!enabled || !alive) return;
             const signedIn = await currentSignedInEmployeeId();
-            if (alive && signedIn !== currentEmployee.id) {
+            if (alive && signedIn !== (testRealRef.current?.employee.id ?? currentEmployee.id)) {
                 console.log('🔐 Session has no matching server identity. Returning to login.');
                 handleLogout();
             }
@@ -226,6 +233,8 @@ export default function App() {
                 if (modulesChanged || roleChanged || nameChanged || profileChanged) {
                     console.log('🔄 Profile or permissions updated from cloud. Syncing...');
                     setCurrentEmployee(fresh);
+                    // 🧪 测试切换中：不要把别人的资料写进本机登入记录，也不要改掉测试选的页面
+                    if (testRealRef.current) return;
                     safeStorage.set('kepong_erp_session_employee', JSON.stringify(fresh));
 
                     const newPortalRole = getPortalRole(fresh);
@@ -393,8 +402,31 @@ export default function App() {
     };
 
     // ─────────────────────────────────────────────────────────────────────────
+    const testOwner = testReal?.employee ?? currentEmployee;
     return (
-        <div className="min-h-screen flex flex-col relative font-sans bg-[#F6F7FB] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0">
+        <div className={`min-h-screen flex flex-col relative font-sans bg-[#F6F7FB] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0 ${testReal ? 'pt-8' : ''}`}>
+            {currentUser && currentEmployee && testOwner && getOrgLevel(testOwner) === 'OWNER' && (
+                <TestSwitcher
+                    real={testReal?.employee ?? null}
+                    current={currentEmployee}
+                    currentRole={currentUser}
+                    onApply={(role, employee) => {
+                        if (!testReal) setTestReal({ role: currentUser, employee: currentEmployee });
+                        setBossTab(null);
+                        setBossHomeView('PRIORITY');
+                        setCurrentEmployee(employee);
+                        setCurrentUser(role);
+                    }}
+                    onRestore={() => {
+                        if (!testReal) return;
+                        setBossTab(null);
+                        setBossHomeView('PRIORITY');
+                        setCurrentEmployee(testReal.employee);
+                        setCurrentUser(testReal.role);
+                        setTestReal(null);
+                    }}
+                />
+            )}
 
             {/* Header（仅登录后且在老板首页时显示，避免电脑端重复顶部栏） */}
             {currentUser === PortalRole.BOSS && !bossTab && bossHomeView === 'FUNCTIONS' && (
