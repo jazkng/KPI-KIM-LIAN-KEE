@@ -67,7 +67,7 @@ export const TestSwitcher: React.FC<Props> = ({ real, current, currentRole, onAp
             </div>
         ) : (
             <button onClick={() => setOpen(true)} aria-label="测试切换" title="测试切换"
-                className="fixed top-1.5 left-1/2 -translate-x-1/2 z-[100001] w-8 h-8 rounded-full bg-white/95 border border-stone-200 shadow-lg grid place-items-center text-orange-500">
+                className="fixed right-0 top-1/2 -translate-y-1/2 z-[100001] w-8 h-10 rounded-l-xl bg-white/95 border border-r-0 border-stone-200 shadow-lg grid place-items-center text-orange-500">
                 <FlaskConical size={15} />
             </button>
         )}
