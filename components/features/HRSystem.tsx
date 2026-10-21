@@ -25,6 +25,8 @@ interface HRSystemProps {
 
 export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) => {
     const isSuperAdminMode = isSystemAdminAccount(currentEmployee);
+    // 手机版：打开某位员工的档案时，隐藏顶部标题与分页，让档案占满画面（档案自己有返回键）
+    const [profileOpen, setProfileOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'PROFILES' | 'PAYROLL' | 'ROLES'>('PROFILES');
     const [payrollMode, setPayrollMode] = useState<'CALC' | 'PARTTIME'>('CALC');
     const [employees, setEmployees] = useState<Employee[]>([]);
@@ -81,7 +83,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
             <div className="bg-white w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
 
                 {/* 顶栏 — iOS safe-area */}
-                <div className="bg-[#111111] px-4 pb-4 text-white flex justify-between items-center shrink-0 border-b-4 border-[#FFD200] safe-area-top">
+                <div className={`bg-[#111111] px-4 pb-4 text-white justify-between items-center shrink-0 border-b-4 border-[#FFD200] safe-area-top ${profileOpen && activeTab === 'PROFILES' ? 'hidden md:flex' : 'flex'}`}>
                     <div className="flex items-center gap-3">
                         <button
                             style={noTap}
@@ -114,7 +116,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                 </div>
 
                 {/* 导航 Tab — iOS: min-h-[44px] + noTap */}
-                <div className="flex bg-gray-100 border-b shrink-0 overflow-x-auto"
+                <div className={`bg-gray-100 border-b shrink-0 overflow-x-auto ${profileOpen && activeTab === 'PROFILES' ? 'hidden md:flex' : 'flex'}`}
                      style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
                     {TABS.map(tab => (
                         <button
@@ -128,7 +130,6 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                     ))}
                 </div>
 
-                {activeTab === 'PROFILES' && <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-2 flex justify-end"><button className="min-h-[44px] px-4 rounded-xl bg-[#FFD200] text-[#111111] text-sm font-bold" onClick={() => { setPayrollMode('PARTTIME'); setActiveTab('PAYROLL'); }}>兼职账目与收据 →</button></div>}
                 {/* 内容区 */}
                 <div className="flex-grow min-h-0 overflow-hidden relative bg-[#F6F7FB]">
                     {activeTab === 'PROFILES' && (
@@ -140,6 +141,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                             isSuperAdminMode={isSuperAdminMode}
                             initialSelectedEmployeeId={focusedEmployeeId}
                             clearInitialSelectedEmployeeId={() => setFocusedEmployeeId(null)}
+                            onDetailOpenChange={setProfileOpen}
                         />
                     )}
                     {activeTab === 'PAYROLL' && (

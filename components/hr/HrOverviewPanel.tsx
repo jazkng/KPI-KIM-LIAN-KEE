@@ -38,7 +38,7 @@ const readStaffCash = async (month: string): Promise<StaffCashMonth> => {
 };
 
 const Chips = ({ list, off }: { list: PersonLine[]; off?: boolean }) => <ul className={`hr-people${off ? ' is-off' : ''}`}>
-    {list.map(p => <li key={p.employeeId}><b>{p.name}</b>{ROSTER_STATUS_LABEL[p.status] && <small>{ROSTER_STATUS_LABEL[p.status]}</small>}</li>)}
+    {list.map(p => <li key={p.employeeId} className={`s-${p.status}`}><b>{p.name}</b>{ROSTER_STATUS_LABEL[p.status] && <small>{ROSTER_STATUS_LABEL[p.status]}</small>}</li>)}
 </ul>;
 
 export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canStaffCash, onOpenHr, onOpenRoster, onOpenStaffCash }) => {
@@ -88,7 +88,7 @@ export const HrOverviewPanel: React.FC<Props> = ({ today, canHr, canRoster, canS
                 {canRoster && <section className="bc-card hr-today">
                     <div className="bc-card-heading"><h2><LayoutGrid size={17} /> 今天班表</h2><button className="hr-link" onClick={onOpenRoster}>排班 <ChevronRight size={14} /></button></div>
                     {!data.hasRoster && <p className="bc-muted">本月班表还没建立，下面只列各部门人数。</p>}
-                    {data.depts.map(d => <div key={d.dept} className="hr-dept">
+                    {data.depts.map(d => <div key={d.dept} className={`hr-dept d-${d.dept}`}>
                         <h3><span>{d.label}</span><small>{data.hasRoster ? <>上班 <b>{d.working.length}</b> · 休息 <b>{d.off.length}</b>{d.unassigned.length > 0 && <> · 未排 {d.unassigned.length}</>}</> : <>{d.total} 人</>}</small></h3>
                         {data.hasRoster && <>
                             {d.working.length > 0 && <Chips list={d.working} />}

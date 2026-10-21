@@ -20,6 +20,7 @@ import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 import { initFirebaseAdmin } from "./server/firebaseAdmin";
 import { mountAuthRoutes } from "./server/auth/authService";
 import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
+import { AI_ERROR_MESSAGE, classifyAiError, modelChain, runWithModelFallback } from "./server/aiFallback";
 
 // Read model configuration from environment variables
 const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
@@ -31,6 +32,9 @@ const TRANSLATION_MODELS = {
     "gemini-3.1-flash-lite",
   smart: process.env.GEMINI_TRANSLATION_SMART_MODEL || "gemini-3.5-flash",
 };
+
+// AI 经营顾问优先用的模型：跟发票扫描服务（ap-ai-service）同一个较新的 Flash（可用 GEMINI_ADVISOR_MODEL 覆盖）
+const ADVISOR_MODEL = process.env.GEMINI_ADVISOR_MODEL || "gemini-3.8-flash";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -284,20 +288,25 @@ ${JSON.stringify(contextData, null, 2)}
       return res.status(503).json({ error: "伺服器没有设定 AI 金钥，暂时无法使用 AI 经营顾问。" });
     }
     try {
-      const response = await getAiClient().models.generateContent({
-        model: CHAT_MODEL,
-        contents: [{ role: "user", parts: [{ text: parsed.question }] }],
-        config: {
-          systemInstruction: buildAdvisorPrompt(parsed.periodLabel, parsed.evidence),
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
-      });
+      // 依序试：3.8 Flash → 3.5 Flash → 3.1 Flash Lite → 旧的对话模型；下架或太忙时自动换下一个（不用 Pro）
+      const { result: response, model } = await runWithModelFallback(
+        modelChain(ADVISOR_MODEL, TRANSLATION_MODELS.smart, TRANSLATION_MODELS.lite, CHAT_MODEL),
+        m => getAiClient().models.generateContent({
+          model: m,
+          contents: [{ role: "user", parts: [{ text: parsed.question }] }],
+          config: {
+            systemInstruction: buildAdvisorPrompt(parsed.periodLabel, parsed.evidence),
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
+        }),
+        { log: msg => console.warn("Cockpit advisor:", msg) },
+      );
       const verified = verifyAdvisorPoints(parseAdvisorJson(response.text || ""), parsed.evidence);
-      res.json({ ...verified, model: CHAT_MODEL });
+      res.json({ ...verified, model });
     } catch (error: any) {
       console.error("Cockpit advisor error:", error?.message || error);
-      res.status(502).json({ error: "AI 服务暂时无法回应，请稍后再试。" });
+      res.status(502).json({ error: AI_ERROR_MESSAGE[classifyAiError(error)] });
     }
   });
 
