@@ -302,3 +302,24 @@ export function runRosterCheck(
 
     return anomalies;
 }
+
+/** 排班画面的部门顺序 */
+const DEPT_SEQUENCE = ['KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'];
+
+/** 员工按部门分组（厨房 → 楼面 → 吧台 → 洗碗 → 后勤 → 其他），空的部门不列 */
+export function groupEmployeesByDept<T>(employees: T[]): { dept: string; label: string; employees: T[] }[] {
+    const groups = new Map<string, T[]>();
+    employees.forEach(emp => {
+        const dept = getEmployeeDept(emp);
+        const key = DEPT_SEQUENCE.includes(dept) ? dept : 'OTHER';
+        groups.set(key, [...(groups.get(key) || []), emp]);
+    });
+    return DEPT_SEQUENCE.filter(d => groups.has(d)).map(d => ({ dept: d, label: getDeptLabel(d), employees: groups.get(d)! }));
+}
+
+/** 这个月排了几天「休息」（OFF），对照员工档案的每月休息天数（没设定 = 4） */
+export function countMonthRestDays(roster: Record<string, Record<string, string>>, monthKey: string, employeeId: string): number {
+    return Object.entries(roster || {})
+        .filter(([date, day]) => date.startsWith(monthKey) && day?.[employeeId] === 'OFF')
+        .length;
+}

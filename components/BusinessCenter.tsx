@@ -82,7 +82,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         </div></header>
         <main className="bc-main">
             {section === 'hr' ? <><h1>人事中心</h1>
-                <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} />
+                <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} canStaffCash={can('STAFF_CASH')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} onOpenStaffCash={() => navigate('STAFF_CASH')} />
             </> : <>
                 <div className="bc-toolbar"><span>经营月份</span><button aria-label="上一个月" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={17} /></button><input aria-label="经营月份" type="month" value={month} max={today.slice(0, 7)} min="2000-01" onChange={e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value) && e.target.value <= today.slice(0, 7)) setMonth(e.target.value); }} /><button aria-label="下一个月" disabled={month >= today.slice(0, 7)} onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={17} /></button></div>
                 <nav className="bc-tabs" aria-label="经营中心视图">{([['sales', '销售概况'], ['profit', '成本与利润'], ['cash', '现金与账款']] as const).map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
