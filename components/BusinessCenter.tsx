@@ -112,7 +112,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
             {section === 'hr' ? <>
                 <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} canStaffCash={can('STAFF_CASH')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} onOpenStaffCash={() => navigate('STAFF_CASH')} />
                 {/* 委托任务与上报事项（老板也可以派任务、处理上报事项） */}
-                <section className="bc-card bc-tasks" id="bc-tasks"><div className="bc-card-heading"><h2><ClipboardList size={17} /> 委托任务与上报事项</h2></div><TaskBoard actor={currentEmployee} /></section>
+                <section className="bc-card bc-tasks" id="bc-tasks"><div className="bc-card-heading"><h2><ClipboardList size={17} /> 任务</h2></div><TaskBoard actor={currentEmployee} /></section>
             </> : <>
                 {openMatters > 0 && <button className="bc-matter-banner" onClick={() => { onSection('HR'); setTimeout(() => document.getElementById('bc-tasks')?.scrollIntoView({ behavior: 'smooth' }), 300); }}><Flag size={18} /><span><b>上报事项 {openMatters} 件</b><small>员工 / 管理层上报、等你处理的事</small></span><ChevronRight size={18} /></button>}
                 {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>

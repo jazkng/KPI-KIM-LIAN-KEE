@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
 import { isRetiredModule } from '../../utils/retiredModules';
-import { Crown, Languages } from 'lucide-react';
 import { Employee, AppModule, OrgLevel, normalizeLanguage } from '../../types';
-import { getOrgLevel } from '../../utils/orgAccess';
 import { mt, ManagementLang } from '../../constants/managementTranslations';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { ManagerInbox } from './ManagerInbox';
+import { TodayRosterCard } from '../hr/TodayRosterCard';
 import { IconTile, moduleIcon } from './managementIcons';
 
 export const getDepartmentName = (dept?: string, lang: ManagementLang = 'zh_en'): string => {
@@ -156,64 +155,11 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F6F7FB] text-stone-900 pb-32">
-            {/* 1. Header with iOS Notch Safety & Identity Section */}
-            <header className="pt-[calc(1.25rem+env(safe-area-inset-top))] pb-6 px-4 md:px-6 bg-white border-b border-stone-200/80 sticky top-0 z-30 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center font-bold text-lg text-stone-700 overflow-hidden shadow-sm shrink-0">
-                            {employee.avatar ? (
-                                <img src={employee.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                                employee.name.charAt(0)
-                            )}
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex items-start gap-2 flex-wrap">
-                                <h1 className="text-lg font-black text-stone-900 tracking-wide shrink leading-tight truncate">{employee.name}</h1>
-                                {getOrgLevel(employee) === 'DEPARTMENT_HEAD' ? (
-                                    <div className="flex flex-col items-start gap-0.5 shrink-0">
-                                        <span className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider leading-none">
-                                            L3
-                                        </span>
-                                        <span className="bg-amber-50 text-amber-700 text-[9px] px-1.5 py-0.5 rounded border border-amber-200 font-black uppercase tracking-wider leading-none">
-                                            {mt('dept_head', lang)}
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <span className="bg-amber-500/10 text-amber-700 text-[9px] px-2 py-0.5 rounded-full font-black border border-amber-500/20 uppercase tracking-wider shrink-0 leading-none">
-                                        {getOrgLevelDisplayName(getOrgLevel(employee), lang)}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1.5 font-semibold">
-                                <Crown size={11} className="text-amber-500 shrink-0" />
-                                <span className="truncate">{employee.role?.split('(')[0]}</span>
-                                <span className="text-stone-300">•</span>
-                                <span className="text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded text-[10px] font-bold truncate max-w-[120px]">
-                                    {getDepartmentName(employee.department, lang)}
-                                </span>
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {/* Notifications & Language Wrapper */}
-                    <div className="flex items-center gap-2 shrink-0 mr-12">
-                        {/* Languages switch button */}
-                        <button 
-                            onClick={() => onLanguageChange(lang === 'zh' ? 'my' : 'zh')}
-                            className="h-10 px-3 rounded-full bg-stone-50 border border-stone-200 flex items-center gap-1.5 text-stone-700 font-black text-xs active:scale-95 transition-transform outline-none"
-                            style={{ minWidth: '44px', minHeight: '44px' }}
-                        >
-                            <Languages size={15} className="text-[#650707]" />
-                            <span>{lang === 'zh' ? '中文' : 'မြန်မာ'}</span>
-                        </button>
-
-                    </div>
-                </div>
-            </header>
-
             {/* 2. 待我处理 + 全部功能：管理层要的是能直接动手的事 */}
-            <div className="flex-grow px-4 md:px-6 space-y-6 pt-4">
+            {/* 个人资料在「我的」；首页最上面直接看今日排班 */}
+            <div className="flex-grow px-4 md:px-6 space-y-6 pt-[calc(1rem+env(safe-area-inset-top))]">
+                {/* 右上角是通知铃，留位置 */}
+                <div className="mr-14"><TodayRosterCard lang={lang} onOpen={() => onNavigateToModule('ROSTER')} /></div>
                 <ManagerInbox employee={employee} lang={lang} onOpen={onNavigateToModule} />
 
                 <section className="space-y-2">

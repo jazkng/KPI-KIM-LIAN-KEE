@@ -1448,6 +1448,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><User size={14}/> <span className="leading-tight">个人档案<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Personal</span></span></h4>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
                                             <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
+                                            <InputField label="昵称 (Nickname)" value={form.nickname || ''} onChange={(e: any) => setForm({...form, nickname: e.target.value})} placeholder="例如：阿明" isEditing={isEditing} />
                                             {isForeignWorker
                                                 ? <InputField label="护照号码 (Passport)" value={form.passportNo || (isEditing ? '' : form.icNumber)} onChange={(e: any) => setForm({...form, passportNo: e.target.value})} placeholder="Passport No" isEditing={isEditing} />
                                                 : <InputField label="IC 号码 (MyKad)" value={form.icNumber} onChange={(e: any) => setForm({...form, icNumber: e.target.value})} placeholder="900101-14-5555" isEditing={isEditing} />}
