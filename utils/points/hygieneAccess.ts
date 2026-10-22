@@ -11,7 +11,7 @@ export const isHygieneSupervisor = (e: Who) => ['DEPARTMENT_HEAD', 'TEAM_LEAD'].
 
 /** 卫生每周由主管评；主管本人由 HR 评（负责人 2026-10-22） */
 export const canScoreHygiene = (actor: Who, target: Who) => {
-    if (actor.id === target.id) return false;
+    if (actor.id === target.id || getOrgLevel(target) === 'OWNER') return false;
     if (isHygieneHr(actor)) return true;
     if (!isHygieneSupervisor(actor)) return false;
     return getOrgLevel(target) === 'CREW' && normDept(target.department) === normDept(actor.department);

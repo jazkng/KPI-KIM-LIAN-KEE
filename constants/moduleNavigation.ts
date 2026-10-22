@@ -84,6 +84,7 @@ export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     ROSTER_KITCHEN: { category: 'PEOPLE', order: 31 },
     ROSTER_FLOOR: { category: 'PEOPLE', order: 32 },
     ASSESSMENT: { category: 'PEOPLE', order: 40 },
+    HYGIENE: { category: 'PEOPLE', order: 45 },
     STAFF_CASH: { category: 'PEOPLE', order: 25 },
     ORG: { category: 'PEOPLE', order: 50 },
 

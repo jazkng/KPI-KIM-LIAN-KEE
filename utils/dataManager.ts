@@ -1884,6 +1884,21 @@ export class DataManager {
         return { roster: r.exists() ? r.data() : {}, notes: n.exists() ? n.data() : {} };
     }
 
+    /**
+     * 员工 App 看排班用（只读，不迁移、不写入）：读排班管理存的 roster_months/{月份}；
+     * 这个月份还没有新格式时，才从旧的 roster/main 里挑出这个月来看。
+     */
+    static async getRosterMonthReadOnly(monthKey: string): Promise<{ roster: Record<string, Record<string, string>>; notes: Record<string, string> }> {
+        const monthDoc = await getDoc(doc(db, 'roster_months', monthKey));
+        if (monthDoc.exists()) {
+            const data = monthDoc.data();
+            return { roster: data.roster || {}, notes: data.notes || {} };
+        }
+        const [legacyRoster, legacyNotes] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
+        const pick = (obj: Record<string, any>) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => k.startsWith(monthKey)));
+        return { roster: pick(legacyRoster.exists() ? legacyRoster.data() : {}), notes: pick(legacyNotes.exists() ? legacyNotes.data() : {}) };
+    }
+
     static async saveRosterData(
         roster: any,
         notes: any,

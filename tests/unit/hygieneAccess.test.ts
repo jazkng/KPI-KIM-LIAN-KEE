@@ -10,6 +10,9 @@ describe('卫生评分权限', () => {
         expect(canScoreHygiene(e('o', 'OWNER'), e('h', 'DEPARTMENT_HEAD'))).toBe(true);
         expect(canScoreHygiene(e('m', 'BRANCH_MANAGER'), e('m', 'BRANCH_MANAGER'))).toBe(false);
         expect(canScoreHygiene(e('c', 'CREW'), e('d', 'CREW'))).toBe(false);
+        // HR 评全部人，但不评老板
+        expect(canScoreHygiene(e('m', 'BRANCH_MANAGER'), e('t', 'TEAM_LEAD', 'FLOOR'))).toBe(true);
+        expect(canScoreHygiene(e('m', 'BRANCH_MANAGER'), e('o', 'OWNER'))).toBe(false);
     });
     it('星期一与备注规则', () => {
         expect(mondayOf('2026-10-22')).toBe('2026-10-19');
