@@ -36,7 +36,7 @@ export const StaffTaskList: React.FC<{ employee: Employee; lang: string }> = ({ 
             <button key={t.id} disabled={s === 'SUBMITTED'} onClick={() => setOpen(t)} className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left ${s === 'OVERDUE' ? 'border-rose-200 bg-rose-50' : s === 'SUBMITTED' ? 'border-gray-100 bg-gray-50 opacity-70' : 'border-gray-200 bg-white'}`}>
                 <span className="flex-1 min-w-0">
                     <b className="block text-[15px] font-black text-stone-900 truncate">{t.title}</b>
-                    <small className="block text-xs text-stone-500 font-semibold truncate">{TYPE_TEXT[t.type][L(lang)]}{t.assignMode === 'DEPT' ? ` · ${tt('dept', lang)}` : ''}{t.repeat === 'DAILY' ? ` · ${tt('daily', lang)}` : ''} · {s === 'OVERDUE' ? tt('overdue', lang) : s === 'SUBMITTED' ? tt('submitted', lang) : tt('todo', lang)}</small>
+                    <small className="block text-xs text-stone-500 font-semibold truncate">{TYPE_TEXT[t.type][L(lang)]}{t.assignMode === 'DEPT' ? ` · ${tt('dept', lang)}` : ''}{t.repeat === 'DAILY' ? ` · ${tt('daily', lang)}` : t.repeat !== 'ONCE' ? ` · ${tt('recurring', lang)}` : ''} · {s === 'OVERDUE' ? tt('overdue', lang) : s === 'SUBMITTED' ? tt('submitted', lang) : tt('todo', lang)}</small>
                     {t.returnNote && s !== 'SUBMITTED' && <small className="block text-xs text-rose-600 font-bold truncate"><RotateCcw size={11} className="inline" /> {tt('returned', lang)}：{t.returnNote}</small>}
                 </span>
                 {s !== 'SUBMITTED' && <ChevronRight size={18} className="text-stone-300" />}

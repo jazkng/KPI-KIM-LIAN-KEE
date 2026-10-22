@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    buildPurchaseApply, buildStocktakeApply, consumptionSinceLast, effectiveStatus, monthReturnCount,
+    buildPurchaseApply, buildStocktakeApply, consumptionSinceLast, currentCycle, effectiveStatus, monthReturnCount, nextCycle, repeatLabel,
     stocktakeDiffs, toStockLine, validateSubmission, type StaffTask,
 } from '../../utils/tasks/staffTaskLogic';
 
@@ -77,5 +77,36 @@ describe('每日消耗与退回次数', () => {
     it('本月被退回几次', () => {
         const t = base({ history: [{ at: '2026-10-05T00:00:00Z', by: 'K', action: 'RETURN', employeeId: 'e1' }, { at: '2026-09-30T00:00:00Z', by: 'K', action: 'RETURN', employeeId: 'e1' }] });
         expect(monthReturnCount([t], 'e1', '2026-10')).toBe(1);
+    });
+});
+
+describe('重复任务的每一期', () => {
+    const created = '2026-10-01T02:00:00Z'; // 星期四
+    const t = (p: Partial<StaffTask>) => base({ createdAt: created, ...p });
+    const now = '2026-10-22T06:00:00Z';
+    it('每周一、四：今天（10/22 星期四）是新的一期；10/21 星期三算到 10/19 星期一那期', () => {
+        const w = t({ repeat: 'WEEKLY', repeatDays: [1, 4] });
+        expect(currentCycle(w, '2026-10-22')).toBe('2026-10-22');
+        expect(currentCycle(w, '2026-10-21')).toBe('2026-10-19');
+        expect(repeatLabel(w)).toBe('每周一、四');
+        expect(nextCycle(w, '2026-10-22')).toBe('2026-10-26');
+    });
+    it('每周：上一期没交，过了开始那天就算逾期；交了这一期就是待确认', () => {
+        const w = t({ repeat: 'WEEKLY', repeatDays: [1] });
+        expect(effectiveStatus(w, '2026-10-21', now)).toBe('OVERDUE');
+        expect(effectiveStatus({ ...w, status: 'SUBMITTED', runDate: '2026-10-19' }, '2026-10-21', now)).toBe('SUBMITTED');
+        expect(effectiveStatus(w, '2026-10-19', now)).toBe('TODO');
+    });
+    it('每月 31 号：小月用月底；第一期还没到 = 未到期', () => {
+        const m = t({ repeat: 'MONTHLY', repeatDate: 31 });
+        expect(currentCycle(m, '2026-11-30')).toBe('2026-11-30');
+        expect(currentCycle(m, '2026-11-15')).toBe('2026-10-31');
+        expect(effectiveStatus(m, '2026-10-15', now)).toBe('UPCOMING');
+    });
+    it('每隔 3 天：从派的那天起算', () => {
+        const n = t({ repeat: 'EVERY_N', repeatEvery: 3 });
+        expect(currentCycle(n, '2026-10-05')).toBe('2026-10-04');
+        expect(currentCycle(n, '2026-10-07')).toBe('2026-10-07');
+        expect(repeatLabel(n)).toBe('每 3 天');
     });
 });

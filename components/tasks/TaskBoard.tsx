@@ -6,7 +6,7 @@ import { getBusinessDateString } from '../../utils/dateHelper';
 import { DEPT_LABEL } from '../../utils/hr/hrOverview';
 import { getOrgLevel } from '../../utils/orgAccess';
 import {
-    MATTER_LABEL, MATTER_STATUS_LABEL, TASK_TYPE_LABEL, consumptionSinceLast, effectiveStatus, normDept, stocktakeDiffs,
+    MATTER_LABEL, MATTER_STATUS_LABEL, TASK_TYPE_LABEL, consumptionSinceLast, effectiveStatus, nextCycle, normDept, repeatLabel, stocktakeDiffs,
     type BossMatter, type EffectiveStatus, type MatterStatus, type StaffTask,
 } from '../../utils/tasks/staffTaskLogic';
 import {
@@ -19,6 +19,7 @@ const GROUPS: { key: EffectiveStatus; label: string; tone: string }[] = [
     { key: 'OVERDUE', label: '逾期', tone: 'text-rose-600 bg-rose-50 border-rose-200' },
     { key: 'TODO', label: '待做', tone: 'text-sky-700 bg-sky-50 border-sky-200' },
     { key: 'DONE', label: '已完成', tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+    { key: 'UPCOMING', label: '还没到期', tone: 'text-stone-500 bg-stone-50 border-stone-200' },
 ];
 const who = (t: StaffTask) => t.assignMode === 'PERSON' ? t.assigneeName || '' : `${DEPT_LABEL[t.department || ''] || t.department}（部门）`;
 const fmt = (iso?: string) => iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -92,7 +93,7 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
                         {g.list.map(t => <button key={t.id} onClick={() => setOpen(t)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[60px]">
                             <span className="flex-1 min-w-0">
                                 <b className="block text-[15px] font-black text-stone-900 truncate">{t.title}</b>
-                                <small className="block text-xs text-stone-500 font-semibold truncate">{TASK_TYPE_LABEL[t.type]} · {who(t)}{t.repeat === 'DAILY' ? ' · 每日' : t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}{t.returnCount ? ` · 退回 ${t.returnCount} 次` : ''}</small>
+                                <small className="block text-xs text-stone-500 font-semibold truncate">{TASK_TYPE_LABEL[t.type]} · {who(t)}{t.repeat !== 'ONCE' ? ` · ${repeatLabel(t)}${g.key === 'UPCOMING' || g.key === 'DONE' ? `（下次 ${nextCycle(t, today)?.slice(5) || '—'}）` : ''}` : t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}{t.returnCount ? ` · 退回 ${t.returnCount} 次` : ''}</small>
                             </span>
                             <ChevronRight size={18} className="text-stone-300 shrink-0" />
                         </button>)}
@@ -152,7 +153,7 @@ export const TaskReviewSheet: React.FC<{ task: StaffTask; actor: Employee; onClo
     </div>) : status !== 'DONE' ? <button disabled={busy} onClick={() => { if (confirm('取消这个任务？员工那边会消失。')) act(() => cancelTask(t.id, actor)); }} className="w-full min-h-[48px] rounded-2xl bg-stone-100 text-stone-600 font-black">取消任务</button> : undefined}>
         <div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-1.5 text-sm">
             <p><b className="text-stone-400 font-bold">类型</b> {TASK_TYPE_LABEL[t.type]}{t.type === 'PURCHASE' ? (t.purchaseMode === 'STOCK' ? '（从库存选）' : '（自行输入）') : ''}</p>
-            <p><b className="text-stone-400 font-bold">派给</b> {who(t)} · {t.repeat === 'DAILY' ? '每日' : '单次'}{t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}</p>
+            <p><b className="text-stone-400 font-bold">派给</b> {who(t)} · {repeatLabel(t)}{t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}</p>
             <p><b className="text-stone-400 font-bold">派的人</b> {t.createdByName} · {fmt(t.createdAt)}</p>
             {t.photosRequired > 0 && <p><b className="text-stone-400 font-bold">照片</b> 至少 {t.photosRequired} 张</p>}
             {t.note && <p className="text-stone-600">{t.note}</p>}
