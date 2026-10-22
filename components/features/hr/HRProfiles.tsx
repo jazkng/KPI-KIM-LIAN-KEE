@@ -20,6 +20,7 @@ import { SkillCatalogEditor } from './skills/SkillCatalogEditor';
 import { SkillPrintDialog } from './skills/SkillPrintDialog';
 import { useSkillCatalog } from './skills/skillCatalogStore';
 import { countLateEarly, type LateEarlyCounts } from '../../../utils/hr/attendanceCounts';
+import { EmployeePointsCard } from '../../points/EmployeePointsCard';
 import { positionSkillScores, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
@@ -1257,6 +1258,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             ))}
                                         </div>
                                     </div>
+
+                                    {mobileDetailTab === 'records' && selectedEmpId && <EmployeePointsCard employee={form as Employee} />}
 
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
                                         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> <span className="leading-tight">登录密码<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Access PIN</span></span></h4>

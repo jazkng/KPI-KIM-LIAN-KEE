@@ -1,10 +1,10 @@
 // ============================================================================
 // 员工积分（每月）——纯计算
 // 规则：docs/hr/points-system-design.md（负责人 2026-10-22 确认）
-// 输入的资料都是现有纪录（考勤、委托任务、会议签到、卫生检查、警告、评语、技能改分纪录），
+// 输入的资料都是现有纪录（考勤、委托任务、会议签到、卫生检查、警告、评语），
 // 这里只计算，不读写资料库。
 // ============================================================================
-import type { AttendanceRecord, ReviewRecord, SkillRatingLog, WarningRecord } from '../../types';
+import type { AttendanceRecord, ReviewRecord, WarningRecord } from '../../types';
 import { currentCycle, type StaffTask } from '../tasks/staffTaskLogic';
 import { checkinColor, type Meeting, type MeetingCheckin } from '../meetings/meetingLogic';
 
@@ -31,7 +31,7 @@ export interface PointsInput {
     month: string;
     /** 算到哪一天（当月进行中 = 今天；过去的月份 = 月底） */
     asOf: string;
-    employee: { id: string; name: string; warningHistory?: WarningRecord[]; reviews?: ReviewRecord[]; skillRatingLog?: SkillRatingLog[] };
+    employee: { id: string; name: string; warningHistory?: WarningRecord[]; reviews?: ReviewRecord[] };
     tasks: StaffTask[];
     attendance: AttendanceRecord[];
     hygiene: HygieneCheck[];
@@ -147,31 +147,17 @@ export const disciplinePart = (inp: PointsInput): PointsPart => {
     return { key: 'discipline', label: '纪律', max: MAX.discipline, points: MAX.discipline + lines.reduce((n, l) => n + l.points, 0), lines };
 };
 
-// ── 6. 加分：表扬 +15；技能升星（第一次评不加）1→2 +2、2→3 +5、3→4 +10、4→5 +15，维持 3 个月
-const STAR_UP: Record<number, number> = { 2: 2, 3: 5, 4: 10, 5: 15 };
-export const bonusLines = (inp: PointsInput): PointsLine[] => {
-    const lines: PointsLine[] = [];
+// ── 6. 加分：表扬 +15（技能星级是个人能力，不算积分；负责人 2026-10-23）
+export const bonusLines = (inp: PointsInput): PointsLine[] =>
     (inp.employee.reviews || []).filter(r => r.type === 'PRAISE' && inMonth(String(r.date).slice(0, 10), inp.month))
-        .forEach(r => lines.push({ date: String(r.date).slice(0, 10), text: `表扬：${r.content}`, points: 15 }));
-    (inp.employee.skillRatingLog || []).forEach(l => {
-        const from = Number(l.from) || 0, to = Number(l.to) || 0;
-        if (!from || to <= from) return; // 第一次评、降级、清除都不加
-        const d = inp.toDate(l.at);
-        const k = monthsBetween(d.slice(0, 7), inp.month);
-        if (k < 0 || k > 2) return;
-        let pts = 0;
-        for (let s = from + 1; s <= to; s++) pts += STAR_UP[s] || 0;
-        if (pts) lines.push({ date: d, text: `技能升星 ★${from}→★${to}${k ? `（第 ${k + 1} 个月）` : ''}`, points: pts });
-    });
-    return lines;
-};
+        .map(r => ({ date: String(r.date).slice(0, 10), text: `表扬：${r.content}`, points: 15 }));
 
 export const computeMonthPoints = (inp: PointsInput): MonthPoints => {
     const hy = hygienePart(inp);
     const bonus = [...bonusLines(inp), ...hy.bonus].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const parts: PointsPart[] = [
         taskPart(inp), attendancePart(inp), hy.part, meetingPart(inp), disciplinePart(inp),
-        { key: 'bonus', label: '加分（表扬、技能升星、卫生超标）', max: null, points: bonus.reduce((n, l) => n + l.points, 0), lines: bonus },
+        { key: 'bonus', label: '加分（表扬、卫生超标）', max: null, points: bonus.reduce((n, l) => n + l.points, 0), lines: bonus },
     ];
     const total = r1(parts.reduce((n, p) => n + p.points, 0));
     return { month: inp.month, total, grade: gradeOf(total), parts };

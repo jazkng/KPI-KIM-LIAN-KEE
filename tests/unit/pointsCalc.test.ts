@@ -62,11 +62,11 @@ describe('积分计算（负责人 2026-10-22 规则）', () => {
         expect(disciplinePart(base({ month: '2027-01', employee: { id: 'e1', name: 'A', warningHistory: [w('2026-08-01', 'FINAL')] } })).points).toBe(15);
     });
 
-    it('加分：表扬 +15；第一次评星不加；升星按级加分、维持 3 个月；跳级相加', () => {
+    it('加分：表扬 +15；技能星级不算积分', () => {
         const emp = { id: 'e1', name: 'A', reviews: [{ id: 'r', date: '2026-10-08', author: 'B', content: '帮忙', type: 'PRAISE' }, { id: 'r2', date: '2026-10-09', author: 'B', content: 'x', type: 'CRITICISM' }] as any,
-            skillRatingLog: [{ itemId: 'a', to: 2, at: '2026-08-01T01:00:00Z' }, { itemId: 'a', from: 2, to: 4, at: '2026-08-20T01:00:00Z' }, { itemId: 'b', from: 1, to: 2, at: '2026-10-02T01:00:00Z' }, { itemId: 'c', from: 4, to: 3, at: '2026-10-02T01:00:00Z' }] };
-        expect(bonusLines(base({ employee: emp })).map(l => l.points).sort()).toEqual([15, 15, 2].sort());
-        expect(bonusLines(base({ month: '2026-11', employee: emp })).map(l => l.points)).toEqual([2]);
+            skillRatingLog: [{ itemId: 'b', from: 1, to: 2, at: '2026-10-02T01:00:00Z' }] } as any;
+        expect(bonusLines(base({ employee: emp })).map(l => l.points)).toEqual([15]);
+        expect(bonusLines(base({ month: '2026-11', employee: emp }))).toEqual([]);
     });
 
     it('A ≥ 90、B ≥ 75、C ≥ 60、其他 D', () => {

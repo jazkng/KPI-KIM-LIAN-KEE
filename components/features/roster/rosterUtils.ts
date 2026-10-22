@@ -304,7 +304,7 @@ export function runRosterCheck(
 }
 
 /** 排班画面的部门顺序 */
-const DEPT_SEQUENCE = ['KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'];
+export const DEPT_SEQUENCE = ['KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'];
 
 /** 员工按部门分组（厨房 → 楼面 → 吧台 → 洗碗 → 后勤 → 其他），空的部门不列 */
 export function groupEmployeesByDept<T>(employees: T[]): { dept: string; label: string; employees: T[] }[] {

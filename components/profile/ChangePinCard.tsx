@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Loader2 } from 'lucide-react';
+import { ChevronDown, KeyRound, Loader2 } from 'lucide-react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, serverAuthEnabled } from '../../firebaseConfig';
 import type { Employee } from '../../types';
@@ -21,6 +21,8 @@ export const ChangePinCard: React.FC<{ employee: Employee; lang: string }> = ({ 
     const [oldPin, setOld] = useState(''), [pin, setPin] = useState(''), [again, setAgain] = useState('');
     const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
     const [serverMode, setServerMode] = useState(false);
+    // 平时收起，按一下才展开（负责人 2026-10-23）
+    const [open, setOpen] = useState(false);
     useEffect(() => { serverAuthEnabled.then(setServerMode).catch(() => setServerMode(false)); }, []);
     const digits = (v: string) => v.replace(/\D/g, '').slice(0, 6);
     const save = async () => {
@@ -43,8 +45,11 @@ export const ChangePinCard: React.FC<{ employee: Employee; lang: string }> = ({ 
     };
     const box = 'w-full min-h-[46px] rounded-xl border border-stone-200 bg-stone-50 px-3 font-black tracking-[0.3em] placeholder:tracking-normal placeholder:font-bold text-[16px]';
     return <div className="p-5 rounded-2xl border border-stone-200 bg-white shadow-xs space-y-3">
-        <h3 className="text-sm font-black text-stone-900 flex items-center gap-2"><KeyRound size={16} className="text-[#650707]" /> {t.title}</h3>
-        {serverMode ? <p className="text-xs text-stone-500">{t.server}</p> : <>
+        <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} className="w-full flex items-center gap-2 text-left">
+            <KeyRound size={16} className="text-[#650707]" /><span className="flex-1 text-sm font-black text-stone-900">{t.title}</span>
+            <ChevronDown size={18} className={`text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {!open ? null : serverMode ? <p className="text-xs text-stone-500">{t.server}</p> : <>
             <input type="password" inputMode="numeric" autoComplete="current-password" value={oldPin} onChange={e => setOld(e.target.value.replace(/\D/g, ''))} placeholder={t.old} className={box} />
             <input type="password" inputMode="numeric" autoComplete="new-password" value={pin} onChange={e => setPin(digits(e.target.value))} placeholder={t.neu} className={box} />
             <input type="password" inputMode="numeric" autoComplete="new-password" value={again} onChange={e => setAgain(digits(e.target.value))} placeholder={t.again} className={box} />
