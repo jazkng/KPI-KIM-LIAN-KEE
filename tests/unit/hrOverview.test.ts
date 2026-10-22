@@ -57,3 +57,11 @@ describe('summarizeStaffCash', () => {
         expect(r).toEqual({ advanceTotal: 230, advanceCount: 3, partTimeTotal: 120, partTimeCount: 1, topAdvances: [{ name: 'Ali', amount: 150 }, { name: 'Mei', amount: 80 }] });
     });
 });
+
+describe('countWorkersByDate', () => {
+    it('只算计入员工、排了上班的人', async () => {
+        const { countWorkersByDate } = await import('../../utils/hr/hrOverview');
+        const emps = [{ id: 'a' }, { id: 'b' }, { id: 'c', excludeFromStaff: true }, { id: 'd', department: 'OWNER' }] as any;
+        expect(countWorkersByDate({ '2026-10-01': { a: 'MORNING', b: 'OFF', c: 'MORNING', d: 'WORK' }, '2026-10-02': { a: 'OFF' } }, emps)).toEqual({ '2026-10-01': 1 });
+    });
+});

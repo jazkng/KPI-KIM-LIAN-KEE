@@ -53,7 +53,7 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         const source: CockpitDataSource = { getPnLRawRange: vi.fn(async () => ({ settlements: records, standaloneExpenses: [], billPayments: [] })), getEmployees: async () => [], getPayrollRecords: async () => [], getAttendanceReviewsByMonth: async () => [], getStandaloneExpensesByIds: async () => [] };
         const value = await loadBusinessCenterWith(source, '2026-10', '2026-10-19');
         expect(source.getPnLRawRange).toHaveBeenCalledTimes(1);
-        expect(source.getPnLRawRange).toHaveBeenCalledWith('2026-09-17', '2026-10-31');
+        expect(source.getPnLRawRange).toHaveBeenCalledWith('2026-09-01', '2026-10-31');
         expect(value.days.some(d => d.date === '2026-09-27')).toBe(true);
         expect(value.days.some(d => d.date === '2026-10-19')).toBe(false);
         expect(value.draftCount).toBe(1);
@@ -127,5 +127,27 @@ describe('成本与利润白话版 profitStory', () => {
         const s = profitStory(result({ actualProfit: kpi('actualProfit', -500, { rows: [] }), breakEvenMonth: kpi('breakEvenMonth', null) }), '2026-10', '2026-10-19');
         expect(s.isProfit).toBe(false);
         expect(s.breakEven).toBeNull();
+    });
+});
+
+describe('dailyBreakEvenTargets · 保本线按星期调整', () => {
+    // 2026-09-01 至 10-21：周六、周日 2000，平日 1000
+    const mk = (date: string) => { const w = new Date(`${date}T00:00:00`).getDay(); return { date, revenue: w === 0 || w === 6 ? 2000 : 1000 } as any; };
+    const days = Array.from({ length: 51 }, (_, i) => { const d = new Date(Date.UTC(2026, 8, 1 + i)); return mk(d.toISOString().slice(0, 10)); });
+    it('周末目标高、平日低，全月合计 = 每日保本 × 天数', async () => {
+        const { dailyBreakEvenTargets } = await import('../../utils/businessCenter');
+        const r = dailyBreakEvenTargets({ days, month: '2026-10', perDay: 1500 });
+        expect(r.weighted).toBe(true);
+        expect(r.targets['2026-10-17']).toBeGreaterThan(r.targets['2026-10-13']); // 周六 > 周二
+        expect(r.targets['2026-10-17'] / r.targets['2026-10-13']).toBeCloseTo(2, 1);
+        const total = Object.values(r.targets).reduce((s, n) => s + n, 0);
+        expect(total).toBeCloseTo(1500 * 31, -1);
+    });
+    it('选「平均」或资料不够时，每天一样', async () => {
+        const { dailyBreakEvenTargets } = await import('../../utils/businessCenter');
+        expect(new Set(Object.values(dailyBreakEvenTargets({ days, month: '2026-10', perDay: 1500, mode: 'flat' }).targets))).toEqual(new Set([1500]));
+        const few = dailyBreakEvenTargets({ days: days.slice(0, 5), month: '2026-10', perDay: 1500 });
+        expect(few.weighted).toBe(false);
+        expect(few.targets['2026-10-17']).toBe(1500);
     });
 });

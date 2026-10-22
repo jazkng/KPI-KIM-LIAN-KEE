@@ -43,7 +43,9 @@ export const loadBusinessCenterWith = async (source: CockpitDataSource, month: s
     const period = businessMonthPeriod(month, today);
     let settlements: SettlementRecord[] = [];
     const result = await loadCockpitWith({ ...source, getPnLRawRange: async (start, end) => {
-        const raw = await source.getPnLRawRange(start < addDays(period.start, -14) ? start : addDays(period.start, -14), end);
+        // 多读上个月整月的日结（只读）：给周对比与 AI 顾问「上月同期」用
+        const from = `${addDays(period.start, -1).slice(0, 7)}-01`;
+        const raw = await source.getPnLRawRange(start < from ? start : from, end);
         settlements = raw.settlements;
         return raw;
     } }, period, today, 'ACCRUAL');
@@ -117,3 +119,42 @@ export const profitStory = (result: CockpitResult, month: string, today: string)
 };
 
 export type ProfitStory = ReturnType<typeof profitStory>;
+
+// ───────────────────────── 每日保本线：按星期几调整 ─────────────────────────
+// 周六、周日生意通常比较好，平日比较淡。把整个月的保本营业额（每日保本 × 当月天数）
+// 按「过去各星期几的平均营业额」分配到每一天：好的日子目标高、淡的日子目标低，
+// 但全月加起来还是同一个保本数字。只用已日结的真实营业日；资料不够（少于 14 天，
+// 或某个星期几少于 2 天）就不调整，回到平均分配。
+
+export interface DailyBreakEven {
+    /** 每一天的保本线 */
+    targets: Record<string, number>;
+    /** 星期几（0=日…6=六）的倍数；1 = 平均 */
+    weights: number[];
+    /** 是否真的按星期调整（资料不够时为 false = 每天一样） */
+    weighted: boolean;
+    /** 用了几天资料算倍数 */
+    sampleDays: number;
+}
+
+export const dailyBreakEvenTargets = (args: { days: BusinessDay[]; month: string; perDay: number; mode?: 'weekday' | 'flat' }): DailyBreakEven => {
+    const { month, perDay } = args;
+    const dim = daysInMonth(month);
+    const dates = Array.from({ length: dim }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
+    const wd = (date: string) => new Date(`${date}T00:00:00`).getDay();
+    // 用本月与上个月已日结的日子（经营中心已经读进来的那些）
+    const sample = args.days.filter(d => d.date <= dates[dim - 1] && d.revenue > 0);
+    const groups = Array.from({ length: 7 }, (_, w) => sample.filter(d => wd(d.date) === w).map(d => d.revenue));
+    const enough = args.mode !== 'flat' && sample.length >= 14 && groups.every(g => g.length >= 2);
+    let weights = Array(7).fill(1) as number[];
+    if (enough) {
+        const avgs = groups.map(g => g.reduce((s, n) => s + n, 0) / g.length);
+        const mean = avgs.reduce((s, n) => s + n, 0) / 7;
+        if (mean > 0) weights = avgs.map(a => round2(a / mean));
+    }
+    // 全月总保本不变：每天 = 全月保本 × 这天的倍数 ÷ 全月倍数合计
+    const total = perDay * dim;
+    const sumW = dates.reduce((s, d) => s + weights[wd(d)], 0);
+    const targets = Object.fromEntries(dates.map(d => [d, round2(total * weights[wd(d)] / sumW)]));
+    return { targets, weights, weighted: enough, sampleDays: enough ? sample.length : 0 };
+};

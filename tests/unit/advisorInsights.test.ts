@@ -52,3 +52,50 @@ describe('buildAdvisorInsights', () => {
         expect(buildAdvisorInsights({ days: [days[0]], month: '2026-10', costLines: [], revenue: 0 }).insights.map(i => i.key)).toEqual(['channel']);
     });
 });
+
+describe('buildAdvisorInsights · 保本 / 上月同期 / 进货价 / 人效 / 异常', () => {
+    const sept = Array.from({ length: 14 }, (_, i) => day(`2026-09-${String(i + 5).padStart(2, '0')}`, 1000));
+    const suppliers = [{ id: 's1', name: '鸿发', catalog: [
+        { id: 'c1', name: '猪肉', unit: 'kg', price: 20, pricePerPurchaseUnit: 20, toBaseRatio: 1, lastReceivedPricePerBase: 23, lastReceivedAt: '2026-10-10T08:00:00Z' },
+        { id: 'c2', name: '白米', unit: 'bag', price: 100, toBaseRatio: 1, lastReceivedPricePerBase: 101, lastReceivedAt: '2026-10-10' },
+        { id: 'c3', name: '旧货', unit: 'kg', price: 10, toBaseRatio: 1, lastReceivedPricePerBase: 20, lastReceivedAt: '2026-07-01' },
+    ] }] as any;
+    const workers = Object.fromEntries(days.map(d => [d.date, 5]));
+    const breakEven = { target: 30000, perDay: 1000, progress: 0.5, gap: -2000, remaining: 14000, daysLeft: 13, needPerDayLeft: 1076.92 };
+    const r = buildAdvisorInsights({ days: [...sept, ...days], month: '2026-10', costLines: [{ ...costLines[0], per100: 38 }], revenue: 16000, breakEven, suppliers, workers });
+    const get = (k: string) => r.insights.find(i => i.key === k)!;
+
+    it('保本：进度条与每天还要多少', () => {
+        expect(get('breakeven').gauge).toMatchObject({ target: 30000, remaining: 14000, needPerDay: 1076.92 });
+        expect(get('breakeven').headline).toBe('已达 53%，每天还要 RM 1,077');
+    });
+    it('上月同期：同样到 18 号为止比较日均', () => {
+        const c = get('compare');
+        expect(c.paired).toBe(true);
+        // 本月 10/5–10/18 日均 1650；上月 9/5–9/18 日均 1000
+        expect(c.bars[0]).toMatchObject({ label: '日均营业额', value: 1650, compare: 1000, sub: '+65.0%' });
+    });
+    it('进货价：只看两个月内收货、差 3% 以上的品项', () => {
+        const s = get('supplier');
+        expect(s.bars.map(b => [b.label, b.value])).toEqual([['猪肉', 15]]);
+        expect(s.unit).toBe('CHANGE');
+    });
+    it('人效：每位上班员工的营业额', () => {
+        expect(get('staff').bars).toHaveLength(7);
+        expect(get('staff').headline).toContain('每人 RM 330');
+    });
+    it('异常：保本落后、成本偏高、进货价涨都列出，最多 4 条且坏的在前', () => {
+        expect(r.anomalies.length).toBeLessThanOrEqual(4);
+        expect(r.anomalies[0]).toMatchObject({ tone: 'bad', key: 'breakeven' });
+        expect(r.anomalies.map(a => a.text)).toEqual(['保本进度落后 RM 2,000', '10/5 周一 少 41%', '10/6 周二 少 39%', '食材每 RM100 花 RM 38']);
+        r.anomalies.forEach(a => expect(r.evidence.some(e => e.id === a.ref)).toBe(true));
+    });
+    it('每根柱子都有对应的证据编号，总数在服务端上限内', () => {
+        r.insights.filter(i => i.key !== 'trend').forEach(i => i.bars.forEach(b => expect(r.evidence.some(e => e.id === b.ref)).toBe(true)));
+        expect(r.evidence.length).toBeLessThan(80);
+    });
+    it('AI 引用上月同期的数字能通过核对', () => {
+        const ref = get('compare').bars[0].ref!;
+        expect(verifyAdvisorPoints({ points: [{ kind: 'finding', text: '日均 RM 1,650，比上月同期 RM 1,000 多 65.0%。', refs: [ref] }] }, r.evidence).points).toHaveLength(1);
+    });
+});

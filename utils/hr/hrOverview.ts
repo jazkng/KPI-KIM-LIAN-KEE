@@ -125,3 +125,14 @@ export const summarizeStaffCash = (args: { advances: ExpenseItem[]; salaries: Ex
         topAdvances: [...perPerson.entries()].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 5),
     };
 };
+
+/** 班表一个月：{ 日期: 上班人数 }（只算计入员工、排了上班班次的人；休息 / 请假 / 未排都不算） */
+export const countWorkersByDate = (roster: Record<string, Record<string, string>>, employees: Employee[]): Record<string, number> => {
+    const counted = new Set(employees.filter(isCountedStaff).map(e => e.id));
+    const out: Record<string, number> = {};
+    Object.entries(roster || {}).forEach(([date, day]) => {
+        const n = Object.entries(day || {}).filter(([id, s]) => counted.has(id) && !NOT_WORKING.has(String(s))).length;
+        if (n > 0) out[date] = n;
+    });
+    return out;
+};
