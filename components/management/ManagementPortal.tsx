@@ -2,11 +2,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { isRetiredModule } from '../../utils/retiredModules';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-    LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
+    LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages, Home, ListChecks, LayoutGrid, User
 } from 'lucide-react';
 import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
 import { ManagerInbox } from './ManagerInbox';
+import { IconTile, MODULE_ICON, moduleIcon } from './managementIcons';
 import { MODULE_DEFINITIONS } from '../constants';
 import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
 import { mt, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../constants/managementTranslations';
@@ -357,7 +358,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                         <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">
                                             {taskList.map(task => (
                                                 <button key={task.id} onClick={() => handleNavigateToModule(task.target)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[56px]">
-                                                    <span className="text-xl w-8 text-center shrink-0">{task.icon}</span>
+                                                    <IconTile style={moduleIcon(task.target)} size="sm" />
                                                     <span className="flex-1 min-w-0 text-sm font-extrabold text-stone-800 truncate">{task.title}</span>
                                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-black border shrink-0 ${task.badgeColor}`}>{task.badge}</span>
                                                     <ChevronRight size={16} className="text-stone-300 shrink-0" />
@@ -396,8 +397,8 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                                                 : 'border-stone-200/60 bg-stone-50/50 opacity-60 cursor-not-allowed'
                                                         }`}
                                                     >
-                                                        <div className="w-10 h-10 rounded-lg bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-500 group-hover:border-amber-300 group-hover:text-amber-600 transition-colors shrink-0">
-                                                            <IconComponent size={20} />
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${MODULE_ICON[tabKey]?.bg || 'bg-stone-100'} ${MODULE_ICON[tabKey]?.fg || 'text-stone-600'}`}>
+                                                            <IconComponent size={18} />
                                                         </div>
                                                         <div className="min-w-0 flex-grow">
                                                             <div className="text-sm font-extrabold text-stone-900 flex items-center justify-between gap-1">
@@ -581,10 +582,10 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                         {/* Standard Bottom Tab Navigation Bar with Safety Area padding for iOS Safari */}
                         <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-3xl border-t border-stone-200/80 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] px-4 flex justify-around items-center z-40 shadow-[0_-8px_30px_rgba(0,0,0,0.03)] md:max-w-[390px] md:mx-auto md:rounded-t-2xl">
                             {[
-                                { key: 'home', label: lang === 'my' ? 'ပင်မစာမျက်နှာ' : '工作台', icon: '👑' },
-                                { key: 'tasks', label: lang === 'my' ? 'လုပ်ငန်းများ' : '任务', icon: '📝' },
-                                { key: 'funcs', label: lang === 'my' ? 'လုပ်ဆောင်ချက်' : '功能', icon: '📦' },
-                                { key: 'me', label: lang === 'my' ? 'ကျွန်ုပ်' : '我的', icon: '👤' }
+                                { key: 'home', label: lang === 'my' ? 'ပင်မစာမျက်နှာ' : '工作台', Icon: Home },
+                                { key: 'tasks', label: lang === 'my' ? 'လုပ်ငန်းများ' : '任务', Icon: ListChecks },
+                                { key: 'funcs', label: lang === 'my' ? 'လုပ်ဆောင်ချက်' : '功能', Icon: LayoutGrid },
+                                { key: 'me', label: lang === 'my' ? 'ကျွန်ုပ်' : '我的', Icon: User }
                             ].map((tab, idx) => {
                                 const isSelected = activeTabIdx === idx;
                                 return (
@@ -594,8 +595,8 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                         className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform outline-none"
                                         style={{ minWidth: '55px', minHeight: '44px' }} // Standard touch targets 44x44 HIG
                                     >
-                                        <span className={`text-xl transition-all ${isSelected ? 'scale-110' : 'opacity-40'}`}>
-                                            {tab.icon}
+                                        <span className={`w-10 h-7 rounded-full grid place-items-center transition-colors ${isSelected ? 'bg-[#FFD200]/25 text-stone-900' : 'text-stone-400'}`}>
+                                            <tab.Icon size={19} strokeWidth={isSelected ? 2.4 : 2} />
                                         </span>
                                         <span className={`text-[11px] leading-tight max-w-full truncate font-black transition-colors ${isSelected ? 'text-amber-600' : 'text-stone-400'}`}>
                                             {tab.label}

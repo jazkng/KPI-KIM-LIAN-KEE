@@ -4,8 +4,8 @@ import { buildInboxItems, rosterSignals } from '../../utils/management/managerIn
 
 describe('buildInboxItems', () => {
     it('只列有读到的项目，有数字的排前面', () => {
-        const items = buildInboxItems({ settlementDrafts: 0, poToReceive: 2, openLogs: 1, absences: [{ name: 'Ali', status: 'MC' }] }, 'zh');
-        expect(items.map(i => [i.key, i.count])).toEqual([['absences', 1], ['poToReceive', 2], ['openLogs', 1], ['settlementDrafts', 0]]);
+        const items = buildInboxItems({ settlementDrafts: 0, poToReceive: 2, inventoryTasks: 1, absences: [{ name: 'Ali', status: 'MC' }] }, 'zh');
+        expect(items.map(i => [i.key, i.count])).toEqual([['absences', 1], ['poToReceive', 2], ['inventoryTasks', 1], ['settlementDrafts', 0]]);
         expect(items[1]).toMatchObject({ title: '采购单待收货', sub: '2 张已订货，到货后要按收货', target: 'PROCUREMENT' });
         expect(items[0].people).toEqual([{ name: 'Ali', status: 'MC' }]);
     });

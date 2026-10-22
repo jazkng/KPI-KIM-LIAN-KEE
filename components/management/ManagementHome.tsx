@@ -6,6 +6,7 @@ import { getOrgLevel } from '../../utils/orgAccess';
 import { mt, ManagementLang } from '../../constants/managementTranslations';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { ManagerInbox } from './ManagerInbox';
+import { IconTile, moduleIcon } from './managementIcons';
 
 export const getDepartmentName = (dept?: string, lang: ManagementLang = 'zh_en'): string => {
     const d = (dept || '').toUpperCase().trim();
@@ -217,12 +218,13 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
 
                 <section className="space-y-2">
                     <h3 className="text-sm font-black text-stone-800 px-1">{lang === 'my' ? 'လုပ်ဆောင်ချက်များ' : lang === 'en' ? 'Functions' : '功能'}</h3>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {allPossibleShortcuts.map(item => (
                             <button key={item.module} onClick={() => onNavigateToModule(item.module)}
-                                className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white border border-stone-200 shadow-xs min-h-[84px] px-1 py-2 active:scale-95 transition-transform">
-                                <span className="text-[26px] leading-none">{item.icon}</span>
-                                <span className="text-[11px] font-black text-stone-700 leading-tight text-center line-clamp-2">{item.label}</span>
+                                className="w-full bg-white border border-stone-200/60 hover:border-stone-300 rounded-2xl p-4 flex flex-col justify-between text-left shadow-sm active:scale-95 transition-all min-h-[104px]"
+                                style={{ WebkitTapHighlightColor: 'transparent' }}>
+                                <IconTile style={moduleIcon(item.module)} />
+                                <span className="mt-3 font-extrabold text-[#111111] text-sm leading-tight truncate">{item.label}</span>
                             </button>
                         ))}
                     </div>

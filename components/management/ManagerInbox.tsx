@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Employee } from '../../types';
 import { getBusinessDateString } from '../../utils/dateHelper';
+import { INBOX_ICON, IconTile } from './managementIcons';
 import { buildInboxItems, inboxLang, loadManagerInbox, type InboxCounts } from '../../utils/management/managerInbox';
 
 /**
@@ -50,7 +51,7 @@ export const ManagerInbox: React.FC<{ employee: Employee; lang: string; onOpen: 
             </div>}
             {todo.map(i => <div key={i.key} className="rounded-2xl bg-white border border-stone-200 shadow-xs overflow-hidden">
                 <button onClick={() => i.people ? setOpenPeople(v => !v) : onOpen(i.target)} className="w-full flex items-center gap-3 p-3.5 text-left active:bg-stone-50 min-h-[64px]">
-                    <span className="text-2xl w-9 text-center shrink-0">{i.icon}</span>
+                    <IconTile style={INBOX_ICON[i.key]} />
                     <span className="flex-1 min-w-0">
                         <b className="block text-[15px] font-black text-stone-900 truncate">{i.title}</b>
                         <small className="block text-xs text-stone-500 font-semibold truncate">{i.sub}</small>

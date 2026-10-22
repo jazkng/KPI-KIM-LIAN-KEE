@@ -5,7 +5,6 @@
 //   日结草稿      settlements.isClosed == false
 //   采购待收货    purchase_orders.status == 'ORDERED'
 //   盘点任务      inventory_tasks.status == 'PENDING'（L3 只算自己部门的员工）
-//   运营日志      logs.status in ['PENDING', 'IN_PROGRESS']
 //   班表待定      roster_months 今天起 7 天内状态为 PENDING 的格子
 //   今天缺席      roster_months 今天 MC / LEAVE / ABSENT
 //   库存告急      库存品项需要补货（沿用 needsReplenishment）
@@ -20,13 +19,12 @@ import { getOrgLevel } from '../orgAccess';
 import { needsReplenishment } from '../unitConversion';
 
 export type InboxLang = 'zh' | 'en' | 'my';
-export type InboxKey = 'settlementDrafts' | 'poToReceive' | 'inventoryTasks' | 'openLogs' | 'rosterPending' | 'absences' | 'lowStock';
+export type InboxKey = 'settlementDrafts' | 'poToReceive' | 'inventoryTasks' | 'rosterPending' | 'absences' | 'lowStock';
 
 export interface InboxCounts {
     settlementDrafts?: number;
     poToReceive?: number;
     inventoryTasks?: number;
-    openLogs?: number;
     rosterPending?: number;
     absences?: { name: string; status: string }[];
     lowStock?: number;
@@ -34,7 +32,6 @@ export interface InboxCounts {
 
 export interface InboxItem {
     key: InboxKey;
-    icon: string;
     title: string;
     /** 一句话：要做什么 */
     sub: string;
@@ -57,9 +54,6 @@ const T: Record<InboxKey, Record<InboxLang, [string, (n: number) => string]>> = 
     inventoryTasks: {
         zh: ['盘点任务', n => `${n} 个还没完成`], en: ['Stock-take tasks', n => `${n} not done`], my: ['ပစ္စည်းစာရင်း စစ်ရန်', n => `${n} ခု မပြီးသေး`],
     },
-    openLogs: {
-        zh: ['运营日志待处理', n => `${n} 件还没解决`], en: ['Open log issues', n => `${n} unresolved`], my: ['မှတ်တမ်း ကိစ္စများ', n => `${n} ခု မဖြေရှင်းရသေး`],
-    },
     rosterPending: {
         zh: ['班表待定', n => `未来 7 天有 ${n} 格还没定`], en: ['Roster to confirm', n => `${n} slots in next 7 days`], my: ['အလှည့်ဇယား မသတ်မှတ်ရသေး', n => `ရက် ၇ ရက်အတွင်း ${n} ကွက်`],
     },
@@ -71,14 +65,13 @@ const T: Record<InboxKey, Record<InboxLang, [string, (n: number) => string]>> = 
     },
 };
 
-const ORDER: { key: InboxKey; icon: string; target: string; tone: InboxItem['tone'] }[] = [
-    { key: 'settlementDrafts', icon: '💰', target: 'SETTLEMENT', tone: 'urgent' },
-    { key: 'absences', icon: '🙋', target: 'ROSTER', tone: 'urgent' },
-    { key: 'lowStock', icon: '⚠️', target: 'PROCUREMENT', tone: 'urgent' },
-    { key: 'poToReceive', icon: '🚚', target: 'PROCUREMENT', tone: 'todo' },
-    { key: 'inventoryTasks', icon: '📦', target: 'INVENTORY_CHECK', tone: 'todo' },
-    { key: 'openLogs', icon: '📝', target: 'LOGBOOK', tone: 'todo' },
-    { key: 'rosterPending', icon: '📅', target: 'ROSTER', tone: 'todo' },
+const ORDER: { key: InboxKey; target: string; tone: InboxItem['tone'] }[] = [
+    { key: 'settlementDrafts', target: 'SETTLEMENT', tone: 'urgent' },
+    { key: 'absences', target: 'ROSTER', tone: 'urgent' },
+    { key: 'lowStock', target: 'PROCUREMENT', tone: 'urgent' },
+    { key: 'poToReceive', target: 'PROCUREMENT', tone: 'todo' },
+    { key: 'inventoryTasks', target: 'INVENTORY_CHECK', tone: 'todo' },
+    { key: 'rosterPending', target: 'ROSTER', tone: 'todo' },
 ];
 
 export const inboxLang = (lang: string): InboxLang => lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh';
@@ -91,7 +84,7 @@ export const buildInboxItems = (counts: InboxCounts, lang: string): InboxItem[] 
         if (raw === undefined) return [];
         const count = Array.isArray(raw) ? raw.length : raw;
         const [title, sub] = T[o.key][l];
-        return [{ key: o.key, icon: o.icon, title, sub: sub(count), count, target: o.target, tone: o.tone, ...(Array.isArray(raw) ? { people: raw } : {}) }];
+        return [{ key: o.key, title, sub: sub(count), count, target: o.target, tone: o.tone, ...(Array.isArray(raw) ? { people: raw } : {}) }];
     }).sort((a, b) => Number(b.count > 0) - Number(a.count > 0));
 };
 
@@ -124,11 +117,10 @@ export const loadManagerInbox = async (employee: Employee, today: string): Promi
         : dept === 'KITCHEN' || dept === 'BOH' ? ['KITCHEN'] : dept === 'BAR' ? ['BAR'] : dept === 'FLOOR' || dept === 'FOH' ? [] : ['GENERAL', 'FUEL'];
 
     const months = [...new Set([today.slice(0, 7), dateAdd(today, 6).slice(0, 7)])];
-    const [drafts, pos, tasks, logs, rosterDocs, stock, employees] = await Promise.allSettled([
+    const [drafts, pos, tasks, rosterDocs, stock, employees] = await Promise.allSettled([
         has(allowed, 'SETTLEMENT') ? count(query(collection(db, 'settlements'), where('isClosed', '==', false))) : Promise.reject(),
         canProcure ? DataManager.getPendingPurchaseOrderCount() : Promise.reject(),
         canInventory ? DataManager.getPendingInventoryTasks() : Promise.reject(),
-        has(allowed, 'LOGBOOK') || has(allowed, 'LOGBOOK_VIEW') ? count(query(collection(db, 'logs'), where('status', 'in', ['PENDING', 'IN_PROGRESS']))) : Promise.reject(),
         canRoster ? Promise.all(months.map(m => getDoc(doc(db, 'roster_months', m)))) : Promise.reject(),
         canInventory || canProcure ? Promise.all(stockTypes.map(t => DataManager.getStock(t).catch(() => []))) : Promise.reject(),
         DataManager.getEmployees(),
@@ -143,7 +135,6 @@ export const loadManagerInbox = async (employee: Employee, today: string): Promi
     const d = ok(drafts); if (d !== undefined) out.settlementDrafts = d;
     const p = ok(pos); if (p !== undefined) out.poToReceive = p;
     const t = ok(tasks) as InventoryTask[] | undefined; if (t) out.inventoryTasks = t.filter(x => inDept(x.assigneeId)).length;
-    const lg = ok(logs); if (lg !== undefined) out.openLogs = lg;
     const docs = ok(rosterDocs);
     if (docs) {
         const rosters = Object.assign({}, ...docs.map(s => (s.exists() ? s.data().roster : {}) || {})) as Record<string, Record<string, string>>;
