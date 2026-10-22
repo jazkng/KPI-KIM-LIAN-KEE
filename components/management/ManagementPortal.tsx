@@ -2,10 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { isRetiredModule } from '../../utils/retiredModules';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-    CheckCircle2, LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
+    LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages
 } from 'lucide-react';
 import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
+import { ManagerInbox } from './ManagerInbox';
 import { MODULE_DEFINITIONS } from '../constants';
 import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
 import { mt, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../constants/managementTranslations';
@@ -348,58 +349,22 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                             {/* Tab 1: Tasks (待我处理) */}
                             {activeTabIdx === 1 && (
                                 <div className="px-4 md:px-6 pt-[calc(1.25rem+env(safe-area-inset-top))] space-y-6">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h2 className="text-xl font-black text-stone-900 font-serif tracking-wide">{mt('tasks_title', lang)}</h2>
-                                            <p className="text-[10px] text-stone-400 tracking-widest mt-1 uppercase font-mono">ACTIONABLE TASK MANAGER</p>
-                                        </div>
-                                    </div>
+                                    <ManagerInbox employee={employee} lang={lang} onOpen={handleNavigateToModule} />
 
-                                    {taskList.length > 0 ? (
-                                        <div className="space-y-3.5">
+                                    {/* 日常工作：例行要做的事，一行一个，直接进去 */}
+                                    {taskList.length > 0 && <section className="space-y-2">
+                                        <h3 className="text-sm font-black text-stone-800 px-1">{lang === 'my' ? 'နေ့စဉ် လုပ်ငန်း' : lang === 'en' ? 'Routine' : '日常工作'}</h3>
+                                        <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">
                                             {taskList.map(task => (
-                                                <div 
-                                                    key={task.id} 
-                                                    className="p-4 rounded-xl border border-stone-200 bg-white shadow-sm flex flex-col justify-between gap-4"
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <span className="text-2xl mt-0.5">{task.icon}</span>
-                                                        <div className="space-y-1">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <h4 className="text-sm font-extrabold text-stone-900">{task.title}</h4>
-                                                                <span className={`text-[8px] px-2 py-0.5 rounded-full font-black border uppercase ${task.badgeColor}`}>
-                                                                    {task.badge}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-xs text-stone-500 leading-relaxed font-medium">
-                                                                {task.desc}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex justify-end border-t border-stone-100 pt-3">
-                                                        <button
-                                                            onClick={() => handleNavigateToModule(task.target)}
-                                                            className="flex items-center gap-1 bg-amber-500 text-white hover:bg-amber-600 px-4 py-1.5 rounded-full text-xs font-black shadow-sm active:scale-95 transition-transform outline-none"
-                                                        >
-                                                            <span>{task.actionLabel}</span>
-                                                            <ChevronRight size={13} className="stroke-[3]" />
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                <button key={task.id} onClick={() => handleNavigateToModule(task.target)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[56px]">
+                                                    <span className="text-xl w-8 text-center shrink-0">{task.icon}</span>
+                                                    <span className="flex-1 min-w-0 text-sm font-extrabold text-stone-800 truncate">{task.title}</span>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black border shrink-0 ${task.badgeColor}`}>{task.badge}</span>
+                                                    <ChevronRight size={16} className="text-stone-300 shrink-0" />
+                                                </button>
                                             ))}
                                         </div>
-                                    ) : (
-                                        <div className="p-12 border border-dashed border-stone-300 rounded-2xl bg-white text-center flex flex-col items-center gap-3 shadow-xs">
-                                            <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-                                                <CheckCircle2 size={20} />
-                                            </div>
-                                            <div>
-                                                <div className="text-xs font-black text-emerald-700">{mt('tasks_empty', lang)}</div>
-                                                <p className="text-[10px] text-stone-500 mt-1">{mt('tasks_empty_desc', lang)}</p>
-                                            </div>
-                                        </div>
-                                    )}
+                                    </section>}
                                 </div>
                             )}
 
