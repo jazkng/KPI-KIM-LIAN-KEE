@@ -1884,24 +1884,23 @@ export const SettlementModule: React.FC<SettlementModuleProps> = ({ storeConfig,
                                             
                                             {/* Lalamove - 美化 */}
                                             <div className="flex items-center gap-3 pt-3 border-t border-orange-100/50 mt-3">
-                                                <div className="w-[100px] shrink-0 border-2 rounded-xl py-2.5 flex items-center justify-center shadow-sm text-blue-700 bg-blue-50 border-blue-100 font-extrabold text-xs">
+                                                <div className="w-[78px] shrink-0 border-2 rounded-xl py-2.5 flex items-center justify-center shadow-sm text-blue-700 bg-blue-50 border-blue-100 font-extrabold text-[11px]">
                                                     Lalamove
                                                 </div>
                                                 <div className="flex-1 relative">
-                                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-gray-300 text-xs font-bold pointer-events-none">RM</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-gray-300 text-[10px] font-bold pointer-events-none">RM</span>
                                                     <input 
                                                         type="number" 
-                                                        placeholder="实收 (Net)" 
-                                                        className="w-full p-3 pl-10 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-right font-mono font-black text-base text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 shadow-inner min-h-[44px] tabular-nums" 
+                                                        placeholder="实收" 
+                                                        className="w-full py-2.5 pl-8 pr-2.5 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-right font-mono font-black text-sm placeholder:text-[11px] placeholder:font-bold text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 shadow-inner min-h-[44px] tabular-nums" 
                                                         value={salesData.lalamove || ''} 
                                                         onChange={e => setSalesData({...salesData, lalamove: parseFloat(e.target.value) || 0})} 
                                                     />
                                                 </div>
-                                                <div className="w-[88px] shrink-0">
+                                                <div className="w-[64px] shrink-0">
                                                     <input type="number" inputMode="numeric" min={0} step={1} placeholder="单数"
                                                         aria-label="Lalamove 单数"
-                                                        className="w-full p-3 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-center font-mono font-black text-gray-900 outline-none focus:bg-white shadow-inner min-h-[44px] tabular-nums"
-                                                        style={{ fontSize: '16px' }}
+                                                        className="w-full py-2.5 px-1.5 bg-gray-50 border border-gray-200 focus:border-blue-400 rounded-xl text-center font-mono font-black text-sm placeholder:text-[11px] placeholder:font-bold text-gray-900 outline-none focus:bg-white shadow-inner min-h-[44px] tabular-nums"
                                                         value={salesData.lalamoveOrders || ''}
                                                         onChange={e => setSalesData({...salesData, lalamoveOrders: Math.max(0, parseInt(e.target.value, 10) || 0)})} />
                                                 </div>

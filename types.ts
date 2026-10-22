@@ -517,6 +517,8 @@ export interface SkillRatingLog {
 export interface Employee {
     id: string;
     name: string;
+    /** 昵称（选填）：班表等地方优先显示；V2 新增，V1 会忽略 */
+    nickname?: string;
     role: string;
     department?: 'KITCHEN' | 'FLOOR' | 'BAR' | 'DISHWASH' | 'BACK_OFFICE' | 'OTHER' | 'OWNER';
     secondaryRoles?: string[]; // <--- 新增：用于存储多项副职

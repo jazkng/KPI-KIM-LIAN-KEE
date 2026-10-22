@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Flag, Loader2, Plus, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Flag, Loader2, Plus, RefreshCw, RotateCcw } from 'lucide-react';
 import type { Employee, InventoryLog } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { getBusinessDateString } from '../../utils/dateHelper';
@@ -61,9 +61,10 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
     const people = [...new Map((tasks || []).filter(t => t.assigneeId).map(t => [t.assigneeId!, t.assigneeName || ''])).entries()];
 
     return <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setCreating('TASK')} className="min-h-[54px] rounded-2xl bg-stone-900 text-[#FFD200] font-black flex items-center justify-center gap-2"><Plus size={18} /> 派任务</button>
-            <button onClick={() => setCreating('MATTER')} className="min-h-[54px] rounded-2xl bg-white border border-stone-200 text-stone-800 font-black flex items-center justify-center gap-2"><Flag size={17} /> 上报事项</button>
+        <div className="flex gap-2">
+            <button onClick={() => setCreating('TASK')} className="flex-1 min-h-[44px] rounded-xl bg-stone-900 text-[#FFD200] text-sm font-black flex items-center justify-center gap-1.5"><Plus size={16} /> 派任务</button>
+            <button onClick={() => setCreating('MATTER')} className="flex-1 min-h-[44px] rounded-xl bg-white border border-stone-200 text-stone-700 text-sm font-black flex items-center justify-center gap-1.5"><Flag size={15} /> 上报</button>
+            {(tasks?.length || 0) > 0 && <button onClick={() => setReload(v => v + 1)} className="w-11 min-h-[44px] rounded-xl bg-white border border-stone-200 grid place-items-center" aria-label="重新读取"><RefreshCw size={15} /></button>}
         </div>
 
         {canSeeMatters && openMatters.length > 0 && <section className="space-y-2">
@@ -76,17 +77,14 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
             </button>)}
         </section>}
 
-        <div className="flex items-center gap-2">
-            <select value={filter} onChange={e => setFilter(e.target.value)} className={`${inputCls} flex-1`}>
-                <option value="">全部</option>
-                {Object.entries(DEPT_LABEL).filter(([k]) => k !== 'OWNER').map(([k, v]) => <option key={k} value={`dept:${k}`}>{v}</option>)}
-                {people.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
-            <button onClick={() => setReload(v => v + 1)} className="w-11 h-11 rounded-xl bg-white border border-stone-200 grid place-items-center" aria-label="重新读取"><RefreshCw size={16} /></button>
-        </div>
+        {people.length > 1 && <select value={filter} onChange={e => setFilter(e.target.value)} className={inputCls}>
+            <option value="">全部</option>
+            {Object.entries(DEPT_LABEL).filter(([k]) => k !== 'OWNER').map(([k, v]) => <option key={k} value={`dept:${k}`}>{v}</option>)}
+            {people.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>}
 
         {tasks === null ? <p className="text-center text-sm text-stone-400 py-8"><Loader2 size={16} className="inline animate-spin" /> 读取中…</p>
-            : shown.length === 0 ? <div className="p-8 rounded-2xl bg-white border border-dashed border-stone-300 text-center text-sm font-bold text-stone-400"><ClipboardList className="mx-auto mb-2" size={22} />还没有任务，按「派任务」开始</div>
+            : shown.length === 0 ? <p className="text-center text-sm font-bold text-stone-400 py-3">还没有任务</p>
                 : grouped.filter(g => g.list.length).map(g => <section key={g.key} className="space-y-2">
                     <h3 className="text-sm font-black text-stone-800 px-1 flex items-center gap-2">{g.label}<span className={`text-[11px] px-2 py-0.5 rounded-full border ${g.tone}`}>{g.list.length}</span></h3>
                     <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">

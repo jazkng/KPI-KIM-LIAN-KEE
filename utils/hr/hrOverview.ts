@@ -31,6 +31,9 @@ export const isCountedStaff = (e: Employee) =>
     !e.isArchived && e.status !== 'TERMINATED' && e.department !== 'OWNER' && e.excludeFromStaff !== true;
 
 export interface PersonLine { employeeId: string; name: string; status: string }
+
+/** 班表上显示的名字：有昵称用昵称，否则用全名 */
+export const shortName = (e: Pick<Employee, 'name' | 'nickname'>) => (e.nickname || '').trim() || e.name;
 export interface DeptToday {
     dept: string;
     label: string;
@@ -78,7 +81,7 @@ export const buildHrOverview = (args: {
         const row = byDept.get(d)!;
         row.total++;
         const s = String(dayRoster?.[e.id] || 'UNASSIGNED');
-        const line = { employeeId: e.id, name: e.name, status: s };
+        const line = { employeeId: e.id, name: shortName(e), status: s };
         if (!dayRoster || NOT_WORKING.has(s) && !OFF_STATUSES.has(s)) row.unassigned.push(line);
         else if (OFF_STATUSES.has(s)) row.off.push(line);
         else row.working.push(line);

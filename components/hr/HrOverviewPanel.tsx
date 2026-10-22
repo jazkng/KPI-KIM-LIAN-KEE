@@ -94,8 +94,8 @@ export const HrOverviewPanel: React.FC<Props> = ({ today: realToday, canHr, canR
                 {canRoster && <section className="bc-card hr-today">
                     <div className="bc-card-heading"><h2><LayoutGrid size={17} /> {today === realToday ? '今天' : `${Number(today.slice(5, 7))}月${Number(today.slice(8))}日`}班表</h2><button className="hr-link" onClick={onOpenRoster}>排班 <ChevronRight size={14} /></button></div>
                     {!data.hasRoster && <p className="bc-muted">本月班表还没建立，下面只列各部门人数。</p>}
-                    {data.depts.map(d => <div key={d.dept} className={`hr-dept d-${d.dept}`}>
-                        <h3><span>{d.label}</span><small>{data.hasRoster ? <>上班 <b>{d.working.length}</b> · 休息 <b>{d.off.length}</b>{d.unassigned.length > 0 && <> · 未排 {d.unassigned.length}</>}</> : <>{d.total} 人</>}</small></h3>
+                    {data.depts.filter(d => !data.hasRoster || d.working.length || d.off.length).map(d => <div key={d.dept} className={`hr-dept d-${d.dept}`}>
+                        <h3><span>{d.label}</span><small>{data.hasRoster ? <>上班 <b>{d.working.length}</b> · 休息 <b>{d.off.length}</b></> : <>{d.total} 人</>}</small></h3>
                         {data.hasRoster && <>
                             {d.working.length > 0 && <Chips list={d.working} />}
                             {d.off.length > 0 && <Chips list={d.off} off />}
