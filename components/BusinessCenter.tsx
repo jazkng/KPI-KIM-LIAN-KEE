@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Sparkles, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Employee } from '../types';
 import { WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from '../types';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
@@ -12,7 +12,7 @@ import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics'
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
 import { AdvisorPanel } from './advisor/AdvisorPanel';
-import { buildAdvisorInsights } from '../utils/cockpit/advisorInsights';
+import { buildAdvisorInsights, type Anomaly } from '../utils/cockpit/advisorInsights';
 import { loadAdvisorSources, type AdvisorSources } from '../utils/cockpit/advisorSources';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -78,6 +78,13 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [aiOpen, month]);
     const k = data?.result.kpis;
+    // AI 顾问入口：先算「本月要注意」给入口预览（只用已读到的资料，不读额外资料）
+    const [aiFocus, setAiFocus] = useState<Anomaly | null>(null);
+    const aiPreview = useMemo(() => {
+        if (!data) return [];
+        const story = profitStory(data.result, month, today);
+        return buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue, breakEven: story.breakEven }).anomalies;
+    }, [data, month, today]);
     const monthDays = data?.days.filter(d => d.date.startsWith(month) && d.date <= data.result.period.end) || [];
     const day = monthDays.find(d => d.date === selectedDate);
     const previous = day && data?.days.find(d => d.date === addDays(day.date, -7));
@@ -100,6 +107,12 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
             {section === 'hr' ? <>
                 <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} canStaffCash={can('STAFF_CASH')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} onOpenStaffCash={() => navigate('STAFF_CASH')} />
             </> : <>
+                {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>
+                    <span className="bc-ai-icon"><Sparkles size={20} /></span>
+                    <span className="bc-ai-text"><b>AI 经营顾问</b><small>{!data ? '读取中…' : aiPreview.length ? `本月 ${aiPreview.length} 件事要注意` : '图表看本月生意，也可以直接问'}</small></span>
+                    {aiPreview.length > 0 && <span className="bc-ai-chips">{aiPreview.slice(0, 3).map((a, i) => <i key={i} role="button" tabIndex={0} className={`is-${a.tone}`} onClick={e => { e.stopPropagation(); setAiFocus(a); setAiOpen(true); }} onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setAiFocus(a); setAiOpen(true); } }}>{a.text}</i>)}</span>}
+                    <ChevronRight size={18} className="bc-ai-go" />
+                </button>}
                 <div className="bc-toolbar"><span>经营月份</span><button aria-label="上一个月" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={17} /></button><input aria-label="经营月份" type="month" value={month} max={today.slice(0, 7)} min="2000-01" onChange={e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value) && e.target.value <= today.slice(0, 7)) setMonth(e.target.value); }} /><button aria-label="下一个月" disabled={month >= today.slice(0, 7)} onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={17} /></button></div>
                 <nav className="bc-tabs" aria-label="经营中心视图">{([['sales', '销售概况'], ['profit', '成本与利润'], ['cash', '现金与账款']] as const).map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
                 {!reportsAllowed ? <p className="bc-card">当前账号未获经营报表权限。其他已授权模块可从「全部功能」进入。</p> : <>
@@ -119,8 +132,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                                 </> : <p className="bc-muted">本月暂无已结算日报。</p>}
                             </section>{day && settlementAllowed && <details className="bc-channel-details"><summary>各渠道订单与均价 <span>展开明细</span></summary><table><thead><tr><th>渠道</th><th>销售额</th><th>单数</th><th>单均</th></tr></thead><tbody>{day.channels.map(c => <tr key={c.label}><td>{c.label}</td><td>{money(c.amount)}</td><td>{c.needsReview ? '待核对' : c.orders ?? '待补'}</td><td>{money(c.average)}</td></tr>)}</tbody></table><p>单均＝同渠道销售额÷完成单数。缺单数显示待补；有销售额但单数为0需核对。日报只读。</p></details>}</div>
                             <aside><section className="bc-card"><div className="bc-card-heading"><h2>本月经营</h2><small>{data.result.period.start.slice(5)}–{data.result.period.end.slice(5)}</small></div><button className="bc-month-revenue" onClick={() => setDetail(k.revenue)}><span>累计营业额</span><b>{format(k.revenue)}</b><Status k={k.revenue} /></button>
-                                <div className="bc-cost-bars">{([['foodRatio', 'food'], ['labourRatio', 'labour']] as const).map(([key, amountKey]) => k[key] && <button key={key} onClick={() => setDetail(k[key])}><span>{k[key].label}</span><b>{format(k[key])}</b>{k[amountKey] && <small className="bc-cost-amount">{format(k[amountKey])}</small>}<i><em style={{ width: `${Math.max(0, Math.min(100, (k[key].value ?? 0) * 100))}%` }} /></i><Status k={k[key]} /></button>)}{(() => { const opex = profitStory(data.result, month, today).lines.find(l => l.key === 'opex'); return opex && <button onClick={() => k.actualProfit && setDetail(k.actualProfit)}><span>经营费用率</span><b>{opex.per100 === null ? '—' : `${opex.per100.toFixed(1)}%`}</b><small className="bc-cost-amount">{money(opex.amount)}</small><i><em style={{ width: `${Math.max(0, Math.min(100, opex.per100 ?? 0))}%` }} /></i><span className="bc-status">租金水电等</span></button>; })()}</div><button className="bc-month-profit" onClick={() => setDetail(k.actualProfit)}><span>经营利润 <Status k={k.actualProfit} /></span><b>{format(k.actualProfit)}</b></button><div className="bc-links"><button onClick={() => setTab('profit')}>成本明细 ↗</button><button onClick={() => setTab('cash')}>现金与账款 ↗</button></div></section>
-                                <section className="bc-card bc-advice"><h2>经营提示</h2><p>{data.result.briefing[0] || '请先核对当前期间的资料完整性。'}</p>{data.result.alerts.slice(0, 2).map(a => <p key={a.title}>{a.title}</p>)}<button disabled={!can('AI_ASSISTANT')} onClick={() => setAiOpen(true)}>查看 AI 经营建议 ↗</button></section>
+                                <div className="bc-cost-bars">{([['foodRatio', 'food'], ['labourRatio', 'labour']] as const).map(([key, amountKey]) => k[key] && <button key={key} onClick={() => setDetail(k[key])}><span>{k[key].label}</span><b>{format(k[key])}</b>{k[amountKey] && <small className="bc-cost-amount">{format(k[amountKey])}</small>}<i><em style={{ width: `${Math.max(0, Math.min(100, (k[key].value ?? 0) * 100))}%` }} /></i><Status k={k[key]} /></button>)}{(() => { const opex = profitStory(data.result, month, today).lines.find(l => l.key === 'opex'); return opex && <button onClick={() => k.actualProfit && setDetail(k.actualProfit)}><span>经营费用率</span><b>{opex.per100 === null ? '—' : `${opex.per100.toFixed(1)}%`}</b><small className="bc-cost-amount">{money(opex.amount)}</small><i><em style={{ width: `${Math.max(0, Math.min(100, opex.per100 ?? 0))}%` }} /></i><span className="bc-status">租金水电等</span></button>; })()}</div><button className={`bc-month-profit${(k.actualProfit?.value ?? 0) < 0 ? ' is-loss' : ''}`} onClick={() => setDetail(k.actualProfit)}><span>经营利润 <Status k={k.actualProfit} /></span><b>{format(k.actualProfit)}</b></button><div className="bc-links"><button onClick={() => setTab('profit')}>成本明细 ↗</button><button onClick={() => setTab('cash')}>现金与账款 ↗</button></div></section>
                             </aside></div>
                             <div className="bc-chart-tabs"><button aria-pressed={chart === 'week'} onClick={() => setChart('week')}>近7天对比</button><button aria-pressed={chart === 'month'} onClick={() => setChart('month')}>本月与保本</button></div>
                             <div className={`bc-charts bc-show-${chart}`}><BusinessChart days={data.days} month={month} end={monthDays.slice(-1)[0]?.date || data.result.period.end} kind="week" onSelect={setSelectedDate} /><BusinessChart days={data.days} month={month} end={data.result.period.end} kind="month" breakEven={k.breakEvenDay} onSelect={setSelectedDate} onDetail={setDetail} /></div>
@@ -140,7 +152,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         {aiOpen && reportsAllowed && can('AI_ASSISTANT') && data && (() => {
             const story = profitStory(data.result, month, today);
             const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue, breakEven: story.breakEven, suppliers: advisorSources?.suppliers, workers: advisorSources?.workers });
-            return <AdvisorPanel periodLabel={data.result.period.label} insights={extra.insights} anomalies={extra.anomalies} settledDays={extra.settledDays} loadingMore={!advisorSources}
+            return <AdvisorPanel focusAnomaly={aiFocus} periodLabel={data.result.period.label} insights={extra.insights} anomalies={extra.anomalies} settledDays={extra.settledDays} loadingMore={!advisorSources}
                 evidence={[...buildAdvisorEvidence(data.result, null), ...extra.evidence]}
                 onClose={() => setAiOpen(false)} onOpenKpi={key => { setAiOpen(false); if (k?.[key]) setDetail(k[key]); }} />;
         })()}

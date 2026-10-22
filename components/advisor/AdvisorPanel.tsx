@@ -22,6 +22,8 @@ interface Props {
     settledDays: number;
     /** 供应商 / 班表还在读 */
     loadingMore?: boolean;
+    /** 从入口点了某一条「要注意」：打开时直接跳到那张图 */
+    focusAnomaly?: Anomaly | null;
     onClose: () => void;
     onOpenKpi?: (key: string) => void;
 }
@@ -84,9 +86,9 @@ const BarChart = ({ insight, picked, onPick }: { insight: Insight; picked: numbe
     </div>;
 };
 
-export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, anomalies = [], evidence, settledDays, loadingMore, onClose, onOpenKpi }) => {
-    const [active, setActive] = useState<InsightKey | null>(insights[0]?.key ?? null);
-    const [picked, setPicked] = useState<number | null>(null);
+export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, anomalies = [], evidence, settledDays, loadingMore, focusAnomaly, onClose, onOpenKpi }) => {
+    const [active, setActive] = useState<InsightKey | null>(focusAnomaly?.key ?? insights[0]?.key ?? null);
+    const [picked, setPicked] = useState<number | null>(focusAnomaly?.bar ?? null);
     const [question, setQuestion] = useState('');
     const [asked, setAsked] = useState('');
     const [loading, setLoading] = useState(false);
