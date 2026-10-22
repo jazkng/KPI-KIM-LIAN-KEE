@@ -7,12 +7,13 @@ import { getBusinessDateString } from '../utils/dateHelper';
 import { browserCockpitSource } from '../utils/cockpit/loadCockpit';
 import { addDays, daysInMonth } from '../utils/cockpit/periods';
 import { holidayLabel } from '../utils/holidays/malaysiaHolidays';
-import { loadBusinessCenterWith, profitStory, type BusinessCenterData, type BusinessDay, type ProfitStory } from '../utils/businessCenter';
+import { dailyBreakEvenTargets, loadBusinessCenterWith, profitStory, type BusinessCenterData, type BusinessDay, type ProfitStory } from '../utils/businessCenter';
 import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics';
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
 import { AdvisorPanel } from './advisor/AdvisorPanel';
 import { buildAdvisorInsights } from '../utils/cockpit/advisorInsights';
+import { loadAdvisorSources, type AdvisorSources } from '../utils/cockpit/advisorSources';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { DataManager } from '../utils/dataManager';
@@ -67,6 +68,15 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         return () => { active = false; clearTimeout(timer); };
     }, [month, today, reportsAllowed, section, revision, currentEmployee.id, loadData]);
     useEffect(() => { if (hrOpen && !canUseBossTarget(currentEmployee, 'HR')) setHrOpen(false); }, [currentEmployee, hrOpen]);
+    // AI 顾问打开时才读供应商最近进价、本月班表（只读；读失败就不显示那张图）
+    const [advisorSources, setAdvisorSources] = useState<AdvisorSources | null>(null);
+    useEffect(() => {
+        if (!aiOpen) { setAdvisorSources(null); return; }
+        let active = true;
+        loadAdvisorSources(month, { suppliers: can('SUPPLIER_CONTACTS'), roster: can('ROSTER') }).then(v => { if (active) setAdvisorSources(v); }).catch(() => { if (active) setAdvisorSources({}); });
+        return () => { active = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [aiOpen, month]);
     const k = data?.result.kpis;
     const monthDays = data?.days.filter(d => d.date.startsWith(month) && d.date <= data.result.period.end) || [];
     const day = monthDays.find(d => d.date === selectedDate);
@@ -129,8 +139,8 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         {hrOpen && can('HR') && <HRSystem currentEmployee={currentEmployee} onClose={() => setHrOpen(false)} />}
         {aiOpen && reportsAllowed && can('AI_ASSISTANT') && data && (() => {
             const story = profitStory(data.result, month, today);
-            const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue });
-            return <AdvisorPanel periodLabel={data.result.period.label} insights={extra.insights} settledDays={extra.settledDays}
+            const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue, breakEven: story.breakEven, suppliers: advisorSources?.suppliers, workers: advisorSources?.workers });
+            return <AdvisorPanel periodLabel={data.result.period.label} insights={extra.insights} anomalies={extra.anomalies} settledDays={extra.settledDays} loadingMore={!advisorSources}
                 evidence={[...buildAdvisorEvidence(data.result, null), ...extra.evidence]}
                 onClose={() => setAiOpen(false)} onOpenKpi={key => { setAiOpen(false); if (k?.[key]) setDetail(k[key]); }} />;
         })()}
@@ -151,35 +161,48 @@ const MetricDialog = ({ kpi, onClose }: { kpi: Kpi; onClose: () => void }) => {
 
 const BusinessChart = ({ days, month, end, kind, breakEven, onSelect, onDetail }: { days: BusinessDay[]; month: string; end: string; kind: 'week' | 'month'; breakEven?: Kpi; onSelect: (date: string) => void; onDetail?: (k: Kpi) => void }) => {
     const [table, setTable] = useState(false);
+    const [beMode, setBeMode] = useState<'weekday' | 'flat'>('weekday');
     const byDate = useMemo(() => new Map(days.map(d => [d.date, d.revenue])), [days]);
     const dates = kind === 'week' ? Array.from({ length: 7 }, (_, i) => addDays(end, i - 6)) : Array.from({ length: Number(end.slice(8)) }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
-    const max = Math.max(1, ...dates.flatMap(date => [byDate.get(date) ?? 0, kind === 'week' ? byDate.get(addDays(date, -7)) ?? 0 : 0]), breakEven?.value ?? 0) * 1.15;
+    // 每日保本线：按星期几调整（周末目标高、平日低，全月合计不变）；资料不够就每天一样
+    const be = kind === 'month' && breakEven?.value !== null && breakEven?.value !== undefined ? breakEven.value : null;
+    const plan = useMemo(() => be === null ? null : dailyBreakEvenTargets({ days, month, perDay: be, mode: beMode }), [days, month, be, beMode]);
+    const target = (date: string) => plan?.targets[date] ?? be ?? 0;
+    const max = Math.max(1, ...dates.flatMap(date => [byDate.get(date) ?? 0, kind === 'week' ? byDate.get(addDays(date, -7)) ?? 0 : 0, be === null ? 0 : target(date)])) * 1.15;
     const w = 700, h = 260, left = 48, base = 215, height = 180, step = (w - left - 15) / dates.length;
     const y = (v: number) => base - v / max * height;
     const currentComplete = dates.every(date => byDate.has(date));
     const previousComplete = dates.every(date => byDate.has(addDays(date, -7)));
     const sum = (shift: number) => dates.reduce((n, date) => n + (byDate.get(addDays(date, shift)) ?? 0), 0);
     // 本月与保本：白话总结（每天要做多少、几天达标、累计比保本多 / 少多少）
-    const be = kind === 'month' && breakEven?.value !== null && breakEven?.value !== undefined ? breakEven.value : null;
     const settled = dates.filter(date => byDate.has(date));
-    const hit = be === null ? 0 : settled.filter(date => (byDate.get(date) ?? 0) >= be).length;
-    const gap = be === null ? 0 : sum(0) - be * settled.length;
-    const barColor = (v: number) => be !== null && v < be ? '#d08a7e' : '#c7a04b';
+    const hit = be === null ? 0 : settled.filter(date => (byDate.get(date) ?? 0) >= target(date)).length;
+    const settledTarget = settled.reduce((n, date) => n + target(date), 0);
+    const gap = be === null ? 0 : sum(0) - settledTarget;
+    const barColor = (date: string, v: number) => be !== null && v < target(date) ? '#d08a7e' : '#c7a04b';
+    const weekdayTargets = plan?.weighted ? [1, 2, 3, 4, 5, 6, 0].map(w => ({ w, v: Object.entries(plan.targets).find(([d]) => new Date(`${d}T00:00:00`).getDay() === w)?.[1] ?? 0 })) : [];
     return <section className={`bc-card bc-chart bc-chart-${kind}`}><div className="bc-card-heading"><h2>{kind === 'week' ? '近7天营业额' : '每天有没有做到保本？'}</h2><button onClick={() => setTable(v => !v)}>{table ? '图表' : '表格'}</button></div>
         {kind === 'week' ? <div className="bc-chart-legend"><span>本7天 {currentComplete ? money(sum(0)) : '资料未齐'}</span><span>前7天 {previousComplete ? money(sum(-7)) : '资料未齐'}</span></div> : breakEven && <>
-            <button className="bc-be" onClick={() => onDetail?.(breakEven)}>每天要做到 {format(breakEven)} 才不亏 <Status k={breakEven} /></button>
-            {be !== null && settled.length > 0 && <p className="bc-be-story">已结算 <b>{settled.length}</b> 天：<b className="is-ok">{hit} 天达到</b>、<b className="is-low">{settled.length - hit} 天没达到</b>。累计营业额 {money(sum(0))}，比 {settled.length} 天的保本 {money(be * settled.length)} <b className={gap >= 0 ? 'is-ok' : 'is-low'}>{gap >= 0 ? '多' : '少'} {money(Math.abs(gap))}</b>。</p>}
+            <div className="bc-be-row">
+                <button className="bc-be" onClick={() => onDetail?.(breakEven)}>{plan?.weighted ? <>保本线按星期调整</> : <>每天要做到 {format(breakEven)} 才不亏</>} <Status k={breakEven} /></button>
+                {be !== null && <div className="bc-be-mode" role="group" aria-label="保本线算法">{(['weekday', 'flat'] as const).map(m => <button key={m} aria-pressed={beMode === m} onClick={() => setBeMode(m)}>{m === 'weekday' ? '按星期' : '平均'}</button>)}</div>}
+            </div>
+            {weekdayTargets.length > 0 && <div className="bc-be-week">{weekdayTargets.map(({ w, v }) => <span key={w} className={w === 0 || w === 6 ? 'is-weekend' : ''}><small>{'日一二三四五六'[w]}</small>{v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)}</span>)}</div>}
+            {beMode === 'weekday' && plan && !plan.weighted && <p className="bc-be-story">日结资料还不够（要 14 天以上、每个星期几至少 2 天），先按平均算。</p>}
+            {be !== null && settled.length > 0 && <p className="bc-be-story">已结算 <b>{settled.length}</b> 天：<b className="is-ok">{hit} 天达到</b>、<b className="is-low">{settled.length - hit} 天没达到</b>。累计营业额 {money(sum(0))}，比 {settled.length} 天的保本 {money(settledTarget)} <b className={gap >= 0 ? 'is-ok' : 'is-low'}>{gap >= 0 ? '多' : '少'} {money(Math.abs(gap))}</b>。</p>}
         </>}
-        {table ? <div className="bc-chart-table"><table><thead><tr><th>营业日</th><th>营业额</th>{kind === 'week' && <th>上周同日</th>}</tr></thead><tbody>{dates.map(date => <tr key={date}><td>{date.slice(5)}</td><td>{byDate.has(date) ? money(byDate.get(date)!) : '未结算'}</td>{kind === 'week' && <td>{byDate.has(addDays(date, -7)) ? money(byDate.get(addDays(date, -7))!) : '未结算'}</td>}</tr>)}</tbody></table></div> : <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={kind === 'week' ? '近7天与上周同日营业额对比；缺记录为空，非零' : '本月已结算营业额与预估保本线'}>
+        {table ? <div className="bc-chart-table"><table><thead><tr><th>营业日</th><th>营业额</th>{kind === 'week' && <th>上周同日</th>}{kind === 'month' && be !== null && <th>保本线</th>}</tr></thead><tbody>{dates.map(date => <tr key={date}><td>{date.slice(5)}</td><td>{byDate.has(date) ? money(byDate.get(date)!) : '未结算'}</td>{kind === 'week' && <td>{byDate.has(addDays(date, -7)) ? money(byDate.get(addDays(date, -7))!) : '未结算'}</td>}{kind === 'month' && be !== null && <td className={byDate.has(date) ? (byDate.get(date)! >= target(date) ? 'is-ok' : 'is-low') : ''}>{money(target(date))}</td>}</tr>)}</tbody></table></div> : <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={kind === 'week' ? '近7天与上周同日营业额对比；缺记录为空，非零' : '本月已结算营业额与预估保本线'}>
             {[0, .5, 1].map(t => <g key={t}><line x1={left} x2={w - 10} y1={y(max * t)} y2={y(max * t)} stroke="#e6e8ec" /><text x={left - 8} y={y(max * t) + 4} textAnchor="end">{(max * t / 1000).toFixed(1)}k</text></g>)}
             {dates.map((date, i) => { const value = byDate.get(date), prev = byDate.get(addDays(date, -7)), x = left + step * i + 5, bar = kind === 'week' ? step * .32 : step * .7; return <g key={date}>
                 {kind === 'week' && prev !== undefined && <rect x={x} y={y(Math.max(0, prev))} width={bar} height={Math.max(0, prev) / max * height} rx="3" fill="#a3adbd"><title>{addDays(date, -7)} {money(prev)}</title></rect>}
-                {value !== undefined ? <g role="button" tabIndex={0} aria-label={`${date} ${money(value)}，查看日报`} onClick={() => date.startsWith(month) && onSelect(date)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (date.startsWith(month)) onSelect(date); } }}><rect x={x + (kind === 'week' ? bar + 2 : 0)} y={y(Math.max(0, value))} width={bar} height={Math.max(2, Math.max(0, value) / max * height)} rx="3" fill={kind === 'month' ? barColor(value) : '#c7a04b'} /><title>{date} {money(value)}</title></g> : <text x={x + step * .3} y={base - 5} textAnchor="middle">—</text>}
+                {value !== undefined ? <g role="button" tabIndex={0} aria-label={`${date} ${money(value)}，查看日报`} onClick={() => date.startsWith(month) && onSelect(date)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (date.startsWith(month)) onSelect(date); } }}><rect x={x + (kind === 'week' ? bar + 2 : 0)} y={y(Math.max(0, value))} width={bar} height={Math.max(2, Math.max(0, value) / max * height)} rx="3" fill={kind === 'month' ? barColor(date, value) : '#c7a04b'} /><title>{date} {money(value)}</title></g> : <text x={x + step * .3} y={base - 5} textAnchor="middle">—</text>}
                 {(kind === 'week' || i % 4 === 0 || i === dates.length - 1) && <text x={x + step * .3} y={base + 22} textAnchor="middle">{date.slice(5)}</text>}
             </g>; })}
-            {kind === 'month' && breakEven?.value !== null && breakEven?.value !== undefined && <line x1={left} x2={w - 10} y1={y(breakEven.value)} y2={y(breakEven.value)} stroke="#53645e" strokeWidth="2" strokeDasharray="6 4" />}
+            {kind === 'month' && be !== null && (plan?.weighted
+                ? <path d={dates.map((date, i) => `${i ? 'L' : 'M'}${left + step * i} ${y(target(date))} L${left + step * (i + 1)} ${y(target(date))}`).join(' ')} fill="none" stroke="#53645e" strokeWidth="2" strokeDasharray="6 4" />
+                : <line x1={left} x2={w - 10} y1={y(be)} y2={y(be)} stroke="#53645e" strokeWidth="2" strokeDasharray="6 4" />)}
         </svg>}
-        <small className="bc-chart-note">{kind === 'week' ? '金色：本7天 · 灰蓝：前7天；缺记录不按零计算。' : '金色＝达到保本 · 红色＝没达到 · 虚线＝每日保本线（固定开销 ÷ 天数，按目前成本率估算）；空白为未结算。'}</small>
+        <small className="bc-chart-note">{kind === 'week' ? '金色：本7天 · 灰蓝：前7天；缺记录不按零计算。' : plan?.weighted ? `金色＝达到当天保本 · 红色＝没达到 · 虚线＝每天的保本线（按过去 ${plan.sampleDays} 天各星期几的生意比例分配，全月合计不变）；空白为未结算。` : '金色＝达到保本 · 红色＝没达到 · 虚线＝每日保本线（固定开销 ÷ 天数，按目前成本率估算）；空白为未结算。'}</small>
     </section>;
 };
 
