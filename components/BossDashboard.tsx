@@ -4,7 +4,7 @@ import {
     Users, Banknote, Coffee, Truck, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, ShoppingBag, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Languages, X,
-    FileText, Calculator, Star, Search, Lock, Gauge, ListChecks
+    FileText, Calculator, Star, Search, Lock, Gauge, ListChecks, Sparkles, ArrowLeft
 } from 'lucide-react';
 import { Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
@@ -19,12 +19,15 @@ import { canOpenDataTools } from './features/system/DataToolsHub';
 import { isReadOnlyMode } from '../utils/readOnlyMode';
 import { HRSystem, MenuManagement, RecurringBillsModule, OrgChart, FinancialReport, LabourProfitDashboard, BossCockpit, PnLReconciliation, ExpenseAudit, DataToolsHub, AttendanceConsole, AccountsPayableModule, TreasuryModule, WarrantyModule, EventsPlanningModule, PriceMonitorModule, EmployeeAssessmentModule, TranslationManager, SelfInvoiceModule, DailyBusinessReportModal, AIOperationsAssistant } from './lazyModules';
 import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
+import { isHygieneHr } from '../utils/points/hygieneAccess';
+import { getOrgLevel } from '../utils/orgAccess';
+import { HygieneBoard } from './points/HygieneBoard';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
 const ALERTS_CACHE_TTL = 5 * 60 * 1000; // 5 mins cache
 
-type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'EXPENSE_AUDIT' | 'DATA_TOOLS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT';
+type ActiveModal = 'NONE' | 'HR' | 'MENU' | 'BILLS' | 'ORG' | 'REPORTS' | 'LABOUR_PROFIT' | 'BOSS_COCKPIT' | 'PNL_RECON' | 'EXPENSE_AUDIT' | 'DATA_TOOLS' | 'ATTENDANCE' | 'AP' | 'TREASURY' | 'WARRANTY' | 'PLANNING' | 'PRICE_MONITOR' | 'ASSESSMENT' | 'TRANSLATION' | 'SELF_INVOICE' | 'DAILY_REPORT' | 'HYGIENE';
 type PlanningTab  = 'VOTE' | 'OKR' | 'CAMPAIGN' | 'EVENTS';
 
 type CardConfig = {
@@ -64,6 +67,8 @@ const BOSS_CARDS: CardConfig[] = [
     { id: "staff_cash", title: "兼职与预支", sub: "PART-TIME & ADVANCE", icon: Banknote, colorClass: "bg-emerald-50", iconColor: "text-emerald-700", actionType: 'NAVIGATE', target: 'STAFF_CASH' },
     { id: "hr", title: "人事管理", sub: "人员档案 / 薪资", icon: Users, colorClass: "bg-red-50", iconColor: "text-red-600", actionType: 'MODAL', target: 'HR' },
     { id: "attendance", title: "考勤管理", sub: "Attendance Control", icon: Clock, colorClass: "bg-indigo-50", iconColor: "text-indigo-600", actionType: 'MODAL', target: 'ATTENDANCE' },
+    // 个人卫生：HR（L2 / L2S）评全部员工；老板本人不显示（负责人 2026-10-23）
+    { id: "hygiene", title: "个人卫生", sub: "HYGIENE · 每周", icon: Sparkles, colorClass: "bg-sky-50", iconColor: "text-sky-600", actionType: 'MODAL', target: 'HYGIENE' },
     { id: "roster", title: "排班管理", sub: "ROSTER", icon: CalendarOff, colorClass: "bg-rose-50", iconColor: "text-rose-500", actionType: 'NAVIGATE', target: 'ROSTER', alertKey: 'absent', alertColor: 'bg-orange-500' },
     { id: "org", title: "组织结构", sub: "ORG STRUCTURE", icon: Layout, colorClass: "bg-teal-50", iconColor: "text-teal-600", actionType: 'MODAL', target: 'ORG' },
     { id: "vote", title: "决策投票", sub: "BOARDROOM VOTE", icon: Vote, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'PLANNING', target: 'VOTE' },
@@ -301,7 +306,9 @@ export const BossDashboard: React.FC<{
 
     // 🔐 权限闸门：L1 老板看全部；L2 等被指派进老板界面的人只看已勾选模块
     const canUseCard = useCallback(
-        (card: CardConfig) => isRetiredModule(card.target) ? false : card.target === 'DATA_TOOLS'
+        (card: CardConfig) => isRetiredModule(card.target) ? false : card.target === 'HYGIENE'
+            ? isHygieneHr(currentEmployee) && getOrgLevel(currentEmployee) !== 'OWNER'
+            : card.target === 'DATA_TOOLS'
             ? canOpenDataTools(currentEmployee) // 里面任何一个工具能用就显示入口（系统管理员可只用库存编号整理）
             : canUseBossTarget(currentEmployee, card.target),
         [currentEmployee],
@@ -416,6 +423,15 @@ export const BossDashboard: React.FC<{
             'ASSESSMENT': <EmployeeAssessmentModule onClose={close} currentEmployee={currentEmployee} />,
             'TRANSLATION': <TranslationManager onClose={close} />,
             'SELF_INVOICE': <SelfInvoiceModule onClose={close} />,
+            'HYGIENE': (
+                <div className="fixed inset-0 z-[120] bg-[#F6F7FB] overflow-y-auto">
+                    <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 flex items-center gap-3">
+                        <button onClick={close} className="w-10 h-10 rounded-full bg-stone-100 grid place-items-center" aria-label="返回"><ArrowLeft size={18} /></button>
+                        <b className="text-base font-black">个人卫生（每周）</b>
+                    </div>
+                    <div className="max-w-2xl mx-auto p-4 pb-24"><HygieneBoard actor={currentEmployee} /></div>
+                </div>
+            ),
             'DAILY_REPORT': (
                 <DailyBusinessReportModal
                     isOpen={activeModal === 'DAILY_REPORT'}

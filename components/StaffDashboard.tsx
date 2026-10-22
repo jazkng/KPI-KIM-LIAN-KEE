@@ -196,13 +196,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
         // ⚡ iOS 性能：考勤、排班、班次设定三项读取同时发出；取用顺序与错误处理维持原样
         const early = <T,>(promise: Promise<T>): Promise<T> => { promise.catch(() => undefined); return promise; };
-        // 「今日班次」卡已拿掉（看排班就好），这里只读排班
-        const rosterRead = early(DataManager.getRosterData());
-
-        // Fetch Roster (3 Days)
-        const { roster, notes } = await rosterRead;
-        setMonthlyNotes(notes || {});
-        setMonthlyRosterData(roster || {});
+        // 跟「排班管理」读同一份：roster_months/{月份}（只读）。以前读旧的 roster/main，
+        // 管理层改了 OFF 员工这边看不到（负责人 2026-10-23 回报）。
+        // 今天到后天如果跨月，下个月也一起读。
+        const lastDay = (() => { const d = new Date(`${todayStr}T00:00:00`); d.setDate(d.getDate() + 2); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+        const months = [...new Set([rosterMonth, todayStr.slice(0, 7), lastDay])];
+        const parts = await Promise.all(months.map(m => early(DataManager.getRosterMonthReadOnly(m)).catch(() => ({ roster: {}, notes: {} }))));
+        const roster: Record<string, Record<string, string>> = Object.assign({}, ...parts.map(p => p.roster));
+        const notes: Record<string, string> = Object.assign({}, ...parts.map(p => p.notes));
+        setMonthlyNotes(notes);
+        setMonthlyRosterData(roster);
 
         const dates = [];
         const baseBusinessDate = new Date(todayStr);
@@ -677,7 +680,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                   // Actual month days
                   for (let day = 1; day <= daysInMonth; day++) {
                     const dStr = `${rosterMonth}-${String(day).padStart(2, '0')}`;
-                    const status = (monthlyRosterData[dStr] || {})[employee.id] || 'WORK';
+                    // 没排班 = 空白（以前默认当成上班，会看到绿点）
+                    const status = (monthlyRosterData[dStr] || {})[employee.id] || '';
                     const note = monthlyNotes[`${dStr}_${employee.id}`];
                     const isOff = status === 'OFF';
                     const isToday = dStr === getBusinessDateString();
@@ -695,7 +699,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                         title={note || ''}
                       >
                         <span className={`text-[9px] font-mono font-extrabold ${isToday ? 'text-amber-600' : isOff ? 'text-gray-400' : 'text-stone-900'}`}>{day}</span>
-                        <div className={`w-1.5 h-1.5 rounded-full mx-auto ${isOff ? 'bg-gray-300' : 'bg-green-500'}`}></div>
+                        {status ? <div className={`w-1.5 h-1.5 rounded-full mx-auto ${isOff ? 'bg-gray-300' : ['MC', 'LEAVE', 'ANNUAL', 'ABSENT', 'HOLIDAY'].includes(status) ? 'bg-orange-400' : 'bg-green-500'}`}></div> : <div className="h-1.5" />}
                       </div>
                     );
                   }
