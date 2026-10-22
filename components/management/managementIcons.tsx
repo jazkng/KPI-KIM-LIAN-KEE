@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    AlertTriangle, Banknote, BookOpen, Calculator, CalendarClock, CalendarOff, CheckSquare, ClipboardCheck, Clock,
+    AlertTriangle, AlarmClock, Banknote, Flag, BookOpen, Calculator, CalendarClock, CalendarOff, CheckSquare, ClipboardCheck, Clock,
     Coffee, CreditCard, Eye, FileText, PenTool, ShoppingCart, Star, Truck, UserX, type LucideIcon,
 } from 'lucide-react';
 import type { InboxKey } from '../../utils/management/managerInbox';
@@ -17,6 +17,7 @@ export const MODULE_ICON: Record<string, IconStyle> = {
     LOGBOOK_VIEW: { Icon: BookOpen, bg: 'bg-emerald-50', fg: 'text-emerald-500' },
     SOP_INSPECT: { Icon: ClipboardCheck, bg: 'bg-violet-50', fg: 'text-violet-500' },
     INVENTORY_CHECK: { Icon: CheckSquare, bg: 'bg-blue-50', fg: 'text-blue-500' },
+    TASK_STOCKTAKE: { Icon: CheckSquare, bg: 'bg-blue-50', fg: 'text-blue-500' },
     INVENTORY_VIEW: { Icon: Eye, bg: 'bg-purple-50', fg: 'text-purple-600' },
     PROCUREMENT: { Icon: ShoppingCart, bg: 'bg-lime-50', fg: 'text-lime-600' },
     SUPPLIER_CONTACTS: { Icon: Truck, bg: 'bg-blue-50', fg: 'text-blue-600' },
@@ -30,6 +31,9 @@ export const MODULE_ICON: Record<string, IconStyle> = {
 };
 
 export const INBOX_ICON: Record<InboxKey, IconStyle> = {
+    tasksToConfirm: { Icon: ClipboardCheck, bg: 'bg-amber-50', fg: 'text-amber-600' },
+    tasksOverdue: { Icon: AlarmClock, bg: 'bg-rose-50', fg: 'text-rose-600' },
+    bossMatters: { Icon: Flag, bg: 'bg-red-50', fg: 'text-red-600' },
     settlementDrafts: MODULE_ICON.SETTLEMENT,
     absences: { Icon: UserX, bg: 'bg-rose-50', fg: 'text-rose-500' },
     lowStock: { Icon: AlertTriangle, bg: 'bg-red-50', fg: 'text-red-600' },

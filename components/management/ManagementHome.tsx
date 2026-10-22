@@ -128,7 +128,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             list.push({ module: 'SOP_INSPECT', label: mt('module_sop_inspect', lang), icon: '✅', bg: 'bg-teal-50 border-teal-200/80', text: 'text-teal-600 font-extrabold' });
         }
         if (allowedModules.some(m => m.startsWith('INVENTORY'))) {
-            list.push({ module: 'INVENTORY_CHECK' as AppModule, label: mt('module_inventory_check', lang), icon: '📦', bg: 'bg-rose-50 border-rose-200/80', text: 'text-rose-600 font-extrabold' });
+            list.push({ module: 'TASK_STOCKTAKE' as AppModule, label: lang === 'my' ? 'စာရင်းစစ် ခိုင်း' : '派盘点', icon: '📦', bg: 'bg-rose-50 border-rose-200/80', text: 'text-rose-600 font-extrabold' });
         }
         if (allowedModules.includes('PROCUREMENT')) {
             list.push({ module: 'PROCUREMENT', label: mt('module_procurement', lang), icon: '🛒', bg: 'bg-purple-50 border-purple-200/80', text: 'text-purple-600 font-extrabold' });

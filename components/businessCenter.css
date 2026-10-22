@@ -67,3 +67,5 @@
 @media(min-width:768px){.bc-ai-chips{order:0;width:auto;flex:0 1 auto}}
 .bc-month-profit.is-loss>b{color:#a84145}
 .adv-about{font-size:11px;font-weight:600;color:#a3aab4;margin-left:4px}
+.bc-matter-banner{width:100%;display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:12px 16px;border:1px solid #f0c9c7;border-radius:16px;background:#fbeeed;color:#a84145;text-align:left;cursor:pointer}.bc-matter-banner span{flex:1}.bc-matter-banner b{display:block;font-size:15px}.bc-matter-banner small{display:block;font-size:12px;color:#b8625f}
+.bc-tasks{margin-top:16px}
