@@ -1988,6 +1988,13 @@ export class DataManager {
             return snap.docs.map(d => d.data() as AttendanceRecord);
         });
     }
+    /** 某员工全部考勤（员工档案「记录」算累计迟到 / 早退用） */
+    static async getAttendanceByEmployee(employeeId: string): Promise<AttendanceRecord[]> {
+        return DataManager.runWithCache(`attendance_emp_${employeeId}`, async () => {
+            const snap = await getDocs(query(collection(db, 'attendance'), where('employeeId', '==', employeeId)));
+            return snap.docs.map(d => d.data() as AttendanceRecord);
+        });
+    }
     static async saveAttendance(record: AttendanceRecord): Promise<void> {
         await setDoc(doc(db, 'attendance', record.id), record);
         DataManager.clearCacheKeys(['attendance_']);   // 👑 打卡/改考勤后清快取，否则画面 3 分钟不更新

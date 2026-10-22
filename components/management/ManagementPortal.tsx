@@ -76,7 +76,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         'ROSTER',
         'LOGBOOK',
         'LOGBOOK_VIEW',
-        'SOP_INSPECT',
+        // SOP 稽查（SOP_INSPECT）已在 V2 停用
         'INVENTORY_CHECK',
         'INVENTORY_VIEW',
         'SUPPLIER_CONTACTS',

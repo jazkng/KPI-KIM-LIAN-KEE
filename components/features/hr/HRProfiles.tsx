@@ -19,11 +19,12 @@ import { SkillStarPanel } from './skills/SkillStarPanel';
 import { SkillCatalogEditor } from './skills/SkillCatalogEditor';
 import { SkillPrintDialog } from './skills/SkillPrintDialog';
 import { useSkillCatalog } from './skills/skillCatalogStore';
-import { primarySkillScore, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
+import { countLateEarly, type LateEarlyCounts } from '../../../utils/hr/attendanceCounts';
+import { positionSkillScores, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
 import type { StarLevel } from '../../../constants/skillCatalog';
-import { withoutRetiredModules } from '../../../utils/retiredModules';
+import { isRetiredModule, withoutRetiredModules } from '../../../utils/retiredModules';
 
 /** 「中文 (English)」→ 中文在上，英文在下（较小） */
 const BiLabel = ({ text, tone = 'light' }: { text: string; tone?: 'light' | 'dark' }) => {
@@ -252,7 +253,7 @@ const SystemAccessModal = ({ isOpen, onClose, allowedModules, onToggle, assessme
                                 <div className="p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                                     {group.modules.map(mod => {
                                         const def = MODULE_DEFINITIONS[mod];
-                                        if (!def) return null;
+                                        if (!def || isRetiredModule(mod)) return null;
                                         const isSelected = allowedModules.includes(mod);
                                         return (
                                             <div 
@@ -430,7 +431,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const reviewFileInputRef = useRef<HTMLInputElement>(null);
     const [isUploadingReviewImage, setIsUploadingReviewImage] = useState(false);
     
-    const [attendanceSnapshot, setAttendanceSnapshot] = useState<{ late: number, lateDates: string[], absent: number, work: number }>({ late: 0, lateDates: [], absent: 0, work: 0 });
+    const [attendanceSnapshot, setAttendanceSnapshot] = useState<LateEarlyCounts>({ late: 0, early: 0, lastLate: '', lastEarly: '' });
 
     const filteredEmployees = useMemo(() => {
         return employees.filter(e => {
@@ -493,32 +494,14 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     useEffect(() => {
         if (!selectedEmpId) return;
         
+        // 累计迟到 / 早退次数（本月明细在薪资结算导出，这里只做记录）
+        let on = true;
         const fetchAttendance = async () => {
-            const now = new Date();
-            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            // 只读这个员工的记录（下推到 Firestore），不再整月全员拉回来
-            const records = await DataManager.getAttendanceByMonth(currentMonth, selectedEmpId);
-            const myRecords = records.filter(r => r.employeeId === selectedEmpId);
-            
-            let late = 0;
-            const lateDates: string[] = [];
-            let absent = 0; 
-            let work = 0;
-
-            myRecords.forEach(r => {
-                if (r.status === 'LATE') {
-                    late++;
-                    lateDates.push(r.date.split('-')[2]);
-                } else if (r.status === 'ABSENT') {
-                    absent++;
-                }
-                if (r.clockIn) work++;
-            });
-
-            setAttendanceSnapshot({ late, lateDates, absent, work });
+            const records = await DataManager.getAttendanceByEmployee(selectedEmpId).catch(() => []);
+            if (on) setAttendanceSnapshot(countLateEarly(records));
         };
         fetchAttendance();
-
+        return () => { on = false; };
     }, [selectedEmpId]);
 
 
@@ -939,7 +922,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         {items.map(emp => {
                                             const isSelected = selectedEmpId === emp.id;
                                             const isTerminated = emp.status === 'TERMINATED' || emp.isArchived;
-                                            
+                                            // 主职 / 副职各自的平均星（评过才有）
+                                            const scores = positionSkillScores(emp, skillCatalog);
+                                            const starOf = (title: string) => scores[title] !== undefined ? ` ★${scores[title].toFixed(1)}` : '';
+
                                             return (
                                                 <div 
                                                     key={emp.id} 
@@ -978,9 +964,10 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                             </div>
                                                         </div>
                                                         
-                                                        {/* 第二行：主职 */}
+                                                        {/* 第二行：主职（评过星就显示「厨师 ★3.5」） */}
                                                         <div className={`text-[11px] font-bold truncate ${isSelected ? 'text-[#FFD200]' : 'text-gray-500'}`}>
                                                             {getRoleChinese(emp.role)}
+                                                            {starOf(emp.role) && <span className={`font-black ${isSelected ? 'text-[#FFD200]' : 'text-amber-700'}`}>{starOf(emp.role)}</span>}
                                                         </div>
 
                                                         {/* 副职 badges */}
@@ -995,7 +982,7 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                             : 'bg-gray-100 text-gray-500 border border-gray-200'
                                                                         }`}
                                                                     >
-                                                                        {getRoleChinese(sr)}
+                                                                        {getRoleChinese(sr)}{starOf(sr)}
                                                                     </span>
                                                                 ))}
                                                                 {(emp as any).secondaryRoles.length > 2 && (
@@ -1016,18 +1003,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                                     <span title="排班分组（跟考勤同步）" className="text-[9px] px-1.5 py-0.5 rounded-md font-black tracking-wider border"
                                                                         style={isSelected ? { background: 'rgba(255,255,255,0.2)', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' } : { background: g.bg, color: g.fg, borderColor: g.border }}>
                                                                         {g.label}
-                                                                    </span>
-                                                                );
-                                                            })()}
-                                                            {(() => {
-                                                                const sc = primarySkillScore(emp, skillCatalog);
-                                                                if (sc === null) return null;
-                                                                return (
-                                                                    <span title="主职工作项目平均星级"
-                                                                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-black tracking-wider border ${
-                                                                            isSelected ? 'bg-white/20 text-white border-white/20' : 'bg-amber-50 text-amber-800 border-amber-200'
-                                                                        }`}>
-                                                                        ★{sc.toFixed(1)}
                                                                     </span>
                                                                 );
                                                             })()}
@@ -1268,23 +1243,18 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                         </div>
                                     </div>
                                     
-                                    <div className={`rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 transition-all ${attendanceSnapshot.late > 0 ? 'bg-red-50 border-red-200' : 'bg-white'} ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
-                                        <h4 className={`text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-2 ${attendanceSnapshot.late > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                            <CalendarDays size={14}/> 本月考勤 (This Month)
+                                    <div className={`rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 transition-all bg-white ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
+                                        <h4 className="text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-2 text-gray-400">
+                                            <CalendarDays size={14}/> 考勤记录 (累计)
                                         </h4>
-                                        <div className="flex justify-between text-center mb-4 gap-2">
-                                            <div className="flex-1">
-                                                <div className={`text-xl md:text-2xl font-black ${attendanceSnapshot.late > 0 ? 'text-red-600' : 'text-gray-800'}`}>{attendanceSnapshot.late}</div>
-                                                <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase">Late</div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-xl md:text-2xl font-black text-gray-800">{attendanceSnapshot.absent}</div>
-                                                <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase">Absent</div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-xl md:text-2xl font-black text-green-600">{attendanceSnapshot.work}</div>
-                                                <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase">Work Days</div>
-                                            </div>
+                                        <div className="grid grid-cols-2 gap-3 text-center">
+                                            {([['迟到次数', 'Late', attendanceSnapshot.late, attendanceSnapshot.lastLate], ['早退次数', 'Early out', attendanceSnapshot.early, attendanceSnapshot.lastEarly]] as const).map(([zh, en, n, last]) => (
+                                                <div key={en} className={`rounded-2xl p-3 border ${n > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
+                                                    <div className={`text-2xl font-black tabular-nums ${n > 0 ? 'text-red-600' : 'text-gray-800'}`}>{n}</div>
+                                                    <div className="text-[11px] font-bold text-gray-600">{zh} <span className="text-gray-400">{en}</span></div>
+                                                    {last && <div className="text-[10px] text-gray-400 mt-0.5">最近 {last}</div>}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
 
@@ -2252,8 +2222,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Rest Days</span><span className="font-bold text-xs">{form.monthlyRestDays ?? 4} Days</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Bank Name</span><span className="font-bold text-xs">{form.bankName || '-'}</span></div>
                                 <div className="flex justify-between border-b border-gray-200 pb-1"><span>Bank Account</span><span className="font-mono font-bold text-xs">{form.bankAccount || '-'}</span></div>
-                                <div className="flex justify-between border-b border-gray-200 pb-1"><span>EPF No</span><span className="font-mono font-bold text-xs">{form.epfNo || '-'}</span></div>
-                                <div className="flex justify-between border-b border-gray-200 pb-1"><span>SOCSO No</span><span className="font-mono font-bold text-xs">{form.socsoNo || '-'}</span></div>
+                                {/* 外劳不用 KWSP / PERKESO，导出时不印 */}
+                                {/malaysia|🇲🇾/i.test(form.nationality || '') && <>
+                                    <div className="flex justify-between border-b border-gray-200 pb-1"><span>EPF No</span><span className="font-mono font-bold text-xs">{form.epfNo || '-'}</span></div>
+                                    <div className="flex justify-between border-b border-gray-200 pb-1"><span>SOCSO No</span><span className="font-mono font-bold text-xs">{form.socsoNo || '-'}</span></div>
+                                </>}
                                 <div className="flex justify-between text-red-900 font-bold text-[10px]"><span>Special Skills (技能)</span><span className="text-right font-sans text-xs truncate max-w-[120px]" title={form.specialSkills}>{form.specialSkills || '-'}</span></div>
                             </div>
                         </div>

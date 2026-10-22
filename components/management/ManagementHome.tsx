@@ -125,7 +125,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
         if (allowedModules.includes('LOGBOOK')) {
             list.push({ module: 'LOGBOOK', label: mt('module_logbook_view', lang), icon: '📝', bg: 'bg-amber-50 border-amber-200/80', text: 'text-amber-600 font-extrabold' });
         }
-        if (allowedModules.includes('SOP_INSPECT')) {
+        if (!isRetiredModule('SOP_INSPECT') && allowedModules.includes('SOP_INSPECT')) {
             list.push({ module: 'SOP_INSPECT', label: mt('module_sop_inspect', lang), icon: '✅', bg: 'bg-teal-50 border-teal-200/80', text: 'text-teal-600 font-extrabold' });
         }
         if (allowedModules.some(m => m.startsWith('INVENTORY'))) {
