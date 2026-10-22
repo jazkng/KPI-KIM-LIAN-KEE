@@ -512,6 +512,8 @@ export interface SkillRatingLog {
     /** ISO 时间 */
     at: string;
     by?: string;
+    /** 升级 / 降级的原因（2026-10-23 起必填；第一次评没有） */
+    reason?: string;
 }
 
 export interface Employee {

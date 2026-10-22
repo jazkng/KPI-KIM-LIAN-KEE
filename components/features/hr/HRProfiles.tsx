@@ -1,7 +1,7 @@
 import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import { TaskReturnStats } from '../../tasks/TaskReturnStats';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Trophy, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Medal, Layout, CheckSquare, Square, Settings, Wallet, Grid3x3 } from 'lucide-react';
+import { User, Plus, Search, Edit3, Save, Trash2, ArrowLeft, CheckCircle2, Clock, Ban, Lock, Camera, ChevronUp, ChevronDown, Shield, ShieldCheck, Hash, LogOut, FileDown, Loader2, X, Phone, Briefcase, Eye, EyeOff, AlertTriangle, Stethoscope, Printer, Archive, Home, CalendarDays, MessageSquarePlus, ThumbsUp, ThumbsDown, StickyNote, Medal, Layout, CheckSquare, Square, Settings, Wallet, Grid3x3 } from 'lucide-react';
 import { Employee, AppModule, WarningRecord, SalaryRecord, ReviewRecord, LoanRecord, InventoryAccessConfig, PortalRole } from '../../../types';
 import { DataManager } from '../../../utils/dataManager';
 import { uploadToCloudinary } from '../../utils';
@@ -10,7 +10,6 @@ import { DepartmentMigrationBanner, DEPARTMENTS, getRecommendedDept } from './De
 import { getOrgLevel, getOrgLevelLabel, getPortalRole, ORG_LEVEL_OPTIONS, PORTAL_ROLE_OPTIONS } from '../../../utils/orgAccess';
 import { INVENTORY_PERMISSION_LABELS, INVENTORY_PERMISSIONS, INVENTORY_SCOPE_LABELS, resolveInventoryAccess } from '../../../utils/inventoryAccess';
 import { InventoryAccessModal } from './InventoryAccessModal';
-import { DEFAULT_PIC_AREAS, PicArea } from '../../../constants/hrSkill';
 
 import { applyResolvedStylesForPdf, waitForPdfFonts } from '../../../utils/pdfStyleResolver';
 import { HRExportDialog } from './HRExportDialog';
@@ -21,6 +20,7 @@ import { SkillPrintDialog } from './skills/SkillPrintDialog';
 import { useSkillCatalog } from './skills/skillCatalogStore';
 import { countLateEarly, type LateEarlyCounts } from '../../../utils/hr/attendanceCounts';
 import { EmployeePointsCard } from '../../points/EmployeePointsCard';
+import { isPartTimer } from '../../../utils/hr/hrOverview';
 import { positionSkillScores, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
@@ -357,7 +357,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const [listMoreOpen, setListMoreOpen] = useState(false);
     useEffect(() => { onDetailOpenChange?.(!!selectedEmpId); }, [selectedEmpId, onDetailOpenChange]);
     const [form, setForm] = useState<Partial<Employee>>({});
-    const [newPicName, setNewPicName] = useState('');
     const [newSecondaryRole, setNewSecondaryRole] = useState('');   // 👑 自己打字新增副职
     // ⭐ 工作能力星级
     const skillCatalog = useSkillCatalog();
@@ -589,8 +588,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     };
 
     const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; setIsUploadingReviewImage(true); try { const url = await uploadToCloudinary(file); setReviewFormState(prev => ({ ...prev, image: url })); } catch (error) { alert('❌ 上传失败'); } finally { setIsUploadingReviewImage(false); if(reviewFileInputRef.current) reviewFileInputRef.current.value = ''; } };
-    const handleAddReview = async () => { if (!reviewFormState.content.trim()) return; const newReview: ReviewRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], author: currentBossId ? 'Manager' : 'Admin', content: reviewFormState.content, type: reviewFormState.type, image: reviewFormState.image }; const updatedReviews = [newReview, ...(form.reviews || [])]; const updatedEmp = { ...form, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(updatedEmp); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); setReviewFormState({ content: '', type: 'NOTE', image: '' }); };
-    const handleDeleteReview = async (reviewId: string) => { if (!confirm("确定删除此条评语?")) return; const updatedReviews = (form.reviews || []).filter(r => r.id !== reviewId); const updatedEmp = { ...form, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(updatedEmp); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); };
+    const handleAddReview = async () => { if (!reviewFormState.content.trim()) return; const newReview: ReviewRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], author: currentBossId ? 'Manager' : 'Admin', content: reviewFormState.content, type: reviewFormState.type, image: reviewFormState.image }; const saved = employees.find(e => e.id === form.id) || (form as Employee); const updatedReviews = [newReview, ...(saved.reviews || [])]; const updatedEmp = { ...saved, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(f => ({ ...f, reviews: updatedReviews })); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); setReviewFormState({ content: '', type: 'NOTE', image: '' }); };
+    const handleDeleteReview = async (reviewId: string) => { if (!confirm("确定删除此条评语?")) return; const saved = employees.find(e => e.id === form.id) || (form as Employee); const updatedReviews = (saved.reviews || []).filter(r => r.id !== reviewId); const updatedEmp = { ...saved, reviews: updatedReviews } as Employee; await DataManager.saveEmployee(updatedEmp); setForm(f => ({ ...f, reviews: updatedReviews })); const newList = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e); onSave(newList); };
     const handleResetPin = () => { if(confirm(`Reset PIN for ${form.name} to 0000?`)) { setForm({ ...form, pin: '0000' }); alert("✅ PIN 已重置为 0000，记得按保存"); } };
     
     // --- LOAN HANDLERS ---
@@ -713,7 +712,18 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const confirmDelete = async () => { if (!selectedEmpId || !form.name) return; try { await DataManager.deleteEmployee(selectedEmpId); const newList = employees.filter(e => e.id !== selectedEmpId); onSave(newList); setSelectedEmpId(null); setIsEditing(false); setShowDeleteModal(false); alert("✅ 档案已永久删除 (Deleted)"); } catch (e) { console.error(e); alert("❌ 删除失败 (Delete Failed)"); } };
     const addSalaryRecord = () => { const amountStr = prompt("输入新薪资 (New Amount):", form.basicSalary?.toString()); const reason = prompt("调整原因 (Reason):", "Annual Increment"); if(amountStr && reason) { const amount = parseFloat(amountStr); const newRecord: SalaryRecord = { date: new Date().toISOString().split('T')[0], amount: amount, adjustment: amount - (form.basicSalary || 0), percentage: 0, reason: reason }; setForm({ ...form, basicSalary: amount, salaryHistory: [newRecord, ...(form.salaryHistory || [])] }); } };
     const deleteSalaryRecord = (index: number) => { if(!form.salaryHistory) return; if(!confirm("确定删除此薪资记录? (Confirm Delete?)")) return; const newHistory = [...form.salaryHistory]; newHistory.splice(index, 1); setForm({...form, salaryHistory: newHistory}); };
-    const confirmAddWarning = () => { if(!warnReason) return alert("⚠️ 请填写原因"); const newWarning: WarningRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: warnType as any, reason: warnReason, issuer: currentBossId || 'Admin' }; setForm({ ...form, warningHistory: [newWarning, ...(form.warningHistory || [])] }); setShowWarningInput(false); setWarnReason(''); };
+    // 警告直接存（不用按编辑）；只写入警告纪录，其他未保存的修改不受影响
+    const confirmAddWarning = async () => {
+        if (!warnReason) return alert("⚠️ 请填写原因");
+        const newWarning: WarningRecord = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: warnType as any, reason: warnReason, issuer: currentBossId || 'Admin' };
+        const saved = employees.find(e => e.id === form.id) || (form as Employee);
+        const warningHistory = [newWarning, ...(saved.warningHistory || [])];
+        const updatedEmp = { ...saved, warningHistory } as Employee;
+        await DataManager.saveEmployee(updatedEmp);
+        onSave(employees.map(e => e.id === updatedEmp.id ? updatedEmp : e));
+        setForm(f => ({ ...f, warningHistory }));
+        setShowWarningInput(false); setWarnReason('');
+    };
     const handleToggleModule = (mod: AppModule) => {
         const current = form.allowedModules || [];
         let nextModules;
@@ -742,19 +752,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     const handleApplyInventoryAccess = (inventoryAccess: InventoryAccessConfig) => { setForm({ ...form, inventoryAccess }); };
 
 
-    // ---------- 🧹 PIC 负责项目 ----------
-    const handleAddPicArea = (name: string) => {
-        const clean = (name || '').trim();
-        if (!clean) return;
-        if ((form.picAreas || []).some(a => a.name === clean)) { alert('⚠️ 这个负责项目已经加过了'); return; }
-        const next: PicArea[] = [...(form.picAreas || []), { id: `PIC_${Date.now()}`, name: clean }];
-        setForm({ ...form, picAreas: next });
-        setNewPicName('');
-    };
-    const handleRemovePicArea = (id: string) => {
-        setForm({ ...form, picAreas: (form.picAreas || []).filter(a => a.id !== id) });
-    };
-
     /** 外劳：国籍不是马来西亚 → 显示 / 编辑护照号码 */
     const isForeignWorker = !!form.nationality && !/malaysia/i.test(form.nationality);
 
@@ -768,34 +765,39 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
     skillFormRef.current = form;
     const skillSaveChain = useRef<Promise<void>>(Promise.resolve());
 
-    const handleRateSkill = (itemId: string, level: StarLevel | null) => {
+    /**
+     * 存技能评分（负责人 2026-10-23）：第一次评按「决定」一次存；之后升级 / 降级带原因。
+     * 只写入技能栏位，以资料库里的员工资料为底，编辑中其他未保存的修改不会被一起存。
+     */
+    const handleCommitSkills = (changes: { itemId: string; level: StarLevel; reason?: string }[]) => {
         const cur = skillFormRef.current;
-        if (!cur.id) return;
+        if (!cur.id || !changes.length) return;
         const now = new Date();
         const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const by = currentEmployee?.name || (isSuperAdminMode ? 'Admin' : 'Manager');
-        const prev = cur.skillRatings?.[itemId]?.level;
         const ratings = { ...(cur.skillRatings || {}) };
-        if (level) ratings[itemId] = { level, ratedAt: today, ratedBy: by };
-        else delete ratings[itemId];
-        const logEntry: any = { itemId, at: now.toISOString(), by };
-        if (prev) logEntry.from = prev;
-        if (level) logEntry.to = level;
-        const updated = { ...cur, skillRatings: ratings, skillRatingLog: [logEntry, ...(cur.skillRatingLog || [])].slice(0, 300) } as Employee;
+        const logs: any[] = [];
+        changes.forEach(({ itemId, level, reason }) => {
+            const prev = ratings[itemId]?.level;
+            ratings[itemId] = { level, ratedAt: today, ratedBy: by };
+            logs.push({ itemId, at: now.toISOString(), by, to: level, ...(prev ? { from: prev } : {}), ...(reason ? { reason } : {}) });
+        });
+        const skillRatingLog = [...logs, ...(cur.skillRatingLog || [])].slice(0, 300);
+        const updated = { ...cur, skillRatings: ratings, skillRatingLog } as Employee;
         skillFormRef.current = updated;
         setForm(updated);
-        // 编辑中 → 跟「保存」一起存；没在编辑 → 马上存
-        if (isEditing) return;
         setSkillSaving(true);
         skillSaveChain.current = skillSaveChain.current
             .then(async () => {
                 const latest = skillFormRef.current as Employee;
-                await DataManager.saveEmployee(latest);
-                onSave(employees.map(e => (e.id === latest.id ? { ...e, skillRatings: latest.skillRatings, skillRatingLog: latest.skillRatingLog } : e)));
+                const saved = employees.find(e => e.id === latest.id) || latest;
+                const toSave = { ...saved, skillRatings: latest.skillRatings, skillRatingLog: latest.skillRatingLog } as Employee;
+                await DataManager.saveEmployee(toSave);
+                onSave(employees.map(e => (e.id === toSave.id ? { ...e, skillRatings: toSave.skillRatings, skillRatingLog: toSave.skillRatingLog } : e)));
             })
             .catch(err => {
                 console.error('Save skill rating failed', err);
-                alert('❌ 评分没存到，请检查网络后再点一次');
+                alert('❌ 评分没存到，请检查网络后再试一次');
             })
             .finally(() => setSkillSaving(false));
     };
@@ -853,7 +855,12 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                 <div className="sticky top-0 z-20 bg-[#F6F7FB]/90 backdrop-blur-xl border-b border-gray-200/60 px-4 py-2.5">
                     <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 text-sm font-black text-[#111111] truncate">
-                            {showResigned ? '已离职' : '在职员工'} · {filteredEmployees.length} 人
+                            {showResigned ? `已离职 · ${filteredEmployees.length} 人` : (() => {
+                                // 在职：管理（L1 / L2）· 员工 · 兼职（负责人 2026-10-23）
+                                const mgmt = filteredEmployees.filter(e => ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT'].includes(getOrgLevel(e))).length;
+                                const pt = filteredEmployees.filter(e => !['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT'].includes(getOrgLevel(e)) && isPartTimer(e)).length;
+                                return <>管理 {mgmt} · 员工 {filteredEmployees.length - mgmt - pt} · 兼职 {pt}</>;
+                            })()}
                             {searchTerm && <span className="ml-1.5 text-xs font-bold text-amber-700">「{searchTerm}」</span>}
                         </div>
                         <button type="button" onClick={() => setListMoreOpen(v => !v)} aria-expanded={listMoreOpen}
@@ -1096,8 +1103,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             )}
                                         </button>
                                     )}
-                                    <button onClick={() => setShowReviewModal(true)} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0" title="记录评语">
-                                        <MessageSquarePlus size={14}/> <span className="hidden md:inline">评语</span>
+                                    {/* 计入员工：放在导出左边（评语已合并到「记录」）；编辑时按一下切换 */}
+                                    <button onClick={() => isEditing ? setForm({ ...form, excludeFromStaff: !form.excludeFromStaff }) : alert('按「编辑」后才能切换')}
+                                        title={isEditing ? '按一下切换（不计入 = 不算人数、不排班）' : '按「编辑」后可以切换'}
+                                        className={`px-3 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 min-h-[44px] md:min-h-[36px] ${form.excludeFromStaff ? 'bg-orange-500 text-white' : 'bg-white/10 text-white'} ${isEditing ? 'ring-1 ring-[#FFD200] active:scale-95' : 'opacity-90'}`}>
+                                        {form.excludeFromStaff ? '不计入员工' : '计入员工'}
                                     </button>
                                     <button onClick={handleExportSinglePDF} disabled={isGeneratingSinglePdf} className="p-2 md:px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0 min-h-[44px] md:min-h-0" title="导出档案">
                                         {isGeneratingSinglePdf ? <Loader2 size={14} className="animate-spin"/> : <FileDown size={14}/>} <span className="hidden md:inline">导出</span>
@@ -1261,14 +1271,6 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
 
                                     {mobileDetailTab === 'records' && selectedEmpId && <EmployeePointsCard employee={form as Employee} />}
 
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Lock size={14}/> <span className="leading-tight">登录密码<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Access PIN</span></span></h4>
-                                        <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
-                                            <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-xl shadow-sm"><Lock size={16} className="text-gray-400"/></div><div><p className="text-[10px] font-bold text-gray-400 uppercase">PIN CODE</p><p className="text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p></div></div>
-                                            <button onClick={() => setShowPin(!showPin)} className="p-2 text-gray-400 hover:text-black transition-colors active:scale-90 min-h-[44px] md:min-h-0">{showPin ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
-                                        </div>
-                                    </div>
-
                                     {/* 薪水卡片 */}
                                     <div className={`bg-[#111111] rounded-[2rem] shadow-lg text-white relative overflow-hidden group transition-all duration-300 ${form.isArchived ? 'grayscale opacity-80' : ''} ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
                                         <button onClick={() => setIsSalaryExpanded(!isSalaryExpanded)} className="w-full p-4 md:p-6 flex justify-between items-center text-left relative z-10 hover:bg-white/5 transition-colors">
@@ -1417,43 +1419,41 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                 </div>
 
                                 <div className="xl:col-span-8 flex flex-col gap-6">
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><User size={14}/> <span className="leading-tight">个人档案<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Personal</span></span></h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
-                                            <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
-                                            <InputField label="昵称 (Nickname)" value={form.nickname || ''} onChange={(e: any) => setForm({...form, nickname: e.target.value})} placeholder="例如：阿明" isEditing={isEditing} />
-                                            {isForeignWorker
-                                                ? <InputField label="护照号码 (Passport)" value={form.passportNo || (isEditing ? '' : form.icNumber)} onChange={(e: any) => setForm({...form, passportNo: e.target.value})} placeholder="Passport No" isEditing={isEditing} />
-                                                : <InputField label="IC 号码 (MyKad)" value={form.icNumber} onChange={(e: any) => setForm({...form, icNumber: e.target.value})} placeholder="900101-14-5555" isEditing={isEditing} />}
-                                            <InputField label="手机 (Phone)" value={form.phone} onChange={(e: any) => setForm({...form, phone: e.target.value})} placeholder="012..." isEditing={isEditing} />
-                                            <SelectField label="性别 (Gender)" value={form.gender} onChange={(e: any) => setForm({...form, gender: e.target.value})} options={['Male', 'Female']} isEditing={isEditing} />
-                                            <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
-                                            <SelectField label="雇佣状态 (Status)" value={form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, {label:'离职 (Terminated)', value:'TERMINATED'}]} isEditing={isEditing} />
-                                            {/* 不计入员工：资料留在档案（例如老板），但不算人数、不排班、人事中心不显示 */}
-                                            <div>
-                                                <BiLabel text="计入员工 (Staff count)" />
-                                                {isEditing ? (
-                                                    <label className={`flex items-center justify-between gap-3 rounded-xl border px-3 min-h-[48px] cursor-pointer ${form.excludeFromStaff ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
-                                                        <span className="text-xs font-bold text-[#111111] leading-tight">不计入员工<span className="block text-[10px] font-medium text-gray-500">不算人数、不排班</span></span>
-                                                        <input type="checkbox" checked={!!form.excludeFromStaff} onChange={e => setForm({...form, excludeFromStaff: e.target.checked})} className="w-5 h-5 accent-orange-500 cursor-pointer shrink-0" />
-                                                    </label>
-                                                ) : (
-                                                    <div className={`text-sm font-bold py-1.5 md:p-2 border border-transparent min-h-[32px] md:min-h-[36px] ${form.excludeFromStaff ? 'text-orange-600' : 'text-[#111111]'}`}>{form.excludeFromStaff ? '不计入员工' : '计入'}</div>
-                                                )}
+                                    {/* 资料：分区块、有分隔线（负责人 2026-10-23） */}
+                                    <div className={`bg-white rounded-[2rem] shadow-sm border border-gray-200 divide-y divide-gray-100 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
+                                        <section className="p-5 md:p-6">
+                                            <h4 className="text-xs font-black text-gray-500 mb-4 flex items-center gap-2"><User size={14}/> 个人资料</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
+                                                <InputField label="全名 (Full Name)" value={form.name} onChange={(e: any) => setForm({...form, name: e.target.value})} placeholder="Name" isEditing={isEditing} />
+                                                <InputField label="昵称 (Nickname)" value={form.nickname || ''} onChange={(e: any) => setForm({...form, nickname: e.target.value})} placeholder="例如：阿明" isEditing={isEditing} />
+                                                {isForeignWorker
+                                                    ? <InputField label="护照号码 (Passport)" value={form.passportNo || (isEditing ? '' : form.icNumber)} onChange={(e: any) => setForm({...form, passportNo: e.target.value})} placeholder="Passport No" isEditing={isEditing} />
+                                                    : <InputField label="IC 号码 (MyKad)" value={form.icNumber} onChange={(e: any) => setForm({...form, icNumber: e.target.value})} placeholder="900101-14-5555" isEditing={isEditing} />}
+                                                <InputField label="手机 (Phone)" value={form.phone} onChange={(e: any) => setForm({...form, phone: e.target.value})} placeholder="012..." isEditing={isEditing} />
+                                                <SelectField label="性别 (Gender)" value={form.gender} onChange={(e: any) => setForm({...form, gender: e.target.value})} options={['Male', 'Female']} isEditing={isEditing} />
+                                                <SelectField label="国籍 (Nationality)" value={form.nationality} onChange={(e: any) => setForm({...form, nationality: e.target.value})} options={NATIONALITY_OPTS} isEditing={isEditing} />
+                                                <SelectField label="语言 (Language)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语', value:'zh_en'}, {label:'English', value:'en'}, {label:'မြန်မာ', value:'my'}]} isEditing={isEditing} />
+                                                <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
+                                                <div className="col-span-2 md:col-span-3"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
                                             </div>
-                                            <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
-                                            <SelectField label={isSuperAdminMode ? "系统入口特殊覆盖 (Portal Override)" : "系统入口 (自动)"} value={isSuperAdminMode ? (form.portalRoleOverride || "") : getPortalRole(form as Employee)} onChange={(e: any) => setForm({...form, portalRoleOverride: e.target.value || undefined})} options={isSuperAdminMode ? [{label: `跟随职级（自动：${getPortalRole(form as Employee)}）`, value: ""}, ...PORTAL_ROLE_OPTIONS] : PORTAL_ROLE_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
-                                            <SelectField 
-                                                label="工作部门 (Department)" 
-                                                value={form.department || getRecommendedDept(form.role || '')} 
-                                                onChange={(e: any) => setForm({...form, department: e.target.value})} 
-                                                options={DEPARTMENTS.map(d => ({ label: d.label, value: d.value }))} 
-                                                isEditing={isEditing} 
-                                            />
-                                            <div className="grid grid-cols-2 gap-2"><InputField label="身高 (cm)" type="number" value={form.height} onChange={(e: any) => setForm({...form, height: parseInt(e.target.value)})} placeholder="cm" isEditing={isEditing} /><InputField label="体重 (kg)" type="number" value={form.weight} onChange={(e: any) => setForm({...form, weight: parseInt(e.target.value)})} placeholder="kg" isEditing={isEditing} /></div>
-                                            <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
-                                            <InputField label="入职日期 (Join Date)" value={form.joinDate} onChange={(e: any) => setForm({...form, joinDate: e.target.value})} type="date" isEditing={isEditing} />
-                                            <SelectField label="语言 (Language)" value={form.preferredLanguage || 'zh_en'} onChange={(e: any) => setForm({...form, preferredLanguage: e.target.value})} options={[{label:'中英双语 (ZH / EN)', value:'zh_en'}, {label:'English Only (EN)', value:'en'}, {label:'မြန်မာ (Burmese / MY)', value:'my'}]} isEditing={isEditing} />
+                                        </section>
+                                        <section className="p-5 md:p-6">
+                                            <h4 className="text-xs font-black text-gray-500 mb-4 flex items-center gap-2"><Briefcase size={14}/> 工作</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-4">
+                                                {/* 雇佣状态：正式 / 试用；离职用旁边的按钮（跟原本权限页的离职合并） */}
+                                                <div>
+                                                    <SelectField label="雇佣状态 (Status)" value={form.status === 'TERMINATED' ? 'TERMINATED' : form.status} onChange={(e: any) => setForm({...form, status: e.target.value})} options={[{label:'正式 (Confirmed)', value:'CONFIRMED'}, {label:'试用 (Probation)', value:'PROBATION'}, ...(form.status === 'TERMINATED' ? [{label:'离职 (Terminated)', value:'TERMINATED'}] : [])]} isEditing={isEditing && form.status !== 'TERMINATED'} />
+                                                    {isEditing && (form.isArchived
+                                                        ? <button onClick={handleRestore} className="mt-2 w-full min-h-[40px] rounded-xl bg-green-50 text-green-700 text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><CheckCircle2 size={13}/> 复职</button>
+                                                        : <button onClick={handleTerminateClick} className="mt-2 w-full min-h-[40px] rounded-xl bg-orange-50 text-orange-700 text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><Ban size={13}/> 办理离职</button>)}
+                                                </div>
+                                                <SelectField 
+                                                    label="工作部门 (Department)" 
+                                                    value={form.department || getRecommendedDept(form.role || '')} 
+                                                    onChange={(e: any) => setForm({...form, department: e.target.value})} 
+                                                    options={DEPARTMENTS.map(d => ({ label: d.label, value: d.value }))} 
+                                                    isEditing={isEditing} 
+                                                />
                                             {/* 👥 排班分组：跟考勤（班次 1 / 2）、组织图同一个栏位 */}
                                             <div>
                                                 <BiLabel text="排班分组 (Group)" />
@@ -1482,12 +1482,37 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                 )}
                                                 {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-1">跟考勤、组织图同步；再点一次 = 取消分组</p>}
                                             </div>
+                                                <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
+                                                <SelectField label={isSuperAdminMode ? "系统入口特殊覆盖 (Portal Override)" : "系统入口 (自动)"} value={isSuperAdminMode ? (form.portalRoleOverride || "") : getPortalRole(form as Employee)} onChange={(e: any) => setForm({...form, portalRoleOverride: e.target.value || undefined})} options={isSuperAdminMode ? [{label: `跟随职级（自动：${getPortalRole(form as Employee)}）`, value: ""}, ...PORTAL_ROLE_OPTIONS] : PORTAL_ROLE_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
+                                            </div>
+                                        </section>
+                                        <section className="p-5 md:p-6">
+                                            <h4 className="text-xs font-black text-gray-500 mb-4">制服</h4>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <InputField label="身高 (cm)" type="number" value={form.height} onChange={(e: any) => setForm({...form, height: parseInt(e.target.value)})} placeholder="cm" isEditing={isEditing} />
+                                                <InputField label="体重 (kg)" type="number" value={form.weight} onChange={(e: any) => setForm({...form, weight: parseInt(e.target.value)})} placeholder="kg" isEditing={isEditing} />
+                                                <SelectField label="制服尺寸 (Size)" value={form.shirtSize} onChange={(e: any) => setForm({...form, shirtSize: e.target.value})} options={SHIRT_SIZES} isEditing={isEditing} />
+                                            </div>
+                                        </section>
+                                        <section className="p-5 md:p-6">
+                                            <h4 className="text-xs font-black text-gray-500 mb-4 flex items-center gap-2"><Phone size={14}/> 紧急联系人</h4>
+                                            <div className="grid grid-cols-2 gap-4"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
+                                        </section>
+                                        <section className="p-5 md:p-6">
+                                            <h4 className="text-xs font-black text-gray-500 mb-3 flex items-center gap-2"><Lock size={14}/> 登录密码</h4>
+                                            <div className="flex items-center gap-2">
+                                                <p className="flex-1 text-lg font-mono font-black text-[#111111] tracking-widest">{showPin ? (form.pin || '0000') : '••••'}</p>
+                                                <button onClick={() => setShowPin(!showPin)} className="w-10 h-10 rounded-xl bg-gray-50 grid place-items-center text-gray-500 active:scale-90" aria-label="显示 PIN">{showPin ? <EyeOff size={17}/> : <Eye size={17}/>}</button>
+                                                {isEditing && <button onClick={handleResetPin} className="h-10 px-3 rounded-xl bg-gray-100 text-gray-700 text-xs font-black whitespace-nowrap flex items-center gap-1.5 active:scale-95"><Lock size={13}/> 重置密码</button>}
+                                            </div>
+                                        </section>
+                                        <section className="p-5 md:p-6">
                                             {/* 🏢 组织架构图设定：BOD → 管理层 → 部门 → 员工（不影响权限职级、薪资部门） */}
-                                            <div className="col-span-2 md:col-span-3 border-t border-gray-100 pt-4 mt-1">
-                                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                            <details className="group" open={isEditing}>
+                                                <summary className="flex items-center justify-between gap-2 mb-3 flex-wrap cursor-pointer list-none">
                                                     <span className="text-xs font-black text-gray-700">🏢 组织架构图 (Org Chart)</span>
-                                                    <span className="text-[10px] font-bold text-gray-400">只影响组织图显示，不改权限、不改薪资部门</span>
-                                                </div>
+                                                    <span className="text-[10px] font-bold text-gray-400">只影响组织图显示 · 点开</span>
+                                                </summary>
                                                 <div className="grid grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-4">
                                                     {(() => {
                                                         const autoTier = resolveTier({ ...form, orgChartTier: undefined });
@@ -1569,9 +1594,8 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     })()}
                                                 </div>
                                                 {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-2">「工作部门」决定他排在组织图哪一栏（厨房 / 楼面…）；第二身份在组织图上用虚线 + 徽章表示，例如「PA to BEN」。</p>}
-                                            </div>
-                                        </div>
-                                        <div className="mt-4 pt-4 border-t border-gray-50"><InputField label="住址 (Address)" value={form.address} onChange={(e: any) => setForm({...form, address: e.target.value})} placeholder="Full Address" isEditing={isEditing} /></div>
+                                            </details>
+                                        </section>
                                     </div>
  
                                     <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'salary' ? 'block' : 'hidden'}`}>
@@ -1595,121 +1619,27 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             employee={form}
                                             catalog={skillCatalog}
                                             canRateHigh={canRateSkillHigh}
-                                            onRate={handleRateSkill}
+                                            editing={isEditing}
+                                            onCommit={handleCommitSkills}
                                             onOpenPrint={() => setShowSkillPrint(true)}
                                             onOpenCatalog={canRateSkillHigh ? () => setShowSkillCatalog(true) : undefined}
                                             saving={skillSaving}
                                         />
 
-                                        {/* ---- PIC 负责项目 ---- */}
-                                        <div className="flex items-center justify-between gap-2 mt-6 mb-3 pt-5 border-t border-gray-100 flex-wrap">
-                                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                                <CheckSquare size={14} className="text-[#FFD200]"/> 负责项目 (PIC)
-                                            </h4>
-                                            {(form.picAreas || []).length > 0 && <span className="text-[11px] font-bold text-gray-500">{(form.picAreas || []).length} 项</span>}
-                                        </div>
-
-                                        {(!form.picAreas || form.picAreas.length === 0) ? (
-                                            <div className="bg-gray-50 border border-gray-100 rounded-2xl px-4 py-5 text-center">
-                                                <span className="text-[11px] text-gray-400 font-bold">暂未指派负责项目 (No PIC area)</span>
-                                            </div>
-                                        ) : (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                {(form.picAreas || []).map(area => (
-                                                    <div key={area.id} className="bg-gray-50 rounded-xl border border-gray-100 px-3 py-2.5 min-w-0">
-                                                        <div className="flex items-start justify-between gap-2">
-                                                            <span className="text-[13px] font-bold text-stone-800 leading-snug break-words min-w-0">{area.name}</span>
-                                                            {isEditing && (
-                                                                <button onClick={() => handleRemovePicArea(area.id)}
-                                                                    className="text-gray-400 hover:text-red-500 shrink-0 active:scale-90 flex items-center justify-center min-h-[40px] min-w-[40px] -my-2 -mr-2" aria-label="移除负责项目">
-                                                                    <Trash2 size={15}/>
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {isEditing && (
-                                            <div className="mt-3 flex flex-col md:flex-row gap-2">
-                                                <select value="" onChange={e => { if (e.target.value) handleAddPicArea(e.target.value); }}
-                                                    className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-2 font-bold text-gray-700 outline-none focus:border-stone-400"
-                                                    style={{ fontSize: '16px', minHeight: '44px' }}>
-                                                    <option value="">+ 从常用项目选</option>
-                                                    {DEFAULT_PIC_AREAS.filter(n => !(form.picAreas || []).some(a => a.name === n)).map(n => (
-                                                        <option key={n} value={n}>{n}</option>
-                                                    ))}
-                                                </select>
-                                                <div className="flex gap-2 flex-1 min-w-0">
-                                                    <input value={newPicName} onChange={e => setNewPicName(e.target.value)}
-                                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddPicArea(newPicName); } }}
-                                                        placeholder="自己打，例如：鱼缸清洁"
-                                                        className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-3 font-bold text-gray-800 outline-none focus:border-stone-400"
-                                                        style={{ fontSize: '16px', minHeight: '44px' }} />
-                                                    <button onClick={() => handleAddPicArea(newPicName)}
-                                                        className="px-4 rounded-xl bg-stone-900 text-[#FFD200] font-black active:scale-95 shrink-0 flex items-center justify-center"
-                                                        style={{ minHeight: '44px' }}>
-                                                        <Plus size={16}/>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
- 
-                                    {/* 其他专长（备注），放在技能星级之后 */}
-                                    <div className={`bg-white rounded-[2rem] p-3 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'skills' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            <Trophy size={14} className="text-[#FFD200]"/> 其他专长（备注）
-                                        </h4>
-                                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                                            {isEditing ? (
-                                                <div className="flex flex-col gap-1.5">
-                                                    <textarea 
-                                                        value={form.specialSkills || ''} 
-                                                        onChange={e => setForm({...form, specialSkills: e.target.value})} 
-                                                        placeholder="请填写员工专业技能，如：会电工、会养鱼、会剖鱼、修水管等 (使用空格、逗号或顿号隔开)..." 
-                                                        className="bg-white text-gray-800 border border-gray-200 rounded-xl p-3 outline-none w-full resize-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all font-medium text-[16px] md:text-sm" 
-                                                        rows={3} />
-                                                    <span className="text-[10px] text-gray-400 font-bold">💡 支持多项专业技能，输入后用空格、逗号或顿号隔开会自动生成标签</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col gap-2">
-                                                    {form.specialSkills ? (
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {form.specialSkills.split(/[,，、\s]+/).filter(Boolean).map((skill, index) => (
-                                                                <span key={index} className="px-3 py-1.5 bg-stone-100 hover:bg-[#FFD200]/10 text-stone-800 hover:text-stone-900 border border-stone-200 hover:border-[#FFD200]/30 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-default">
-                                                                    ✨ {skill}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs text-gray-400 italic">暂未登记专业能力 (No skills defined yet)</span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
+                                        {/* 负责项目、其他专长已删除（负责人 2026-10-23）；资料保留不动 */}
                                     </div>
 
-
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'basic' ? 'block' : 'hidden'}`}>
-                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2"><Phone size={14}/> <span className="leading-tight">紧急联系人<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Emergency Contact</span></span></h4>
-                                        <div className="grid grid-cols-2 gap-4 md:gap-6"><InputField label="联系人姓名 (Name)" value={form.emergencyName} onChange={(e: any) => setForm({...form, emergencyName: e.target.value})} placeholder="Relative Name" isEditing={isEditing} /><InputField label="联系电话 (Phone)" value={form.emergencyPhone} onChange={(e: any) => setForm({...form, emergencyPhone: e.target.value})} placeholder="Emergency Phone" isEditing={isEditing} /></div>
-                                    </div>
- 
-                                    <div className={mobileDetailTab === 'access' ? 'block' : 'hidden'}>
-                                        <div className="bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200">
-                                            <div className="flex justify-between items-center mb-4"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield size={14}/> <span className="leading-tight">系统权限<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Access</span></span></h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="text-[10px] bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-bold active:scale-95 min-h-[44px] md:min-h-0">Config</button>}</div>
-                                            <div className="flex flex-wrap gap-2 mb-4">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">No access granted</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
-                                            
-                                        </div>
-                                    </div>
-
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
+                                    {/* 权限：系统权限 + 库存权限 合并成一张卡（负责人 2026-10-23） */}
+                                    <div className={`bg-white rounded-[2rem] shadow-sm border border-gray-200 divide-y divide-gray-100 ${mobileDetailTab === 'access' ? 'block' : 'hidden'}`}>
+                                        <section className="p-5 md:p-6">
+                                            <div className="flex justify-between items-center mb-3"><h4 className="text-xs font-black text-gray-500 flex items-center gap-2"><Shield size={14}/> 系统权限</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="h-9 px-3 rounded-xl bg-[#111111] text-[#FFD200] text-xs font-black active:scale-95">设置</button>}</div>
+                                            <div className="flex flex-wrap gap-2">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">还没开权限</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[11px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
+                                        </section>
+                                        <section className="p-5 md:p-6">
                                         <div className="flex items-start justify-between gap-3 mb-4">
                                             <div>
-                                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> <span className="leading-tight">库存权限<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Inventory Access</span></span></h4>
-                                                <p className="mt-1 text-[10px] font-bold text-gray-400">控制库存范围与具体操作，不改变员工看到的其他模块</p>
+                                                <h4 className="text-xs font-black text-gray-500 flex items-center gap-2"><ShieldCheck size={14}/> 库存权限</h4>
+                                                <p className="mt-1 text-[10px] font-bold text-gray-400">库存范围与具体操作</p>
                                             </div>
                                             {isEditing && canConfigureInventoryAccess && (
                                                 <button onClick={() => setShowInventoryAccessModal(true)} className="min-h-[40px] shrink-0 rounded-xl bg-[#111111] px-3 text-[10px] font-black text-[#FFD200] active:scale-95 min-h-[44px] md:min-h-0">设置</button>
@@ -1736,25 +1666,44 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             </div>
                                             {isEditing && !canConfigureInventoryAccess && <p className="rounded-xl bg-gray-50 p-3 text-[10px] font-bold text-gray-400">只有老板或超级管理员可以修改库存权限。</p>}
                                         </div>
+                                        </section>
                                     </div>
  
-                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
+                                    <div className={`bg-white rounded-[2rem] p-5 md:p-6 shadow-sm border border-gray-200 space-y-4 ${mobileDetailTab === 'records' ? 'block' : 'hidden'}`}>
                                         {form.id && <TaskReturnStats employeeId={form.id} />}
-                                        <div className="flex justify-between items-center mb-6"><h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> <span className="leading-tight">奖惩记录<span className="block text-[9px] font-medium tracking-normal normal-case text-gray-300 mt-0.5">Disciplinary</span></span></h4>{isEditing && !showWarningInput && <button onClick={() => setShowWarningInput(true)} className="text-[10px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold border border-red-100 hover:bg-red-100 active:scale-95 min-h-[44px] md:min-h-0">+ Add Warning</button>}</div>
-                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl mb-4 border border-red-100 animate-in slide-in-from-top-2"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`min-h-[44px] md:min-h-0 flex-1 py-2.5 text-[10px] font-bold rounded-lg transition-colors active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="违规原因 (e.g. Late, Mistakes)" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">Cancel</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">Confirm</button></div></div>)}
-                                        <div className="space-y-3">{(!form.warningHistory || form.warningHistory.length === 0) && <p className="text-center text-xs text-gray-300 italic py-4">无违规记录 (Clean Record)</p>}{form.warningHistory?.map((warn, idx) => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === warn.type); return (<div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100"><div className="flex items-center gap-3"><div className={`text-[10px] font-black px-2 py-1.5 rounded uppercase shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div><div className="min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{warn.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{warn.date} • by {warn.issuer}</div></div></div>{isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center items-center"><Trash2 size={16}/></button>}</div>); })}</div>
+                                        {/* 奖惩与评语：警告和评语合在一起，不用按编辑就能加（负责人 2026-10-23） */}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="flex-1 text-xs font-black text-gray-500 flex items-center gap-2"><AlertTriangle size={14}/> 奖惩与评语</h4>
+                                            <button onClick={() => setShowReviewModal(true)} className="h-9 px-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-black flex items-center gap-1 active:scale-95"><MessageSquarePlus size={13}/> 表扬 / 评语</button>
+                                            {!showWarningInput && <button onClick={() => setShowWarningInput(true)} className="h-9 px-3 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-black active:scale-95">+ 警告</button>}
+                                        </div>
+                                        {showWarningInput && (<div className="bg-red-50 p-4 rounded-xl border border-red-100"><div className="flex gap-2 mb-3">{DISCIPLINARY_TYPES.map(t => (<button key={t.id} onClick={() => setWarnType(t.id)} className={`min-h-[44px] flex-1 py-2 text-[11px] font-bold rounded-lg active:scale-95 ${warnType === t.id ? 'bg-red-600 text-white' : 'bg-white text-gray-500 border'}`}>{t.label}</button>))}</div><input className="w-full p-3 border border-gray-200 rounded-lg mb-3 bg-white text-[#111111] outline-none" style={{ fontSize: '16px', minHeight: '48px' }} placeholder="原因（例如：上班玩手机）" value={warnReason} onChange={e => setWarnReason(e.target.value)} /><div className="flex gap-2"><button onClick={() => setShowWarningInput(false)} className="flex-1 py-3 bg-white text-gray-500 text-xs rounded-lg font-bold active:scale-95">取消</button><button onClick={confirmAddWarning} className="flex-1 py-3 bg-red-600 text-white text-xs rounded-lg font-bold active:scale-95">记录警告</button></div></div>)}
+                                        <div className="space-y-2">
+                                            {(() => {
+                                                const items = [
+                                                    ...(form.warningHistory || []).map((w, idx) => ({ kind: 'W' as const, date: w.date, idx, w })),
+                                                    ...(form.reviews || []).map(r => ({ kind: 'R' as const, date: r.date, r })),
+                                                ].sort((x, y) => String(y.date).localeCompare(String(x.date)));
+                                                if (!items.length) return <p className="text-center text-xs text-gray-300 italic py-4">没有奖惩或评语</p>;
+                                                return items.map(it => it.kind === 'W' ? (() => { const typeConfig = DISCIPLINARY_TYPES.find(t => t.id === it.w.type); return (
+                                                    <div key={`w${it.idx}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                        <div className={`text-[10px] font-black px-2 py-1.5 rounded shrink-0 ${typeConfig?.color}`}>{typeConfig?.label}</div>
+                                                        <div className="flex-1 min-w-0"><div className="text-xs font-bold text-[#111111] break-words">{it.w.reason}</div><div className="text-[10px] text-gray-400 mt-0.5">{it.w.date} · {it.w.issuer}</div></div>
+                                                        {isEditing && <button onClick={() => { const h = [...(form.warningHistory||[])]; h.splice(it.idx,1); setForm({...form, warningHistory: h}); }} className="text-gray-300 hover:text-red-500 p-2 active:scale-90" aria-label="删除"><Trash2 size={16}/></button>}
+                                                    </div>); })() : (
+                                                    <div key={`r${it.r.id}`} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                        <div className={`text-[10px] font-black px-2 py-1.5 rounded shrink-0 ${it.r.type === 'PRAISE' ? 'bg-emerald-100 text-emerald-700' : it.r.type === 'CRITICISM' ? 'bg-orange-100 text-orange-700' : 'bg-gray-200 text-gray-600'}`}>{it.r.type === 'PRAISE' ? '表扬' : it.r.type === 'CRITICISM' ? '批评' : '备注'}</div>
+                                                        <div className="flex-1 min-w-0"><div className="text-xs font-bold text-[#111111] break-words whitespace-pre-wrap">{it.r.content}</div><div className="text-[10px] text-gray-400 mt-0.5">{it.r.date} · {it.r.author}</div>{it.r.image && <img src={it.r.image} onClick={() => setViewImage(it.r.image!)} className="mt-2 h-16 rounded-lg border border-gray-200 cursor-zoom-in" />}</div>
+                                                        <button onClick={() => handleDeleteReview(it.r.id)} className="text-gray-300 hover:text-red-500 p-2 active:scale-90" aria-label="删除评语"><Trash2 size={16}/></button>
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
                                     </div>
 
-                                    {isEditing && mobileDetailTab === 'access' && (
-                                        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col md:flex-row gap-3">
-                                            <button onClick={handleResetPin} className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><Lock size={14}/> 重置密码 (Reset PIN)</button>
-                                            {form.isArchived ? (
-                                                <button onClick={handleRestore} className="flex-1 py-3.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><CheckCircle2 size={14}/> 复职 (Restore)</button>
-                                            ) : (
-                                                <button onClick={handleTerminateClick} className="flex-1 py-3.5 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"><Ban size={14}/> 离职 (Terminate)</button>
-                                            )}
-                                            <button onClick={() => setShowDeleteModal(true)} className="flex-1 py-3.5 bg-red-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors hover:bg-red-700 shadow-md active:scale-[0.98]"><Trash2 size={14}/> 永久删除</button>
-                                        </div>
+                                    {/* 永久删除：放在记录最下面（编辑时才出现） */}
+                                    {isEditing && mobileDetailTab === 'records' && (
+                                        <button onClick={() => setShowDeleteModal(true)} className="w-full py-3.5 bg-red-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-700 shadow-md active:scale-[0.98]"><Trash2 size={14}/> 永久删除这个员工</button>
                                     )}
                                 </div>
                             </div>
