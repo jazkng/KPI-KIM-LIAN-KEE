@@ -15,6 +15,8 @@ import { sortNavigationItems } from '../constants/moduleNavigation';
 import { NotificationCenter } from './ui/NotificationCenter';
 import { ScanButton } from './meetings/ScanButton';
 import { MyPointsCard } from './points/MyPointsCard';
+import { HygieneBoard } from './points/HygieneBoard';
+import { isHygieneSupervisor } from '../utils/points/hygieneAccess';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
@@ -520,6 +522,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
             {/* 1. 我的任务（主管委派的任务）放最上面：一打开就知道今天要做什么 */}
             <StaffTaskList employee={employee} lang={lang} showEmpty />
+            {/* L4 组长：每周评自己部门的个人卫生 */}
+            {isHygieneSupervisor(employee) && <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm"><HygieneBoard actor={employee} /></div>}
             
             {/* 2. Authorized Work Tools (Grid - touch targets >= 48px) */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
@@ -1137,7 +1141,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             )}
 
             {/* 我的积分（取代旧的季度评分） */}
-            <MyPointsCard lang={lang} />
+            <MyPointsCard lang={lang} employeeId={employee.id} />
 
           </div>
         )}
