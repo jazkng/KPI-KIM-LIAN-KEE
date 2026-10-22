@@ -2,7 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { PortalRole, Employee, DeviceScreen } from './types';
 import { Login } from './components/Login';
-import { LogOut, Settings, Target, Layout, Users } from 'lucide-react';
+import { LogOut, Settings, Target, Layout, Users, ScanLine } from 'lucide-react';
+import { ScanButton } from './components/meetings/ScanButton';
+import { CheckinScreen } from './components/meetings/CheckinScreen';
+import { CHECKIN_EVENT } from './components/meetings/meetingEvents';
+import { parseCheckinCode, type MeetingType } from './utils/meetings/meetingLogic';
 import { DataManager } from './utils/dataManager';
 import { APP_VERSION } from './constants/versionHistory';
 import { getOrgLevel, getPortalRole } from './utils/orgAccess';
@@ -128,6 +132,23 @@ export default function App() {
     const [bossHomeView,    setBossHomeView]    = useState<'PRIORITY' | 'HR' | 'FUNCTIONS'>('PRIORITY');
     const [isConfigOpen,    setIsConfigOpen]    = useState(false);
     const [isAiOpen,        setIsAiOpen]        = useState(false);
+    // 老板按住「扫一扫」3 秒 → 打开经营中心的 AI 经营顾问
+    const [aiSignal,        setAiSignal]        = useState(0);
+    // 会议签到：从墙上 QR 链接（?checkin=store）打开，或 App 里扫到签到码
+    const [checkin,         setCheckin]         = useState<{ type: MeetingType; via: 'CAMERA' | 'APP_SCAN' } | null>(null);
+    useEffect(() => {
+        const type = parseCheckinCode(window.location.search);
+        if (type) {
+            // 还没登录也先记住，登录后再打开签到页
+            try { sessionStorage.setItem('klk_pending_checkin', type); } catch {}
+            const url = new URL(window.location.href);
+            url.searchParams.delete('checkin');
+            window.history.replaceState({}, '', url);
+        }
+        const onCheckin = (e: Event) => setCheckin((e as CustomEvent).detail);
+        window.addEventListener(CHECKIN_EVENT, onCheckin);
+        return () => window.removeEventListener(CHECKIN_EVENT, onCheckin);
+    }, []);
     const [showWhatsNew,    setShowWhatsNew]    = useState(false);
     
     // App 启动时只有两个稳定状态: BOOTING 和 READY
@@ -265,6 +286,14 @@ export default function App() {
             return () => window.removeEventListener('focus', handleFocus);
         }
     }, [currentEmployee, syncEmployeePermissions]);
+
+    // 登录后：有待签到的会议就打开签到页
+    useEffect(() => {
+        if (!currentEmployee) return;
+        let pending: string | null = null;
+        try { pending = sessionStorage.getItem('klk_pending_checkin'); sessionStorage.removeItem('klk_pending_checkin'); } catch {}
+        if (pending === 'MANAGEMENT' || pending === 'STORE') setCheckin({ type: pending, via: 'CAMERA' });
+    }, [currentEmployee]);
 
     // Fix #4: 监听浏览器后退键，同步 portalMode 与 URL
     useEffect(() => {
@@ -566,6 +595,7 @@ export default function App() {
                                     notifications={currentEmployee && (
                                         <NotificationCenter employee={currentEmployee} onOpenLog={openOperationalLogFromNotification} variant="header" />
                                     )}
+                                    aiSignal={aiSignal}
                                 />
                             ) : (
                                 <BossDashboard
@@ -600,6 +630,11 @@ export default function App() {
                     <StaffDashboard employee={currentEmployee} />
                 )}
 
+                {/* 会议签到 */}
+                {currentUser && currentEmployee && checkin && (
+                    <CheckinScreen type={checkin.type} via={checkin.via} employee={currentEmployee} onClose={() => setCheckin(null)} />
+                )}
+
                 {/* WhatsNewModal */}
                 {currentUser && (
                     <WhatsNewModal isOpen={showWhatsNew} onClose={handleCloseWhatsNew} />
@@ -617,6 +652,12 @@ export default function App() {
                         <div className="flex justify-between items-center w-full px-2">
                             {currentUser === PortalRole.BOSS ? (
                                 <>
+                                    {/* 扫一扫（会议签到）；按住 3 秒 → AI 经营顾问 */}
+                                    <ScanButton
+                                        onLongPress={() => { setBossTab(null); setBossHomeView('PRIORITY'); setAiSignal(v => v + 1); }}
+                                        className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold text-stone-400 select-none [-webkit-touch-callout:none]">
+                                        <span className="rounded-lg px-4 py-1.5"><ScanLine size={19} /></span>扫一扫
+                                    </ScanButton>
                                     {([['PRIORITY', '经营中心', Target], ['HR', '人事', Users], ['FUNCTIONS', '全部功能', Layout]] as const).map(([id, label, Icon]) => <button key={id} onClick={() => { setBossTab(null); setBossHomeView(id); }} aria-current={!bossTab && bossHomeView === id ? 'page' : undefined} className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold ${!bossTab && bossHomeView === id ? 'text-stone-900' : 'text-stone-400'}`}><span className={`rounded-lg px-4 py-1.5 ${!bossTab && bossHomeView === id ? 'bg-[#f2e4bc]' : ''}`}><Icon size={19} /></span>{label}</button>)}
                                 </>
                             ) : (

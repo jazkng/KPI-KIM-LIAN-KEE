@@ -13,6 +13,7 @@ import { mapRoleToCode, getChineseRoleName } from './utils';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { NotificationCenter } from './ui/NotificationCenter';
+import { ScanButton } from './meetings/ScanButton';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
@@ -390,6 +391,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             </div>
             
             <div className="flex items-center gap-2">
+              {/* 扫一扫：会议签到 */}
+              <ScanButton label={lang === 'my' ? 'စကင်ဖတ်' : '扫一扫'} className="w-11 h-11 rounded-full border border-white/15 bg-[#111111] text-[#FFD200] grid place-items-center shadow-lg active:scale-95" />
               <NotificationCenter
                 employee={employee}
                 onOpenLog={openOperationalLogFromNotification}
