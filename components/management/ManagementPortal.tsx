@@ -387,6 +387,8 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                                 const IconComponent = modDef.icon;
                                                 const tabKey = modDef.tab || modKey;
                                                 const isSupported = SUPPORTED_MANAGEMENT_TABS.includes(tabKey);
+                                                // 管理层界面还没接入的功能不列出来（以前会显示成灰色「暂未开放」）
+                                                if (!isSupported) return null;
                                                 return (
                                                     <button
                                                         key={modKey}
