@@ -211,3 +211,16 @@ export const primarySkillScore = (
     if (!primary) return null;
     return summarizeItems(primary.items, emp.skillRatings).avg;
 };
+
+/** 每个职位（主职、副职）各自的平均星：{ 职位名称: 平均星 }，没评过的职位不会出现 */
+export const positionSkillScores = (
+    emp: HasRoles & { skillRatings?: Record<string, SkillRating> },
+    catalog: SkillItem[],
+): Record<string, number> => {
+    const out: Record<string, number> = {};
+    getEmployeePositions(emp, catalog).forEach(p => {
+        const avg = summarizeItems(p.items, emp.skillRatings).avg;
+        if (avg !== null) out[p.title] = avg;
+    });
+    return out;
+};

@@ -141,7 +141,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack, allo
      if (showAll || allowedModules?.includes('LOGBOOK')) {
          tabs.push({ key: 'LOGBOOK', label: lang === 'en' ? 'Logbook' : lang === 'my' ? 'လည်ပတ်မှတ်တမ်း' : '运营日志', icon: <BookOpen size={18} /> });
      }
-     if (showAll || allowedModules?.includes('SOP_INSPECT')) {
+     if (!isRetiredModule('SOP_INSPECT') && (showAll || allowedModules?.includes('SOP_INSPECT'))) {
          tabs.push({ key: 'SOP_INSPECT', label: lang === 'my' ? 'SOP စစ်ဆေးခြင်း' : 'SOP 稽查', icon: <ClipboardCheck size={18} /> });
      }
      // INVENTORY LOGIC REFINED

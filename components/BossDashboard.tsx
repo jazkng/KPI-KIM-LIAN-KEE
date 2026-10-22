@@ -1,3 +1,4 @@
+import { isRetiredModule } from '../utils/retiredModules';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Users, Banknote, Coffee, Truck, CheckSquare, PenTool, BookOpen, CalendarOff, 
@@ -300,7 +301,7 @@ export const BossDashboard: React.FC<{
 
     // 🔐 权限闸门：L1 老板看全部；L2 等被指派进老板界面的人只看已勾选模块
     const canUseCard = useCallback(
-        (card: CardConfig) => card.target === 'DATA_TOOLS'
+        (card: CardConfig) => isRetiredModule(card.target) ? false : card.target === 'DATA_TOOLS'
             ? canOpenDataTools(currentEmployee) // 里面任何一个工具能用就显示入口（系统管理员可只用库存编号整理）
             : canUseBossTarget(currentEmployee, card.target),
         [currentEmployee],
