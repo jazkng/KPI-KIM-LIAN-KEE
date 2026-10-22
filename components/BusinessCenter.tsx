@@ -73,7 +73,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
     useEffect(() => {
         if (!aiOpen) { setAdvisorSources(null); return; }
         let active = true;
-        loadAdvisorSources(month, { suppliers: can('SUPPLIER_CONTACTS'), roster: can('ROSTER') }).then(v => { if (active) setAdvisorSources(v); }).catch(() => { if (active) setAdvisorSources({}); });
+        loadAdvisorSources(month, { suppliers: can('SUPPLIER_CONTACTS'), roster: can('ROSTER'), purchases: can('PROCUREMENT') }).then(v => { if (active) setAdvisorSources(v); }).catch(() => { if (active) setAdvisorSources({}); });
         return () => { active = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [aiOpen, month]);
@@ -151,7 +151,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         {hrOpen && can('HR') && <HRSystem currentEmployee={currentEmployee} onClose={() => setHrOpen(false)} />}
         {aiOpen && reportsAllowed && can('AI_ASSISTANT') && data && (() => {
             const story = profitStory(data.result, month, today);
-            const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue, breakEven: story.breakEven, suppliers: advisorSources?.suppliers, workers: advisorSources?.workers });
+            const extra = buildAdvisorInsights({ days: data.days, month, costLines: story.lines, revenue: story.revenue, breakEven: story.breakEven, suppliers: advisorSources?.suppliers, workers: advisorSources?.workers, purchaseOrders: advisorSources?.purchaseOrders });
             return <AdvisorPanel focusAnomaly={aiFocus} periodLabel={data.result.period.label} insights={extra.insights} anomalies={extra.anomalies} settledDays={extra.settledDays} loadingMore={!advisorSources}
                 evidence={[...buildAdvisorEvidence(data.result, null), ...extra.evidence]}
                 onClose={() => setAiOpen(false)} onOpenKpi={key => { setAiOpen(false); if (k?.[key]) setDetail(k[key]); }} />;

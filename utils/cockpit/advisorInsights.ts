@@ -8,11 +8,12 @@
 // 「本月异常」也只从这些数字比较出来，每一条都附证据编号、能点回对应的图。
 // ============================================================================
 import { dailyBreakEvenTargets, type BusinessDay, type ProfitLine, type ProfitStory } from '../businessCenter';
-import { WEATHER_OPTIONS, type Supplier } from '../../types';
+import { WEATHER_OPTIONS, type PurchaseOrder, type Supplier } from '../../types';
+import { summarizeFoodPurchases } from './foodPurchases';
 import { catalogPerBaseCost } from '../inventory/supplyOptions';
 import type { EvidenceItem } from './advisorEvidence';
 
-export type InsightKey = 'breakeven' | 'trend' | 'compare' | 'weekday' | 'weather' | 'channel' | 'cost' | 'supplier' | 'staff';
+export type InsightKey = 'breakeven' | 'trend' | 'compare' | 'weekday' | 'weather' | 'channel' | 'cost' | 'food' | 'supplier' | 'staff';
 
 export interface InsightBar {
     label: string;
@@ -78,6 +79,8 @@ export const buildAdvisorInsights = (args: {
     revenue: number;
     breakEven?: ProfitStory['breakEven'];
     suppliers?: Supplier[];
+    /** 采购单（已收货的才算）：食材明细与单价 */
+    purchaseOrders?: PurchaseOrder[];
     /** 班表：{ 日期: 上班人数 }（只算计入员工、排了上班的人） */
     workers?: Record<string, number>;
 }) => {
@@ -239,6 +242,31 @@ export const buildAdvisorInsights = (args: {
         });
     }
 
+    // ── 食材明细：本月已收货采购单，按品项合计金额与单价（跟上个月单价比） ──
+    if (args.purchaseOrders?.length) {
+        const food = summarizeFoodPurchases(args.purchaseOrders, month);
+        if (food.lines.length) {
+            // g / ml 换成 kg / L 显示单价，比较好读
+            const per = (l: { unit: string; unitPrice: number | null }) => l.unitPrice === null ? null
+                : /^(g|gm|gram)$/i.test(l.unit) ? { v: l.unitPrice * 1000, u: 'kg' } : /^ml$/i.test(l.unit) ? { v: l.unitPrice * 1000, u: 'L' } : { v: l.unitPrice, u: l.unit || '单位' };
+            const total = ev('本月采购单已收货食材合计', rm(food.total), `${food.receivedPos} 张已收货采购单、${food.lines.length} 个品项`);
+            const top = food.lines.slice(0, 8);
+            const bars: InsightBar[] = top.map(l => {
+                const p = per(l);
+                const price = p ? `RM ${p.v.toFixed(2)}/${p.u}` : '';
+                const change = l.change !== null ? `，比上月单价 ${signed(l.change)}` : '';
+                return { label: l.name, value: l.spend, sub: [price, l.change !== null ? `上月 ${signed(l.change)}` : ''].filter(Boolean).join(' · ') || `${l.receipts} 次收货`,
+                    highlight: l.change !== null && l.change >= 10 ? 'worst' : l.change !== null && l.change <= -10 ? 'best' : undefined,
+                    ref: ev(`本月${l.name}进货`, `${rm(l.spend)}${price ? `（单价 ${price}${change}）` : ''}`, `${l.receipts} 次收货`) };
+            });
+            const share = food.total > 0 ? top[0].spend / food.total * 100 : 0;
+            insights.push({ key: 'food', title: '食材明细', unit: 'RM', bars, refs: [total, ...bars.map(b => b.ref!)],
+                headline: `最多是${top[0].name} ${rm(top[0].spend)}（占 ${share.toFixed(0)}%）` });
+            const jump = top.map((l, i) => ({ l, i })).filter(x => x.l.change !== null && x.l.change >= 10).sort((a, b) => b.l.change! - a.l.change!)[0];
+            if (jump) anomalies.push({ tone: 'warn', text: `${jump.l.name} 单价 ${signed(jump.l.change!)}`, key: 'food', bar: jump.i, ref: bars[jump.i].ref! });
+        }
+    }
+
     // ── 进货价：最近收货的价钱跟目录价比（两个月内收过货的品项） ──
     if (args.suppliers?.length) {
         const since = `${prevMonthOf(month)}-01`;
@@ -256,7 +284,8 @@ export const buildAdvisorInsights = (args: {
             insights.push({ key: 'supplier', title: '进货价', unit: 'CHANGE', bars, refs: bars.map(b => b.ref!),
                 headline: up.length ? `${up.length} 样比目录贵，最多 ${signed(up[0].pct)}（${up[0].name}）` : '最近进价都没比目录贵' });
             const worst = bars.findIndex(b => b.value >= 10);
-            if (worst >= 0) anomalies.push({ tone: 'warn', text: `${rows[worst].name} 进价 ${signed(rows[worst].pct)}`, key: 'supplier', bar: worst, ref: bars[worst].ref! });
+            // 食材明细已经提醒过同一样就不重复
+            if (worst >= 0 && !anomalies.some(a => a.key === 'food' && a.text.startsWith(`${rows[worst].name} `))) anomalies.push({ tone: 'warn', text: `${rows[worst].name} 进价 ${signed(rows[worst].pct)}`, key: 'supplier', bar: worst, ref: bars[worst].ref! });
         }
     }
 
