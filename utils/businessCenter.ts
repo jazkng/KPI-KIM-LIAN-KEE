@@ -1,10 +1,13 @@
 import { SPECIAL_CONDITION_OPTIONS, type SettlementRecord } from '../types';
 import { getOps } from '../components/features/settlement/settlementOps';
+import { getSettlementFigures } from '../components/features/settlement/settlementExcelExport';
 import { computePnL } from './pnl/engine/pnlEngine';
 import { loadCockpitWith, type CockpitDataSource } from './cockpit/cockpitLoader';
-import type { CockpitResult } from './cockpit/cockpitMetrics';
+import type { CockpitResult, Kpi } from './cockpit/cockpitMetrics';
 import { addDays, daysInMonth, resolvePeriod } from './cockpit/periods';
 import { getMalaysiaHoliday, hasHolidayDataForYear } from './holidays/malaysiaHolidays';
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export const businessMonthPeriod = (month: string, today: string) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month > today.slice(0, 7)) throw new Error('请选择有效的经营月份');
@@ -19,10 +22,13 @@ export const dailyBusiness = (records: SettlementRecord[], date: string) => {
     const count = (key: 'bills' | 'pax') => ops.every(o => o[key] > 0) ? ops.reduce((n, o) => n + o[key], 0) : null;
     const bills = count('bills'), pax = count('pax'), store = pnl.classic.inStoreSales;
     const perRecord = rows.length === 1 ? [pnl] : rows.map(r => computePnL({ settlements: [r], standaloneExpenses: [], billPayments: [], employees: [], payrollRecords: [] }, date, date, date));
+    // 外卖用实收（跟每日结算同一套：已对账用实际到账，没对账用净额 − 广告），负责人 2026-10-22
+    const figures = rows.map(getSettlementFigures);
+    const received = (grossKey: 'grab' | 'panda' | 'shopee' | 'lalamove') => r2(figures.reduce((n, f) => n + (grossKey === 'lalamove' ? f.lalamove : f[grossKey].report), 0));
     const platform = (label: string, grossKey: 'grab' | 'panda' | 'shopee' | 'lalamove', key: 'grabOrders' | 'pandaOrders' | 'shopeeOrders' | 'lalamoveOrders') => {
         const values = rows.map(r => r.sales?.deliveryBreakdown?.[key]);
         const complete = values.every(v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
-        return { label, amount: pnl.classic.platformGross[grossKey], orders: complete ? values.reduce<number>((n, v) => n + v!, 0) : null,
+        return { label, amount: received(grossKey), orders: complete ? values.reduce<number>((n, v) => n + v!, 0) : null,
             needsReview: values.some((v, i) => v === 0 && perRecord[i].classic.platformGross[grossKey] !== 0) };
     };
     const channels = [{ label: '店内', amount: store, orders: bills, needsReview: false }, platform('Grab', 'grab', 'grabOrders'), platform('Foodpanda', 'panda', 'pandaOrders'), platform('ShopeeFood', 'shopee', 'shopeeOrders'), platform('Lalamove', 'lalamove', 'lalamoveOrders')].map(c => ({ ...c, average: !c.needsReview && c.orders && c.orders > 0 ? c.amount / c.orders : null }));
@@ -30,7 +36,7 @@ export const dailyBusiness = (records: SettlementRecord[], date: string) => {
     // 熟客 / VIP 到店 / WhatsApp：同日多笔相加（没填 = 0，画面显示「—」）
     const sum = (key: 'vipNew' | 'vipVisits' | 'waJoin' | 'waOrders') => ops.reduce((n, o) => n + o[key], 0);
     const community = { regulars: sum('vipNew'), vipVisits: sum('vipVisits'), waJoin: sum('waJoin'), waOrders: sum('waOrders') };
-    return { date, revenue: pnl.revenue, channels, bills, pax, community, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
+    return { date, revenue: r2(store + channels.slice(1).reduce((n, c) => n + c.amount, 0)), channels, bills, pax, community, perBill: bills ? store / bills : null, perPax: pax ? store / pax : null,
         weather: weather.length === 1 ? weather[0] : undefined, weatherMixed: weather.length > 1,
         legacyGrab: pnl.reasons.some(r => r.code === 'LEGACY_GRAB'),
         specialConditions: SPECIAL_CONDITION_OPTIONS.filter(o => rows.some(r => Array.isArray(r.specialConditions) && r.specialConditions.includes(o.value))).map(o => o.value),
@@ -50,7 +56,43 @@ export const loadBusinessCenterWith = async (source: CockpitDataSource, month: s
         return raw;
     } }, period, today, 'ACCRUAL');
     const draftCount = settlements.filter(r => r.isClosed === false && String(r.date).slice(0, 10) >= period.start && String(r.date).slice(0, 10) <= period.end).length;
-    return { month, result, draftCount, days: buildBusinessDays(settlements) };
+    // 经营中心的营业额用「店内实收 + 外卖实收」（跟每日结算一样）；其他报表照旧（rawResult）
+    return { month, result: businessCenterNetView(result), rawResult: result, draftCount, days: buildBusinessDays(settlements) };
+};
+
+/**
+ * 经营中心专用：营业额改成「店内实收 + 外卖实收」（负责人 2026-10-22：要跟每日结算对得上）。
+ * 外卖实收 = 平台总额 − 平台抽成与广告，所以利润不变，只是平台扣款不再单独列成本。
+ * 食材率、人工率改用新的营业额当分母；保本营业额按同一比例换算（利润为 0 的那一点不变）。
+ * 只影响经营中心画面，利润引擎、财务报表、导出照旧。
+ */
+export const businessCenterNetView = (result: CockpitResult): CockpitResult => {
+    const k = result.kpis;
+    const gross = k.revenue?.value;
+    if (!k.revenue || gross === null || gross === undefined) return result;
+    const rows = k.actualProfit?.rows || [];
+    const platformRow = rows.find(r => /外送平台/.test(r.label));
+    const platform = Math.abs(platformRow?.amount ?? 0);
+    const net = r2(gross - platform);
+    const scale = gross > 0 ? net / gross : 1;
+    const inStore = k.revenue.rows.find(r => r.label.startsWith('店内'))?.amount ?? 0;
+    const kpis: Record<string, Kpi> = { ...k };
+    kpis.revenue = {
+        ...k.revenue, value: net,
+        basis: ['营业额 = 店内实收 + 外卖实收（平台总额 − 抽成与广告），跟每日结算的「总营业额」一样', '只用于经营中心；财务报表与导出照旧用平台总额，平台扣款列为成本', ...k.revenue.basis.slice(1)],
+        rows: [{ label: '店内实收', amount: inStore }, { label: '外卖实收（总额 − 抽成与广告）', amount: r2(net - inStore) }],
+    };
+    if (k.actualProfit) kpis.actualProfit = { ...k.actualProfit, rows: rows.filter(r => r !== platformRow).map(r => r.label === '营业额' ? { ...r, amount: net } : r) };
+    const ratio = (key: string, amountKey: string) => {
+        const a = k[amountKey]?.value;
+        if (k[key] && a !== null && a !== undefined) kpis[key] = { ...k[key], value: net > 0 ? a / net : null };
+    };
+    ratio('foodRatio', 'food'); ratio('labourRatio', 'labour');
+    (['breakEvenMonth', 'breakEvenDay', 'breakEvenGap'] as const).forEach(key => {
+        const v = k[key]?.value;
+        if (k[key] && v !== null && v !== undefined) kpis[key] = { ...k[key], value: r2(v * scale), rows: k[key].rows.filter(r => !/平台/.test(r.label)).map(r => /营业额/.test(r.label) ? { ...r, amount: r2(r.amount * scale) } : r) };
+    });
+    return { ...result, kpis };
 };
 
 export type BusinessCenterData = Awaited<ReturnType<typeof loadBusinessCenterWith>>;
@@ -91,7 +133,8 @@ export const profitStory = (result: CockpitResult, month: string, today: string)
     // 引擎若还有其他调整（例如待核对项目），差额单独列出，不让数字对不上
     const other = round2(revenue - base.reduce((n, l) => n + l.amount, 0) - profit);
     if (Math.abs(other) >= 1) base.push({ key: 'other', label: '其他调整（待核对）', hint: '利润引擎标记待核对的项目，点开看明细', amount: other, kpi: 'actualProfit' });
-    const lines: ProfitLine[] = base.map(l => ({ ...l, per100: per100(l.amount) }));
+    // 经营中心用外卖实收时，平台扣款已经不在成本里，这一行是 0 就不显示
+    const lines: ProfitLine[] = base.filter(l => l.key !== 'platform' || l.amount > 0).map(l => ({ ...l, per100: per100(l.amount) }));
 
     const monthDone = month < today.slice(0, 7);
     const isFinal = k.actualProfit?.status === 'CONFIRMED';

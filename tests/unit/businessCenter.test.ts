@@ -13,10 +13,11 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(() => businessMonthPeriod('2026-13', '2026-10-19')).toThrow();
         expect(() => businessMonthPeriod('2026-11', '2026-10-19')).toThrow();
     });
-    it('日报销售额与同日引擎一致，不把广告抽佣扣两次', () => {
+    it('日报营业额 = 店内实收 + 外卖实收（跟每日结算一样）', () => {
         const r = row('2026-10-18');
         const day = dailyBusiness([r], r.date)!;
-        expect(day.revenue).toBe(315);
+        // 店内 180 + Grab 实收（净额 60 − 广告 10 = 50）+ Panda 40 + Shopee 10 + Lalamove 5
+        expect(day.revenue).toBe(285);
         expect(day.channels.reduce((sum, c) => sum + c.amount, 0)).toBe(day.revenue);
         expect(day.perBill).toBe(18);
         expect(day.perPax).toBe(9);
@@ -25,7 +26,7 @@ describe('经营中心：复用利润引擎与原始记录', () => {
     it('旧 Grab 只有净额时沿用引擎回退并明确标记', () => {
         const r = row('2026-10-18');
         r.sales.deliveryBreakdown!.grabGross = undefined;
-        expect(dailyBusiness([r], r.date)).toMatchObject({ revenue: 295, legacyGrab: true });
+        expect(dailyBusiness([r], r.date)).toMatchObject({ revenue: 285, legacyGrab: true });
     });
     it('缺单数、人数不推测，全渠道均价不会套用店内单数', () => {
         const r = row('2026-10-18', { ops: {} });
@@ -38,7 +39,7 @@ describe('经营中心：复用利润引擎与原始记录', () => {
     it('同日多笔归并；部分记录缺营运资料时不算虚假的均价', () => {
         const r = row('2026-10-18');
         const d = dailyBusiness([r, row(r.date, { ops: {}, weather: 'SUNNY' })], r.date)!;
-        expect(d.revenue).toBe(630);
+        expect(d.revenue).toBe(570);
         expect(d.bills).toBeNull();
         expect(d.weather).toBeUndefined();
         expect(d.weatherMixed).toBe(true);
@@ -46,7 +47,7 @@ describe('经营中心：复用利润引擎与原始记录', () => {
     it('退款后负数保留，不夹成零或生成负进度比例', () => {
         const r = row('2026-10-18');
         r.sales.refundTotal = 1000;
-        expect(dailyBusiness([r], r.date)!.revenue).toBe(-680);
+        expect(dailyBusiness([r], r.date)!.revenue).toBe(-710);
     });
     it('一次范围读取供首页与利润，不另读日报；保留早月跨月周对比', async () => {
         const records = [row('2026-09-27'), row('2026-10-01'), row('2026-10-18'), row('2026-10-19', { isClosed: false })];
@@ -58,8 +59,10 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(value.days.some(d => d.date === '2026-10-19')).toBe(false);
         expect(value.draftCount).toBe(1);
         const actual = value.days.filter(d => d.date.startsWith('2026-10')).reduce((n, d) => n + d.revenue, 0);
-        expect(value.result.kpis.revenue.value).toBe(actual + 315);
-        expect(value.result.kpis.revenue.value).toBe(computePnL({ settlements: records, employees: [], payrollRecords: [], standaloneExpenses: [], billPayments: [] }, '2026-10-01', '2026-10-19', '2026-10-19').revenue);
+        // 经营中心用实收（草稿那天引擎也算进去）；原始引擎数字留在 rawResult
+        expect(value.result.kpis.revenue.value).toBe(actual + 285);
+        expect(value.result.kpis.actualProfit.value).toBe(value.rawResult.kpis.actualProfit.value);
+        expect(value.rawResult.kpis.revenue.value).toBe(computePnL({ settlements: records, employees: [], payrollRecords: [], standaloneExpenses: [], billPayments: [] }, '2026-10-01', '2026-10-19', '2026-10-19').revenue);
     });
     it('读取CC环境因素，未知值忽略，历史没填不推断晴天', () => {
         const d = dailyBusiness([row('2026-11-08', { weather: undefined, specialConditions: ['HAZE', 'POWER_CUT', 'OTHER'] as never[] })], '2026-11-08')!;
@@ -70,11 +73,11 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         expect(dailyBusiness([row('2028-01-01')], '2028-01-01')!.holidayYearCovered).toBe(false);
         expect(dailyBusiness([row('2026-10-18', { specialConditions: 'HAZE' as never })], '2026-10-18')!.specialConditions).toEqual([]);
     });
-    it('外卖单数使用同渠道同日数据，缺失和零单分开，均价不扣佣金广告', () => {
+    it('外卖单数使用同渠道同日数据，缺失和零单分开，均价用实收', () => {
         const r = row('2026-10-18');
         Object.assign(r.sales.deliveryBreakdown!, { grabOrders: 4, pandaOrders: 0, shopeeOrders: -2 });
         const channels = dailyBusiness([r], r.date)!.channels;
-        expect(channels[1]).toMatchObject({ orders: 4, average: 20, needsReview: false });
+        expect(channels[1]).toMatchObject({ orders: 4, average: 12.5, needsReview: false });
         expect(channels[2]).toMatchObject({ orders: 0, average: null, needsReview: true });
         expect(channels[3]).toMatchObject({ orders: null, average: null });
         expect(dailyBusiness([r, row(r.date)], r.date)!.channels[1].orders).toBeNull();
@@ -84,7 +87,7 @@ describe('经营中心：复用利润引擎与原始记录', () => {
         const a = row('2026-10-18'), b = row('2026-10-18');
         a.sales.deliveryBreakdown!.grabOrders = 0;
         b.sales.deliveryBreakdown!.grabOrders = 4;
-        expect(dailyBusiness([a, b], a.date)!.channels[1]).toMatchObject({ amount: 160, orders: 4, needsReview: true, average: null });
+        expect(dailyBusiness([a, b], a.date)!.channels[1]).toMatchObject({ amount: 100, orders: 4, needsReview: true, average: null });
     });
 
 });
@@ -121,6 +124,22 @@ describe('成本与利润白话版 profitStory', () => {
     it('shows an explicit adjustment line when the engine total differs', () => {
         const s = profitStory(result({ actualProfit: kpi('actualProfit', 300, { rows: result().kpis.actualProfit.rows }) }), '2026-10', '2026-10-19');
         expect(s.lines.at(-1)).toMatchObject({ key: 'other', amount: 200 });
+    });
+
+    it('经营中心实收版：平台扣款移出成本，利润不变，保本按比例换算', async () => {
+        const { businessCenterNetView } = await import('../../utils/businessCenter');
+        const base = result();
+        base.kpis.revenue.rows = [{ label: '店内 POS 实收', amount: 7000 }];
+        base.kpis.foodRatio = kpi('foodRatio', 0.4); base.kpis.labourRatio = kpi('labourRatio', 0.3);
+        const v = businessCenterNetView(base);
+        expect(v.kpis.revenue.value).toBe(9000);
+        expect(v.kpis.revenue.rows).toEqual([{ label: '店内实收', amount: 7000 }, { label: '外卖实收（总额 − 抽成与广告）', amount: 2000 }]);
+        expect(v.kpis.foodRatio.value).toBeCloseTo(4000 / 9000, 6);
+        expect(v.kpis.breakEvenMonth.value).toBe(27900);
+        const s = profitStory(v, '2026-10', '2026-10-19');
+        expect(s.lines.map(l => l.key)).toEqual(['food', 'labour', 'opex']);
+        expect(s.profit).toBe(500);
+        expect(s.revenue).toBe(9000);
     });
 
     it('loss month and missing break-even', () => {

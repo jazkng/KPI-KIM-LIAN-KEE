@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import type { Employee, StockItem } from '../../types';
@@ -84,8 +84,9 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
     const [staff, setStaff] = useState<Employee[]>([]);
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
-    useEffect(() => { DataManager.getEmployees().then(l => setStaff(l.filter(isCountedStaff).filter(e => !isL3 || normDept(e.department) === myDept).sort((a, b) => a.name.localeCompare(b.name)))).catch(() => setStaff([])); }, [isL3, myDept]);
-    const depts = useMemo(() => isL3 ? [myDept] : DEPT_ORDER, [isL3, myDept]);
+    // L3 也可以派给其他部门的人（例如厨房主管叫楼面的人来帮忙处理虾；负责人 2026-10-22）；自己部门的人排在前面
+    useEffect(() => { DataManager.getEmployees().then(l => setStaff(l.filter(isCountedStaff).sort((a, b) => Number(normDept(b.department) === myDept) - Number(normDept(a.department) === myDept) || a.name.localeCompare(b.name)))).catch(() => setStaff([])); }, [myDept]);
+    const depts = DEPT_ORDER;
     const pro = type === 'REPAIR' && repairBy === 'PRO';
     const needLines = type === 'STOCKTAKE' || (type === 'PURCHASE' && purchaseMode === 'STOCK');
     const autoTitle = title.trim() || (type === 'STOCKTAKE' ? `盘点 ${lines.length} 项` : '');

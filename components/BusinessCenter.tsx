@@ -100,7 +100,9 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
     const previous = day && data?.days.find(d => d.date === addDays(day.date, -7));
     const salesEmpty = !loading && !!data && monthDays.length === 0;
     const navigate = (target: string) => { if (can(target)) onNavigate(target); };
-    const metric = (key: string) => k?.[key] && <button className="bc-metric" onClick={() => setDetail(k[key])}><span>{k[key].label}</span><strong>{format(k[key])}</strong><Status k={k[key]} /></button>;
+    // 「给会计看的原始数字」照旧用利润引擎（营业额含平台总额）
+    const raw = data?.rawResult.kpis;
+    const metric = (key: string) => raw?.[key] && <button className="bc-metric" onClick={() => setDetail(raw[key])}><span>{raw[key].label}</span><strong>{format(raw[key])}</strong><Status k={raw[key]} /></button>;
 
     return <div className="bc-shell">
         <aside className="bc-sidebar"><div className="bc-brand"><b>御膳智控</b><small>金莲记 · 经营工作空间</small></div>
@@ -154,7 +156,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                         {tab === 'profit' && <><ProfitView story={profitStory(data.result, month, today)} month={month} integrity={data.result.integrity} onDetail={key => k[key] && setDetail(k[key])} />
                             <details className="bc-card bc-all-metrics"><summary>全部指标（给会计看的原始数字）</summary><div className="bc-metric-grid">{['actualProfit', 'revenue', 'food', 'foodRatio', 'labour', 'labourRatio', 'grossMargin', 'netMargin', 'breakEvenDay', 'breakEvenMonth'].map(key => <React.Fragment key={key}>{metric(key)}</React.Fragment>)}</div></details></>}
                         {tab === 'cash' && <CashView today={today} canAP={can('AP')} canBills={can('BILLS')} canTreasury={can('TREASURY')} onOpen={target => { if (!can(target)) return; if (target === 'AP') navigate('AP'); else setAccountModal(target as 'TREASURY' | 'BILLS'); }} />}
-                        <details className="bc-sources"><summary>数据依据与口径</summary><p>来源：现有日结、应付账款、固定账单与薪资。营业额使用利润引擎：店内扣退款后金额＋外卖平台总额；抽佣和广告单列成本。旧 Grab 缺总额时沿用引擎暂计净额并提示。日报仅显示已结算记录；月度金额沿用原引擎，若存在未结算记录会单独提示。缺记录不作 0；食材是采购成本，不代表实际耗用。更新于 {new Date(data.result.loadedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur' })}。</p></details>
+                        <details className="bc-sources"><summary>数据依据与口径</summary><p>来源：现有日结、应付账款、固定账单与薪资。营业额＝店内实收＋外卖实收（跟每日结算一样；外卖实收已扣平台抽成与广告，所以不再另列平台成本，利润不变）。「全部指标」照旧显示利润引擎的原始数字（外卖用平台总额）。旧 Grab 缺总额时沿用引擎暂计净额并提示。日报仅显示已结算记录；月度金额沿用原引擎，若存在未结算记录会单独提示。缺记录不作 0；食材是采购成本，不代表实际耗用。更新于 {new Date(data.result.loadedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur' })}。</p></details>
                     </>}
                 </>}
             </>}
@@ -257,7 +259,7 @@ const ProfitView = ({ story, month, integrity, onDetail }: { story: ProfitStory;
         <section className="bc-card">
             <div className="bc-card-heading"><h2>钱去了哪里</h2><small>点任何一行看怎么算</small></div>
             <div className="bc-statement">
-                <button className="bc-statement-row is-total" onClick={() => onDetail('revenue')}><span><b>营业额</b><small>店内实收 + 外卖平台总额</small></span><em /><strong>{amt(story.revenue)}</strong></button>
+                <button className="bc-statement-row is-total" onClick={() => onDetail('revenue')}><span><b>营业额</b><small>店内实收 + 外卖实收（跟每日结算一样）</small></span><em /><strong>{amt(story.revenue)}</strong></button>
                 {story.lines.map(l => <button key={l.key} className="bc-statement-row" onClick={() => onDetail(l.kpi)}>
                     <span><b>− {l.label}</b><small>{l.hint}</small></span>
                     <em>{l.per100 !== null && <>每 RM100 花 <i>RM{l.per100.toFixed(2)}</i>{l.reference && <u>{l.reference}</u>}</>}</em>
