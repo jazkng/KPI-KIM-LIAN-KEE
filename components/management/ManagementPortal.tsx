@@ -17,6 +17,7 @@ import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { NotificationCenter } from '../ui/NotificationCenter';
 import { ScanButton } from '../meetings/ScanButton';
 import { MeetingBoard } from '../meetings/MeetingBoard';
+import { HygieneBoard } from '../points/HygieneBoard';
 import { ManagerDashboard } from '../lazyModules';
 
 interface ManagementPortalProps {
@@ -355,6 +356,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                     <h2 className="text-xl font-black text-stone-900">{lang === 'my' ? 'တာဝန် စီမံခန့်ခွဲမှု' : lang === 'en' ? 'Tasks' : '任务管理'}</h2>
                                     <TaskBoard actor={employee} autoCreate={autoCreate} onAutoCreateUsed={clearAutoCreate} />
                                     <MeetingBoard actor={employee} />
+                                    <HygieneBoard actor={employee} />
 
                                     {/* 日常工作：例行要做的事，一行一个，直接进去 */}
                                     {taskList.length > 0 && <details className="space-y-2">

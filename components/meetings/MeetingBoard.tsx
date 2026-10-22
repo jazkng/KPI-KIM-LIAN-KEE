@@ -120,7 +120,7 @@ const MeetingDetailSheet: React.FC<{ meeting: Meeting; onClose: () => void; onCh
             <button onClick={() => setReload(v => v + 1)} className="h-9 px-3 rounded-lg border border-stone-200 bg-white text-xs font-black flex items-center gap-1"><RefreshCw size={13} />刷新</button>
         </div>
         <div className="flex gap-1.5 text-[11px] font-bold">
-            {([['GREEN', '准时'], ['YELLOW', '10 分钟内'], ['ORANGE', '更晚'], ['GRAY', '没签']] as const).map(([c, l]) => <span key={c} className={`px-2 py-0.5 rounded-md border ${COLOR_CLASS[c]}`}>{l}</span>)}
+            {([['GREEN', '合格（开始后 10 分钟内）'], ['ORANGE', '更晚'], ['GRAY', '没签']] as const).map(([c, l]) => <span key={c} className={`px-2 py-0.5 rounded-md border ${COLOR_CLASS[c]}`}>{l}</span>)}
         </div>
         <div className="grid grid-cols-2 gap-1.5">
             {rows.map(r => <div key={r.id} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${COLOR_CLASS[checkinColor(m.start, r.t)]}`}>

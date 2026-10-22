@@ -39,7 +39,7 @@ export const MEETING_LABEL: Record<MeetingType, string> = { MANAGEMENT: '管理�
 
 /** 开始前多久可以扫码 */
 export const EARLY_MINUTES = 15;
-/** 开始后多少分钟内算黄色 */
+/** 开始后多少分钟内还算合格（负责人 2026-10-22：前 15 分钟到开始后 10 分钟都合格） */
 export const GRACE_MINUTES = 10;
 
 /** 管理层会议只有 L1；店面会议 L1–L3（L2S 幕僚也算 L2） */
@@ -61,18 +61,14 @@ export const findActiveMeeting = (meetings: Meeting[], type: MeetingType, date: 
         .sort((a, b) => a.start.localeCompare(b.start))[0] || null;
 };
 
-export type CheckinColor = 'GREEN' | 'YELLOW' | 'ORANGE' | 'GRAY';
-/** 只用颜色区分：准时 / 10 分钟内 / 更晚 / 没签（不标「迟到」） */
+export type CheckinColor = 'GREEN' | 'ORANGE' | 'GRAY';
+/** 只用颜色区分：合格（开始后 10 分钟内）/ 更晚 / 没签（不标「迟到」） */
 export const checkinColor = (start: string, checkinHHMM?: string | null): CheckinColor => {
     if (!checkinHHMM) return 'GRAY';
-    const d = toMin(checkinHHMM) - toMin(start);
-    if (d <= 0) return 'GREEN';
-    if (d <= GRACE_MINUTES) return 'YELLOW';
-    return 'ORANGE';
+    return toMin(checkinHHMM) - toMin(start) <= GRACE_MINUTES ? 'GREEN' : 'ORANGE';
 };
 export const COLOR_CLASS: Record<CheckinColor, string> = {
     GREEN: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    YELLOW: 'bg-amber-50 text-amber-700 border-amber-200',
     ORANGE: 'bg-orange-100 text-orange-700 border-orange-300',
     GRAY: 'bg-stone-50 text-stone-400 border-stone-200',
 };

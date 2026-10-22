@@ -19,10 +19,10 @@ describe('meeting logic', () => {
         expect(findActiveMeeting(list, 'STORE', '2026-10-27', '11:01')).toBeNull();
         expect(findActiveMeeting(list, 'MANAGEMENT', '2026-10-27', '10:30')?.id).toBe('m2');
     });
-    it('颜色：准时绿、10 分钟内黄、更晚橙、没签灰', () => {
-        expect(checkinColor('10:00', '09:58')).toBe('GREEN');
+    it('颜色：开始前 15 分钟到开始后 10 分钟都合格（绿）、更晚橙、没签灰', () => {
+        expect(checkinColor('10:00', '09:45')).toBe('GREEN');
         expect(checkinColor('10:00', '10:00')).toBe('GREEN');
-        expect(checkinColor('10:00', '10:10')).toBe('YELLOW');
+        expect(checkinColor('10:00', '10:10')).toBe('GREEN');
         expect(checkinColor('10:00', '10:11')).toBe('ORANGE');
         expect(checkinColor('10:00', null)).toBe('GRAY');
     });

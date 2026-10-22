@@ -1,23 +1,39 @@
-import React from 'react';
-import { Award } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Award, Loader2 } from 'lucide-react';
+import { getMalaysiaDateString } from '../../utils/dateHelper';
+import type { MonthPoints } from '../../utils/points/pointsCalc';
+import { loadMyPoints } from '../../utils/points/pointsStore';
+import { PointsBreakdown, GRADE_CLASS } from './PointsBreakdown';
 
 const T = {
-    zh: { title: '我的积分（每月）', note: '积分规则确认后从下个月开始计算。每一项会写清楚是哪件事加分或扣分。', rows: [['任务完成率', 30], ['出勤（迟到 / 早退）', 25], ['个人卫生（每周检查）', 20], ['会议出席', 10], ['加分 / 扣分（表扬、警告、技能升星）', null]] },
-    en: { title: 'My points (monthly)', note: 'Points start next month once the rules are confirmed. Every item shows which action added or deducted points.', rows: [['Task completion', 30], ['Attendance (late / early out)', 25], ['Personal hygiene (weekly check)', 20], ['Meetings', 10], ['Bonus / deductions (praise, warnings, skill up)', null]] },
-    my: { title: 'ကျွန်ုပ်၏ အမှတ် (လစဉ်)', note: 'စည်းမျဉ်း အတည်ပြုပြီးနောက် နောက်လမှ စတင်တွက်ပါမည်။', rows: [['လုပ်ငန်းပြီးစီးမှု', 30], ['အချိန်လိုက်နာမှု', 25], ['ကိုယ်ရေးသန့်ရှင်းမှု', 20], ['အစည်းအဝေး', 10], ['အပိုအမှတ် / နုတ်အမှတ်', null]] },
+    zh: { title: '我的积分', thisMonth: '这个月', lastMonth: '上个月', sofar: '算到今天为止，月底 HR 确认后才定案。', confirmed: 'HR 已确认' },
+    en: { title: 'My points', thisMonth: 'This month', lastMonth: 'Last month', sofar: 'Counted up to today; final after HR confirms at month end.', confirmed: 'Confirmed by HR' },
+    my: { title: 'ကျွန်ုပ်၏ အမှတ်', thisMonth: 'ဒီလ', lastMonth: 'ပြီးခဲ့သည့်လ', sofar: 'ယနေ့အထိ တွက်ထားသည်။', confirmed: 'HR အတည်ပြုပြီး' },
 } as const;
+const prevMonth = (m: string) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return d.toISOString().slice(0, 7); };
 
-/** 员工「我的」：取代旧的季度评分。积分系统上线前只显示项目与满分。 */
-export const MyPointsCard: React.FC<{ lang: string }> = ({ lang }) => {
+/** 员工「我的」：这个月 / 上个月的积分与明细（让员工知道自己的行为带来什么结果） */
+export const MyPointsCard: React.FC<{ lang: string; employeeId: string }> = ({ lang, employeeId }) => {
     const t = T[lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh'];
+    const thisMonth = getMalaysiaDateString().slice(0, 7);
+    const [month, setMonth] = useState(thisMonth);
+    const [data, setData] = useState<MonthPoints | null | undefined>(undefined);
+    useEffect(() => { let on = true; setData(undefined); loadMyPoints(employeeId, month).then(d => on && setData(d)).catch(() => on && setData(null)); return () => { on = false; }; }, [employeeId, month]);
     return <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-3">
-        <h3 className="font-black text-sm text-[#111111] border-b border-gray-100 pb-3 flex items-center gap-2"><Award size={16} className="text-[#FFD200]" /><span>{t.title}</span></h3>
-        <div className="divide-y divide-gray-100">
-            {t.rows.map(([label, max]) => <div key={label} className="flex items-center justify-between py-2">
-                <span className="text-sm font-bold text-stone-700">{label}</span>
-                <span className="text-sm font-black tabular-nums text-stone-400">— {max !== null ? `/ ${max}` : ''}</span>
-            </div>)}
+        <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+            <Award size={16} className="text-[#FFD200]" /><h3 className="flex-1 font-black text-sm text-[#111111]">{t.title}</h3>
+            <div className="flex bg-stone-100 rounded-lg p-0.5">{[thisMonth, prevMonth(thisMonth)].map((m, i) => <button key={m} onClick={() => setMonth(m)} className={`px-2.5 h-8 rounded-md text-xs font-black ${month === m ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500'}`}>{i ? t.lastMonth : t.thisMonth}</button>)}</div>
         </div>
-        <p className="text-xs text-stone-500">{t.note}</p>
+        {data === undefined ? <p className="text-center text-stone-400 py-4"><Loader2 className="inline animate-spin" size={18} /></p>
+            : !data ? <p className="text-sm text-stone-400">—</p>
+                : <>
+                    <div className="flex items-end gap-3">
+                        <b className="text-4xl font-black tabular-nums text-stone-900">{data.total}</b><span className="pb-1 text-sm font-bold text-stone-400">分</span>
+                        <span className={`ml-auto px-3 py-1 rounded-xl text-lg font-black ${GRADE_CLASS[data.grade]}`}>{data.grade}</span>
+                    </div>
+                    <p className="text-[11px] text-stone-500">{'confirmedAt' in data ? t.confirmed : t.sofar}</p>
+                    <PointsBreakdown points={data} />
+                </>}
     </div>;
 };
+

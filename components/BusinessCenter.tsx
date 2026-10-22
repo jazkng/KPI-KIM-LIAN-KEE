@@ -13,6 +13,9 @@ import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
 import { AdvisorPanel } from './advisor/AdvisorPanel';
 import { MeetingBoard } from './meetings/MeetingBoard';
+import { HygieneBoard } from './points/HygieneBoard';
+import { PointsBoard } from './points/PointsBoard';
+import { isHygieneHr } from '../utils/points/hygieneAccess';
 import { startableTypes } from '../utils/meetings/meetingLogic';
 import { TaskBoard } from './tasks/TaskBoard';
 import { countOpenMatters } from '../utils/tasks/staffTaskStore';
@@ -121,6 +124,8 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                 {/* 委托任务与上报事项（老板也可以派任务、处理上报事项） */}
                 <section className="bc-card bc-tasks" id="bc-tasks"><div className="bc-card-heading"><h2><ClipboardList size={17} /> 任务</h2></div><TaskBoard actor={currentEmployee} /></section>
                 {startableTypes(currentEmployee).length > 0 && <section className="bc-card bc-tasks"><MeetingBoard actor={currentEmployee} /></section>}
+                {isHygieneHr(currentEmployee) && <section className="bc-card bc-tasks"><PointsBoard actor={currentEmployee} /></section>}
+                {isHygieneHr(currentEmployee) && <section className="bc-card bc-tasks"><HygieneBoard actor={currentEmployee} /></section>}
             </> : <>
                 {openMatters > 0 && <button className="bc-matter-banner" onClick={() => { onSection('HR'); setTimeout(() => document.getElementById('bc-tasks')?.scrollIntoView({ behavior: 'smooth' }), 300); }}><Flag size={18} /><span><b>上报事项 {openMatters} 件</b><small>员工 / 管理层上报、等你处理的事</small></span><ChevronRight size={18} /></button>}
                 {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>
