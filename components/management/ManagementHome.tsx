@@ -101,9 +101,11 @@ interface ManagementHomeProps {
     onSwitchTab: (tabIndex: number) => void;
     lang: ManagementLang;
     onLanguageChange: (newLang: ManagementLang) => void;
+    /** 放在「待我处理」标题右边（通知铃） */
+    inboxAction?: React.ReactNode;
 }
 
-export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavigateToModule, lang, onLanguageChange }) => {
+export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavigateToModule, lang, onLanguageChange, inboxAction }) => {
     const allowedModules = useMemo(() => {
         return employee.allowedModules || [];
     }, [employee]);
@@ -158,9 +160,8 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             {/* 2. 待我处理 + 全部功能：管理层要的是能直接动手的事 */}
             {/* 个人资料在「我的」；首页最上面直接看今日排班 */}
             <div className="flex-grow px-4 md:px-6 space-y-6 pt-[calc(1rem+env(safe-area-inset-top))]">
-                {/* 右上角是通知铃，留位置 */}
-                <div className="mr-14"><TodayRosterCard lang={lang} onOpen={() => onNavigateToModule('ROSTER')} /></div>
-                <ManagerInbox employee={employee} lang={lang} onOpen={onNavigateToModule} />
+                <TodayRosterCard lang={lang} onOpen={() => onNavigateToModule('ROSTER')} />
+                <ManagerInbox employee={employee} lang={lang} onOpen={onNavigateToModule} headerAction={inboxAction} />
 
                 <section className="space-y-2">
                     <h3 className="text-sm font-black text-stone-800 px-1">{lang === 'my' ? 'လုပ်ဆောင်ချက်များ' : lang === 'en' ? 'Functions' : '功能'}</h3>

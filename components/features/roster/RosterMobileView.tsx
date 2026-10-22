@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ROSTER_STATUSES } from './rosterConstants';
-import { getDayOfWeekText, getEmployeeDept, getDaysInMonth, groupEmployeesByDept, countMonthRestDays } from './rosterUtils';
-import { 
-    ChevronLeft, ChevronRight, MessageSquare, ShieldCheck, X, RefreshCw, 
-    MoreHorizontal, Download, Save, Send, SlidersHorizontal, 
-    CheckSquare, ArrowLeft
+import { getEmployeeDept, getDaysInMonth, groupEmployeesByDept, countMonthRestDays } from './rosterUtils';
+import {
+    ChevronLeft, ChevronRight, MessageSquare, X, RefreshCw,
+    MoreHorizontal, Download, Save, Send, SlidersHorizontal,
+    CheckSquare, ArrowLeft, Hand
 } from 'lucide-react';
 import { Employee } from '../../../types';
+import { shortName } from '../../../utils/hr/hrOverview';
 
 interface RosterMobileViewProps {
     employees: Employee[];
@@ -38,13 +39,26 @@ interface RosterMobileViewProps {
     lastSavedBy?: string | null;
 }
 
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
+const DEPTS: [string, string][] = [['ALL', '全部'], ['KITCHEN', '厨房'], ['FLOOR', '楼面'], ['BAR', '吧台'], ['DISHWASH', '洗碗'], ['BACK_OFFICE', '后勤'], ['OTHER', '其他']];
+
+/** 本地日期 YYYY-MM-DD（不用 toISOString，避免马来西亚早上 8 点前变成前一天） */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const parseYmd = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const weekdayOf = (s: string) => parseYmd(s).getDay();
+const getMonday = (d: Date): Date => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const addDays = (s: string, n: number) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+
+const statusOf = (roster: Record<string, Record<string, string>>, date: string, empId: string) => (roster[date] || {})[empId] || 'UNASSIGNED';
+const cfgOf = (key: string) => ROSTER_STATUSES[key] || ROSTER_STATUSES.UNASSIGNED;
+
 /** 名字旁边：本月已排休息天数 / 每月应休天数 */
 const RestDays: React.FC<{ emp: any; roster: any; monthKey: string }> = ({ emp, roster, monthKey }) => {
     const rest = countMonthRestDays(roster, monthKey, emp.id);
     const target = emp.monthlyRestDays ?? 4;
     return (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${rest === target ? 'bg-green-50 text-green-700' : rest > target ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-            本月休 {rest}/{target} 天
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ${rest === target ? 'bg-green-50 text-green-700' : rest > target ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+            休 {rest}/{target}
         </span>
     );
 };
@@ -58,431 +72,316 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
         onToggleShiftMode, isMultiShiftMode, onAutoFillWork, saving
     } = props;
 
-    const activeEmployees = employees.filter(e => !e.isArchived && e.status !== 'TERMINATED');
-    
-    // Dept filtering
-    const filteredEmployees = useMemo(() => {
-        if (deptFilter === 'ALL') return activeEmployees;
-        return activeEmployees.filter(emp => getEmployeeDept(emp) === deptFilter);
-    }, [activeEmployees, deptFilter]);
+    const today = ymd(new Date());
+    const activeEmployees = useMemo(() => employees.filter(e => !e.isArchived && e.status !== 'TERMINATED'), [employees]);
+    const filteredEmployees = useMemo(() => deptFilter === 'ALL' ? activeEmployees : activeEmployees.filter(emp => getEmployeeDept(emp) === deptFilter), [activeEmployees, deptFilter]);
+    const groups = useMemo(() => groupEmployeesByDept(filteredEmployees), [filteredEmployees]);
 
-    // Navigation state
-    const [anchorDate, setAnchorDate] = useState<Date>(new Date());
-    const [selectedDate, setSelectedDate] = useState<string>('');
+    // 日视图看哪一天；周视图看 selectedDate 所在的那一周
+    const [selectedDate, setSelectedDate] = useState<string>(today);
+    const [personalEmpId, setPersonalEmpId] = useState<string>('');
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+    // 快速填班：选了一个班次后，点格子直接填上，不用每格开窗
+    const [brush, setBrush] = useState<string | null>(null);
 
-    // Sheet state
     const [activeSheetEmpId, setActiveSheetEmpId] = useState<string | null>(null);
     const [sheetNoteText, setSheetNoteText] = useState('');
     const [sheetDate, setSheetDate] = useState<string>('');
 
-    // Sync dates when monthKey shifts
+    // 换月份：本月 → 今天；其他月份 → 1 号
     useEffect(() => {
-        // 打开的是本月 → 直接显示今天这一周 / 今天；其他月份从 1 号开始
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        if (todayStr.startsWith(monthKey)) {
-            setAnchorDate(new Date());
-            setSelectedDate(todayStr);
-            return;
-        }
-        const [yr, mo] = monthKey.split('-');
-        const d = new Date(parseInt(yr), parseInt(mo) - 1, 1);
-        setAnchorDate(d);
-        const firstDayStr = `${monthKey}-01`;
-        setSelectedDate(firstDayStr);
-    }, [monthKey]);
+        setSelectedDate(prev => prev.startsWith(monthKey) ? prev : today.startsWith(monthKey) ? today : `${monthKey}-01`);
+    }, [monthKey, today]);
 
-    // Helper functions for Date
-    const getMonday = (d: Date): Date => {
-        const date = new Date(d);
-        const day = date.getDay();
-        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-        return new Date(date.setDate(diff));
-    };
+    const personalEmp = filteredEmployees.find(e => e.id === personalEmpId) || filteredEmployees[0];
 
-    const handlePrevDay = () => {
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() - 1);
-        const dStr = d.toISOString().split('T')[0];
+    const goDate = (dStr: string) => {
         setSelectedDate(dStr);
-        setAnchorDate(d);
-        const newMonthKey = dStr.substring(0, 7);
-        if (newMonthKey !== monthKey) onChangeMonth(newMonthKey);
+        if (dStr.substring(0, 7) !== monthKey) onChangeMonth(dStr.substring(0, 7));
     };
+    const shiftMonth = (n: number) => {
+        const [y, m] = monthKey.split('-').map(Number);
+        const d = new Date(y, m - 1 + n, 1);
+        onChangeMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    };
+    const isMonthNav = currentView === 'MONTH' || currentView === 'PERSONAL';
+    const handlePrev = () => isMonthNav ? shiftMonth(-1) : goDate(addDays(selectedDate, currentView === 'WEEK' ? -7 : -1));
+    const handleNext = () => isMonthNav ? shiftMonth(1) : goDate(addDays(selectedDate, currentView === 'WEEK' ? 7 : 1));
 
-    const handleNextDay = () => {
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() + 1);
-        const dStr = d.toISOString().split('T')[0];
-        setSelectedDate(dStr);
-        setAnchorDate(d);
-        const newMonthKey = dStr.substring(0, 7);
-        if (newMonthKey !== monthKey) onChangeMonth(newMonthKey);
-    };
+    const weekDays = useMemo(() => {
+        const monday = ymd(getMonday(parseYmd(selectedDate)));
+        return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+    }, [selectedDate]);
+    const monthDays = useMemo(() => getDaysInMonth(monthKey), [monthKey]);
 
-    const handleGoToday = () => {
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('en-CA');
-        setSelectedDate(todayStr);
-        setAnchorDate(today);
-        const newMonthKey = todayStr.substring(0, 7);
-        if (newMonthKey !== monthKey) onChangeMonth(newMonthKey);
-    };
-
-    const handlePrevWeek = () => {
-        const d = new Date(anchorDate);
-        d.setDate(d.getDate() - 7);
-        setAnchorDate(d);
-        const newMonthKey = d.toISOString().split('T')[0].substring(0, 7);
-        if (newMonthKey !== monthKey) onChangeMonth(newMonthKey);
-    };
-
-    const handleNextWeek = () => {
-        const d = new Date(anchorDate);
-        d.setDate(d.getDate() + 7);
-        setAnchorDate(d);
-        const newMonthKey = d.toISOString().split('T')[0].substring(0, 7);
-        if (newMonthKey !== monthKey) onChangeMonth(newMonthKey);
-    };
+    const [yr, mo] = monthKey.split('-');
+    const navLabel = currentView === 'WEEK'
+        ? `${weekDays[0].substring(5).replace('-', '/')} – ${weekDays[6].substring(5).replace('-', '/')}`
+        : currentView === 'DAILY'
+            ? `${parseInt(selectedDate.substring(5, 7))}月${parseInt(selectedDate.substring(8))}日 周${WEEKDAY[weekdayOf(selectedDate)]}`
+            : `${yr}年${parseInt(mo)}月`;
+    const atToday = isMonthNav ? today.startsWith(monthKey) : currentView === 'WEEK' ? weekDays.includes(today) : selectedDate === today;
 
     const handleOpenSheet = (empId: string, dateStr: string) => {
         setActiveSheetEmpId(empId);
         setSheetDate(dateStr);
         setSheetNoteText(notes[`${dateStr}_${empId}`] || '');
     };
-
-    const handleCloseSheet = () => {
-        setActiveSheetEmpId(null);
-        setSheetNoteText('');
-        setSheetDate('');
-    };
-
+    const handleCloseSheet = () => { setActiveSheetEmpId(null); setSheetNoteText(''); setSheetDate(''); };
     const handleSelectStatus = (statusKey: string) => {
         if (!activeSheetEmpId || !sheetDate) return;
         onChangeCell(sheetDate, activeSheetEmpId, statusKey);
-        // Do not close immediately to let them add a note if they want, or we can close it. Let's just close to save clicks.
         handleCloseSheet();
     };
-
     const handleSaveSheetNote = () => {
         if (!activeSheetEmpId || !sheetDate) return;
         onSaveNote(sheetDate, activeSheetEmpId, sheetNoteText);
         handleCloseSheet();
     };
+    /** 点格子：有选快速班次就直接填（再点一次同样的 = 清掉），没有就开窗 */
+    const tapCell = (empId: string, dateStr: string) => {
+        if (readOnly) return;
+        if (brush) {
+            onChangeCell(dateStr, empId, statusOf(roster, dateStr, empId) === brush && brush !== 'UNASSIGNED' ? 'UNASSIGNED' : brush);
+            return;
+        }
+        handleOpenSheet(empId, dateStr);
+    };
 
     const activeSheetEmp = activeSheetEmpId ? employees.find(e => e.id === activeSheetEmpId) : null;
-
-    // Build week days
-    const monday = getMonday(anchorDate);
-    const weekDays = Array.from({ length: 7 }).map((_, i) => {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        return d.toISOString().split('T')[0];
-    });
+    const brushOptions = ['WORK', ...(isMultiShiftMode ? ['MORNING', 'AFTERNOON', 'NIGHT'] : []), 'OFF', 'MC', 'LEAVE', 'ANNUAL', 'HOLIDAY', 'UNASSIGNED'];
 
     const isDraft = status === 'draft';
     const isError = status === 'error';
 
-    return (
-        <div className="flex flex-col h-[100dvh] bg-[#F6F7FB] relative overflow-hidden text-gray-900 w-full">
-            {/* 1. Compact Header */}
-            <div className="shrink-0 bg-gray-900 px-4 py-3 flex items-center justify-between z-20" style={{ minHeight: '64px' }}>
-                <div className="flex items-center gap-2">
-                    {onClose && (
-                        <button 
-                            onClick={onClose} 
-                            className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-full transition-colors flex items-center justify-center shrink-0"
-                            aria-label="Back"
-                            id="roster-back-btn"
-                            style={{ minWidth: '40px', minHeight: '40px' }}
-                        >
-                            <ArrowLeft size={18} className="stroke-[2.5]" />
-                        </button>
-                    )}
-                    <div className="bg-[#FFD200] text-[#111111] p-2 rounded-lg shadow-md flex-shrink-0">
-                        <ShieldCheck size={18} />
-                    </div>
-                    <div className="min-w-0 flex flex-col justify-center">
-                        <h2 className="text-white font-bold text-[15px] leading-tight truncate">排班管理中心</h2>
-                        <p className="text-[10px] text-gray-400 font-mono tracking-wider truncate">
-                            Roster Desk
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button onClick={onRefresh} className="p-2 bg-gray-800 text-gray-300 hover:text-white rounded-lg transition-colors" aria-label="Refresh" style={{ minWidth: '40px', minHeight: '40px' }}>
-                        <RefreshCw size={16} className={saving ? 'animate-spin' : ''} />
-                    </button>
-                    <button onClick={onClose} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-full transition-colors" aria-label="Close" style={{ minWidth: '40px', minHeight: '40px' }}>
-                        <X size={18} />
-                    </button>
-                </div>
-            </div>
+    /** 一格班次：只显示简写，颜色跟班次 */
+    const renderCell = (empId: string, dateStr: string, wide: boolean) => {
+        const key = statusOf(roster, dateStr, empId);
+        const cfg = cfgOf(key);
+        const hasNote = !!notes[`${dateStr}_${empId}`];
+        return (
+            <button type="button" onClick={() => tapCell(empId, dateStr)}
+                className={`relative ${wide ? 'w-full' : 'w-10'} h-10 rounded-lg border text-[11px] font-black tabular-nums active:scale-95 transition-transform ${key === 'UNASSIGNED' ? 'border-dashed border-gray-200 bg-white text-gray-300' : cfg.color} ${dateStr === today ? 'ring-2 ring-[#FFD200]' : ''}`}>
+                {key === 'UNASSIGNED' ? '·' : cfg.short}
+                {hasNote && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />}
+            </button>
+        );
+    };
 
-            {/* 2. Primary Control Bar */}
-            <div className="shrink-0 bg-white px-4 py-2 border-b border-gray-200 flex items-center justify-between z-20">
-                <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="month"
-                            value={monthKey}
-                            onChange={(e) => {
-                                if (e.target.value) onChangeMonth(e.target.value);
-                            }}
-                            className="bg-transparent text-sm font-bold text-gray-900 focus:outline-none max-w-[120px]"
-                        />
-                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isError ? 'bg-red-100 text-red-700' :
-                            isDraft ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
-                        }`}>
-                            {isError ? '发布失败' : isDraft ? '草稿' : '已发布'}
-                        </div>
-                    </div>
-                    {isModified && (
-                        <div className="flex items-center gap-1 text-[10px] text-orange-500 font-semibold mt-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-                            有未保存修改
-                        </div>
-                    )}
-                </div>
-                <button 
-                    onClick={() => setIsMoreMenuOpen(true)}
-                    className="p-2 rounded-lg bg-gray-100 text-gray-700 flex items-center gap-1 text-xs font-semibold active:scale-95 transition-transform"
-                    style={{ minHeight: '40px' }}
-                >
-                    更多 <MoreHorizontal size={14} />
-                </button>
-            </div>
+    /** 周 / 月：员工一行、日期一列；日期只在表头出现一次 */
+    const renderGrid = (days: string[]) => {
+        const wide = days.length <= 7;
+        return (
+            <table className={`border-separate border-spacing-0 ${wide ? 'w-full' : ''}`}>
+                    <thead>
+                        <tr>
+                            <th className="sticky left-0 top-0 z-30 bg-[#F6F7FB] min-w-[72px] max-w-[72px]" />
+                            {days.map(d => {
+                                const wd = weekdayOf(d);
+                                return (
+                                    <th key={d} className={`sticky top-0 z-20 bg-[#F6F7FB] px-0.5 pt-1 pb-1.5 text-center ${wide ? '' : 'min-w-[44px]'}`}>
+                                        <div className={`mx-auto w-10 rounded-lg py-0.5 ${d === today ? 'bg-[#FFD200] text-[#111111]' : wd === 0 || wd === 6 ? 'text-rose-500' : 'text-gray-500'}`}>
+                                            <div className="text-[10px] font-bold leading-tight">{WEEKDAY[wd]}</div>
+                                            <div className="text-[13px] font-black leading-tight">{parseInt(d.substring(8))}</div>
+                                        </div>
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {groups.map(group => (
+                            <React.Fragment key={group.dept}>
+                                <tr>
+                                    <td colSpan={days.length + 1} className="pt-3 pb-1">
+                                        <span className="sticky left-0 inline-block px-1 text-xs font-black text-gray-700">{group.label} <span className="text-gray-400 font-bold">· {group.employees.length} 人</span></span>
+                                    </td>
+                                </tr>
+                                {group.employees.map(emp => (
+                                    <tr key={emp.id}>
+                                        <td className="sticky left-0 z-10 bg-[#F6F7FB] pr-1.5 py-0.5 min-w-[72px] max-w-[72px]">
+                                            <div className="text-[13px] font-black text-gray-900 truncate leading-tight">{shortName(emp)}</div>
+                                            <RestDays emp={emp} roster={roster} monthKey={monthKey} />
+                                        </td>
+                                        {days.map(d => (
+                                            <td key={d} className="px-px py-0.5 text-center">
+                                                {renderCell(emp.id, d, wide)}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </React.Fragment>
+                        ))}
+                    </tbody>
+            </table>
+        );
+    };
 
-            {/* 3. View Switcher */}
-            <div className="shrink-0 bg-white px-4 py-2 border-b border-gray-200 z-20">
-                <div className="flex bg-gray-100 p-1 rounded-xl">
-                    {[
-                        { id: 'WEEK', label: '周' },
-                        { id: 'DAILY', label: '每日' },
-                        { id: 'MONTH', label: '月' },
-                        { id: 'PERSONAL', label: '个人' }
-                    ].map(view => (
-                        <button
-                            key={view.id}
-                            onClick={() => onChangeView(view.id as any)}
-                            className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                                currentView === view.id 
-                                    ? 'bg-white text-gray-900 shadow-sm' 
-                                    : 'text-gray-500'
-                            }`}
-                            style={{ minHeight: '40px' }}
-                        >
-                            {view.label}
+    const renderDaily = () => (
+        <div className="space-y-3">
+            {groups.map(group => (
+                <div key={group.dept} className="space-y-1.5">
+                    <div className="px-1 text-xs font-black text-gray-700">{group.label} <span className="text-gray-400 font-bold">· {group.employees.length} 人</span></div>
+                    <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+                        {group.employees.map(emp => {
+                            const key = statusOf(roster, selectedDate, emp.id);
+                            const cfg = cfgOf(key);
+                            const note = notes[`${selectedDate}_${emp.id}`];
+                            return (
+                                <button key={emp.id} type="button" onClick={() => tapCell(emp.id, selectedDate)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-gray-50" style={{ minHeight: '52px' }}>
+                                    <span className="flex-1 min-w-0">
+                                        <span className="flex items-center gap-1.5"><b className="text-sm font-black text-gray-900 truncate">{shortName(emp)}</b><RestDays emp={emp} roster={roster} monthKey={monthKey} /></span>
+                                        {note && <span className="block text-[11px] text-amber-700 font-semibold truncate"><MessageSquare size={10} className="inline" /> {note}</span>}
+                                    </span>
+                                    <span className={`min-w-[64px] px-2.5 py-1.5 rounded-lg border text-xs font-black text-center ${key === 'UNASSIGNED' ? 'border-dashed border-gray-200 text-gray-400' : cfg.color}`}>
+                                        {key === 'UNASSIGNED' ? '未排' : cfg.label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+
+    /** 个人：选一个人，看整个月的日历 */
+    const renderPersonal = () => {
+        if (!personalEmp) return null;
+        const lead = (weekdayOf(monthDays[0]) + 6) % 7; // 周一开头
+        return (
+            <div className="space-y-3">
+                <div className="flex overflow-x-auto gap-1.5 hide-scrollbar -mx-2 px-2">
+                    {filteredEmployees.map(emp => (
+                        <button key={emp.id} type="button" onClick={() => setPersonalEmpId(emp.id)}
+                            className={`flex-none px-3 rounded-full text-[13px] font-bold border ${emp.id === personalEmp.id ? 'bg-[#111111] text-[#FFD200] border-[#111111]' : 'bg-white text-gray-600 border-gray-200'}`} style={{ minHeight: '36px' }}>
+                            {shortName(emp)}
                         </button>
                     ))}
                 </div>
-            </div>
-
-            {/* 4. Department Chips */}
-            <div className="shrink-0 bg-white border-b border-gray-200 z-20">
-                <div className="flex overflow-x-auto px-4 py-2 gap-2 hide-scrollbar">
-                    {['ALL', 'KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'].map((dept) => {
-                        const labels: Record<string, string> = {
-                            ALL: '全部', KITCHEN: '厨房', FLOOR: '楼面', BAR: '吧台', 
-                            DISHWASH: '洗碗', BACK_OFFICE: '后勤', OTHER: '其他'
-                        };
-                        const isAct = deptFilter === dept;
-                        return (
-                            <button
-                                key={dept}
-                                onClick={() => onChangeDeptFilter(dept)}
-                                className={`flex-none px-4 py-1.5 rounded-full text-xs transition-colors ${
-                                    isAct
-                                        ? 'bg-[#111111] text-[#FFD200] font-bold'
-                                        : 'bg-white border border-gray-200 text-gray-600 font-medium'
-                                }`}
-                                style={{ minHeight: '40px' }}
-                            >
-                                {labels[dept]}
-                            </button>
-                        );
-                    })}
+                <div className="bg-white rounded-2xl border border-gray-100 p-3">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                        <b className="text-sm font-black text-gray-900">{personalEmp.name}</b>
+                        <RestDays emp={personalEmp} roster={roster} monthKey={monthKey} />
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-center">
+                        {['一', '二', '三', '四', '五', '六', '日'].map((w, i) => <div key={w} className={`text-[10px] font-bold ${i >= 5 ? 'text-rose-500' : 'text-gray-400'}`}>{w}</div>)}
+                        {Array.from({ length: lead }).map((_, i) => <div key={`b${i}`} />)}
+                        {monthDays.map(d => {
+                            const key = statusOf(roster, d, personalEmp.id);
+                            const cfg = cfgOf(key);
+                            return (
+                                <button key={d} type="button" onClick={() => tapCell(personalEmp.id, d)}
+                                    className={`h-12 rounded-lg border flex flex-col items-center justify-center active:scale-95 ${key === 'UNASSIGNED' ? 'border-dashed border-gray-200 text-gray-300' : cfg.color} ${d === today ? 'ring-2 ring-[#FFD200]' : ''}`}>
+                                    <span className="text-[10px] font-bold opacity-70 leading-none">{parseInt(d.substring(8))}</span>
+                                    <span className="text-[12px] font-black leading-tight">{key === 'UNASSIGNED' ? '·' : cfg.short}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
+        );
+    };
 
-            {/* 5. Date Navigation (Sticky above content) */}
-            <div className="shrink-0 bg-gray-50 px-4 py-2 border-b border-gray-200 sticky top-0 z-10 flex items-center justify-between shadow-sm">
-                <button 
-                    onClick={currentView === 'WEEK' ? handlePrevWeek : handlePrevDay}
-                    className="p-2 hover:bg-gray-200 rounded-xl text-gray-700 active:scale-95 transition-transform"
-                    style={{ minWidth: '44px', minHeight: '44px' }}
-                >
-                    <ChevronLeft size={20} />
+    return (
+        <div className="flex flex-col h-[100dvh] bg-[#F6F7FB] relative overflow-hidden text-gray-900 w-full">
+            {/* 1. 标题列：返回 · 排班 · 状态 · 刷新 · 更多 */}
+            <div className="shrink-0 bg-gray-900 px-3 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] flex items-center gap-2 z-20">
+                <button onClick={onClose} className="w-10 h-10 bg-gray-800 text-gray-200 rounded-full flex items-center justify-center shrink-0" aria-label="Back" id="roster-back-btn">
+                    <ArrowLeft size={18} className="stroke-[2.5]" />
                 </button>
-                
-                <div className="flex flex-col items-center">
-                    <span className="text-sm font-bold text-gray-900">
-                        {currentView === 'WEEK' 
-                            ? `${weekDays[0].substring(5).replace('-', '/')} - ${weekDays[6].substring(5).replace('-', '/')}`
-                            : `${selectedDate.replace(/-/g, '/')} ${getDayOfWeekText(selectedDate)}`
-                        }
-                    </span>
-                    <button 
-                        onClick={handleGoToday}
-                        className="text-[10px] text-gray-500 font-semibold px-2 py-0.5 mt-0.5 rounded-md hover:bg-gray-200"
-                        style={{ minHeight: '24px' }}
-                    >
-                        {currentView === 'WEEK' ? '回到本周' : '回到今天'}
-                    </button>
-                </div>
-
-                <button 
-                    onClick={currentView === 'WEEK' ? handleNextWeek : handleNextDay}
-                    className="p-2 hover:bg-gray-200 rounded-xl text-gray-700 active:scale-95 transition-transform"
-                    style={{ minWidth: '44px', minHeight: '44px' }}
-                >
-                    <ChevronRight size={20} />
+                <h2 className="text-white font-black text-[16px] truncate">排班</h2>
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0 ${isError ? 'bg-red-100 text-red-700' : isDraft ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                    {isError ? '发布失败' : isDraft ? '草稿' : '已发布'}
+                </span>
+                {isModified && <span className="text-[11px] text-orange-300 font-bold shrink-0 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />未保存</span>}
+                <div className="flex-1" />
+                <button onClick={onRefresh} className="w-10 h-10 bg-gray-800 text-gray-300 rounded-lg flex items-center justify-center shrink-0" aria-label="Refresh">
+                    <RefreshCw size={16} className={saving ? 'animate-spin' : ''} />
+                </button>
+                <button onClick={() => setIsMoreMenuOpen(true)} className="w-10 h-10 bg-gray-800 text-gray-300 rounded-lg flex items-center justify-center shrink-0" aria-label="More">
+                    <MoreHorizontal size={18} />
                 </button>
             </div>
 
-            {/* 6. Scrollable Content Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pb-[calc(100px+env(safe-area-inset-bottom))]">
-                <div className="p-4 space-y-4">
+            {/* 2. 视图 + 部门 + 日期，同一块白底 */}
+            <div className="shrink-0 bg-white border-b border-gray-200 z-20 px-3 pt-2 pb-2 space-y-2">
+                <div className="flex bg-gray-100 p-1 rounded-xl">
+                    {([['WEEK', '周'], ['MONTH', '月'], ['DAILY', '日'], ['PERSONAL', '个人']] as const).map(([id, label]) => (
+                        <button key={id} onClick={() => onChangeView(id)}
+                            className={`flex-1 rounded-lg text-sm font-bold transition-all ${currentView === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`} style={{ minHeight: '36px' }}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex overflow-x-auto gap-1.5 hide-scrollbar">
+                    {DEPTS.map(([dept, label]) => (
+                        <button key={dept} onClick={() => onChangeDeptFilter(dept)}
+                            className={`flex-none px-3.5 rounded-full text-xs transition-colors ${deptFilter === dept ? 'bg-[#111111] text-[#FFD200] font-bold' : 'bg-white border border-gray-200 text-gray-600 font-medium'}`} style={{ minHeight: '34px' }}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={handlePrev} className="w-10 h-10 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center active:scale-95" aria-label="Previous"><ChevronLeft size={20} /></button>
+                    <label className="relative flex-1 text-center">
+                        <span className="text-[15px] font-black text-gray-900">{navLabel}</span>
+                        {/* 点日期可以直接跳到别的月份 / 日子 */}
+                        {isMonthNav
+                            ? <input type="month" value={monthKey} onChange={e => e.target.value && onChangeMonth(e.target.value)} className="absolute inset-0 opacity-0" aria-label="选择月份" />
+                            : <input type="date" value={selectedDate} onChange={e => e.target.value && goDate(e.target.value)} className="absolute inset-0 opacity-0" aria-label="选择日期" />}
+                    </label>
+                    {!atToday && <button onClick={() => isMonthNav ? onChangeMonth(today.substring(0, 7)) : goDate(today)} className="px-2.5 h-8 rounded-lg bg-[#FFD200] text-[#111111] text-xs font-black">今天</button>}
+                    <button onClick={handleNext} className="w-10 h-10 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center active:scale-95" aria-label="Next"><ChevronRight size={20} /></button>
+                </div>
+                {!readOnly && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+                        <span className="flex-none flex items-center gap-1 text-[11px] font-bold text-gray-400 pr-0.5"><Hand size={12} />快速填</span>
+                        {brushOptions.map(key => {
+                            const cfg = cfgOf(key);
+                            const on = brush === key;
+                            return (
+                                <button key={key} type="button" onClick={() => setBrush(on ? null : key)}
+                                    className={`flex-none px-2.5 rounded-lg border text-xs font-black ${on ? 'bg-[#111111] text-[#FFD200] border-[#111111]' : key === 'UNASSIGNED' ? 'bg-white border-dashed border-gray-300 text-gray-500' : cfg.color}`} style={{ minHeight: '32px' }}>
+                                    {key === 'UNASSIGNED' ? '清除' : cfg.short}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+                {brush && <p className="text-[11px] font-bold text-amber-700">点格子直接填「{brush === 'UNASSIGNED' ? '清除' : cfgOf(brush).label}」，再点一次取消。用完再按一次上面的按钮关掉。</p>}
+            </div>
+
+            {/* 3. 内容 */}
+            <div className="flex-1 min-h-0 overflow-auto overscroll-contain pb-[calc(96px+env(safe-area-inset-bottom))]">
+                <div className="px-2 py-3">
                     {filteredEmployees.length === 0 ? (
-                        <div className="text-center py-10 text-gray-400 text-sm">
-                            没有找到该部门的员工
-                        </div>
-                    ) : (
-                        groupEmployeesByDept(filteredEmployees).map(group => (
-                        <div key={group.dept} className="space-y-3">
-                            <div className="sticky top-0 z-10 -mx-4 px-4 py-1.5 bg-[#F6F7FB]/95 backdrop-blur flex items-center justify-between">
-                                <span className="text-xs font-black text-gray-700">{group.label}</span>
-                                <span className="text-[11px] font-bold text-gray-400">{group.employees.length} 人</span>
-                            </div>
-                        {currentView === 'DAILY' ? (
-                            /* DAILY VIEW: List of employees for a single day */
-                            group.employees.map(emp => {
-                                const dayRoster = roster[selectedDate] || {};
-                                const statusKey = dayRoster[emp.id] || 'UNASSIGNED';
-                                const statusConfig = ROSTER_STATUSES[statusKey] || ROSTER_STATUSES.UNASSIGNED;
-                                const note = notes[`${selectedDate}_${emp.id}`];
-
-                                return (
-                                    <div 
-                                        key={emp.id}
-                                        onClick={() => !readOnly && handleOpenSheet(emp.id, selectedDate)}
-                                        className="bg-white rounded-[16px] shadow-sm border border-gray-100 p-4 active:scale-[0.98] transition-transform"
-                                        style={{ minHeight: '80px' }}
-                                    >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                <div className="font-bold text-gray-900 text-sm flex items-center gap-2 flex-wrap">{emp.name}<RestDays emp={emp} roster={roster} monthKey={monthKey} /></div>
-                                                <div className="text-[11px] text-gray-500 mt-0.5">
-                                                    {emp.role}
-                                                </div>
-                                            </div>
-                                            {note && (
-                                                <span className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">
-                                                    <MessageSquare size={10} /> 备注
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${
-                                            statusKey === 'UNASSIGNED' 
-                                                ? 'bg-gray-50 border-gray-200 border-dashed text-gray-500' 
-                                                : statusConfig.color
-                                        }`}>
-                                            <span className="text-xs font-bold">{statusKey === 'UNASSIGNED' ? '未排班' : statusConfig.label}</span>
-                                            <span className="text-xs font-semibold px-2 py-1 bg-white/50 rounded-md">
-                                                设置班次
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            /* WEEK / MONTH / PERSONAL VIEW: Horizontal Scrolling Days */
-                            group.employees.map(emp => {
-                                const daysToRender = currentView === 'WEEK' ? weekDays : getDaysInMonth(monthKey);
-                                return (
-                                    <div 
-                                        key={emp.id}
-                                        className="bg-white rounded-[16px] shadow-sm border border-gray-100 overflow-hidden"
-                                    >
-                                        <div className="px-4 py-3 border-b border-gray-50 bg-gray-50/50">
-                                            <div className="font-bold text-gray-900 text-sm flex items-center gap-2 flex-wrap">{emp.name}<RestDays emp={emp} roster={roster} monthKey={monthKey} /></div>
-                                            <div className="text-[11px] text-gray-500 mt-0.5">
-                                                {emp.role}
-                                            </div>
-                                        </div>
-                                        <div className="flex overflow-x-auto overscroll-x-contain touch-pan-x flex-nowrap p-3 gap-2 hide-scrollbar">
-                                            {daysToRender.map((dateStr: string) => {
-                                                const dayRoster = roster[dateStr] || {};
-                                                const statusKey = dayRoster[emp.id] || 'UNASSIGNED';
-                                                const statusConfig = ROSTER_STATUSES[statusKey] || ROSTER_STATUSES.UNASSIGNED;
-                                                const today = new Date().toLocaleDateString('en-CA');
-                                                const isToday = dateStr === today;
-                                                const dObj = new Date(dateStr);
-                                                const dayText = ['日', '一', '二', '三', '四', '五', '六'][dObj.getDay()];
-                                                const isOff = statusKey === 'OFF' || statusKey === 'LEAVE' || statusKey === 'MC';
-                                                
-                                                return (
-                                                    <div 
-                                                        key={dateStr}
-                                                        onClick={() => !readOnly && handleOpenSheet(emp.id, dateStr)}
-                                                        className={`flex-none w-[96px] h-[72px] rounded-xl flex flex-col justify-center items-center active:scale-95 transition-transform border ${
-                                                            isToday ? 'border-[#FFD200] bg-yellow-50/30' : 'border-transparent'
-                                                        } ${
-                                                            statusKey === 'UNASSIGNED' 
-                                                                ? 'bg-gray-50 border-gray-200 border-dashed text-gray-400' 
-                                                                : isOff 
-                                                                    ? 'bg-gray-100 text-gray-600'
-                                                                    : 'bg-green-50 border-green-100 text-green-800'
-                                                        }`}
-                                                    >
-                                                        <div className="text-[10px] font-medium opacity-80 mb-1">
-                                                            {dayText} {dateStr.substring(8, 10)}
-                                                        </div>
-                                                        <div className="text-xs font-bold tabular-nums text-center px-1">
-                                                            {statusKey === 'UNASSIGNED' ? '未排班' : statusConfig.short || statusConfig.label}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                        </div>
-                        ))
-                    )}
+                        <div className="text-center py-10 text-gray-400 text-sm">没有找到该部门的员工</div>
+                    ) : currentView === 'DAILY' ? renderDaily()
+                        : currentView === 'PERSONAL' ? renderPersonal()
+                        : renderGrid(currentView === 'WEEK' ? weekDays : monthDays)}
                 </div>
             </div>
 
-            {/* 7. Bottom Fixed Action Bar */}
-            <div className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-200 pb-[env(safe-area-inset-bottom)] z-30">
+            {/* 4. 底部：保存 / 发布 */}
+            <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 pb-[env(safe-area-inset-bottom)] z-30">
                 <div className="p-3 flex items-center gap-3">
-                    <button 
-                        onClick={onSaveDraft}
-                        disabled={saving}
-                        className="flex-[4] relative bg-white border border-gray-300 text-gray-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
-                        style={{ minHeight: '56px' }}
-                    >
+                    <button onClick={onSaveDraft} disabled={saving}
+                        className="flex-[4] relative bg-white border border-gray-300 text-gray-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50" style={{ minHeight: '52px' }}>
                         <Save size={18} />
                         {saving ? '保存中...' : '保存草稿'}
-                        {isModified && (
-                            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-orange-500 border-2 border-white"></span>
-                        )}
+                        {isModified && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-orange-500 border-2 border-white"></span>}
                     </button>
-                    <button 
-                        onClick={onPublishClick}
-                        className="flex-[6] bg-gray-900 text-[#FFD200] rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
-                        style={{ minHeight: '56px' }}
-                    >
+                    <button onClick={onPublishClick}
+                        className="flex-[6] bg-gray-900 text-[#FFD200] rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md" style={{ minHeight: '52px' }}>
                         <Send size={18} />
                         发布正式
                     </button>
                 </div>
             </div>
 
-            {/* 8. More Options Bottom Sheet */}
+            {/* 5. 更多 */}
             {isMoreMenuOpen && (
                 <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
                     <div className="absolute inset-0" onClick={() => setIsMoreMenuOpen(false)} />
@@ -495,21 +394,17 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                             </button>
                         </div>
                         <div className="p-4 space-y-2">
-                            <button 
-                                onClick={() => { onToggleShiftMode(); setIsMoreMenuOpen(false); }}
-                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
-                            >
+                            <button onClick={() => { onToggleShiftMode(); setIsMoreMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors text-left">
                                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><SlidersHorizontal size={20} /></div>
                                 <div className="flex-1">
-                                    <div className="text-sm font-bold text-gray-900">{isMultiShiftMode ? '多班次模式 (Multi-Shift)' : '常规单班模式'}</div>
+                                    <div className="text-sm font-bold text-gray-900">{isMultiShiftMode ? '多班次模式（早 / 中 / 晚）' : '常规单班模式'}</div>
                                     <div className="text-[11px] text-gray-500">点击切换排班模式</div>
                                 </div>
                             </button>
                             {onAutoFillWork && (
-                                <button 
-                                    onClick={() => { onAutoFillWork(); setIsMoreMenuOpen(false); }}
-                                    className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-green-50 active:bg-green-100 transition-colors text-left"
-                                >
+                                <button onClick={() => { onAutoFillWork(); setIsMoreMenuOpen(false); }}
+                                    className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-green-50 active:bg-green-100 transition-colors text-left">
                                     <div className="p-2 bg-green-50 text-green-600 rounded-lg"><CheckSquare size={20} /></div>
                                     <div className="flex-1">
                                         <div className="text-sm font-bold text-green-700">一键常规班 (W)</div>
@@ -517,20 +412,16 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                                     </div>
                                 </button>
                             )}
-                            <button 
-                                onClick={() => { onExportClick(); setIsMoreMenuOpen(false); }}
-                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
-                            >
+                            <button onClick={() => { onExportClick(); setIsMoreMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors text-left">
                                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Download size={20} /></div>
                                 <div className="flex-1">
                                     <div className="text-sm font-bold text-gray-900">导出排班</div>
                                     <div className="text-[11px] text-gray-500">导出 PDF 或 Excel</div>
                                 </div>
                             </button>
-                            <button 
-                                onClick={() => { onResetClick(); setIsMoreMenuOpen(false); }}
-                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-red-50 active:bg-red-100 transition-colors text-left"
-                            >
+                            <button onClick={() => { onResetClick(); setIsMoreMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-red-50 active:bg-red-100 transition-colors text-left">
                                 <div className="p-2 bg-red-50 text-red-600 rounded-lg"><RefreshCw size={20} /></div>
                                 <div className="flex-1">
                                     <div className="text-sm font-bold text-red-600">重置排班</div>
@@ -542,72 +433,38 @@ export const RosterMobileView: React.FC<RosterMobileViewProps> = (props) => {
                 </div>
             )}
 
-            {/* 9. Edit Shift Bottom Sheet */}
+            {/* 6. 设置一格班次 */}
             {activeSheetEmpId && activeSheetEmp && (
                 <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
                     <div className="absolute inset-0" onClick={handleCloseSheet} />
                     <div className="relative w-full bg-white rounded-t-[20px] shadow-2xl flex flex-col max-h-[85dvh]">
                         <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mt-4 mb-2 shrink-0" onClick={handleCloseSheet} />
-                        
-                        <div className="px-6 pb-3 pt-1 border-b border-gray-100 shrink-0">
-                            <h3 className="text-lg font-bold text-gray-900">设置班次</h3>
-                            <p className="text-xs text-gray-500 mt-1">
-                                {sheetDate} · {activeSheetEmp.name} ({getEmployeeDept(activeSheetEmp)})
-                            </p>
+                        <div className="px-5 pb-3 pt-1 border-b border-gray-100 shrink-0">
+                            <h3 className="text-lg font-black text-gray-900">{shortName(activeSheetEmp)}</h3>
+                            <p className="text-xs font-bold text-gray-500 mt-0.5">{parseInt(sheetDate.substring(5, 7))}月{parseInt(sheetDate.substring(8))}日 周{WEEKDAY[weekdayOf(sheetDate)]}</p>
                         </div>
-
-                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6 overscroll-contain">
-                            <div className="space-y-3">
-                                <label className="block text-xs font-bold text-gray-400 uppercase">选择班次</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {Object.values(ROSTER_STATUSES).map(item => {
-                                        const isSel = (roster[sheetDate] || {})[activeSheetEmpId] === item.id;
-                                        return (
-                                            <button
-                                                key={item.id}
-                                                onClick={() => handleSelectStatus(item.id)}
-                                                className={`flex items-center justify-between px-4 py-3.5 rounded-xl border ${
-                                                    isSel
-                                                        ? 'border-gray-900 bg-gray-900 text-white shadow-md'
-                                                        : 'border-gray-200 bg-white active:bg-gray-50 text-gray-700'
-                                                } transition-colors`}
-                                                style={{ minHeight: '52px' }}
-                                            >
-                                                <span className="text-sm font-bold">{item.label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 overscroll-contain">
+                            <div className="grid grid-cols-3 gap-2">
+                                {Object.values(ROSTER_STATUSES).map(item => {
+                                    const isSel = statusOf(roster, sheetDate, activeSheetEmpId) === item.id;
+                                    return (
+                                        <button key={item.id} onClick={() => handleSelectStatus(item.id)}
+                                            className={`px-2 py-2.5 rounded-xl border text-sm font-bold ${isSel ? 'border-gray-900 bg-gray-900 text-white shadow-md' : item.id === 'UNASSIGNED' ? 'border-dashed border-gray-300 text-gray-500' : item.color}`}
+                                            style={{ minHeight: '48px' }}>
+                                            {item.label}
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            
-                            <div className="space-y-3 pb-8">
-                                <label className="block text-xs font-bold text-gray-400 uppercase">特殊备注</label>
-                                <input
-                                    type="text"
-                                    placeholder="输入假条或调整原因..."
-                                    value={sheetNoteText}
-                                    onChange={(e) => setSheetNoteText(e.target.value)}
-                                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#FFD200] focus:border-transparent outline-none bg-gray-50"
-                                    style={{ minHeight: '48px' }}
-                                />
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-gray-400">备注</label>
+                                <input type="text" placeholder="假条或调整原因…" value={sheetNoteText} onChange={(e) => setSheetNoteText(e.target.value)}
+                                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#FFD200] focus:border-transparent outline-none bg-gray-50" style={{ minHeight: '48px' }} />
                             </div>
                         </div>
-
                         <div className="shrink-0 p-4 border-t border-gray-100 pb-[calc(16px+env(safe-area-inset-bottom))] flex gap-3 bg-white">
-                            <button 
-                                onClick={handleCloseSheet}
-                                className="flex-[3] py-3.5 rounded-xl font-bold text-sm bg-gray-100 text-gray-700"
-                                style={{ minHeight: '48px' }}
-                            >
-                                取消
-                            </button>
-                            <button 
-                                onClick={handleSaveSheetNote}
-                                className="flex-[7] py-3.5 rounded-xl font-bold text-sm bg-gray-900 text-white shadow-md"
-                                style={{ minHeight: '48px' }}
-                            >
-                                确认保存
-                            </button>
+                            <button onClick={handleCloseSheet} className="flex-[3] rounded-xl font-bold text-sm bg-gray-100 text-gray-700" style={{ minHeight: '48px' }}>取消</button>
+                            <button onClick={handleSaveSheetNote} className="flex-[7] rounded-xl font-bold text-sm bg-gray-900 text-white shadow-md" style={{ minHeight: '48px' }}>保存备注</button>
                         </div>
                     </div>
                 </div>

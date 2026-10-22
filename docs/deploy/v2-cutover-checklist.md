@@ -1,0 +1,27 @@
+# 全员改用 V2 之后要处理的事项
+
+> 状态：备忘。**每一项执行前仍需负责人逐项批准**。涉及正式 Rules、Auth、DNS、Cloud Run 或资料库的项目，要先备份，并写好影响说明与回滚方式。
+> 前提：所有员工、所有设备（包括收银和厨房平板）都已改用 V2，V1 的两个 AI Studio 部署没有人再使用。
+
+## A. 安全（最重要）
+1. **收紧 Firestore Rules**（紧急整改计划 E3 / CHG-06）。现在规则是「任何已登录身份都能读写全部集合」，V1 也靠这条规则运作，所以 V1 停用前不能收紧。
+   详见 `docs/security/2026-10-12-security-remediation-plan.md` E3。
+2. **作废全部旧 PIN，全员重设 PIN**。`employees/{id}.pin` 是明文，旧规则下可被读取，应视为已外泄。
+   - 关掉 `MIRROR_LEGACY_PIN`（设为 `false`）。之后新 PIN 只存在服务端的哈希里，不再写回 `employees.pin`。
+   - 「我的 → 改 PIN」（`components/profile/ChangePinCard.tsx`）在旧登录方式下会直接写 `employees.pin`，要改为只走服务端。
+3. **只保留服务端登录**：`AUTH_SERVER_ENABLED=true` 成为正式设定，移除前端比对 PIN 的旧登录方式。
+4. 关闭 V1 的两个 AI Studio 部署（`kimliankee-epr.ai.studio`、`service-5174.ai.studio`）。关闭后，V1 后端带着的 Gemini 和发票扫描密钥也一起失效（安全计划 P3 / P4）。
+
+## B. 部署
+5. **V2 正式发布**：正式网址指向 V2，需要调整 Cloudflare DNS 和 Cloud Run。预览站 `dev.kimliankee.app` 的访问门禁（`PREVIEW_ACCESS_PASSWORD`）要换成正式登录保护，不能直接拿掉。
+6. 员工手机上的 App（TWA / 主画面捷径）改指向正式网址，`assetlinks` 一并更新。
+
+## C. 清理测试与过渡功能
+7. **移除测试切换**（`components/dev/TestSwitcher.tsx`，右边的橙色「测试」按钮），负责人确认测试完成即可移除。
+8. 库存的「常驻指派（旧）」分页：旧任务已被「委托任务」取代，确认旧资料不再需要后移除这个分页。
+9. 「V1 必须读得懂 V2 资料」的限制可以放宽：只能新增可选字段的规定，在 V1 停用后可以重新评估。资料清理仍要按高风险流程（备份 → 说明 → 批准）进行。
+
+## D. 停用 V1 前的检查
+- 所有员工都至少用 V2 登录过一次（可以从登录纪录查）。
+- 日结、排班、采购、库存、薪资在 V2 都已经完整跑过一个月。
+- 正式资料库有可用的备份，并做过恢复演练。

@@ -90,12 +90,6 @@ export const RosterModule: React.FC<RosterModuleProps> = ({ onClose, allowedModu
     const [isResetOpen, setIsResetOpen] = useState<boolean>(false);
     const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
 
-    // 切换到手机布局时，月视图信息密度过高，自动退回周视图
-    useEffect(() => {
-        if (isMobile && currentView === 'MONTH') {
-            setCurrentView('WEEK'); // default mobile to Week View for optimal HIG
-        }
-    }, [isMobile, currentView]);
 
     // Load configurations and employee list on mount
     const loadInitialMeta = useCallback(async () => {

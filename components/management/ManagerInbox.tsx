@@ -15,7 +15,8 @@ const L = {
     my: { title: 'လုပ်ရန်', loading: 'ဖွင့်နေသည်…', clear: 'အားလုံး ပြီးပါပြီ 👍', ok: 'ကျန်တာ ပုံမှန်', retry: 'ပြန်ဖွင့်', status: { MC: 'ဆေးခွင့်', LEAVE: 'ခွင့်', ABSENT: 'ပျက်ကွက်' } as Record<string, string> },
 };
 
-export const ManagerInbox: React.FC<{ employee: Employee; lang: string; onOpen: (target: string) => void }> = ({ employee, lang, onOpen }) => {
+/** headerAction：放在标题右边、刷新按钮左边（管理层首页放通知铃） */
+export const ManagerInbox: React.FC<{ employee: Employee; lang: string; onOpen: (target: string) => void; headerAction?: React.ReactNode }> = ({ employee, lang, onOpen, headerAction }) => {
     const t = L[inboxLang(lang)];
     const [counts, setCounts] = useState<InboxCounts | null>(null);
     const [loading, setLoading] = useState(true);
@@ -40,9 +41,12 @@ export const ManagerInbox: React.FC<{ employee: Employee; lang: string; onOpen: 
             <h3 className="text-sm font-black text-stone-800 flex items-center gap-2">{t.title}
                 {todo.length > 0 && <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center">{todo.reduce((s, i) => s + i.count, 0)}</span>}
             </h3>
-            <button onClick={() => setReload(v => v + 1)} disabled={loading} aria-label={t.retry} className="w-9 h-9 rounded-full grid place-items-center text-stone-400 active:bg-stone-100">
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <div className="flex items-center gap-1.5">
+                {headerAction}
+                <button onClick={() => setReload(v => v + 1)} disabled={loading} aria-label={t.retry} className="w-9 h-9 rounded-full grid place-items-center text-stone-400 active:bg-stone-100">
+                    <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+                </button>
+            </div>
         </div>
 
         {loading && !counts ? <div className="p-4 rounded-2xl bg-white border border-stone-200 text-center text-xs font-bold text-stone-400">{t.loading}</div> : <>

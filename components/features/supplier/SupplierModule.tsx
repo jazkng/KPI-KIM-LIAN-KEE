@@ -50,7 +50,7 @@ import { getMalaysiaDateString } from '../../../utils/dateHelper';
 
 // 共用常量
 import { 
-    ITEMS_PER_PAGE, DEFAULT_UOMS, SUP_LABEL_STYLE, SupplierReceivedItem 
+    DEFAULT_UOMS, SUP_LABEL_STYLE, SupplierReceivedItem 
 } from './supplierConstants';
 
 interface SupplierModuleProps {
@@ -62,6 +62,9 @@ interface SupplierModuleProps {
     /** 同时打开这个供应商品项的编辑窗 */
     initialCatalogItemId?: string;
 }
+
+// 采购单 PDF 每页行数：字体放大后一页放 12 行
+const PO_PRINT_ROWS = 12;
 
 export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal = false, onNavigateToStock, initialSupplierId, initialCatalogItemId }) => {
     const [mainTab, setMainTab] = useState<'SUPPLIERS' | 'POS'>('SUPPLIERS');
@@ -911,7 +914,7 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
             if (!printRef.current) return;
             try {
                 const pdf = new (await loadJsPDF())('p', 'mm', 'a4');
-                const totalPages = Math.ceil(po.items.length / ITEMS_PER_PAGE);
+                const totalPages = Math.ceil(po.items.length / PO_PRINT_ROWS);
                 for (let i = 0; i < totalPages; i++) {
                     const pageElement = document.getElementById(`po-print-page-${i}`);
                     if (!pageElement) continue;
@@ -2012,79 +2015,71 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                 )}
             </div>
 
-            {/* HIDDEN PRINT TEMPLATE FOR PURCHASE ORDERS */}
+            {/* HIDDEN PRINT TEMPLATE FOR PURCHASE ORDERS — 给供应商看，不印价钱；品名和数量用大字 */}
             {printingPO && (
                 <div style={{ position: 'fixed', top: '0px', left: '0px', zIndex: -9999, pointerEvents: 'none' }}>
                     <div ref={printRef}>
-                        {Array.from({ length: Math.ceil(printingPO.items.length / ITEMS_PER_PAGE) }).map((_, i) => {
-                            const pageItems = printingPO.items.slice(i * ITEMS_PER_PAGE, (i + 1) * ITEMS_PER_PAGE);
+                        {Array.from({ length: Math.ceil(printingPO.items.length / PO_PRINT_ROWS) }).map((_, i) => {
+                            const pageItems = printingPO.items.slice(i * PO_PRINT_ROWS, (i + 1) * PO_PRINT_ROWS);
+                            const totalPages = Math.ceil(printingPO.items.length / PO_PRINT_ROWS);
                             return (
                                 <div
                                     key={i}
                                     id={`po-print-page-${i}`}
-                                    className="w-[794px] min-h-[1123px] bg-white p-12 text-black relative flex flex-col justify-between"
+                                    className="w-[794px] min-h-[1123px] bg-white px-12 py-10 text-black relative flex flex-col justify-between"
                                     style={{ fontFamily: 'Inter, "Noto Sans SC", sans-serif', fontKerning: 'none', textRendering: 'geometricPrecision' }}
                                 >
                                     <div>
                                         {/* Header */}
-                                        <div className="flex justify-between items-start border-b-4 border-[#111111] pb-5 mb-8">
+                                        <div className="flex justify-between items-start border-b-4 border-[#111111] pb-5 mb-6">
                                             <div>
-                                                <h1 className="text-2xl font-black text-[#111111] mb-1">采购订单</h1>
-                                                <p className="text-[10px] font-black text-gray-500">PURCHASE ORDER</p>
-                                                <p className="text-[9px] text-gray-400 font-bold mt-2">
-                                                    订单日期 Date: {printingPO.date.split('T')[0]}
-                                                </p>
+                                                <h1 className="text-[34px] font-black text-[#111111] leading-none">采购订单</h1>
+                                                <p className="text-[13px] font-bold text-gray-500 mt-2">Purchase Order</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-xl font-black text-[#111111]">KIM LIAN KEE (KEPONG)</p>
-                                                <p className="text-xs font-bold text-gray-500 mt-1">金莲记（甲洞）</p>
-                                                <p className="text-[11px] font-bold text-[#111111] mt-1">{printingPO.id}</p>
+                                                <p className="text-[22px] font-black text-[#111111] leading-tight">{printingPO.id}</p>
+                                                <p className="text-[16px] font-bold text-[#111111] mt-1">日期 Date：{printingPO.date.split('T')[0]}</p>
                                             </div>
                                         </div>
 
                                         {/* Info Block */}
-                                        <div className="grid grid-cols-2 gap-8 mb-8">
-                                            <div>
-                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">供应商 Supplier</p>
-                                                <p className="text-sm font-black text-[#111111]">{printingPO.supplierName}</p>
+                                        <div className="grid grid-cols-2 gap-6 mb-6">
+                                            <div className="rounded-xl border-2 border-[#111111] p-4">
+                                                <p className="text-[14px] font-bold text-gray-500 mb-1">供应商 Supplier</p>
+                                                <p className="text-[22px] font-black text-[#111111] leading-snug">{printingPO.supplierName}</p>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">收货方 Deliver To</p>
-                                                <p className="text-sm font-black text-[#111111]">KIM LIAN KEE (KEPONG) SDN BHD</p>
-                                                <p className="text-[10px] text-gray-500 mt-1">No. 52, Jalan Metro Perdana Barat 13, Kepong, KL</p>
+                                            <div className="rounded-xl border border-gray-300 p-4">
+                                                <p className="text-[14px] font-bold text-gray-500 mb-1">收货方 Deliver to</p>
+                                                <p className="text-[18px] font-black text-[#111111] leading-snug">金莲记（甲洞）</p>
+                                                <p className="text-[14px] font-bold text-[#111111]">KIM LIAN KEE (KEPONG) SDN BHD</p>
+                                                <p className="text-[13px] text-gray-600 mt-1">No. 52, Jalan Metro Perdana Barat 13, Kepong, KL</p>
                                             </div>
                                         </div>
 
                                         {/* Items Table */}
-                                        <table className="w-full text-left text-[10px] border-collapse mb-8">
+                                        <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="bg-[#111111] text-white font-black text-[9px]">
-                                                    <th className="p-2 text-left rounded-l-lg">序号 No.</th>
-                                                    <th className="p-2 text-left">商品名称 Item Description</th>
-                                                    <th className="p-2 text-right">数量 Qty</th>
-                                                    <th className="p-2 text-center">单位 Unit</th>
-                                                    <th className="p-2 text-right">单价 Price (RM)</th>
-                                                    <th className="p-2 text-right rounded-r-lg">预估小计 Subtotal (RM)</th>
+                                                <tr className="bg-[#111111] text-white">
+                                                    <th className="py-2.5 px-3 text-left text-[14px] font-bold w-14">No.</th>
+                                                    <th className="py-2.5 px-3 text-left text-[14px] font-bold">品名 Item</th>
+                                                    <th className="py-2.5 px-3 text-right text-[14px] font-bold w-32">数量 Qty</th>
+                                                    <th className="py-2.5 px-3 text-left text-[14px] font-bold w-32">单位 Unit</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100">
+                                            <tbody>
                                                 {pageItems.map((item, idx) => {
-                                                    const itemNo = i * ITEMS_PER_PAGE + idx + 1;
-                                                    const subtotal = item.totalCost || item.estimatedTotal || (item.orderQty * item.cost) || 0;
+                                                    const itemNo = i * PO_PRINT_ROWS + idx + 1;
+                                                    const n = item.subName ? { primary: item.name, secondary: item.subName } : chineseFirstName(item.name);
                                                     return (
-                                                        <tr key={idx} className="hover:bg-gray-50/50">
-                                                            <td className="p-2 text-left font-bold text-gray-500">{itemNo}</td>
-                                                            <td className="p-2">
-                                                                {(() => { const n = item.subName ? { primary: item.name, secondary: item.subName } : chineseFirstName(item.name); return <>
-                                                                    <div className="text-[12px] font-bold text-[#111111] leading-snug">{n.primary}</div>
-                                                                    {n.secondary && <div className="text-[9px] text-gray-500 leading-snug">{n.secondary}</div>}
-                                                                </>; })()}
-                                                                {item.supplierCode && <span className="text-[8px] bg-gray-100 text-gray-600 px-1 py-0.5 rounded">供应商编号 {item.supplierCode}</span>}
+                                                        <tr key={idx} className="border-b border-gray-300">
+                                                            <td className="py-3 px-3 align-top text-[16px] font-bold text-gray-500">{itemNo}</td>
+                                                            <td className="py-3 px-3 align-top">
+                                                                <div className="text-[20px] font-black text-[#111111] leading-snug">{n.primary}</div>
+                                                                {n.secondary && <div className="text-[14px] font-semibold text-gray-600 leading-snug">{n.secondary}</div>}
+                                                                {item.supplierCode && <div className="text-[13px] font-bold text-gray-700 mt-0.5">编号 Code：{item.supplierCode}</div>}
                                                             </td>
-                                                            <td className="p-2 text-right font-bold">{item.orderQty}</td>
-                                                            <td className="p-2 text-center font-bold text-gray-600">{item.unit}</td>
-                                                            <td className="p-2 text-right font-bold">{(item.cost || 0).toFixed(2)}</td>
-                                                            <td className="p-2 text-right font-black text-[#111111]">{subtotal.toFixed(2)}</td>
+                                                            <td className="py-3 px-3 align-top text-right text-[24px] font-black text-[#111111]">{item.orderQty}</td>
+                                                            <td className="py-3 px-3 align-top text-[18px] font-bold text-[#111111]">{item.unit}</td>
                                                         </tr>
                                                     );
                                                 })}
@@ -2092,29 +2087,26 @@ export const SupplierModule: React.FC<SupplierModuleProps> = ({ onClose, isModal
                                         </table>
                                     </div>
 
-                                    {/* Footer (Legend / Signature) */}
+                                    {/* Footer (Signature) */}
                                     <div>
-                                        {i === Math.ceil(printingPO.items.length / ITEMS_PER_PAGE) - 1 && (
-                                            <div className="border-t border-gray-200 pt-4 mb-8 flex justify-between items-end">
-                                                <div>
-                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Estimated Amount</p>
-                                                    <p className="text-xl font-black text-blue-700">RM {printingPO.totalEstimated.toFixed(2)}</p>
-                                                </div>
-                                                <div className="flex gap-12 text-center text-[9px] text-gray-500">
+                                        {i === totalPages - 1 && (
+                                            <div className="border-t-2 border-gray-300 pt-4 mb-6 flex justify-between items-end">
+                                                <p className="text-[16px] font-bold text-[#111111]">共 {printingPO.items.length} 项 · Total {printingPO.items.length} items</p>
+                                                <div className="flex gap-10 text-center text-[13px] font-bold text-gray-600">
                                                     <div>
-                                                        <p>采购人 (Prepared By)</p>
-                                                        <div className="w-28 border-b border-dashed border-gray-300 mt-8"></div>
+                                                        <div className="w-36 border-b border-gray-400 mb-1.5 h-12"></div>
+                                                        <p>采购人 Prepared by</p>
                                                     </div>
                                                     <div>
-                                                        <p>批准人 (Approved By)</p>
-                                                        <div className="w-28 border-b border-dashed border-gray-300 mt-8"></div>
+                                                        <div className="w-36 border-b border-gray-400 mb-1.5 h-12"></div>
+                                                        <p>供应商签收 Received by</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
-                                        <div className="flex justify-between text-[8px] text-gray-400 font-mono">
-                                            <span>KIM LIAN KEE ERP SYSTEM • PO GENERATION</span>
-                                            <span>Page {i + 1} of {Math.ceil(printingPO.items.length / ITEMS_PER_PAGE)}</span>
+                                        <div className="flex justify-between text-[11px] text-gray-400">
+                                            <span>KIM LIAN KEE (KEPONG) · {printingPO.id}</span>
+                                            <span>Page {i + 1} / {totalPages}</span>
                                         </div>
                                     </div>
                                 </div>
