@@ -15,6 +15,8 @@ import { mt, getModuleTranslatedLabel, getModuleTranslatedDesc } from '../../con
 import { DataManager } from '../../utils/dataManager';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { NotificationCenter } from '../ui/NotificationCenter';
+import { ScanButton } from '../meetings/ScanButton';
+import { MeetingBoard } from '../meetings/MeetingBoard';
 import { ManagerDashboard } from '../lazyModules';
 
 interface ManagementPortalProps {
@@ -352,6 +354,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                 <div className="px-4 md:px-6 pt-[calc(1.25rem+env(safe-area-inset-top))] space-y-6">
                                     <h2 className="text-xl font-black text-stone-900">{lang === 'my' ? 'တာဝန် စီမံခန့်ခွဲမှု' : lang === 'en' ? 'Tasks' : '任务管理'}</h2>
                                     <TaskBoard actor={employee} autoCreate={autoCreate} onAutoCreateUsed={clearAutoCreate} />
+                                    <MeetingBoard actor={employee} />
 
                                     {/* 日常工作：例行要做的事，一行一个，直接进去 */}
                                     {taskList.length > 0 && <details className="space-y-2">
@@ -596,8 +599,10 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                             ].map((tab, idx) => {
                                 const isSelected = activeTabIdx === idx;
                                 return (
+                                    <React.Fragment key={tab.key}>
+                                    {/* 扫一扫：放在「任务」和「功能」中间 */}
+                                    {idx === 2 && <ScanButton label={lang === 'my' ? 'စကင်ဖတ်' : '扫一扫'} iconSize={22} className="w-12 h-12 -mt-5 rounded-2xl bg-stone-900 text-[#FFD200] grid place-items-center shadow-lg active:scale-90 transition-transform" />}
                                     <button
-                                        key={tab.key}
                                         onClick={() => setActiveTabIdx(idx)}
                                         className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform outline-none"
                                         style={{ minWidth: '55px', minHeight: '44px' }} // Standard touch targets 44x44 HIG
@@ -609,6 +614,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                             {tab.label}
                                         </span>
                                     </button>
+                                    </React.Fragment>
                                 );
                             })}
                         </div>

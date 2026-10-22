@@ -12,6 +12,8 @@ import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics'
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
 import { AdvisorPanel } from './advisor/AdvisorPanel';
+import { MeetingBoard } from './meetings/MeetingBoard';
+import { startableTypes } from '../utils/meetings/meetingLogic';
 import { TaskBoard } from './tasks/TaskBoard';
 import { countOpenMatters } from '../utils/tasks/staffTaskStore';
 import { buildAdvisorInsights, type Anomaly } from '../utils/cockpit/advisorInsights';
@@ -33,6 +35,8 @@ interface Props {
     loadData?: typeof loadBusinessCenterWith;
     /** 通知铃铛：放在设置和退出中间 */
     notifications?: React.ReactNode;
+    /** 数字变了就打开 AI 经营顾问（老板长按「扫一扫」3 秒） */
+    aiSignal?: number;
 }
 /** 日报小格子：标签已经说明是金额，不再加 RM */
 const plain = (n: number | null) => n === null ? '—' : n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -41,7 +45,7 @@ const format = (k?: Kpi) => !k || k.value === null ? '—' : k.unit === 'PCT' ? 
 const Status = ({ k }: { k?: Kpi }) => k ? <span className={`bc-status bc-status-${k.status}`}>{COCKPIT_STATUS_LABEL[k.status]}</span> : null;
 const shiftMonth = (month: string, by: number) => addDays(`${month}-01`, by < 0 ? -1 : daysInMonth(month)).slice(0, 7);
 
-export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSection, onNavigate, onOpenConfig, onLogout, loadData = loadBusinessCenterWith, notifications }) => {
+export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSection, onNavigate, onOpenConfig, onLogout, loadData = loadBusinessCenterWith, notifications, aiSignal = 0 }) => {
     const today = getBusinessDateString();
     const [month, setMonth] = useState(today.slice(0, 7));
     const [tab, setTab] = useState<'sales' | 'profit' | 'cash'>('sales');
@@ -70,6 +74,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         return () => { active = false; clearTimeout(timer); };
     }, [month, today, reportsAllowed, section, revision, currentEmployee.id, loadData]);
     useEffect(() => { if (hrOpen && !canUseBossTarget(currentEmployee, 'HR')) setHrOpen(false); }, [currentEmployee, hrOpen]);
+    useEffect(() => { if (aiSignal > 0) setAiOpen(true); }, [aiSignal]);
     // 上报事项（只读计数）：有待处理的就在经营中心最上面提醒
     const [openMatters, setOpenMatters] = useState(0);
     useEffect(() => { let on = true; countOpenMatters().then(n => on && setOpenMatters(n)).catch(() => undefined); return () => { on = false; }; }, [section]);
@@ -113,6 +118,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                 <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} canStaffCash={can('STAFF_CASH')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} onOpenStaffCash={() => navigate('STAFF_CASH')} />
                 {/* 委托任务与上报事项（老板也可以派任务、处理上报事项） */}
                 <section className="bc-card bc-tasks" id="bc-tasks"><div className="bc-card-heading"><h2><ClipboardList size={17} /> 任务</h2></div><TaskBoard actor={currentEmployee} /></section>
+                {startableTypes(currentEmployee).length > 0 && <section className="bc-card bc-tasks"><MeetingBoard actor={currentEmployee} /></section>}
             </> : <>
                 {openMatters > 0 && <button className="bc-matter-banner" onClick={() => { onSection('HR'); setTimeout(() => document.getElementById('bc-tasks')?.scrollIntoView({ behavior: 'smooth' }), 300); }}><Flag size={18} /><span><b>上报事项 {openMatters} 件</b><small>员工 / 管理层上报、等你处理的事</small></span><ChevronRight size={18} /></button>}
                 {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>
