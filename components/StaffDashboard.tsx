@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Crown, BookOpen, User, Calendar, 
-  Award, Clock, CheckCircle2, ChevronDown, ChevronUp, Check, LogOut, MapPin, Sparkles, AlertOctagon, HelpCircle, 
+  Award, ChevronDown, ChevronUp, Check, LogOut, MapPin, Sparkles, AlertOctagon, HelpCircle, 
   Smartphone, BookMarked, ShieldAlert
 } from 'lucide-react';
-import { SOPItem, Employee, RoleGuide, AttendanceRecord, AppModule, AppLanguage, normalizeLanguage } from '../types';
+import { SOPItem, Employee, RoleGuide, AppModule, AppLanguage, normalizeLanguage } from '../types';
 import { LanguageSelector } from './ui/LanguageSelector';
 import { ROLE_SOP_DETAILS, MODULE_SYSTEM_TASKS, MODULE_DEFINITIONS } from './constants';
 import { DEFAULT_ROLE_GUIDES, DEFAULT_ROLES } from '../constants/staff';
-import { DataManager, DEFAULT_ATTENDANCE_SETTINGS, getTargetShiftForDate } from '../utils/dataManager';
+import { DataManager } from '../utils/dataManager';
 import { mapRoleToCode, getChineseRoleName } from './utils';
 import { getBusinessDateString } from '../utils/dateHelper';
 import { sortNavigationItems } from '../constants/moduleNavigation';
 import { NotificationCenter } from './ui/NotificationCenter';
 import { ScanButton } from './meetings/ScanButton';
+import { MyPointsCard } from './points/MyPointsCard';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
@@ -31,6 +32,14 @@ import {
 interface StaffDashboardProps { 
   employee: Employee; 
 }
+
+/** 底栏 / 分页名称（负责人 2026-10-22：第一页任务、第二页职位职责） */
+const TAB_LABEL = {
+  TODAY: { zh: '任务', en: 'Tasks', my: 'လုပ်ငန်း' },
+  HANDBOOK: { zh: '职责', en: 'My duties', my: 'တာဝန်' },
+} as const;
+const DUTY_TITLE = { zh: '我的职位要做的事', en: 'My role duties', my: 'ကျွန်ုပ်၏ တာဝန်' } as const;
+const L3 = (lang: string): 'zh' | 'en' | 'my' => lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh';
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const roleCode = mapRoleToCode(employee.role);
@@ -91,9 +100,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   const [aiOpen, setAiOpen] = useState(false);
   
   // Shift & Attendance states
-  const [todayRosterStatus, setTodayRosterStatus] = useState<string>('WORK');
-  const [todayShiftTimes, setTodayShiftTimes] = useState<{ checkInStr: string; checkOutStr: string }>({ checkInStr: '15:00', checkOutStr: '02:00' });
-  const [attendanceRecord, setAttendanceRecord] = useState<AttendanceRecord | null>(null);
   const [, setLoadingAttendance] = useState(false);
   const [rosterData3Days, setRosterData3Days] = useState<{ date: string; label: string; status: string }[]>([]);
   
@@ -188,13 +194,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
         // ⚡ iOS 性能：考勤、排班、班次设定三项读取同时发出；取用顺序与错误处理维持原样
         const early = <T,>(promise: Promise<T>): Promise<T> => { promise.catch(() => undefined); return promise; };
-        const attendanceRead = early(DataManager.getAttendanceByEmployeeAndDate(employee.id, todayStr));
+        // 「今日班次」卡已拿掉（看排班就好），这里只读排班
         const rosterRead = early(DataManager.getRosterData());
-        const settingsRead = early(DataManager.getAttendanceSettings());
-
-        // Fetch only this employee's attendance for the current business date.
-        const myAtt = await attendanceRead;
-        setAttendanceRecord(myAtt);
 
         // Fetch Roster (3 Days)
         const { roster, notes } = await rosterRead;
@@ -218,16 +219,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           return { date: dStr, label, status };
         });
         setRosterData3Days(roster3);
-        setTodayRosterStatus(roster3[0]?.status || '暂无排班');
-
-        // Fetch Settings & calculate shift times
-        const settings = await settingsRead;
-        const currentSettings = settings || DEFAULT_ATTENDANCE_SETTINGS;
-        const shiftInfo = getTargetShiftForDate(todayStr, currentSettings, employee.shiftGroup || 1);
-        setTodayShiftTimes({
-          checkInStr: shiftInfo.checkInStr,
-          checkOutStr: shiftInfo.checkOutStr
-        });
 
       } catch (err) {
         console.error('Failed to load roster or attendance:', err);
@@ -427,7 +418,19 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               }`}
             >
               <ClipboardList size={14} />
-              <span>{st('todayWorkspace', lang)}</span>
+              <span>{TAB_LABEL.TODAY[L3(lang)]}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HANDBOOK')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                activeTab === 'HANDBOOK' 
+                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
+                  : 'text-stone-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <BookOpen size={14} />
+              <span>{TAB_LABEL.HANDBOOK[L3(lang)]}</span>
             </button>
 
             <button
@@ -440,18 +443,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             >
               <Calendar size={14} />
               <span>{st('schedule', lang)}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('HANDBOOK')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                activeTab === 'HANDBOOK' 
-                  ? 'bg-[#FFD200] text-stone-900 shadow-sm' 
-                  : 'text-stone-300 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <BookOpen size={14} />
-              <span>{st('handbook', lang)}</span>
             </button>
 
             <button
@@ -527,98 +518,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
         {activeTab === 'TODAY' && (
           <div className="space-y-5 animate-in fade-in duration-300">
 
-            {/* 0. 我的任务（管理层委托的任务；没有任务时不显示） */}
-            <StaffTaskList employee={employee} lang={lang} />
+            {/* 1. 我的任务（主管委派的任务）放最上面：一打开就知道今天要做什么 */}
+            <StaffTaskList employee={employee} lang={lang} showEmpty />
             
-            {/* 1. Today Shift Card */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-[#FFD200]" />
-                  <h3 className="font-black text-sm text-[#111111]">{st('todayShift', lang)}</h3>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-gray-400">
-                  {getBusinessDateString()}
-                </span>
-              </div>
-
-              {/* Roster & Times list */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('position', lang)}</p>
-                  <p className="font-bold text-xs text-[#111111]">
-                    {st(employee.role, lang)}
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('workHours', lang)}</p>
-                  <p className="font-bold text-xs text-[#111111] font-mono">
-                    {todayShiftTimes.checkInStr} - {todayShiftTimes.checkOutStr}
-                  </p>
-                </div>
-
-                <div className="space-y-1 col-span-2">
-                  <p className="text-[11px] text-gray-400 font-bold uppercase">{st('status', lang)}</p>
-                  <div className="flex items-center gap-2 pt-0.5">
-                    {todayRosterStatus === 'OFF' ? (
-                      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
-                        💤 {st('restDay', lang)}
-                      </span>
-                    ) : todayRosterStatus === '暂无排班' ? (
-                      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
-                        ❔ {st('noSchedule', lang)}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-green-500/10 text-[#22C55E] text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
-                        ✅ {st('onDuty', lang)}
-                      </span>
-                    )}
-
-                    {/* Clock-in stamp */}
-                    {attendanceRecord?.clockIn && (
-                      <span className="text-[9px] bg-blue-500/10 text-blue-600 font-bold px-2 py-0.5 rounded-full">
-                        In: {new Date(attendanceRecord.clockIn).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-
-                    {attendanceRecord?.clockOut && (
-                      <span className="text-[9px] bg-[#FFD200]/10 text-amber-600 font-bold px-2 py-0.5 rounded-full">
-                        Out: {new Date(attendanceRecord.clockOut).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-gray-100">
-                {attendanceRecord?.clockIn && attendanceRecord?.clockOut ? (
-                  <div className="w-full bg-green-50 text-green-600 border border-green-100 text-xs font-bold py-2.5 rounded-xl text-center flex items-center justify-center gap-1.5">
-                    <CheckCircle2 size={13} className="text-[#22C55E]" />
-                    <span>{st('attendanceCompleted', lang)}</span>
-                  </div>
-                ) : attendanceRecord?.clockIn ? (
-                  <div className="w-full bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold py-2.5 rounded-xl text-center flex items-center justify-center gap-1.5">
-                    <Clock size={13} />
-                    <span>{st('clockedInWaiting', lang)}</span>
-                  </div>
-                ) : todayRosterStatus === 'OFF' ? (
-                  <div className="w-full bg-gray-50 text-gray-500 border border-gray-100 text-xs font-bold py-2.5 rounded-xl text-center flex items-center justify-center gap-1.5">
-                    <span>{st('restDayNoPunch', lang)}</span>
-                  </div>
-                ) : todayRosterStatus === '暂无排班' ? (
-                  <div className="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs font-bold py-2.5 rounded-xl text-center flex items-center justify-center gap-1.5">
-                    <span>{st('noRosterTip', lang)}</span>
-                  </div>
-                ) : (
-                  <div className="w-full bg-amber-50 text-amber-700 border border-amber-100 text-xs font-bold py-2.5 rounded-xl text-center flex flex-col items-center justify-center gap-1">
-                    <span className="flex items-center gap-1">🕒 <span>{st('waitingManagerConfirmation', lang)}</span></span>
-                    <span className="text-[10px] text-gray-400 font-normal">{st('waitingDeviceSub', lang)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* 2. Authorized Work Tools (Grid - touch targets >= 48px) */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -690,12 +592,130 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               })()}
             </div>
 
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB 2: ROSTER VIEW (个人排班)
+            ========================================== */}
+        {activeTab === 'ROSTER' && (
+          <div className="space-y-5 animate-in fade-in duration-300">
+            
+            {/* Quick 3 Days shift cards */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
+              <h3 className="font-black text-sm text-[#111111] flex items-center gap-2 border-b border-gray-100 pb-3">
+                <Calendar size={16} className="text-[#FFD200]" />
+                <span>{st('schedule', lang)}</span>
+              </h3>
+
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                {rosterData3Days.map((item, idx) => {
+                  const isOff = item.status === 'OFF';
+                  const isMc = item.status === 'MC';
+                  return (
+                    <div 
+                      key={idx}
+                      className={`p-3 rounded-xl border flex flex-col gap-1 ${
+                        idx === 0 
+                          ? 'bg-[#FFD200]/5 border-[#FFD200]/40' 
+                          : 'bg-gray-50/50 border-gray-100'
+                      }`}
+                    >
+                      <p className="text-[10px] font-black text-gray-400 uppercase">{st(item.label, lang)}</p>
+                      <p className="text-[8px] font-mono text-gray-400 mt-0.5">{item.date.split('-')[2]}</p>
+                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${
+                        isOff 
+                          ? 'bg-gray-100 text-gray-500' 
+                          : isMc 
+                            ? 'bg-rose-50 text-rose-500 border border-rose-100' 
+                            : 'bg-green-500/10 text-[#22C55E]'
+                      }`}>
+                        {isOff ? st('restDay', lang) : isMc ? st('sickLeave', lang) : st('work', lang)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Roster Monthly calendar view */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="font-black text-sm text-[#111111]">{st('monthlyRoster', lang)}</h3>
+                <span className="text-[11px] font-mono font-extrabold text-gray-400">{rosterMonth}</span>
+              </div>
+
+              {/* Minimalist calendar grid */}
+              <div className="grid grid-cols-7 gap-1 bg-gray-50 p-1.5 rounded-xl border border-gray-100 text-center">
+                {/* Headers */}
+                {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(h => (
+                  <div key={h} className="text-[9px] font-black text-gray-400 uppercase py-1">
+                    {st(h, lang)}
+                  </div>
+                ))}
+
+                {/* Days of current month */}
+                {(() => {
+                  const [yearStr, monthStr] = rosterMonth.split('-');
+                  const year = parseInt(yearStr);
+                  const month = parseInt(monthStr);
+                  const firstDay = new Date(year, month - 1, 1).getDay(); // 0 (Sun) - 6 (Sat)
+                  const offset = firstDay === 0 ? 6 : firstDay - 1; // Mon offset: 0-6
+                  
+                  const daysInMonth = new Date(year, month, 0).getDate();
+                  const cells = [];
+                  
+                  // Padding cells
+                  for (let i = 0; i < offset; i++) {
+                    cells.push(<div key={`pad-${i}`} className="aspect-square bg-gray-50/40 rounded-lg"></div>);
+                  }
+
+                  // Actual month days
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    const dStr = `${rosterMonth}-${String(day).padStart(2, '0')}`;
+                    const status = (monthlyRosterData[dStr] || {})[employee.id] || 'WORK';
+                    const note = monthlyNotes[`${dStr}_${employee.id}`];
+                    const isOff = status === 'OFF';
+                    const isToday = dStr === getBusinessDateString();
+
+                    cells.push(
+                      <div 
+                        key={day}
+                        className={`aspect-square rounded-lg flex flex-col justify-between p-1 border text-center transition-all ${
+                          isToday 
+                            ? 'ring-2 ring-[#FFD200] border-[#FFD200] bg-yellow-50/20' 
+                            : isOff 
+                              ? 'bg-gray-100 border-gray-200' 
+                              : 'bg-white border-gray-100 hover:bg-gray-50/50'
+                        }`}
+                        title={note || ''}
+                      >
+                        <span className={`text-[9px] font-mono font-extrabold ${isToday ? 'text-amber-600' : isOff ? 'text-gray-400' : 'text-stone-900'}`}>{day}</span>
+                        <div className={`w-1.5 h-1.5 rounded-full mx-auto ${isOff ? 'bg-gray-300' : 'bg-green-500'}`}></div>
+                      </div>
+                    );
+                  }
+
+                  return cells;
+                })()}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB 3: HANDBOOK VIEW (岗位手册)
+            ========================================== */}
+        {activeTab === 'HANDBOOK' && (
+          <div className="space-y-5 animate-in fade-in duration-300">
+            {/* 我的职位要做的事（原「今日任务进度」移到这里） */}
             {/* 3. Today's Tasks & Progress */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2">
                   <ClipboardList size={16} className="text-[#FFD200]" />
-                  <h3 className="font-black text-sm text-[#111111]">{st('taskProgress', lang)}</h3>
+                  <h3 className="font-black text-sm text-[#111111]">{DUTY_TITLE[L3(lang)]} · {getChineseRoleName(employee.role)}</h3>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-black text-stone-950 font-mono">
@@ -938,123 +958,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               </div>
             )}
 
-          </div>
-        )}
-
-        {/* ==========================================
-            TAB 2: ROSTER VIEW (个人排班)
-            ========================================== */}
-        {activeTab === 'ROSTER' && (
-          <div className="space-y-5 animate-in fade-in duration-300">
-            
-            {/* Quick 3 Days shift cards */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <h3 className="font-black text-sm text-[#111111] flex items-center gap-2 border-b border-gray-100 pb-3">
-                <Calendar size={16} className="text-[#FFD200]" />
-                <span>{st('schedule', lang)}</span>
-              </h3>
-
-              <div className="grid grid-cols-3 gap-2.5 text-center">
-                {rosterData3Days.map((item, idx) => {
-                  const isOff = item.status === 'OFF';
-                  const isMc = item.status === 'MC';
-                  return (
-                    <div 
-                      key={idx}
-                      className={`p-3 rounded-xl border flex flex-col gap-1 ${
-                        idx === 0 
-                          ? 'bg-[#FFD200]/5 border-[#FFD200]/40' 
-                          : 'bg-gray-50/50 border-gray-100'
-                      }`}
-                    >
-                      <p className="text-[10px] font-black text-gray-400 uppercase">{st(item.label, lang)}</p>
-                      <p className="text-[8px] font-mono text-gray-400 mt-0.5">{item.date.split('-')[2]}</p>
-                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${
-                        isOff 
-                          ? 'bg-gray-100 text-gray-500' 
-                          : isMc 
-                            ? 'bg-rose-50 text-rose-500 border border-rose-100' 
-                            : 'bg-green-500/10 text-[#22C55E]'
-                      }`}>
-                        {isOff ? st('restDay', lang) : isMc ? st('sickLeave', lang) : st('work', lang)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Roster Monthly calendar view */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h3 className="font-black text-sm text-[#111111]">{st('monthlyRoster', lang)}</h3>
-                <span className="text-[11px] font-mono font-extrabold text-gray-400">{rosterMonth}</span>
-              </div>
-
-              {/* Minimalist calendar grid */}
-              <div className="grid grid-cols-7 gap-1 bg-gray-50 p-1.5 rounded-xl border border-gray-100 text-center">
-                {/* Headers */}
-                {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(h => (
-                  <div key={h} className="text-[9px] font-black text-gray-400 uppercase py-1">
-                    {st(h, lang)}
-                  </div>
-                ))}
-
-                {/* Days of current month */}
-                {(() => {
-                  const [yearStr, monthStr] = rosterMonth.split('-');
-                  const year = parseInt(yearStr);
-                  const month = parseInt(monthStr);
-                  const firstDay = new Date(year, month - 1, 1).getDay(); // 0 (Sun) - 6 (Sat)
-                  const offset = firstDay === 0 ? 6 : firstDay - 1; // Mon offset: 0-6
-                  
-                  const daysInMonth = new Date(year, month, 0).getDate();
-                  const cells = [];
-                  
-                  // Padding cells
-                  for (let i = 0; i < offset; i++) {
-                    cells.push(<div key={`pad-${i}`} className="aspect-square bg-gray-50/40 rounded-lg"></div>);
-                  }
-
-                  // Actual month days
-                  for (let day = 1; day <= daysInMonth; day++) {
-                    const dStr = `${rosterMonth}-${String(day).padStart(2, '0')}`;
-                    const status = (monthlyRosterData[dStr] || {})[employee.id] || 'WORK';
-                    const note = monthlyNotes[`${dStr}_${employee.id}`];
-                    const isOff = status === 'OFF';
-                    const isToday = dStr === getBusinessDateString();
-
-                    cells.push(
-                      <div 
-                        key={day}
-                        className={`aspect-square rounded-lg flex flex-col justify-between p-1 border text-center transition-all ${
-                          isToday 
-                            ? 'ring-2 ring-[#FFD200] border-[#FFD200] bg-yellow-50/20' 
-                            : isOff 
-                              ? 'bg-gray-100 border-gray-200' 
-                              : 'bg-white border-gray-100 hover:bg-gray-50/50'
-                        }`}
-                        title={note || ''}
-                      >
-                        <span className={`text-[9px] font-mono font-extrabold ${isToday ? 'text-amber-600' : isOff ? 'text-gray-400' : 'text-stone-900'}`}>{day}</span>
-                        <div className={`w-1.5 h-1.5 rounded-full mx-auto ${isOff ? 'bg-gray-300' : 'bg-green-500'}`}></div>
-                      </div>
-                    );
-                  }
-
-                  return cells;
-                })()}
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* ==========================================
-            TAB 3: HANDBOOK VIEW (岗位手册)
-            ========================================== */}
-        {activeTab === 'HANDBOOK' && (
-          <div className="space-y-5 animate-in fade-in duration-300">
             
             {/* 1. Core Guidelines */}
             <div className="bg-[#111111] text-white rounded-2xl p-5 relative overflow-hidden shadow-md">
@@ -1233,29 +1136,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
               </div>
             )}
 
-            {/* Read-only Quarterly Rating */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <h3 className="font-black text-sm text-[#111111] border-b border-gray-100 pb-3 flex items-center gap-2">
-                <Award size={16} className="text-[#FFD200]" />
-                <span>{st('rating', lang)}</span>
-              </h3>
-              {employee.assessmentSummary?.currentGrade ? (
-                <div className="flex items-center justify-between bg-yellow-50/30 p-4 rounded-xl border border-yellow-100">
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase">Quarter</p>
-                    <p className="text-xs font-black text-stone-900">{employee.assessmentSummary.currentQuarter}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase">Grade / Score</p>
-                    <p className="text-sm font-serif font-black text-amber-600">
-                      Grade {employee.assessmentSummary.currentGrade} ({employee.assessmentSummary.currentScore} Pts)
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-center text-xs text-gray-400 py-3 italic">{st('noRating', lang)}</p>
-              )}
-            </div>
+            {/* 我的积分（取代旧的季度评分） */}
+            <MyPointsCard lang={lang} />
 
           </div>
         )}
@@ -1283,7 +1165,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
           <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'TODAY' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
             <ClipboardList size={16} className={activeTab === 'TODAY' ? 'text-amber-600' : ''} />
           </div>
-          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'TODAY' ? 'text-amber-600' : ''}`}>{st('todayWorkspace', lang)}</span>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'TODAY' ? 'text-amber-600' : ''}`}>{TAB_LABEL.TODAY[L3(lang)]}</span>
+        </button>
+
+        {/* HANDBOOK */}
+        <button 
+          onClick={() => setActiveTab('HANDBOOK')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
+            activeTab === 'HANDBOOK' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
+          }`}
+          style={{ minHeight: '44px' }}
+        >
+          <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'HANDBOOK' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
+            <BookOpen size={16} className={activeTab === 'HANDBOOK' ? 'text-amber-600' : ''} />
+          </div>
+          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'HANDBOOK' ? 'text-amber-600' : ''}`}>{TAB_LABEL.HANDBOOK[L3(lang)]}</span>
         </button>
 
         {/* ROSTER */}
@@ -1298,20 +1194,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             <Calendar size={16} className={activeTab === 'ROSTER' ? 'text-amber-600' : ''} />
           </div>
           <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'ROSTER' ? 'text-amber-600' : ''}`}>{st('schedule', lang)}</span>
-        </button>
-
-        {/* HANDBOOK */}
-        <button 
-          onClick={() => setActiveTab('HANDBOOK')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all active:scale-95 min-w-0 flex-1 ${
-            activeTab === 'HANDBOOK' ? 'text-amber-500' : 'text-stone-400 active:text-stone-700'
-          }`}
-          style={{ minHeight: '44px' }}
-        >
-          <div className={`p-1.5 rounded-lg transition-all ${activeTab === 'HANDBOOK' ? 'bg-[#FFD200]/20 text-[#FFD200]' : 'active:bg-stone-50'}`}>
-            <BookOpen size={16} className={activeTab === 'HANDBOOK' ? 'text-amber-600' : ''} />
-          </div>
-          <span className={`text-[11px] leading-tight font-black max-w-full truncate ${activeTab === 'HANDBOOK' ? 'text-amber-600' : ''}`}>{st('handbook', lang)}</span>
         </button>
 
         {/* PROFILE */}

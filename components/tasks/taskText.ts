@@ -4,6 +4,7 @@ export const tl = (lang: string): L => lang === 'my' ? 'my' : lang === 'en' ? 'e
 
 const T = {
     myTasks: { zh: '我的任务', en: 'My tasks', my: 'ကျွန်ုပ်၏ တာဝန်များ' },
+    noTasksToday: { zh: '现在没有派给你的任务 👍', en: 'No tasks for you right now 👍', my: 'ယခု တာဝန် မရှိပါ 👍' },
     noTasks: { zh: '目前没有任务 👍', en: 'No tasks 👍', my: 'တာဝန် မရှိပါ 👍' },
     todo: { zh: '待做', en: 'To do', my: 'လုပ်ရန်' },
     submitted: { zh: '已交回，等确认', en: 'Submitted, waiting', my: 'ပေးပို့ပြီး စောင့်နေ' },

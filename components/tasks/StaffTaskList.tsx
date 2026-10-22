@@ -18,7 +18,7 @@ const TYPE_TEXT: Record<StaffTask['type'], Record<'zh' | 'en' | 'my', string>> =
 const L = (lang: string) => lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh';
 
 /** 员工页「我的任务」：派给自己或自己部门的任务。只读取；按「交回」才写入。 */
-export const StaffTaskList: React.FC<{ employee: Employee; lang: string }> = ({ employee, lang }) => {
+export const StaffTaskList: React.FC<{ employee: Employee; lang: string; showEmpty?: boolean }> = ({ employee, lang, showEmpty }) => {
     const [tasks, setTasks] = useState<StaffTask[] | null>(null);
     const [open, setOpen] = useState<StaffTask | null>(null);
     const [reload, setReload] = useState(0);
@@ -27,12 +27,12 @@ export const StaffTaskList: React.FC<{ employee: Employee; lang: string }> = ({ 
 
     const rows = (tasks || []).map(t => ({ t, s: effectiveStatus(t, today, now) })).filter(r => r.s === 'TODO' || r.s === 'OVERDUE' || r.s === 'SUBMITTED')
         .sort((a, b) => ['OVERDUE', 'TODO', 'SUBMITTED'].indexOf(a.s) - ['OVERDUE', 'TODO', 'SUBMITTED'].indexOf(b.s));
-    if (tasks !== null && rows.length === 0) return null;
+    if (tasks !== null && rows.length === 0 && !showEmpty) return null;
 
     return <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm space-y-3">
         <div className="flex items-center gap-2"><ClipboardList size={16} className="text-[#FFD200]" /><h3 className="font-black text-sm text-[#111111]">{tt('myTasks', lang)}</h3>
             {rows.length > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center">{rows.filter(r => r.s !== 'SUBMITTED').length}</span>}</div>
-        {tasks === null ? <p className="text-xs text-gray-400"><Loader2 size={13} className="inline animate-spin" /></p> : rows.map(({ t, s }) => (
+        {tasks === null ? <p className="text-xs text-gray-400"><Loader2 size={13} className="inline animate-spin" /></p> : rows.length === 0 ? <p className="text-sm font-bold text-stone-400 py-2">{tt('noTasksToday', lang)}</p> : rows.map(({ t, s }) => (
             <button key={t.id} disabled={s === 'SUBMITTED'} onClick={() => setOpen(t)} className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left ${s === 'OVERDUE' ? 'border-rose-200 bg-rose-50' : s === 'SUBMITTED' ? 'border-gray-100 bg-gray-50 opacity-70' : 'border-gray-200 bg-white'}`}>
                 <span className="flex-1 min-w-0">
                     <b className="block text-[15px] font-black text-stone-900 truncate">{t.title}</b>
