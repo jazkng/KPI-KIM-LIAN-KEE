@@ -30,6 +30,9 @@ export const ROSTER_STATUS_LABEL: Record<string, string> = {
 export const isCountedStaff = (e: Employee) =>
     !e.isArchived && e.status !== 'TERMINATED' && e.department !== 'OWNER' && e.excludeFromStaff !== true;
 
+/** 兼职：按小时计薪，或职位写明兼职 / Part-Time（积分不评兼职） */
+export const isPartTimer = (e: Pick<Employee, 'salaryMode' | 'role'>) => e.salaryMode === 'HOURLY' || /part[- ]?time|兼职/i.test(e.role || '');
+
 export interface PersonLine { employeeId: string; name: string; status: string }
 
 /** 班表上显示的名字：有昵称用昵称，否则用全名 */

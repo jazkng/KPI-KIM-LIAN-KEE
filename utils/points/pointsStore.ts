@@ -8,7 +8,7 @@ import { db } from '../../firebaseConfig';
 import type { AttendanceRecord, Employee } from '../../types';
 import { DataManager } from '../dataManager';
 import { getMalaysiaDateString } from '../dateHelper';
-import { isCountedStaff } from '../hr/hrOverview';
+import { isCountedStaff, isPartTimer } from '../hr/hrOverview';
 import { myTime, type Meeting, type MeetingCheckin } from '../meetings/meetingLogic';
 import { listRecentTasks } from '../tasks/staffTaskStore';
 import type { StaffTask } from '../tasks/staffTaskLogic';
@@ -79,7 +79,8 @@ export const loadAllPoints = async (month: string) => {
     const [employees, d] = await Promise.all([DataManager.getEmployees(), loadMonthData(month)]);
     const asOf = asOfFor(month);
     const confirmed = await listConfirmedPoints(month);
-    return employees.filter(isCountedStaff).map(e => ({ employee: e, points: confirmed[e.id] || pointsFor(e, month, asOf, d), confirmed: !!confirmed[e.id] }))
+    // 兼职不评积分（负责人 2026-10-23）
+    return employees.filter(e => isCountedStaff(e) && !isPartTimer(e)).map(e => ({ employee: e, points: confirmed[e.id] || pointsFor(e, month, asOf, d), confirmed: !!confirmed[e.id] }))
         .sort((a, b) => b.points.total - a.points.total);
 };
 

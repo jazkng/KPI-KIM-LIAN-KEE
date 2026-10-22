@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { isRetiredModule } from '../../utils/retiredModules';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-    LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages, Home, ListChecks, LayoutGrid, User
+    LogOut, ChevronRight, HelpCircle, ShieldCheck, Languages, Home, ListChecks, LayoutGrid, User, ArrowLeft
 } from 'lucide-react';
 import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
@@ -97,9 +97,12 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
     // 「任务」相关的入口直接切到任务页（不是模块）
     const [autoCreate, setAutoCreate] = useState<'STOCKTAKE' | null>(null);
     const clearAutoCreate = React.useCallback(() => setAutoCreate(null), []);
+    // 个人卫生（每周）：管理层的独立模块（负责人 2026-10-23）
+    const [hygieneOpen, setHygieneOpen] = useState(false);
     const handleNavigateToModule = (modKey: string) => {
         if (modKey === 'TASKS') { setActiveTabIdx(1); return; }
         if (modKey === 'TASK_STOCKTAKE') { setAutoCreate('STOCKTAKE'); setActiveTabIdx(1); return; }
+        if (modKey === 'HYGIENE') { setHygieneOpen(true); return; }
         // 1. Resolve tab key
         const def = MODULE_DEFINITIONS[modKey as keyof typeof MODULE_DEFINITIONS];
         const tabKey = (def && def.tab) ? def.tab : modKey;
@@ -304,6 +307,13 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
 
     return (
         <div className="min-h-screen bg-[#F6F7FB] flex flex-col relative overflow-x-hidden select-none text-stone-900">
+            {hygieneOpen && <div className="fixed inset-0 z-[120] bg-[#F6F7FB] overflow-y-auto">
+                <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 flex items-center gap-3">
+                    <button onClick={() => setHygieneOpen(false)} className="w-10 h-10 rounded-full bg-stone-100 grid place-items-center" aria-label="返回"><ArrowLeft size={18} /></button>
+                    <b className="text-base font-black">个人卫生（每周）</b>
+                </div>
+                <div className="max-w-2xl mx-auto p-4 pb-24"><HygieneBoard actor={employee} /></div>
+            </div>}
             
             {/* If an operational sub-module is active, render the workspace full-screen, hiding tabs */}
             <AnimatePresence mode="wait">
@@ -356,7 +366,6 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                     <h2 className="text-xl font-black text-stone-900">{lang === 'my' ? 'တာဝန် စီမံခန့်ခွဲမှု' : lang === 'en' ? 'Tasks' : '任务管理'}</h2>
                                     <TaskBoard actor={employee} autoCreate={autoCreate} onAutoCreateUsed={clearAutoCreate} />
                                     <MeetingBoard actor={employee} />
-                                    <HygieneBoard actor={employee} />
 
                                     {/* 日常工作：例行要做的事，一行一个，直接进去 */}
                                     {taskList.length > 0 && <details className="space-y-2">

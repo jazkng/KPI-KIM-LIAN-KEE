@@ -4,6 +4,7 @@ import { getMalaysiaDateString } from '../../utils/dateHelper';
 import type { MonthPoints } from '../../utils/points/pointsCalc';
 import { loadMyPoints } from '../../utils/points/pointsStore';
 import { PointsBreakdown, GRADE_CLASS } from './PointsBreakdown';
+import { PointsRules } from './PointsRules';
 
 const T = {
     zh: { title: '我的积分', thisMonth: '这个月', lastMonth: '上个月', sofar: '算到今天为止，月底 HR 确认后才定案。', confirmed: 'HR 已确认' },
@@ -33,6 +34,7 @@ export const MyPointsCard: React.FC<{ lang: string; employeeId: string }> = ({ l
                     </div>
                     <p className="text-[11px] text-stone-500">{'confirmedAt' in data ? t.confirmed : t.sofar}</p>
                     <PointsBreakdown points={data} />
+                    <PointsRules />
                 </>}
     </div>;
 };

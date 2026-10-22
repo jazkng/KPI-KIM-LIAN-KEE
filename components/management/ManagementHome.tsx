@@ -4,6 +4,7 @@ import { Employee, AppModule, OrgLevel, normalizeLanguage } from '../../types';
 import { mt, ManagementLang } from '../../constants/managementTranslations';
 import { sortNavigationItems } from '../../constants/moduleNavigation';
 import { ManagerInbox } from './ManagerInbox';
+import { isHygieneHr, isHygieneSupervisor } from '../../utils/points/hygieneAccess';
 import { TodayRosterCard } from '../hr/TodayRosterCard';
 import { IconTile, moduleIcon } from './managementIcons';
 
@@ -131,6 +132,10 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
         if (allowedModules.some(m => m.startsWith('INVENTORY'))) {
             list.push({ module: 'TASK_STOCKTAKE' as AppModule, label: lang === 'my' ? 'စာရင်းစစ် ခိုင်း' : '派盘点', icon: '📦', bg: 'bg-rose-50 border-rose-200/80', text: 'text-rose-600 font-extrabold' });
         }
+        // 个人卫生：L3 / L4 主管每周评自己部门的员工
+        if (isHygieneSupervisor(employee) || isHygieneHr(employee)) {
+            list.push({ module: 'HYGIENE' as AppModule, label: lang === 'my' ? 'ကိုယ်ရေးသန့်ရှင်းမှု' : '个人卫生', icon: '🧼', bg: 'bg-sky-50 border-sky-200/80', text: 'text-sky-700 font-extrabold' });
+        }
         if (allowedModules.includes('PROCUREMENT')) {
             list.push({ module: 'PROCUREMENT', label: mt('module_procurement', lang), icon: '🛒', bg: 'bg-purple-50 border-purple-200/80', text: 'text-purple-600 font-extrabold' });
         }
@@ -153,7 +158,7 @@ export const ManagementHome: React.FC<ManagementHomeProps> = ({ employee, onNavi
             list.push({ module: 'MENU_MANAGEMENT', label: lang === 'my' ? 'မီနူး' : '菜单', icon: '🍜', bg: 'bg-red-50 border-red-200/80', text: 'text-red-700 font-extrabold' });
         }
         return sortNavigationItems(list, item => item.module);
-    }, [allowedModules, lang]);
+    }, [allowedModules, lang, employee]);
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F6F7FB] text-stone-900 pb-32">

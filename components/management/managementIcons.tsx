@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     AlertTriangle, AlarmClock, Banknote, Flag, BookOpen, Calculator, CalendarClock, CalendarOff, CheckSquare, ClipboardCheck, Clock,
-    Coffee, CreditCard, Eye, FileText, PenTool, ShoppingCart, Star, Truck, UserX, type LucideIcon,
+    Coffee, CreditCard, Eye, FileText, PenTool, ShoppingCart, Sparkles, Star, Truck, UserX, type LucideIcon,
 } from 'lucide-react';
 import type { InboxKey } from '../../utils/management/managerInbox';
 
@@ -18,6 +18,7 @@ export const MODULE_ICON: Record<string, IconStyle> = {
     SOP_INSPECT: { Icon: ClipboardCheck, bg: 'bg-violet-50', fg: 'text-violet-500' },
     INVENTORY_CHECK: { Icon: CheckSquare, bg: 'bg-blue-50', fg: 'text-blue-500' },
     TASK_STOCKTAKE: { Icon: CheckSquare, bg: 'bg-blue-50', fg: 'text-blue-500' },
+    HYGIENE: { Icon: Sparkles, bg: 'bg-sky-50', fg: 'text-sky-600' },
     INVENTORY_VIEW: { Icon: Eye, bg: 'bg-purple-50', fg: 'text-purple-600' },
     PROCUREMENT: { Icon: ShoppingCart, bg: 'bg-lime-50', fg: 'text-lime-600' },
     SUPPLIER_CONTACTS: { Icon: Truck, bg: 'bg-blue-50', fg: 'text-blue-600' },

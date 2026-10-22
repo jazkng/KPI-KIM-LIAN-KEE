@@ -66,13 +66,19 @@ export const HygieneBoard: React.FC<{ actor: Employee }> = ({ actor }) => {
     </div>;
 };
 
+// 2 分（需要进步）/ 4 分（很好）的预设答案，按标准 6 项写（负责人 2026-10-23）
+const LOW_PRESETS = ['发网没包好头发', '制服 / 围裙不整洁', '指甲太长或不干净', '上岗前没洗手消毒', '戴了饰物 / 伤口没包扎', '切配时没戴手套', '提醒后才改善'];
+const HIGH_PRESETS = ['全部达标', '主动提醒同事注意卫生', '帮忙整理工作区卫生', '提出可执行的改善建议'];
+
 const NoteSheet: React.FC<{ emp: Employee; score: number; onClose: () => void; onSave: (note: string) => Promise<void> }> = ({ emp, score, onClose, onSave }) => {
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
     const low = score <= 2;
     return <Sheet title={`${shortName(emp)} · ${score} 分 ${HYGIENE_LEVELS[score].label}`} onClose={onClose} footer={
         <button disabled={!note.trim() || busy} onClick={async () => { setBusy(true); try { await onSave(note.trim()); } finally { setBusy(false); } }} className="w-full min-h-[52px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-40">{busy ? '保存中…' : '保存'}</button>}>
-        <p className="text-sm text-stone-600">{low ? '请写出问题（例如：没戴发网、指甲太长）。' : '请写出超出标准的实际行为或改善建议。'}</p>
+        <p className="text-sm text-stone-600">{low ? '点选问题，或自己写。' : '点选做得好的地方，或自己写。'}</p>
+        <div className="flex flex-wrap gap-1.5">{(low ? LOW_PRESETS : HIGH_PRESETS).map(p => <button key={p} type="button" onClick={() => setNote(n => n.includes(p) ? n : (n.trim() ? `${n.trim()}；${p}` : p))}
+            className={`min-h-[36px] px-3 rounded-full text-[13px] font-bold border ${note.includes(p) ? 'bg-stone-900 text-[#FFD200] border-stone-900' : 'bg-white text-stone-600 border-stone-200'}`}>{p}</button>)}</div>
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} className={`${inputCls} py-2`} placeholder={low ? '问题…' : '做了什么 / 建议…'} />
     </Sheet>;
 };
