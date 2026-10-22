@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlaskConical, Loader2, RotateCcw, X } from 'lucide-react';
+import { FlaskConical, Loader2, X } from 'lucide-react';
 import { PortalRole, type Employee } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { getPortalRole } from '../../utils/orgAccess';
@@ -58,23 +58,16 @@ export const TestSwitcher: React.FC<Props> = ({ real, current, currentRole, onAp
     };
 
     return <>
-        {real ? (
-            <div className="fixed top-0 inset-x-0 z-[100001] h-8 bg-orange-500 text-white flex items-center justify-center gap-2 px-2 text-[11px] font-bold shadow">
-                <FlaskConical size={13} className="shrink-0" />
-                <span className="truncate">测试中：{current.name} · {ROLE_LABEL[currentRole]}</span>
-                <button onClick={() => setOpen(true)} className="shrink-0 rounded-full bg-white/20 px-2.5 h-6">切换</button>
-                <button onClick={onRestore} className="shrink-0 rounded-full bg-stone-900 text-[#FFD200] px-2.5 h-6 flex items-center gap-1"><RotateCcw size={11} /> 返回本人</button>
-            </div>
-        ) : (
-            <button onClick={() => setOpen(true)} aria-label="测试切换" title="测试切换"
-                className="fixed right-0 top-1/2 -translate-y-1/2 z-[100001] w-8 h-10 rounded-l-xl bg-white/95 border border-r-0 border-stone-200 shadow-lg grid place-items-center text-orange-500">
-                <FlaskConical size={15} />
-            </button>
-        )}
+        {/* 测试中不再用顶部横条（会盖住页面最上方）：右边一个橙色小按钮，按了可以切换或「返回本人」 */}
+        <button onClick={() => setOpen(true)} aria-label="测试切换" title={real ? `测试中：${current.name} · ${ROLE_LABEL[currentRole]}` : '测试切换'}
+            className={`fixed right-0 top-1/2 -translate-y-1/2 z-[100001] w-8 rounded-l-xl border border-r-0 shadow-lg grid place-items-center ${real ? 'h-16 bg-orange-500 border-orange-600 text-white' : 'h-10 bg-white/95 border-stone-200 text-orange-500'}`}>
+            <FlaskConical size={15} />
+            {real && <span className="text-[10px] font-black leading-none [writing-mode:vertical-rl]">测试</span>}
+        </button>
         {open && <div className="fixed inset-0 z-[100002] bg-black/50 flex items-end md:items-center justify-center" onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}>
             <div className="w-full md:max-w-sm bg-white rounded-t-3xl md:rounded-3xl p-5 space-y-4 shadow-2xl" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
                 <div className="flex items-center justify-between">
-                    <b className="flex items-center gap-2 text-base"><FlaskConical size={17} className="text-orange-500" /> 测试切换</b>
+                    <b className="flex items-center gap-2 text-base"><FlaskConical size={17} className="text-orange-500" /> 测试切换{real && <span className="text-xs font-bold text-orange-600">现在：{current.name}</span>}</b>
                     <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-xl bg-stone-100 grid place-items-center" aria-label="关闭"><X size={17} /></button>
                 </div>
 

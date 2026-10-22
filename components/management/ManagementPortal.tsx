@@ -301,13 +301,6 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
 
     return (
         <div className="min-h-screen bg-[#F6F7FB] flex flex-col relative overflow-x-hidden select-none text-stone-900">
-            {!activeModule && activeTabIdx === 0 && (
-                <NotificationCenter
-                    employee={employee}
-                    onOpenLog={openOperationalLogFromNotification}
-                    variant="floating"
-                />
-            )}
             
             {/* If an operational sub-module is active, render the workspace full-screen, hiding tabs */}
             <AnimatePresence mode="wait">
@@ -350,6 +343,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                     onSwitchTab={setActiveTabIdx}
                                     lang={lang}
                                     onLanguageChange={handleLanguageChange}
+                                    inboxAction={<NotificationCenter employee={employee} onOpenLog={openOperationalLogFromNotification} variant="header" />}
                                 />
                             )}
 
