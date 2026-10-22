@@ -10,6 +10,7 @@ const T = {
     done: { zh: '完成', en: 'Done', my: 'ပြီးပြီ' },
     overdue: { zh: '逾期', en: 'Overdue', my: 'နောက်ကျ' },
     daily: { zh: '每日', en: 'Daily', my: 'နေ့စဉ်' },
+    recurring: { zh: '定期', en: 'Recurring', my: 'ပုံမှန်' },
     dept: { zh: '部门任务', en: 'Team task', my: 'ဌာန တာဝန်' },
     due: { zh: '期限', en: 'Due', my: 'နောက်ဆုံး' },
     returned: { zh: '被退回，请重做', en: 'Returned, please redo', my: 'ပြန်ပို့ထားသည်၊ ပြန်လုပ်ပါ' },

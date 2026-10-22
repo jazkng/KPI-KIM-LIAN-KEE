@@ -6,7 +6,7 @@ import { DataManager } from '../../utils/dataManager';
 import { DEPT_LABEL, DEPT_ORDER, isCountedStaff } from '../../utils/hr/hrOverview';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { isConsumeOnReceive, isDiscontinued } from '../../utils/unitConversion';
-import { MATTER_LABEL, TASK_TYPE_LABEL, normDept, toStockLine, type MatterCategory, type StockArea, type TaskStockLine, type TaskType } from '../../utils/tasks/staffTaskLogic';
+import { MATTER_LABEL, TASK_TYPE_LABEL, normDept, toStockLine, type MatterCategory, type StockArea, type TaskRepeat, type TaskStockLine, type TaskType } from '../../utils/tasks/staffTaskLogic';
 import { createMatter, createTask } from '../../utils/tasks/staffTaskStore';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
 
@@ -63,7 +63,7 @@ const StockPicker: React.FC<{ value: TaskStockLine[]; onChange: (v: TaskStockLin
 };
 
 /** 派任务 */
-export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType; onClose: () => void; onCreated: () => void }> = ({ actor, initialType = 'CLEAN', onClose, onCreated }) => {
+export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType; initialLines?: TaskStockLine[]; onClose: () => void; onCreated: () => void }> = ({ actor, initialType = 'CLEAN', initialLines, onClose, onCreated }) => {
     const isL3 = getOrgLevel(actor) === 'DEPARTMENT_HEAD';
     const myDept = normDept(actor.department);
     const [type, setType] = useState<TaskType>(initialType);
@@ -72,10 +72,13 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
     const [mode, setMode] = useState<'PERSON' | 'DEPT'>('PERSON');
     const [person, setPerson] = useState('');
     const [dept, setDept] = useState(isL3 ? myDept : 'KITCHEN');
-    const [repeat, setRepeat] = useState<'ONCE' | 'DAILY'>('ONCE');
+    const [repeat, setRepeat] = useState<TaskRepeat>('ONCE');
+    const [repeatDays, setRepeatDays] = useState<number[]>([1]);
+    const [repeatDate, setRepeatDate] = useState(1);
+    const [repeatEvery, setRepeatEvery] = useState(2);
     const [due, setDue] = useState('');
     const [photos, setPhotos] = useState(0);
-    const [lines, setLines] = useState<TaskStockLine[]>([]);
+    const [lines, setLines] = useState<TaskStockLine[]>(initialLines || []);
     const [purchaseMode, setPurchaseMode] = useState<'STOCK' | 'FREE'>('STOCK');
     const [repairBy, setRepairBy] = useState<'STAFF' | 'PRO'>('STAFF');
     const [staff, setStaff] = useState<Employee[]>([]);
@@ -92,6 +95,7 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         if (!autoTitle) return setErr('请写要做什么');
         if (needLines && !lines.length) return setErr('请挑选库存品项');
         if (!pro && mode === 'PERSON' && !person) return setErr('请选派给谁');
+        if (repeat === 'WEEKLY' && !repeatDays.length) return setErr('请选星期几');
         setBusy(true);
         try {
             if (pro) {
@@ -102,6 +106,7 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
                     type, title: autoTitle, note: note || undefined, assignMode: mode,
                     ...(mode === 'PERSON' ? { assigneeId: emp!.id, assigneeName: emp!.name, assigneeKey: `emp:${emp!.id}` } : { department: dept, assigneeKey: `dept:${dept}` }),
                     repeat, dueAt: repeat === 'ONCE' && due ? new Date(due).toISOString() : undefined, photosRequired: photos,
+                    ...(repeat === 'WEEKLY' ? { repeatDays } : repeat === 'MONTHLY' ? { repeatDate } : repeat === 'EVERY_N' ? { repeatEvery } : {}),
                     stockLines: needLines ? lines : undefined, purchaseMode: type === 'PURCHASE' ? purchaseMode : undefined,
                     createdBy: actor.id, createdByName: actor.name,
                 });
@@ -125,7 +130,11 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
             {mode === 'PERSON'
                 ? <select value={person} onChange={e => setPerson(e.target.value)} className={inputCls}><option value="">选员工…</option>{staff.map(e => <option key={e.id} value={e.id}>{e.name} · {DEPT_LABEL[normDept(e.department)] || '其他'}</option>)}</select>
                 : <Chips value={dept} onChange={setDept} options={depts.map(d => ({ v: d, label: DEPT_LABEL[d] || d }))} />}
-            <Field label="次数"><Chips value={repeat} onChange={setRepeat} options={[{ v: 'ONCE', label: '单次' }, { v: 'DAILY', label: '每日' }]} /></Field>
+            <Field label="次数"><Chips value={repeat} onChange={setRepeat} options={[{ v: 'ONCE', label: '单次' }, { v: 'DAILY', label: '每日' }, { v: 'WEEKLY', label: '每周' }, { v: 'MONTHLY', label: '每月' }, { v: 'EVERY_N', label: '每隔几天' }]} /></Field>
+            {repeat === 'WEEKLY' && <Field label="星期几（可多选）"><div className="flex flex-wrap gap-1.5">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} onClick={() => setRepeatDays(v => v.includes(d) ? v.filter(x => x !== d) : [...v, d])}
+                className={`w-11 h-11 rounded-full text-sm font-black border ${repeatDays.includes(d) ? 'bg-stone-900 text-[#FFD200] border-stone-900' : 'bg-white text-stone-600 border-stone-200'}`}>{'日一二三四五六'[d]}</button>)}</div></Field>}
+            {repeat === 'MONTHLY' && <Field label="每月几号（当月没有这一天就用月底）"><select value={repeatDate} onChange={e => setRepeatDate(Number(e.target.value))} className={inputCls}>{Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d} 号</option>)}</select></Field>}
+            {repeat === 'EVERY_N' && <Field label="每隔几天一次（从今天开始）"><select value={repeatEvery} onChange={e => setRepeatEvery(Number(e.target.value))} className={inputCls}>{[2, 3, 4, 5, 6, 7, 10, 14, 15, 30].map(n => <option key={n} value={n}>每 {n} 天</option>)}</select></Field>}
             {repeat === 'ONCE' && <Field label="期限（选填）"><input type="datetime-local" value={due} onChange={e => setDue(e.target.value)} className={inputCls} /></Field>}
             <Field label="要员工拍照吗"><Chips value={photos} onChange={setPhotos} options={[0, 1, 2, 3, 4, 5].map(n => ({ v: n, label: n === 0 ? '不用' : `至少 ${n} 张` }))} /></Field>
         </>}

@@ -9,7 +9,7 @@ import { db } from '../../firebaseConfig';
 import type { Employee, InventoryLog, StockItem } from '../../types';
 import { DataManager } from '../dataManager';
 import {
-    addHistory, assigneeKeysFor, buildPurchaseApply, buildStocktakeApply,
+    addHistory, assigneeKeysFor, currentCycle, buildPurchaseApply, buildStocktakeApply,
     type BossMatter, type MatterStatus, type StaffTask, type StockArea, type TaskPurchaseLine,
 } from './staffTaskLogic';
 
@@ -97,7 +97,8 @@ export const submitTask = async (task: StaffTask, actor: Employee, today: string
     return updateTask(task.id, t => {
         if (t.status === 'CANCELLED') throw new Error('任务已取消');
         return {
-            status: 'SUBMITTED', runDate: today, returnNote: undefined,
+            // 重复任务：记下交的是哪一期（不是交的那天），这样漏掉的那一期补交也对得上
+            status: 'SUBMITTED', runDate: t.repeat === 'ONCE' ? today : (currentCycle(t, today) || today), returnNote: undefined,
             submission: { by: actor.id, byName: actor.name, at, note: input.note || undefined, photoIds, counts: input.counts, qtyAtSubmit, purchases: input.purchases },
             history: addHistory(t.history, actor.name, 'SUBMIT', at),
         };

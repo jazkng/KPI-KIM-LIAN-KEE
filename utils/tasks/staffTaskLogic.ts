@@ -5,6 +5,7 @@
 import type { Employee, InventoryLog, InventoryLogItem, StockItem } from '../../types';
 import { applyReceivedStock, getBaseUnit, getCostPerBaseUnit, getCurrentQtyBase, getDisplayToBaseRatio } from '../unitConversion';
 
+export type TaskRepeat = 'ONCE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'EVERY_N';
 export type TaskType = 'STOCKTAKE' | 'CLEAN' | 'PURCHASE' | 'REPAIR' | 'OTHER';
 export type TaskStatus = 'OPEN' | 'SUBMITTED' | 'DONE' | 'CANCELLED';
 export type StockArea = 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
@@ -43,7 +44,13 @@ export interface StaffTask {
     department?: string;
     /** 'emp:ID' 或 'dept:KITCHEN'，员工页用来查 */
     assigneeKey: string;
-    repeat: 'ONCE' | 'DAILY';
+    repeat: TaskRepeat;
+    /** 每周：星期几（0=日…6=六，可多选） */
+    repeatDays?: number[];
+    /** 每月：几号（1–31；当月没有这一天就用月底） */
+    repeatDate?: number;
+    /** 每隔几天（从派的那天起算） */
+    repeatEvery?: number;
     dueAt?: string;
     /** 0 = 不用拍照；1–5 = 至少要拍几张 */
     photosRequired: number;
@@ -53,7 +60,7 @@ export interface StaffTask {
     createdByName: string;
     createdAt: string;
     status: TaskStatus;
-    /** 每日任务：这次交回是哪一天的 */
+    /** 重复任务：这次交回是哪一期的（那一期开始的日期） */
     runDate?: string;
     submission?: {
         by: string; byName: string; at: string; note?: string; photoIds: string[];
@@ -102,17 +109,67 @@ export const normDept = (d?: string) => {
 
 export const assigneeKeysFor = (e: Pick<Employee, 'id' | 'department'>) => [`emp:${e.id}`, ...(e.department ? [`dept:${normDept(e.department)}`] : [])];
 
-/** 今天这个任务算什么状态（每日任务：前几天交的不算今天） */
-export type EffectiveStatus = 'TODO' | 'SUBMITTED' | 'DONE' | 'OVERDUE' | 'CANCELLED';
+const addDays = (date: string, n: number) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 864e5);
+const weekday = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+const lastDayOfMonth = (month: string) => { const [y, m] = month.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+
+/**
+ * 重复任务「这一期」从哪一天开始（今天或以前最近一次排到的日子）；单次任务没有期。
+ * 每日 = 今天；每周 = 最近一个勾选的星期几；每月 = 最近一次的几号；每隔 N 天 = 从派的那天起每 N 天。
+ */
+export const currentCycle = (t: Pick<StaffTask, 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery' | 'createdAt'>, today: string): string | null => {
+    if (t.repeat === 'DAILY') return today;
+    if (t.repeat === 'WEEKLY') {
+        const days = t.repeatDays?.length ? t.repeatDays : [weekday(t.createdAt.slice(0, 10))];
+        for (let i = 0; i < 7; i++) { const d = addDays(today, -i); if (days.includes(weekday(d))) return d; }
+        return null;
+    }
+    if (t.repeat === 'MONTHLY') {
+        const want = t.repeatDate || Number(t.createdAt.slice(8, 10));
+        const day = (month: string) => `${month}-${String(Math.min(want, lastDayOfMonth(month))).padStart(2, '0')}`;
+        const thisMonth = day(today.slice(0, 7));
+        if (thisMonth <= today) return thisMonth;
+        const prev = addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
+        return day(prev);
+    }
+    if (t.repeat === 'EVERY_N') {
+        const n = Math.max(1, Math.round(t.repeatEvery || 1));
+        const start = t.createdAt.slice(0, 10);
+        const passed = dayDiff(today, start);
+        return passed < 0 ? null : addDays(start, passed - (passed % n));
+    }
+    return null;
+};
+
+/** 下一期从哪一天开始（给管理层看「下次」） */
+export const nextCycle = (t: Pick<StaffTask, 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery' | 'createdAt'>, today: string): string | null => {
+    if (t.repeat === 'ONCE') return null;
+    for (let i = 1; i <= 62; i++) { const d = addDays(today, i); if (currentCycle(t, d) === d) return d; }
+    return null;
+};
+
+/** 今天这个任务算什么状态。重复任务：这一期还没交 = 待做；这一期过了（今天不是开始那天）还没交 = 逾期；第一期还没到 = 未到期 */
+export type EffectiveStatus = 'TODO' | 'SUBMITTED' | 'DONE' | 'OVERDUE' | 'UPCOMING' | 'CANCELLED';
 export const effectiveStatus = (t: StaffTask, today: string, nowIso: string): EffectiveStatus => {
     if (t.status === 'CANCELLED') return 'CANCELLED';
-    const stale = t.repeat === 'DAILY' && t.runDate !== today;
-    const status = stale ? 'OPEN' : t.status;
-    if (status === 'SUBMITTED') return 'SUBMITTED';
-    if (status === 'DONE') return 'DONE';
-    if (t.repeat === 'ONCE' && t.dueAt && t.dueAt < nowIso) return 'OVERDUE';
-    return 'TODO';
+    if (t.repeat === 'ONCE') {
+        if (t.status === 'SUBMITTED') return 'SUBMITTED';
+        if (t.status === 'DONE') return 'DONE';
+        return t.dueAt && t.dueAt < nowIso ? 'OVERDUE' : 'TODO';
+    }
+    const cycle = currentCycle(t, today);
+    if (!cycle || cycle < t.createdAt.slice(0, 10)) return 'UPCOMING';
+    if (t.runDate === cycle) return t.status === 'SUBMITTED' ? 'SUBMITTED' : t.status === 'DONE' ? 'DONE' : 'TODO';
+    // 这一期还没交：每日任务当天都算待做；其他重复任务过了开始那天就算逾期
+    return t.repeat !== 'DAILY' && cycle < today ? 'OVERDUE' : 'TODO';
 };
+
+const WD = ['日', '一', '二', '三', '四', '五', '六'];
+/** 「每周一、四」「每月 15 号」这种文字（管理层画面用） */
+export const repeatLabel = (t: Pick<StaffTask, 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery'>) =>
+    t.repeat === 'DAILY' ? '每日' : t.repeat === 'WEEKLY' ? `每周${(t.repeatDays || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => WD[d]).join('、')}`
+        : t.repeat === 'MONTHLY' ? `每月 ${t.repeatDate} 号` : t.repeat === 'EVERY_N' ? `每 ${t.repeatEvery} 天` : '单次';
 
 /** 员工输入单位：有显示单位就用显示单位 */
 export const countUnitOf = (item: StockItem) => {

@@ -16,7 +16,8 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { db } from '../../../firebaseConfig';
 import { setPreferredSupply } from '../../../utils/inventory/preferredSupply';
 import { findLinkedCatalogItems, updateSupplierLinksForDeletedStock, type LinkAction, type LinkedCatalogRef } from '../../../utils/inventory/supplierLinks';
-import { AssignModal } from './AssignModal';
+import { TaskCreateSheet } from '../../tasks/TaskForms';
+import { toStockLine, type TaskStockLine } from '../../../utils/tasks/staffTaskLogic';
 import { TaskEditorModal } from './TaskEditorModal';
 import { ExportModal } from './ExportModal';
 import { DataManager } from '../../../utils/dataManager';
@@ -491,10 +492,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
     const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
     const [selectedForAssign, setSelectedForAssign] = useState<Set<string>>(new Set());
-    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-    const [staffList, setStaffList] = useState<Employee[]>([]);
-    const [selectedAssignee, setSelectedAssignee] = useState('');
-    const [assignFrequency, setAssignFrequency] = useState(1);
     const [taskList, setTaskList] = useState<InventoryTask[]>([]);
     const [myTask, setMyTask] = useState<InventoryTask | null>(null);
 
@@ -1184,77 +1181,13 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             setIsSubmitting(false);
         }
     };
+    // 指派盘点改走「委托任务」：选好的品项直接带进派任务表单；员工交回后要派的人确认才改库存
+    // （旧的常驻指派 inventory_tasks 不再新增；已有的仍可在「常驻指派」查看、修改、取消）
+    const [taskLines, setTaskLines] = useState<TaskStockLine[] | null>(null);
     const initiateAssignment = async () => {
         if (!canAssignTasks) return alert('你没有指派盘点任务的权限。');
         if (selectedForAssign.size === 0) return alert("请先选择物品 (Select items first)");
-        const staff = await DataManager.getEmployees();
-        setStaffList(staff.filter(s => !s.isArchived));
-        setAssignFrequency(1);
-        setIsAssignModalOpen(true);
-    };
-
-    // 🌟 修复：指派任务时只合并同等频率的任务 🌟
-    const confirmAssignment = async () => {
-        if (!canAssignTasks) return alert('你没有指派盘点任务的权限。');
-        if (!selectedAssignee) return alert("Select staff");
-        const assignee = staffList.find(s => s.id === selectedAssignee);
-        if (!assignee) return;
-
-        // 【关键修复】只查找该员工相同盘点频率的任务进行合并
-        const existing = activeTasks.filter(t => t.assigneeId === assignee.id && t.checkFrequency === assignFrequency);
-
-        const newTaskItems = items
-            .filter(i => selectedForAssign.has(i.id))
-            .map(i => ({
-                stockId: i.id, stockName: i.name,
-                category: currentStockView, currentQty: getCurrentQtyBase(i)
-            }));
-
-        if (existing.length > 0) {
-            const allExisting = existing.flatMap(t => t.items);
-            const existingIds = new Set(allExisting.map(i => i.stockId));
-            const itemsToAdd = newTaskItems.filter(ni => !existingIds.has(ni.stockId));
-            
-            if (itemsToAdd.length === 0) {
-                alert(`⚠️ ${assignee.name} 的任务已包含所有选中物品。`);
-                setIsAssignModalOpen(false);
-                return;
-            }
-
-            const deduped = new Map<string, any>();
-            [...allExisting, ...itemsToAdd].forEach(i => { if (!deduped.has(i.stockId)) deduped.set(i.stockId, i); });
-
-            await DataManager.saveInventoryTask({ ...existing[0], items: Array.from(deduped.values()), checkFrequency: assignFrequency } as any);
-
-            for (let i = 1; i < existing.length; i++) {
-                await DataManager.deleteInventoryTask(existing[i].id);
-            }
-
-            setIsAssignModalOpen(false);
-            setSelectedForAssign(new Set());
-            setMode('CHECK');
-            loadTasks();
-            alert(`✅ 已追加 ${itemsToAdd.length} 个物品到 ${assignee.name} 的${assignFrequency}天任务中`);
-        } else {
-            const newTask: InventoryTask = {
-                id: `task_${Date.now()}`,
-                createdAt: new Date().toISOString(),
-                creatorId: employee?.id || 'admin',
-                creatorName: employee?.name || 'Admin',
-                assigneeId: assignee.id,
-                assigneeName: assignee.name,
-                status: 'PENDING',
-                items: newTaskItems,
-                checkFrequency: assignFrequency
-            } as any;
-
-            await DataManager.saveInventoryTask(newTask);
-            setIsAssignModalOpen(false);
-            setSelectedForAssign(new Set());
-            setMode('CHECK');
-            loadTasks();
-            alert(`✅ 常驻任务已派发给 ${assignee.name}（每${assignFrequency === 1 ? '天' : assignFrequency + '天'}）`);
-        }
+        setTaskLines(items.filter(i => selectedForAssign.has(i.id)).map(i => toStockLine(i, currentStockView)));
     };
 
     const mergeStaffTasks = async (assigneeId: string, frequency: number) => {
@@ -2326,7 +2259,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                             <div className="flex bg-gray-200 p-1 rounded-lg">
                                 <button onClick={() => setTaskSubView('ASSIGNMENTS')}
                                     className={`flex items-center gap-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${taskSubView === 'ASSIGNMENTS' ? 'bg-white text-[#111111] shadow-sm' : 'text-gray-500'}`}>
-                                    <Users size={14}/> 常驻指派
+                                    <Users size={14}/> 常驻指派（旧）
                                 </button>
                                 <button onClick={() => setTaskSubView('LOG')}
                                     className={`flex items-center gap-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${taskSubView === 'LOG' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}>
@@ -2355,8 +2288,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                                 {staffGroups.length === 0 ? (
                                     <div className="text-center py-20 text-gray-400 font-bold">
                                         <Users size={48} className="mx-auto mb-2 opacity-20"/>
-                                        <p>暂无常驻指派</p>
-                                        <p className="text-xs text-gray-300 mt-1">在 列表 (List) 页面使用 指派任务 (Assign) 开始指派</p>
+                                        <p>暂无旧的常驻指派</p>
+                                        <p className="text-xs text-gray-300 mt-1">新的盘点请在列表勾选品项后按「指派盘点」，或到「任务」页派任务</p>
                                     </div>
                                 ) : (
                                     staffGroups.map(group => renderStaffCard(group))
@@ -2607,19 +2540,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
                 />
             )}
 
-            {isAssignModalOpen && canAssignTasks && (
-                <AssignModal
-                    selectedCount={selectedForAssign.size}
-                    staffList={staffList}
-                    selectedAssignee={selectedAssignee}
-                    onAssigneeChange={setSelectedAssignee}
-                    assignFrequency={assignFrequency}
-                    onFrequencyChange={setAssignFrequency}
-                    activeTasks={activeTasks}
-                    onConfirm={confirmAssignment}
-                    onClose={() => setIsAssignModalOpen(false)}
-                />
+            {taskLines && employee && canAssignTasks && (
+                <TaskCreateSheet actor={employee} initialType="STOCKTAKE" initialLines={taskLines} onClose={() => setTaskLines(null)}
+                    onCreated={() => { setSelectedForAssign(new Set()); setMode('MASTER'); alert(`✅ 已派出盘点任务（${taskLines.length} 项）。员工交回后，到「任务」确认才会更新库存。`); }} />
             )}
+
 
             {editingTask && canAssignTasks && (
                 <TaskEditorModal
