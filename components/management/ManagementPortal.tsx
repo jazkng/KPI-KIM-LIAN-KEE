@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { Employee, AppModule, AppLanguage, normalizeLanguage } from '../../types';
 import { ManagementHome, getDepartmentName } from './ManagementHome';
-import { ManagerInbox } from './ManagerInbox';
+import { TaskBoard } from '../tasks/TaskBoard';
+import { ChangePinCard } from '../profile/ChangePinCard';
 import { IconTile, MODULE_ICON, moduleIcon } from './managementIcons';
 import { MODULE_DEFINITIONS } from '../constants';
 import { getOrgLevel, getOrgLevelLabel } from '../../utils/orgAccess';
@@ -90,7 +91,12 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
         // 厨房通知（KITCHEN_ALERT）已在 V2 停用
     ], []);
 
+    // 「任务」相关的入口直接切到任务页（不是模块）
+    const [autoCreate, setAutoCreate] = useState<'STOCKTAKE' | null>(null);
+    const clearAutoCreate = React.useCallback(() => setAutoCreate(null), []);
     const handleNavigateToModule = (modKey: string) => {
+        if (modKey === 'TASKS') { setActiveTabIdx(1); return; }
+        if (modKey === 'TASK_STOCKTAKE') { setAutoCreate('STOCKTAKE'); setActiveTabIdx(1); return; }
         // 1. Resolve tab key
         const def = MODULE_DEFINITIONS[modKey as keyof typeof MODULE_DEFINITIONS];
         const tabKey = (def && def.tab) ? def.tab : modKey;
@@ -350,11 +356,12 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                             {/* Tab 1: Tasks (待我处理) */}
                             {activeTabIdx === 1 && (
                                 <div className="px-4 md:px-6 pt-[calc(1.25rem+env(safe-area-inset-top))] space-y-6">
-                                    <ManagerInbox employee={employee} lang={lang} onOpen={handleNavigateToModule} />
+                                    <h2 className="text-xl font-black text-stone-900">{lang === 'my' ? 'တာဝန် စီမံခန့်ခွဲမှု' : lang === 'en' ? 'Tasks' : '任务管理'}</h2>
+                                    <TaskBoard actor={employee} autoCreate={autoCreate} onAutoCreateUsed={clearAutoCreate} />
 
                                     {/* 日常工作：例行要做的事，一行一个，直接进去 */}
-                                    {taskList.length > 0 && <section className="space-y-2">
-                                        <h3 className="text-sm font-black text-stone-800 px-1">{lang === 'my' ? 'နေ့စဉ် လုပ်ငန်း' : lang === 'en' ? 'Routine' : '日常工作'}</h3>
+                                    {taskList.length > 0 && <details className="space-y-2">
+                                        <summary className="text-sm font-black text-stone-500 px-1 cursor-pointer">{lang === 'my' ? 'နေ့စဉ် လုပ်ငန်း' : lang === 'en' ? 'Routine' : '日常工作捷径'}</summary>
                                         <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">
                                             {taskList.map(task => (
                                                 <button key={task.id} onClick={() => handleNavigateToModule(task.target)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[56px]">
@@ -365,7 +372,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                                 </button>
                                             ))}
                                         </div>
-                                    </section>}
+                                    </details>}
                                 </div>
                             )}
 
@@ -389,6 +396,8 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                                 const isSupported = SUPPORTED_MANAGEMENT_TABS.includes(tabKey);
                                                 // 管理层界面还没接入的功能不列出来（以前会显示成灰色「暂未开放」）
                                                 if (!isSupported) return null;
+                                                // 盘点改成由管理层委派（任务页「派任务 → 盘点库存」），部门库存入口不再列出
+                                                if (['INVENTORY_KITCHEN', 'INVENTORY_BAR', 'INVENTORY_GENERAL', 'INVENTORY_FUEL', 'INVENTORY_CHECK'].includes(modKey)) return null;
                                                 return (
                                                     <button
                                                         key={modKey}
@@ -565,6 +574,8 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                                             </button>
                                         </div>
                                     </div>
+
+                                    <ChangePinCard employee={employee} lang={lang} />
 
                                     {/* Action Buttons */}
                                     <div className="space-y-3 pt-4">

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, Sparkles, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, Flag, RefreshCw, Sparkles, Settings, LogOut, TrendingUp, Users, LayoutGrid, CloudRain, Sun, CloudSun, CloudLightning, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Employee } from '../types';
 import { WEATHER_OPTIONS, SPECIAL_CONDITION_OPTIONS } from '../types';
 import { canUseBossTarget } from '../utils/bossPortalAccess';
@@ -12,6 +12,8 @@ import { COCKPIT_STATUS_LABEL, type Kpi } from '../utils/cockpit/cockpitMetrics'
 import { buildAdvisorEvidence } from '../utils/cockpit/advisorEvidence';
 import { HRSystem, RecurringBillsModule, TreasuryModule } from './lazyModules';
 import { AdvisorPanel } from './advisor/AdvisorPanel';
+import { TaskBoard } from './tasks/TaskBoard';
+import { countOpenMatters } from '../utils/tasks/staffTaskStore';
 import { buildAdvisorInsights, type Anomaly } from '../utils/cockpit/advisorInsights';
 import { loadAdvisorSources, type AdvisorSources } from '../utils/cockpit/advisorSources';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -68,6 +70,9 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         return () => { active = false; clearTimeout(timer); };
     }, [month, today, reportsAllowed, section, revision, currentEmployee.id, loadData]);
     useEffect(() => { if (hrOpen && !canUseBossTarget(currentEmployee, 'HR')) setHrOpen(false); }, [currentEmployee, hrOpen]);
+    // 上报事项（只读计数）：有待处理的就在经营中心最上面提醒
+    const [openMatters, setOpenMatters] = useState(0);
+    useEffect(() => { let on = true; countOpenMatters().then(n => on && setOpenMatters(n)).catch(() => undefined); return () => { on = false; }; }, [section]);
     // AI 顾问打开时才读供应商最近进价、本月班表（只读；读失败就不显示那张图）
     const [advisorSources, setAdvisorSources] = useState<AdvisorSources | null>(null);
     useEffect(() => {
@@ -106,7 +111,10 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
         <main className="bc-main">
             {section === 'hr' ? <>
                 <HrOverviewPanel today={today} canHr={can('HR')} canRoster={can('ROSTER')} canStaffCash={can('STAFF_CASH')} onOpenHr={() => setHrOpen(true)} onOpenRoster={() => navigate('ROSTER')} onOpenStaffCash={() => navigate('STAFF_CASH')} />
+                {/* 委托任务与上报事项（老板也可以派任务、处理上报事项） */}
+                <section className="bc-card bc-tasks" id="bc-tasks"><div className="bc-card-heading"><h2><ClipboardList size={17} /> 委托任务与上报事项</h2></div><TaskBoard actor={currentEmployee} /></section>
             </> : <>
+                {openMatters > 0 && <button className="bc-matter-banner" onClick={() => { onSection('HR'); setTimeout(() => document.getElementById('bc-tasks')?.scrollIntoView({ behavior: 'smooth' }), 300); }}><Flag size={18} /><span><b>上报事项 {openMatters} 件</b><small>员工 / 管理层上报、等你处理的事</small></span><ChevronRight size={18} /></button>}
                 {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>
                     <span className="bc-ai-icon"><Sparkles size={20} /></span>
                     <span className="bc-ai-text"><b>AI 经营顾问</b><small>{!data ? '读取中…' : aiPreview.length ? `本月 ${aiPreview.length} 件事要注意` : '图表看本月生意，也可以直接问'}</small></span>

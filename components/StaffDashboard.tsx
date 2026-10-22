@@ -17,6 +17,8 @@ import { collection, limit, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebaseConfig';
 import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
 import { withoutRetiredModules } from '../utils/retiredModules';
+import { StaffTaskList } from './tasks/StaffTaskList';
+import { ChangePinCard } from './profile/ChangePinCard';
 
 import { 
   st, 
@@ -521,6 +523,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             ========================================== */}
         {activeTab === 'TODAY' && (
           <div className="space-y-5 animate-in fade-in duration-300">
+
+            {/* 0. 我的任务（管理层委托的任务；没有任务时不显示） */}
+            <StaffTaskList employee={employee} lang={lang} />
             
             {/* 1. Today Shift Card */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
@@ -1163,6 +1168,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             ========================================== */}
         {activeTab === 'PROFILE' && (
           <div className="space-y-5 animate-in fade-in duration-300">
+            <ChangePinCard employee={employee} lang={lang} />
             
             {/* Employee Detailed Profile Card */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">

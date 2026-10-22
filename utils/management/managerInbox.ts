@@ -17,11 +17,16 @@ import type { Employee, InventoryTask } from '../../types';
 import { DataManager } from '../dataManager';
 import { getOrgLevel } from '../orgAccess';
 import { needsReplenishment } from '../unitConversion';
+import { effectiveStatus, normDept } from '../tasks/staffTaskLogic';
+import { countOpenMatters, listRecentTasks } from '../tasks/staffTaskStore';
 
 export type InboxLang = 'zh' | 'en' | 'my';
-export type InboxKey = 'settlementDrafts' | 'poToReceive' | 'inventoryTasks' | 'rosterPending' | 'absences' | 'lowStock';
+export type InboxKey = 'tasksToConfirm' | 'tasksOverdue' | 'bossMatters' | 'settlementDrafts' | 'poToReceive' | 'inventoryTasks' | 'rosterPending' | 'absences' | 'lowStock';
 
 export interface InboxCounts {
+    tasksToConfirm?: number;
+    tasksOverdue?: number;
+    bossMatters?: number;
     settlementDrafts?: number;
     poToReceive?: number;
     inventoryTasks?: number;
@@ -45,6 +50,15 @@ export interface InboxItem {
 }
 
 const T: Record<InboxKey, Record<InboxLang, [string, (n: number) => string]>> = {
+    tasksToConfirm: {
+        zh: ['任务待确认', n => `${n} 个员工已交回，等你确认`], en: ['Tasks to confirm', n => `${n} submitted`], my: ['အတည်ပြုရန် တာဝန်', n => `${n} ခု ပေးပို့ပြီး`],
+    },
+    tasksOverdue: {
+        zh: ['任务逾期', n => `${n} 个过了期限还没交回`], en: ['Overdue tasks', n => `${n} overdue`], my: ['နောက်ကျ တာဝန်', n => `${n} ခု`],
+    },
+    bossMatters: {
+        zh: ['上报事项', n => `${n} 件等处理`], en: ['Escalations', n => `${n} open`], my: ['တင်ပြချက်များ', n => `${n} ခု`],
+    },
     settlementDrafts: {
         zh: ['日结草稿', n => `${n} 张还没结算`], en: ['Draft settlements', n => `${n} not closed yet`], my: ['နေ့စဉ်ငွေစာရင်း မူကြမ်း', n => `${n} ခု မပိတ်ရသေး`],
     },
@@ -66,6 +80,9 @@ const T: Record<InboxKey, Record<InboxLang, [string, (n: number) => string]>> = 
 };
 
 const ORDER: { key: InboxKey; target: string; tone: InboxItem['tone'] }[] = [
+    { key: 'bossMatters', target: 'TASKS', tone: 'urgent' },
+    { key: 'tasksToConfirm', target: 'TASKS', tone: 'urgent' },
+    { key: 'tasksOverdue', target: 'TASKS', tone: 'urgent' },
     { key: 'settlementDrafts', target: 'SETTLEMENT', tone: 'urgent' },
     { key: 'absences', target: 'ROSTER', tone: 'urgent' },
     { key: 'lowStock', target: 'PROCUREMENT', tone: 'urgent' },
@@ -117,13 +134,16 @@ export const loadManagerInbox = async (employee: Employee, today: string): Promi
         : dept === 'KITCHEN' || dept === 'BOH' ? ['KITCHEN'] : dept === 'BAR' ? ['BAR'] : dept === 'FLOOR' || dept === 'FOH' ? [] : ['GENERAL', 'FUEL'];
 
     const months = [...new Set([today.slice(0, 7), dateAdd(today, 6).slice(0, 7)])];
-    const [drafts, pos, tasks, rosterDocs, stock, employees] = await Promise.allSettled([
+    const canMatters = ['OWNER', 'BRANCH_MANAGER'].includes(getOrgLevel(employee));
+    const [drafts, pos, tasks, rosterDocs, stock, employees, staffTasks, matters] = await Promise.allSettled([
         has(allowed, 'SETTLEMENT') ? count(query(collection(db, 'settlements'), where('isClosed', '==', false))) : Promise.reject(),
         canProcure ? DataManager.getPendingPurchaseOrderCount() : Promise.reject(),
         canInventory ? DataManager.getPendingInventoryTasks() : Promise.reject(),
         canRoster ? Promise.all(months.map(m => getDoc(doc(db, 'roster_months', m)))) : Promise.reject(),
         canInventory || canProcure ? Promise.all(stockTypes.map(t => DataManager.getStock(t).catch(() => []))) : Promise.reject(),
         DataManager.getEmployees(),
+        listRecentTasks(),
+        canMatters ? countOpenMatters() : Promise.reject(),
     ]);
     const ok = <T,>(r: PromiseSettledResult<T>) => r.status === 'fulfilled' ? r.value : undefined;
 
@@ -142,6 +162,14 @@ export const loadManagerInbox = async (employee: Employee, today: string): Promi
         out.absences = r.absences.map(([id, s]) => ({ name: byId.get(id)?.name || id, status: String(s) }));
         out.rosterPending = r.pending;
     }
+    const st2 = ok(staffTasks);
+    if (st2) {
+        const now = new Date().toISOString();
+        const mine = st2.filter(x => x.status !== 'CANCELLED').filter(x => !isL3 || x.createdBy === employee.id || normDept(x.department) === normDept(dept) || inDept(x.assigneeId || ''));
+        out.tasksToConfirm = mine.filter(x => effectiveStatus(x, today, now) === 'SUBMITTED').length;
+        out.tasksOverdue = mine.filter(x => effectiveStatus(x, today, now) === 'OVERDUE').length;
+    }
+    const mt = ok(matters); if (mt !== undefined) out.bossMatters = mt;
     const st = ok(stock); if (st && stockTypes.length) out.lowStock = st.flat().filter(needsReplenishment).length;
     return out;
 };
