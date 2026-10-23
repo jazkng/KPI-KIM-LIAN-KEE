@@ -1,6 +1,9 @@
-# V2 正式站 `epr.kimliankee.app`
+# V2 正式站 `epr.kimliankee.app`（以后正式发布时使用）
 
-> 负责人 2026-10-23 批准：V2 从预览站 `dev.kimliankee.app` 发布为正式站 `epr.kimliankee.app`，开始正常使用。
+> 状态：**尚未执行，正式发布需负责人另行批准。**
+> 负责人 2026-10-23 说明：现在只是更换以后要用的网址，还没有正式发布。目前做法是让**预览站**改用 `epr.kimliankee.app`
+> （`docs/deploy/map-epr-to-preview.sh`：在 `erp-v2-dev` 上多加这个网址，dev 网址保留）。
+> 本文件是以后正式发布时的做法：另开正式服务 `erp-v2`，届时要先把 `epr` 的网址映射从 `erp-v2-dev` 移到 `erp-v2`。
 > 云端设置（Cloud Run、网域映射、Cloudflare DNS）由负责人执行；Claude Code 没有这些权限，也不得自行修改 DNS。
 
 ## 1. 架构

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 御膳智控 ERP V2 · 正式站一次性设置（由负责人在 Google Cloud Shell 执行）
+# 御膳智控 ERP V2 · 正式站一次性设置（由负责人在 Google Cloud Shell 执行；正式发布需负责人另行批准，尚未执行）
 #
 # 前提：预览站已经按 setup-dev-preview.sh 设置好（镜像仓库、两个服务账号、GitHub 登录设定都沿用）。
 # 只新增资源，不修改也不删除任何现有资源：
@@ -59,7 +59,14 @@ gcloud run services add-iam-policy-binding erp-v2-dev --region "${REGION}" \
 
 step "4/4 自定义网域 ${DOMAIN}"
 if gcloud beta run domain-mappings describe --domain "${DOMAIN}" --region "${REGION}" >/dev/null 2>&1; then
-  echo "  网域映射已存在。"
+  MAPPED_TO="$(gcloud beta run domain-mappings describe --domain "${DOMAIN}" --region "${REGION}" --format='value(spec.routeName)')"
+  if [ "${MAPPED_TO}" != "${SERVICE}" ]; then
+    echo "  ⚠️ ${DOMAIN} 目前指向 ${MAPPED_TO}（预览站）。正式发布时先执行："
+    echo "     gcloud beta run domain-mappings delete --domain ${DOMAIN} --region ${REGION}"
+    echo "     然后重跑本脚本。Cloudflare 记录通常不用改（同样指向 ghs.googlehosted.com）。"
+  else
+    echo "  网域映射已存在。"
+  fi
 else
   gcloud beta run domain-mappings create --service "${SERVICE}" --domain "${DOMAIN}" --region "${REGION}" || \
     echo "  ⚠️ 网域映射未成功。请把错误讯息转告 Claude Code。"

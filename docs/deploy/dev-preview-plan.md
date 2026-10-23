@@ -2,6 +2,7 @@
 
 - 依据：`docs/KLK_ERP_V2_RULES.md` 第 10 条（连接现有正式 Firebase；不新建数据库；V1 两个 AI Studio 网址不动）。
 - 状态：代码、工作流与一次性设置脚本已就绪；云端设置由负责人执行一次（见第 3 节）。
+- 2026-10-23：负责人决定预览站以后改用 `epr.kimliankee.app` 打开（`dev.kimliankee.app` 保留）。设置：`docs/deploy/map-epr-to-preview.sh`。这只是换网址，不是正式发布。
 
 ## 1. 架构
 
