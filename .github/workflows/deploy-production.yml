@@ -1,0 +1,166 @@
+# 御膳智控 ERP V2 · 正式站部署（epr.kimliankee.app → Cloud Run erp-v2）
+#
+# - 负责人 2026-10-23 批准：V2 从 dev.kimliankee.app 发布为正式站 epr.kimliankee.app
+# - 只手动触发，不随合并自动部署：预览站（dev）照旧每次合并自动更新，负责人验收后再把「同一个镜像」发布到正式站
+# - 不重新构建：直接用预览站已在跑、已通过 CI 与门禁检查的镜像，正式站与验收过的版本完全相同
+# - 正式站同样启用访问门禁（PREVIEW_ACCESS_PASSWORD，使用正式站自己的密码）；门禁不能拿掉，
+#   要等「只保留服务端登录 + 收紧 Rules」完成后才另行评估（docs/deploy/v2-cutover-checklist.md A、B5）
+# - 只接受 develop-v2；不会碰 V1（AI Studio）的任何部署
+# - 三个动作：
+#     release  → 把预览站目前的版本（或指定 commit 的镜像）部署成候选版本 → 门禁检查 → 切 100% 流量 → 再检查，失败自动切回
+#     rollback → 把 100% 流量切回指定的旧 revision
+#     register → 只做分支检查（本文件合并进 develop-v2 时自动运行一次，让工作流出现在 Actions 列表）
+name: Deploy production
+
+on:
+  push:
+    branches: [develop-v2]
+    paths: [.github/workflows/deploy-production.yml]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "release = 发布预览站目前的版本；rollback = 切回指定版本"
+        type: choice
+        options: [release, rollback]
+        default: release
+      commit:
+        description: "release 时选填：要发布的 develop-v2 commit（完整 SHA）。留空 = 预览站目前正在跑的版本"
+        required: false
+      revision:
+        description: "rollback 时必填：正式站要切回的 revision 名称"
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SERVICE: erp-v2
+  DEV_SERVICE: erp-v2-dev
+  REGION: ${{ vars.GCP_REGION }}
+  IMAGE_REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/erp-v2/erp-v2-dev
+
+jobs:
+  guard:
+    name: 分支检查
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${GITHUB_REF}" != "refs/heads/develop-v2" ]; then
+            echo "::error::只能从 develop-v2 发布（当前：${GITHUB_REF}）"; exit 1
+          fi
+
+  release:
+    name: 发布到正式站
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'release'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: 找出要发布的镜像
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          if [ -n "${COMMIT}" ]; then
+            if ! echo "${COMMIT}" | grep -Eq '^[0-9a-f]{40}$'; then echo "::error::commit 要填完整的 40 位 SHA"; exit 1; fi
+            IMAGE="${IMAGE_REPO}:${COMMIT}"
+          else
+            # 预览站目前 100% 流量的 revision 用的镜像 = 负责人在 dev.kimliankee.app 验收的版本
+            DEV_REV=$(gcloud run services describe "${DEV_SERVICE}" --region "${REGION}" --format=json \
+              | jq -r '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty')
+            if [ -z "${DEV_REV}" ]; then echo "::error::找不到预览站目前的版本"; exit 1; fi
+            IMAGE=$(gcloud run revisions describe "${DEV_REV}" --region "${REGION}" --format='value(spec.containers[0].image)')
+            echo "预览站目前版本：${DEV_REV}"
+          fi
+          gcloud artifacts docker images describe "${IMAGE}" >/dev/null || { echo "::error::镜像不存在：${IMAGE}（这个 commit 可能没有部署过预览站）"; exit 1; }
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "TAG=r-$(echo "${IMAGE##*:}" | cut -c1-7)" >> "$GITHUB_ENV"
+          echo "发布镜像：${IMAGE}"
+      - name: 记录目前正式版本（失败时切回用）
+        run: |
+          PREVIOUS=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
+            | jq -r '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty')
+          echo "PREVIOUS_REVISION=${PREVIOUS}" >> "$GITHUB_ENV"
+          echo "目前正式版本：${PREVIOUS:-（无）}"
+      - name: 部署候选版本（0% 流量）
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}" \
+            --region "${REGION}" \
+            --service-account "${{ vars.GCP_RUNTIME_SA }}" \
+            --port 3000 \
+            --set-env-vars "NODE_ENV=production,VITE_AP_AI_API_URL=${{ vars.VITE_AP_AI_API_URL }}" \
+            --set-secrets "PREVIEW_ACCESS_PASSWORD=erp-v2-prod-access-password:latest,GEMINI_API_KEY=erp-v2-dev-gemini-api-key:latest,INTERNAL_API_KEY=erp-v2-dev-internal-api-key:latest" \
+            --no-traffic \
+            --tag "${TAG}" \
+            --quiet
+      - name: 切换前：候选版本必须有访问门禁
+        run: |
+          ENTRY=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
+            | jq -c --arg t "${TAG}" '.status.traffic[] | select(.tag==$t)')
+          URL=$(echo "${ENTRY}" | jq -r '.url')
+          REVISION=$(echo "${ENTRY}" | jq -r '.revisionName')
+          echo "REVISION=${REVISION}" >> "$GITHUB_ENV"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
+          echo "未带密码访问候选 ${REVISION} → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then echo "::error::候选版本没有访问门禁（预期 401），不切换"; exit 1; fi
+      - name: 切换 100% 流量
+        run: gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
+      - name: 切换后：正式网址必须有访问门禁，否则自动切回
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
+          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then
+            echo "::error::访问门禁未生效（预期 401），自动切回 ${PREVIOUS_REVISION}"
+            if [ -n "${PREVIOUS_REVISION}" ]; then
+              gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${PREVIOUS_REVISION}=100" --quiet
+            fi
+            exit 1
+          fi
+          {
+            echo "## 已发布到 epr.kimliankee.app"
+            echo ""
+            echo "- 镜像：\`${IMAGE}\`"
+            echo "- 现行 revision：\`${REVISION}\`"
+            echo "- 回滚用（上一个版本）：\`${PREVIOUS_REVISION:-无}\`（以 action = rollback 运行本工作流）"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    name: 切回旧版本
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: 切换
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          if [ -z "${REVISION}" ]; then echo "::error::rollback 需要填写 revision"; exit 1; fi
+          gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
+      - name: 切换后：正式网址必须有访问门禁
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
+          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then echo "::error::访问门禁未生效（预期 401），请切到其他版本"; exit 1; fi
+          {
+            echo "## 正式站已切回"
+            gcloud run services describe "${SERVICE}" --region "${REGION}" --format="table(status.traffic[].revisionName, status.traffic[].percent)"
+          } >> "$GITHUB_STEP_SUMMARY"
