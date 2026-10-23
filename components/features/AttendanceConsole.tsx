@@ -30,19 +30,19 @@ const DEFAULT_FOREIGN_REST = 2;
 
 let currentShiftSettings = DEFAULT_ATTENDANCE_SETTINGS;
 
+type ShiftWho = Pick<Employee, 'shiftGroup' | 'fixedShift'> | null | undefined;
+/** 这个人这一天的班次：有固定上下班时间就用自己的，否则按班次人群 */
+const shiftOf = (dateStr: string, who?: ShiftWho) => getTargetShiftForDate(dateStr, currentShiftSettings, who?.shiftGroup || 1, who?.fixedShift);
+
 /** 获取指定日期的上班时间 */
-const getShiftStart = (dateStr: string, shiftGroup = 1): Date => {
-    return getTargetShiftForDate(dateStr, currentShiftSettings, shiftGroup).checkIn;
-};
+const getShiftStart = (dateStr: string, who?: ShiftWho): Date => shiftOf(dateStr, who).checkIn;
 
 /** 获取指定日期的下班时间 */
-const getShiftEnd = (dateStr: string, shiftGroup = 1): Date => {
-    return getTargetShiftForDate(dateStr, currentShiftSettings, shiftGroup).checkOut;
-};
+const getShiftEnd = (dateStr: string, who?: ShiftWho): Date => shiftOf(dateStr, who).checkOut;
 
 /** 计算单次迟到分钟数 (clockIn - shiftStart, 负数=0) */
-const calculateLateMinutes = (clockInDate: Date, dateStr: string, shiftGroup = 1): number => {
-    const shift = getTargetShiftForDate(dateStr, currentShiftSettings, shiftGroup);
+const calculateLateMinutes = (clockInDate: Date, dateStr: string, who?: ShiftWho): number => {
+    const shift = shiftOf(dateStr, who);
     return Math.max(0, Math.floor((clockInDate.getTime() - shift.checkIn.getTime()) / 60000));
 };
 
@@ -81,8 +81,8 @@ const RollCallModal: React.FC<{
 
     const handleQuickPresent = async (emp: Employee) => {
         setProcessingId(emp.id);
-        const inTime = getShiftStart(dateStr, emp.shiftGroup || 1);
-        const outTime = getShiftEnd(dateStr, emp.shiftGroup || 1);
+        const inTime = getShiftStart(dateStr, emp);
+        const outTime = getShiftEnd(dateStr, emp);
 
         const inStr = inTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         const outStr = outTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -116,10 +116,10 @@ const RollCallModal: React.FC<{
             clockInDate.setHours(hh, mm, 0, 0);
             if (hh < 12) clockInDate.setDate(clockInDate.getDate() + 1);
 
-            const lateMinutes = calculateLateMinutes(clockInDate, dateStr, emp.shiftGroup || 1);
+            const lateMinutes = calculateLateMinutes(clockInDate, dateStr, emp);
             const isLate = lateMinutes > currentShiftSettings.graceMinutes;
 
-            const targetOutTime = getShiftEnd(dateStr, emp.shiftGroup || 1);
+            const targetOutTime = getShiftEnd(dateStr, emp);
 
             const durationMinutes = Math.floor((targetOutTime.getTime() - clockInDate.getTime()) / 60000);
 
@@ -495,7 +495,7 @@ const SecurityPinModal: React.FC<{ isOpen: boolean; onClose: () => void; onSucce
 // ============================================================
 // EDIT RECORD MODAL
 // ============================================================
-const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: AttendanceRecord; shiftGroup?: number; onSave: (updated: AttendanceRecord) => void; }> = ({ isOpen, onClose, record, shiftGroup = 1, onSave }) => {
+const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: AttendanceRecord; who?: ShiftWho; onSave: (updated: AttendanceRecord) => void; }> = ({ isOpen, onClose, record, who, onSave }) => {
     const [punchTimes, setPunchTimes] = useState<string[]>([]);
     
     useEffect(() => { 
@@ -549,7 +549,7 @@ const EditRecordModal: React.FC<{ isOpen: boolean; onClose: () => void; record: 
         const newOut = isoTimes.length > 1 ? isoTimes[isoTimes.length - 1] : '';
 
         const duration = newOut ? Math.floor((new Date(newOut).getTime() - new Date(newIn).getTime()) / 60000) : 0;
-        const calc = getAttendanceStatus(newIn, newOut || null, record.date, currentShiftSettings, shiftGroup);
+        const calc = getAttendanceStatus(newIn, newOut || null, record.date, currentShiftSettings, who?.shiftGroup || 1, who?.fixedShift);
         const status = calc.status;
 
         onSave({ 
@@ -1893,10 +1893,10 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, c
         const now = new Date();
         const dateStr = selectedDate; 
         
-        const shift = getTargetShiftForDate(dateStr, currentShiftSettings, employee.shiftGroup || 1);
+        const shift = shiftOf(dateStr, employee);
         
         if (type === 'IN') {
-            const lateMinutes = calculateLateMinutes(now, dateStr, employee.shiftGroup || 1);
+            const lateMinutes = calculateLateMinutes(now, dateStr, employee);
             const isLate = lateMinutes > currentShiftSettings.graceMinutes;
             
             const targetOutTime = shift.checkOut;
@@ -1928,7 +1928,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, c
             const inStr = new Date(record.clockIn).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
             const outStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-            const calc = getAttendanceStatus(record.clockIn, now.toISOString(), dateStr, currentShiftSettings, employee.shiftGroup || 1);
+            const calc = getAttendanceStatus(record.clockIn, now.toISOString(), dateStr, currentShiftSettings, employee.shiftGroup || 1, employee.fixedShift);
 
             // 💡 安全类型约束
             const newRecord: AttendanceRecord = { 
@@ -2441,7 +2441,7 @@ export const AttendanceConsole: React.FC<AttendanceConsoleProps> = ({ onClose, c
 
             {/* Modals */}
             <SecurityPinModal isOpen={securityModalOpen} onClose={() => setSecurityModalOpen(false)} onSuccess={executeClockAction} employeeName={pendingAction?.employee.name || ''} employeeId={pendingAction?.employee.id || ''} targetPin={pendingAction?.employee.pin || '0000'} />
-            {editingRecord && <EditRecordModal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} record={editingRecord} onSave={saveEditedRecord} />}
+            {editingRecord && <EditRecordModal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} record={editingRecord} who={staffList.find(s => s.id === editingRecord.employeeId)} onSave={saveEditedRecord} />}
             <RollCallModal isOpen={showRollCall} onClose={() => setShowRollCall(false)} staffList={currentDateStaffList} todayRecords={todayRecords} dateStr={selectedDate} onUpdate={async () => {
                 const freshAttendance = await DataManager.getAttendanceByDate(selectedDate);
                 setTodayRecords(mergeAttendanceRecords(freshAttendance));

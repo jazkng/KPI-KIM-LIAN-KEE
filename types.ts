@@ -610,6 +610,9 @@ export interface Employee {
     /** 不计入员工：资料留在档案（例如老板），但不算员工人数、不出现在排班与人事中心。V2 新增，V1 会忽略 */
     excludeFromStaff?: boolean;
     shiftGroup?: number; // 新增：班次人群 (1 = 班次1, 2 = 班次2)
+    /** 固定上下班时间（V2 新增，选填；V1 会忽略）。有设定时迟到 / 早退按这个算，不看班次人群。
+     *  byDay 按星期几各设一组（'0' = 星期日 … '6' = 星期六），没设的那天用 checkIn / checkOut。 */
+    fixedShift?: { checkIn: string; checkOut: string; byDay?: Record<string, { checkIn: string; checkOut: string }> };
     /** 考勤机（FACE3000-U）上的员工编号；没设定时以员工 ID 比对（V2 新增，选填） */
     attendanceDeviceNo?: string;
 

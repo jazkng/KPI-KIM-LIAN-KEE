@@ -59,6 +59,8 @@ export const STAFF_UI_TRANSLATIONS: Record<string, Partial<Record<StaffLang | st
   'noScheduleShort': { zh: '未排班', en: 'No Shift', my: 'ဇယားမရှိ' },
   'noSchedule': { zh: '暂无排班', en: 'No Shift Scheduled', my: 'ဇယားမရှိသေးပါ' },
   'sickLeave': { zh: '病假', en: 'Medical Leave (MC)', my: 'နာမကျန်းခွင့် (MC)' },
+  'onLeave': { zh: '请假', en: 'On Leave', my: 'ခွင့်ယူ' },
+  'notScheduled': { zh: '未排班', en: 'Not scheduled', my: 'ဇယားမရှိ' },
   'personalLeave': { zh: '事假', en: 'Personal Leave', my: 'အရေးပေါ်分假' },
   'absent': { zh: '缺席', en: 'Absent', my: 'ပျက်ကွက်' },
   'work': { zh: '上班', en: 'Working', my: 'အလုပ်ဆင်း' },

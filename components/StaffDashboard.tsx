@@ -219,7 +219,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
         }
 
         const roster3 = dates.map((dStr, idx) => {
-          const status = (roster[dStr] || {})[employee.id] || '暂无排班';
+          const status = (roster[dStr] || {})[employee.id] || '';
           const label = idx === 0 ? 'today' : idx === 1 ? 'tomorrow' : 'dayAfterTomorrow';
           return { date: dStr, label, status };
         });
@@ -617,8 +617,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
 
               <div className="grid grid-cols-3 gap-2.5 text-center">
                 {rosterData3Days.map((item, idx) => {
-                  const isOff = item.status === 'OFF';
-                  const isMc = item.status === 'MC';
+                  // 没排到的日子显示「未排班」，不当成上班（负责人 2026-10-23）
+                  const kind = !item.status ? 'NONE' : item.status === 'OFF' ? 'OFF' : item.status === 'MC' ? 'MC' : ['LEAVE', 'ANNUAL', 'ABSENT', 'HOLIDAY'].includes(item.status) ? 'LEAVE' : 'WORK';
+                  const badge = {
+                    NONE: ['bg-gray-50 text-gray-400 border border-dashed border-gray-200', 'notScheduled'],
+                    OFF: ['bg-gray-100 text-gray-500', 'restDay'],
+                    MC: ['bg-rose-50 text-rose-500 border border-rose-100', 'sickLeave'],
+                    LEAVE: ['bg-orange-50 text-orange-600 border border-orange-100', 'onLeave'],
+                    WORK: ['bg-green-500/10 text-[#22C55E]', 'work'],
+                  }[kind];
                   return (
                     <div 
                       key={idx}
@@ -630,14 +637,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                     >
                       <p className="text-[10px] font-black text-gray-400 uppercase">{st(item.label, lang)}</p>
                       <p className="text-[8px] font-mono text-gray-400 mt-0.5">{item.date.split('-')[2]}</p>
-                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${
-                        isOff 
-                          ? 'bg-gray-100 text-gray-500' 
-                          : isMc 
-                            ? 'bg-rose-50 text-rose-500 border border-rose-100' 
-                            : 'bg-green-500/10 text-[#22C55E]'
-                      }`}>
-                        {isOff ? st('restDay', lang) : isMc ? st('sickLeave', lang) : st('work', lang)}
+                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${badge[0]}`}>
+                        {st(badge[1], lang)}
                       </span>
                     </div>
                   )
