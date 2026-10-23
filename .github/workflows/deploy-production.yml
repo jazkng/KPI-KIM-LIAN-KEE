@@ -1,6 +1,6 @@
 # 御膳智控 ERP V2 · 正式站部署（epr.kimliankee.app → Cloud Run erp-v2）
 #
-# - 负责人 2026-10-23 批准：V2 从 dev.kimliankee.app 发布为正式站 epr.kimliankee.app
+# - 以后正式发布时使用；尚未批准执行（负责人 2026-10-23：现在只是预览站改用 epr 网址，见 docs/deploy/map-epr-to-preview.sh）
 # - 只手动触发，不随合并自动部署：预览站（dev）照旧每次合并自动更新，负责人验收后再把「同一个镜像」发布到正式站
 # - 不重新构建：直接用预览站已在跑、已通过 CI 与门禁检查的镜像，正式站与验收过的版本完全相同
 # - 正式站同样启用访问门禁（PREVIEW_ACCESS_PASSWORD，使用正式站自己的密码）；门禁不能拿掉，
