@@ -1,3 +1,4 @@
+import { HolidayCalendarBadge } from './ui/HolidayCalendarBadge';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     FileBarChart, CreditCard, Wallet, ShieldCheck, Banknote,
@@ -806,6 +807,7 @@ export const BossPriorityDashboard: React.FC<BossPriorityDashboardProps> = ({ cu
                                                             </span>
                                                         )}
                                                     </p>
+                                                <HolidayCalendarBadge date={r.dateStr}/>
                                                 </div>
                                             </div>
                                             <button

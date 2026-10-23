@@ -1,3 +1,4 @@
+import { mountHolidayRoutes } from './server/holidays/routes';
 import express from "express";
 import crypto from "crypto";
 import fs from "fs";
@@ -203,6 +204,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));
+  mountHolidayRoutes(app,isEmulatorMode);
 
   // Secure API endpoint for querying app data context with Gemini
   app.post("/api/gemini/chat", async (req, res) => {

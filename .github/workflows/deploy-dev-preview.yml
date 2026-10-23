@@ -76,6 +76,7 @@ jobs:
         run: |
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
           docker build -t "${IMAGE}:${GITHUB_SHA}" \
+            --build-arg VITE_HOLIDAY_CALENDAR_ENABLED="${{ vars.VITE_HOLIDAY_CALENDAR_ENABLED || 'false' }}" \
             --build-arg VITE_FIREBASE_API_KEY="${{ vars.VITE_FIREBASE_API_KEY }}" \
             --build-arg VITE_FIREBASE_AUTH_DOMAIN="${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \
             --build-arg VITE_FIREBASE_PROJECT_ID="${{ vars.VITE_FIREBASE_PROJECT_ID }}" \
