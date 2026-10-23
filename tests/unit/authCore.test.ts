@@ -85,6 +85,15 @@ describe('CHG-05 · 登录 ID 与尝试次数', () => {
         const later = recordFailure(s, t0 + LIMITS.login.windowMs + 10_000, LIMITS.login);
         expect(later.failures).toBe(1);
     });
+    it('同一员工不论 IP：1 小时错 20 次锁 1 小时', () => {
+        let s = null as ReturnType<typeof recordFailure> | null;
+        const t0 = 1_000_000;
+        for (let i = 0; i < 19; i++) s = recordFailure(s, t0 + i * 60_000, LIMITS.loginEmployee);
+        expect(isLocked(s, t0 + 19 * 60_000)).toBe(false);
+        s = recordFailure(s, t0 + 19 * 60_000, LIMITS.loginEmployee);
+        expect(isLocked(s, t0 + 20 * 60_000)).toBe(true);
+        expect(isLocked(s, t0 + 19 * 60_000 + LIMITS.loginEmployee.lockMs + 1)).toBe(false);
+    });
     it('一次性凭证：服务端只存杂凑', () => {
         const { token, id } = newOneTimeToken();
         expect(token.length).toBeGreaterThan(30);

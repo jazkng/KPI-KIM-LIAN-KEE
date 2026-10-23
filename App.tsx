@@ -12,7 +12,7 @@ import { APP_VERSION } from './constants/versionHistory';
 import { getOrgLevel, getPortalRole } from './utils/orgAccess';
 import { TestSwitcher } from './components/dev/TestSwitcher';
 import { syncReadOnlyMode } from './utils/readOnlyMode';
-import { currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
+import { checkServerSession, currentSignedInEmployeeId, serverAuthEnabled, serverSignOut } from './utils/auth/serverAuth';
 import { NotificationCenter } from './components/ui/NotificationCenter';
 import { BossDashboard, BusinessCenter, ManagerDashboard, StaffDashboard, ManagementPortal, DeviceScreenPortal, StoreConfigModal, AIOperationsAssistant, WhatsNewModal, preloadHomeFor } from './components/lazyModules';
 
@@ -213,9 +213,17 @@ export default function App() {
         let alive = true;
         serverAuthEnabled.then(async enabled => {
             if (!enabled || !alive) return;
+            const expected = testRealRef.current?.employee.id ?? currentEmployee.id;
             const signedIn = await currentSignedInEmployeeId();
-            if (alive && signedIn !== (testRealRef.current?.employee.id ?? currentEmployee.id)) {
+            if (alive && signedIn !== expected) {
                 console.log('🔐 Session has no matching server identity. Returning to login.');
+                handleLogout();
+                return;
+            }
+            // 登录记录（代替预览站密码）到期或不是本人 → 重新输入员工 PIN；离线连不上时不登出
+            const session = await checkServerSession(expected);
+            if (alive && (session === 'EXPIRED' || session === 'MISMATCH')) {
+                console.log('🔐 Server login record expired. Returning to login.');
                 handleLogout();
             }
         });

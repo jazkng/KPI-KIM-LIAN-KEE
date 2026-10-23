@@ -20,6 +20,7 @@ import { isPlausibleFcmToken } from "./server/push/pushPolicy";
 import { initFirebaseAdmin } from "./server/firebaseAdmin";
 import { mountAuthRoutes } from "./server/auth/authService";
 import { mountDeviceAuthRoutes } from "./server/auth/deviceAuth";
+import { clearedSessionCookie, deriveSessionKey, isPublicPath, readCookie, SESSION_COOKIE, sessionCookie, signSession, verifySession } from "./server/auth/sessionCookie";
 import { AI_ERROR_MESSAGE, AiAllModelsFailed, aiErrorSummary, classifyAiError, describeApiKeyShape, modelChain, normalizeApiKey, runWithModelFallback } from "./server/aiFallback";
 
 // Read model configuration from environment variables
@@ -175,10 +176,29 @@ async function startServer() {
   // Cloud Scheduler 无法输入预览站密码：只有这一个路径改由下方的 OIDC 身份验证把关（且推送必须已开启）
   const isSchedulerCall = (req: express.Request) => pushAvailable && req.method === "POST" && req.path === "/api/push/evaluate";
 
+  // 🔐 CHG-05 服务端登录：预设关闭。AUTH_SERVER_ENABLED=true 且有预览站门禁或 Emulator 才开放；
+  //    关闭时前端照旧使用原本的登录方式（与 V1 相同）
+  const authEnabled = process.env.AUTH_SERVER_ENABLED === "true" && (!!process.env.PREVIEW_ACCESS_PASSWORD || isEmulatorMode);
+  const authEpoch = Number(process.env.AUTH_EPOCH || 1);
+  // 登录后免预览站密码（负责人 2026-10-23 批准）：服务端登录开通时，登录成功发一张登录记录（Cookie），
+  // 有登录记录就等同输入过预览站密码。网页本身与登录接口不用密码，其余 /api 要登录记录或预览站密码。
+  const sessionSecret = process.env.SESSION_SECRET || process.env.PREVIEW_ACCESS_PASSWORD || (isEmulatorMode ? "emulator-only" : "");
+  const sessionKey = authEnabled && sessionSecret ? deriveSessionKey(sessionSecret) : null;
+  const sessionOf = (req: express.Request) =>
+    sessionKey ? verifySession(sessionKey, readCookie(req.headers.cookie, SESSION_COOKIE), authEpoch) : null;
+
   if (process.env.PREVIEW_ACCESS_PASSWORD) {
     const gate = createPreviewGate(process.env.PREVIEW_ACCESS_PASSWORD);
-    app.use((req, res, next) => (isSchedulerCall(req) ? next() : gate(req, res, next)));
-    console.log("🔒 预览站访问门禁已启用");
+    app.use((req, res, next) => {
+      if (isSchedulerCall(req)) return next();
+      if (!sessionKey) return gate(req, res, next);
+      res.setHeader("X-Robots-Tag", "noindex, nofollow");
+      if (isPublicPath(req.method, req.path) || sessionOf(req)) return next();
+      // 负责人的后备入口：仍接受预览站密码（但不主动弹出密码框，免得登录页的请求跳出浏览器对话框）
+      if (String(req.headers.authorization || "").startsWith("Basic ")) return gate(req, res, next);
+      return res.status(401).json({ error: "需要登录" });
+    });
+    console.log(sessionKey ? "🔒 访问门禁已启用（登录后免预览站密码）" : "🔒 预览站访问门禁已启用");
   }
   const PORT = 3000;
 
@@ -314,9 +334,6 @@ ${JSON.stringify(contextData, null, 2)}
     }
   });
 
-  // 🔐 CHG-05 服务端登录：预设关闭。AUTH_SERVER_ENABLED=true 且有预览站门禁或 Emulator 才开放；
-  //    关闭时前端照旧使用原本的登录方式（与 V1 相同）
-  const authEnabled = process.env.AUTH_SERVER_ENABLED === "true" && (!!process.env.PREVIEW_ACCESS_PASSWORD || isEmulatorMode);
   if (authEnabled) initFirebaseAdmin(isEmulatorMode);
   app.use("/api/auth", (req, res, next) => {
     if (req.method === "GET" && req.path === "/config") return next();
@@ -326,11 +343,23 @@ ${JSON.stringify(contextData, null, 2)}
   });
   const authOptions = {
     enabled: authEnabled,
-    epoch: Number(process.env.AUTH_EPOCH || 1),
+    epoch: authEpoch,
+    onSignedIn: (res: express.Response, who: { sub: string; kind: "emp" | "device" }) => {
+      if (sessionKey) res.setHeader("Set-Cookie", sessionCookie(signSession(sessionKey, who, authEpoch)));
+    },
     acceptLegacyPin: process.env.ACCEPT_LEGACY_PIN !== "false",
     mirrorLegacyPin: process.env.MIRROR_LEGACY_PIN !== "false",
     getIp: getTrustedClientIp,
   };
+  // 登录记录：查询（要登录记录才过得了门禁）与登出（公开，清掉 Cookie）
+  app.get("/api/auth/session", (req, res) => {
+    const s = sessionOf(req);
+    res.set("Cache-Control", "no-store").json(s ? { kind: s.kind, id: s.sub, exp: s.exp } : { kind: null });
+  });
+  app.post("/api/auth/logout", (_req, res) => {
+    res.setHeader("Set-Cookie", clearedSessionCookie());
+    res.json({ ok: true });
+  });
   mountAuthRoutes(app, authOptions);
   mountDeviceAuthRoutes(app, authOptions);
 

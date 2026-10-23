@@ -35,6 +35,8 @@ export interface AuthOptions {
     /** 改 PIN 时同步写回 employees.pin（V1 仍在使用旧登录时必须开启） */
     mirrorLegacyPin: boolean;
     getIp: (req: express.Request) => string;
+    /** 登录成功、签发身份时呼叫：设定登录记录 Cookie（代替预览站密码） */
+    onSignedIn?: (res: express.Response, who: { sub: string; kind: 'emp' | 'device' }) => void;
 }
 
 export const db = (): Firestore => getFirestore(adminApp());
@@ -114,6 +116,21 @@ export const mountAuthRoutes = (app: express.Express, opts: AuthOptions) => {
 
     app.get('/api/auth/config', (_req, res) => res.json({ enabled: opts.enabled }));
 
+    /** 签发身份 + 登录记录 */
+    const signedIn = async (res: express.Response, emp: AuthEmployee) => {
+        const token = await issueToken(emp, opts.epoch);
+        opts.onSignedIn?.(res, { sub: emp.id, kind: 'emp' });
+        res.json({ token, employee: publicEmployee(emp) });
+    };
+
+    // 登录页只要 Logo（负责人选 b：不显示员工名单，名单接口要登录才能用）
+    app.get('/api/auth/branding', guard, async (_req, res) => {
+        try {
+            const [cfg, any] = await Promise.all([db().collection('config').doc('store').get(), db().collection('employees').limit(1).get()]);
+            res.json({ logoUrl: typeof cfg.data()?.logoUrl === 'string' ? cfg.data()!.logoUrl : '', empty: any.empty });
+        } catch (e) { fail(res, e); }
+    });
+
     // 登录页名单：不含 PIN、薪资、电话；附门店 Logo
     app.get('/api/auth/roster', guard, async (_req, res) => {
         try {
@@ -135,16 +152,23 @@ export const mountAuthRoutes = (app: express.Express, opts: AuthOptions) => {
             const emp = findEmployeeByLoginId((await loadEmployees()).filter(isActiveEmployee), loginId);
             // 找不到员工也计入同一 IP 的失败次数，避免用来枚举员工编号
             const key = rateKey('login', emp?.id || `?${loginId}`, opts.getIp(req));
-            const prev = await readAttempts(key);
-            if (isLocked(prev, Date.now())) return res.status(429).json({ error: 'LOCKED', retryAfterMs: prev!.lockedUntil - Date.now() });
+            // 同一员工不论 IP 的总次数（登录页公开后，防止换 IP 猜 PIN）
+            const empKey = emp ? rateKey('login-emp', emp.id) : null;
+            const [prev, empPrev] = await Promise.all([readAttempts(key), empKey ? readAttempts(empKey) : Promise.resolve(null)]);
+            const now = Date.now();
+            if (isLocked(prev, now)) return res.status(429).json({ error: 'LOCKED', retryAfterMs: prev!.lockedUntil - now });
+            if (isLocked(empPrev, now)) return res.status(429).json({ error: 'LOCKED', retryAfterMs: empPrev!.lockedUntil - now });
             const result = emp ? checkPin(emp, await loadSecret(emp.id), pin, opts.acceptLegacyPin) : { ok: false as const };
             if (!emp || !result.ok) {
-                const next = await writeFailure(key, prev, LIMITS.login);
+                const [next] = await Promise.all([
+                    writeFailure(key, prev, LIMITS.login),
+                    empKey ? writeFailure(empKey, empPrev, LIMITS.loginEmployee) : Promise.resolve(null),
+                ]);
                 return res.status(401).json({ ...DENIED, remaining: Math.max(0, LIMITS.login.maxFailures - next.failures) });
             }
-            await clearAttempts(key);
+            await Promise.all([clearAttempts(key), empKey ? clearAttempts(empKey) : Promise.resolve()]);
             if (result.mustChange) return res.json({ mustChange: true, changeToken: await issuePinChange(emp), employee: publicEmployee(emp) });
-            res.json({ token: await issueToken(emp, opts.epoch), employee: publicEmployee(emp) });
+            await signedIn(res, emp);
         } catch (e) { fail(res, e); }
     });
 
@@ -161,7 +185,7 @@ export const mountAuthRoutes = (app: express.Express, opts: AuthOptions) => {
                 if (!result.ok) continue;
                 await clearAttempts(key);
                 if (result.mustChange) return res.json({ mustChange: true, changeToken: await issuePinChange(boss), employee: publicEmployee(boss) });
-                return res.json({ token: await issueToken(boss, opts.epoch), employee: publicEmployee(boss) });
+                return signedIn(res, boss);
             }
             await writeFailure(key, prev, LIMITS.boss);
             res.status(401).json({ error: 'WRONG PIN' });
@@ -212,7 +236,7 @@ export const mountAuthRoutes = (app: express.Express, opts: AuthOptions) => {
             await getAuth(adminApp()).revokeRefreshTokens(uidForEmployee(emp.id)).catch(err => {
                 if ((err as { code?: string })?.code !== 'auth/user-not-found') throw err;
             });
-            res.json({ token: await issueToken(emp, opts.epoch), employee: publicEmployee(emp) });
+            await signedIn(res, emp);
         } catch (e) { fail(res, e); }
     });
 };

@@ -3,7 +3,7 @@ import { PortalRole, Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { DEFAULT_STAFF } from '../constants/staff';
 import { getPortalRole } from '../utils/orgAccess';
-import { bossLogin, changePinWithToken, fetchRoster, loginWithPin, serverAuthEnabled, type LoginResult } from '../utils/auth/serverAuth';
+import { bossLogin, changePinWithToken, fetchBranding, loginWithPin, serverAuthEnabled, type LoginResult } from '../utils/auth/serverAuth';
 import { APP_VERSION } from '../constants/versionHistory';
 import { Lock, User, ShieldCheck, Zap, Delete, Unlock, ArrowLeft, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
 
@@ -188,6 +188,7 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
     const errorText: Record<string, string> = {
         'USER NOT FOUND': '找不到这个员工编号，请重新检查。',
         'ACCESS DENIED': 'PIN 不正确，请重新输入。',
+        'ID OR PIN WRONG': '员工编号或 PIN 不正确，请重新输入。',
         '6 DIGITS REQUIRED': '新 PIN 必须输入 6 位数字。',
         'INVALID PIN': '这个 PIN 不可使用，请设置其他号码。',
         'MISMATCH': '两次输入的 PIN 不一致。',
@@ -379,12 +380,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
         try {
             if (await serverAuthEnabled) {
                 setServerMode(true);
-                const roster = await fetchRoster();
-                if (roster.logoUrl) setCustomLogo(roster.logoUrl);
-                if (roster.empty) setIsSystemEmpty(true);
-                else if (!roster.hasOwner) setLoadError('NO_OWNER');
-                // 名单只有编号、姓名、职位、头像，没有 PIN
-                else setEmployees(roster.employees as unknown as Employee[]);
+                // 登录页不再取得员工名单（负责人 2026-10-23 选 b）：只取 Logo；员工输入自己的编号，由服务端比对
+                const branding = await fetchBranding();
+                if (branding.logoUrl) setCustomLogo(branding.logoUrl);
+                if (branding.empty) setIsSystemEmpty(true);
                 return;
             }
             // 门店设定（Logo）与员工名单同时读取，不再一前一后等待；任一失败的处理与原本相同
@@ -475,6 +474,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
 
   const handleManualIdSubmit = () => { 
       const normalizedId = enteredId.trim().toUpperCase();
+      if (serverMode) {
+          // 服务端登录：不在浏览器查名单，编号与 PIN 一起送服务端比对（找不到也只回「编号或 PIN 不正确」）
+          if (!normalizedId) { setError('USER NOT FOUND'); return; }
+          setTargetEmployee({ id: normalizedId, name: '', role: '' } as Employee);
+          setEnteredId(normalizedId); setStep('PIN'); setEnteredPin(''); setError('');
+          return;
+      }
       const digits = normalizedId.replace(/\D/g, '');
       const paddedDigits = digits ? digits.padStart(3, '0') : '';
       const possibleIds = new Set([
@@ -492,9 +498,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
   /** 服务端登录的结果 → 画面 */
   const applyServerResult = (r: LoginResult, onMustChange: (token: string) => void) => {
       if (r.kind === 'OK') { performLogin(r.employee); return; }
-      if (r.kind === 'MUST_CHANGE') { onMustChange(r.changeToken); return; }
+      if (r.kind === 'MUST_CHANGE') {
+          // 服务端回传的员工（编号、姓名、职位、头像）：改 PIN 时让员工确认是自己
+          setTargetEmployee(r.employee as unknown as Employee);
+          onMustChange(r.changeToken);
+          return;
+      }
       if (r.kind === 'LOCKED') setError('LOCKED');
-      else if (r.kind === 'DENIED') setError('ACCESS DENIED');
+      else if (r.kind === 'DENIED') setError(targetEmployee?.name ? 'ACCESS DENIED' : 'ID OR PIN WRONG');
       else setError(r.message);
   };
 
@@ -730,13 +741,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                     {targetEmployee?.avatar ? (
                       <img src={targetEmployee.avatar} alt={targetEmployee.name} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-2xl font-black">{targetEmployee?.name.charAt(0)}</span>
+                      <span className="text-2xl font-black">{(targetEmployee?.name || targetEmployee?.id || '').charAt(0)}</span>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-black tracking-wider text-emerald-600">✓ 已找到员工</p>
-                    <h2 className="mt-0.5 truncate text-lg font-black">{targetEmployee?.name}</h2>
-                    <p className="truncate text-xs font-semibold text-stone-500">{targetEmployee?.id} · {targetEmployee?.role.split('(')[0]}</p>
+                    {targetEmployee?.name ? (<>
+                      <p className="text-[10px] font-black tracking-wider text-emerald-600">✓ 已找到员工</p>
+                      <h2 className="mt-0.5 truncate text-lg font-black">{targetEmployee.name}</h2>
+                      <p className="truncate text-xs font-semibold text-stone-500">{targetEmployee.id} · {targetEmployee.role.split('(')[0]}</p>
+                    </>) : (<>
+                      <p className="text-[10px] font-black tracking-wider text-stone-400">员工编号 · STAFF ID</p>
+                      <h2 className="mt-0.5 truncate text-lg font-black">{targetEmployee?.id}</h2>
+                    </>)}
                   </div>
                 </div>
 

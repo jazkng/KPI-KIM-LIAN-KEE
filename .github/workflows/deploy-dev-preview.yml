@@ -87,12 +87,15 @@ jobs:
           docker push "${IMAGE}:${GITHUB_SHA}"
       - name: 部署候选版本（0% 流量）
         run: |
+          # 服务端登录（登录后免预览站密码）：GitHub 变量 AUTH_SERVER_ENABLED=true 才开启；
+          # 负责人先执行 docs/deploy/enable-server-login.sh 设好权限，再设这个变量（见 docs/security/2026-10-23-login-instead-of-gate-password.md）
+          AUTH="${{ vars.AUTH_SERVER_ENABLED }}"; [ "${AUTH}" = "true" ] || AUTH="false"
           gcloud run deploy "${SERVICE}" \
             --image "${IMAGE}:${GITHUB_SHA}" \
             --region "${REGION}" \
             --service-account "${{ vars.GCP_RUNTIME_SA }}" \
             --port 3000 \
-            --set-env-vars "NODE_ENV=production,VITE_AP_AI_API_URL=${{ vars.VITE_AP_AI_API_URL }}" \
+            --set-env-vars "NODE_ENV=production,VITE_AP_AI_API_URL=${{ vars.VITE_AP_AI_API_URL }},AUTH_SERVER_ENABLED=${AUTH},FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}" \
             --set-secrets "PREVIEW_ACCESS_PASSWORD=erp-v2-dev-preview-password:latest,GEMINI_API_KEY=erp-v2-dev-gemini-api-key:latest,INTERNAL_API_KEY=erp-v2-dev-internal-api-key:latest" \
             --no-traffic \
             --tag "c-${GITHUB_SHA::7}" \
@@ -106,10 +109,10 @@ jobs:
           echo "CANDIDATE_URL=${URL}" >> "$GITHUB_ENV"
           echo "CANDIDATE_REVISION=$(echo "${ENTRY}" | jq -r '.revisionName')" >> "$GITHUB_ENV"
           echo "revision=$(echo "${ENTRY}" | jq -r '.revisionName')" >> "$GITHUB_OUTPUT"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问候选版本 → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问候选版本 → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then
-            echo "::error::候选版本没有启用访问门禁（预期 401），不得切换流量"; exit 1
+            echo "::error::候选版本没有启用访问门禁（未登录访问接口预期 401），不得切换流量"; exit 1
           fi
       - name: 摘要
         run: |
@@ -154,10 +157,10 @@ jobs:
             if [ -z "${URL}" ]; then
               echo "::error::${REVISION} 不是 deploy 建立的候选版本（找不到 c- 标签），不得 promote"; exit 1
             fi
-            CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-            echo "未带密码访问候选 ${REVISION} → HTTP ${CODE}"
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+            echo "未登录访问候选 ${REVISION} → HTTP ${CODE}"
             if [ "${CODE}" != "401" ]; then
-              echo "::error::候选版本没有启用访问门禁（预期 401），不得切换流量"; exit 1
+              echo "::error::候选版本没有启用访问门禁（未登录访问接口预期 401），不得切换流量"; exit 1
             fi
           fi
       - name: 切换
@@ -168,8 +171,8 @@ jobs:
       - name: 冒烟测试：正式预览网址必须有访问门禁
         run: |
           URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then echo "::error::访问门禁未生效（预期 401），请立即 rollback"; exit 1; fi
           {
             echo "## 流量已切换（${{ inputs.action }}）"
@@ -199,8 +202,8 @@ jobs:
           URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
             | jq -r --arg r "${REVISION}" '[.status.traffic[] | select(.revisionName==$r and (.tag // "" | startswith("c-")))][0].url // empty')
           if [ -z "${URL}" ]; then echo "::error::${REVISION} 不是 deploy 建立的候选版本"; exit 1; fi
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问候选 ${REVISION} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问候选 ${REVISION} → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then echo "::error::候选版本没有访问门禁（预期 401），不切换"; exit 1; fi
       - name: 切换流量
         env:
@@ -211,8 +214,8 @@ jobs:
           REVISION: ${{ needs.deploy.outputs.revision }}
         run: |
           URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then
             echo "::error::访问门禁未生效（预期 401），自动切回 ${PREVIOUS_REVISION}"
             if [ -n "${PREVIOUS_REVISION}" ]; then

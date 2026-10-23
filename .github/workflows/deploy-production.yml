@@ -111,16 +111,16 @@ jobs:
           URL=$(echo "${ENTRY}" | jq -r '.url')
           REVISION=$(echo "${ENTRY}" | jq -r '.revisionName')
           echo "REVISION=${REVISION}" >> "$GITHUB_ENV"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问候选 ${REVISION} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问候选 ${REVISION} → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then echo "::error::候选版本没有访问门禁（预期 401），不切换"; exit 1; fi
       - name: 切换 100% 流量
         run: gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
       - name: 切换后：正式网址必须有访问门禁，否则自动切回
         run: |
           URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then
             echo "::error::访问门禁未生效（预期 401），自动切回 ${PREVIOUS_REVISION}"
             if [ -n "${PREVIOUS_REVISION}" ]; then
@@ -157,8 +157,8 @@ jobs:
       - name: 切换后：正式网址必须有访问门禁
         run: |
           URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/")
-          echo "未带密码访问 ${URL} → HTTP ${CODE}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
+          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
           if [ "${CODE}" != "401" ]; then echo "::error::访问门禁未生效（预期 401），请切到其他版本"; exit 1; fi
           {
             echo "## 正式站已切回"

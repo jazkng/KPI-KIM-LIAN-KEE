@@ -133,6 +133,8 @@ export interface AttemptState {
 export const LIMITS = {
     login: { maxFailures: 5, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
     boss: { maxFailures: 5, windowMs: 15 * 60 * 1000, lockMs: 30 * 60 * 1000 },
+    /** 同一员工不论 IP：1 小时错 20 次锁 1 小时（登录页公开后，防止换 IP 猜 PIN） */
+    loginEmployee: { maxFailures: 20, windowMs: 60 * 60 * 1000, lockMs: 60 * 60 * 1000 },
 } as const;
 
 export const isLocked = (s: AttemptState | null, now: number) => !!s && s.lockedUntil > now;
