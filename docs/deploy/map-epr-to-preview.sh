@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 御膳智控 ERP V2 · 让预览站改用 epr.kimliankee.app 这个网址（由负责人在 Google Cloud Shell 执行）
+# 御膳智控 ERP V2 · （已完成，过渡用）让测试站暂时也用 epr.kimliankee.app。正式站设好后，用 move-epr-to-production.sh 搬到正式站。
 #
 # 负责人 2026-10-23 决定：现在只是更换以后要用的网址，还没有正式发布。
 # 做法：在现有的预览站服务 erp-v2-dev 上多加一个网址 epr.kimliankee.app。

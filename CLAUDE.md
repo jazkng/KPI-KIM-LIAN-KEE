@@ -23,6 +23,7 @@
 ## 快速迭代（负责人 2026-10-14 决定，详见规范第 11 条）
 - 完成且 CI 通过的 PR，检查依赖与冲突后尽快合并到 `develop-v2`，不要长期留在 Draft。
 - 合并后自动部署 `dev.kimliankee.app`。部署前跑 CI 并验证访问门禁，失败自动回滚。
+- **dev 是测试站，`epr.kimliankee.app` 是正式站**（负责人 2026-10-23）：只有负责人在对话中说「发布」，才可运行 `deploy-production.yml`（action=release）把 dev 当下的版本发布到 epr。见 `docs/deploy/production-plan.md`。
 - 按功能逐个发布。涉及真实写入、付款、订单权限、迁移的功能，未通过安全检查前可先发布界面，但禁用操作。
 - 有阻碍（批量写入、财务缺口、权限风险）的 PR 明确列出阻碍，不强行合并。
 

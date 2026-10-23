@@ -14,8 +14,7 @@
 
 ## B. 部署
 5. **V2 正式发布**：正式网址指向 V2，需要调整 Cloudflare DNS 和 Cloud Run。预览站 `dev.kimliankee.app` 的访问门禁（`PREVIEW_ACCESS_PASSWORD`）要换成正式登录保护，不能直接拿掉。
-   - 2026-10-23 负责人决定以后的网址用 `epr.kimliankee.app`。**目前只是预览站改用这个网址**（`docs/deploy/map-epr-to-preview.sh`），还没有正式发布。
-   - 正式发布时的做法见 `docs/deploy/production-plan.md`（尚未批准执行）。
+   - 2026-10-23 负责人决定：**dev 是测试站，epr 是正式站，负责人确认 dev 后才发布到 epr。** 做法见 `docs/deploy/production-plan.md`。
 6. 员工手机上的 App（TWA / 主画面捷径）改指向正式网址，`assetlinks` 一并更新。
 
 ## C. 清理测试与过渡功能

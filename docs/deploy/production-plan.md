@@ -1,51 +1,53 @@
-# V2 正式站 `epr.kimliankee.app`（以后正式发布时使用）
+# 正式站 `epr.kimliankee.app` 与测试站 `dev.kimliankee.app`
 
-> 状态：**尚未执行，正式发布需负责人另行批准。**
-> 负责人 2026-10-23 说明：现在只是更换以后要用的网址，还没有正式发布。目前做法是让**预览站**改用 `epr.kimliankee.app`
-> （`docs/deploy/map-epr-to-preview.sh`：在 `erp-v2-dev` 上多加这个网址，dev 网址保留）。
-> 本文件是以后正式发布时的做法：另开正式服务 `erp-v2`，届时要先把 `epr` 的网址映射从 `erp-v2-dev` 移到 `erp-v2`。
-> 云端设置（Cloud Run、网域映射、Cloudflare DNS）由负责人执行；Claude Code 没有这些权限，也不得自行修改 DNS。
+> 负责人 2026-10-23 决定：**dev 是测试站，epr 是正式站。负责人确认 dev 的内容可以后，才发布到 epr。**
+> 云端设置（Cloud Run、网域映射）由负责人执行；Claude Code 没有这些权限，也不得自行修改 DNS。
+> 发布到正式站：负责人说「发布」，或自己执行第 3 节的指令。
 
 ## 1. 架构
 
 ```
-epr.kimliankee.app ──(Cloudflare DNS, DNS only)──▶ Cloud Run erp-v2      ← 正式站：手动发布
-dev.kimliankee.app ──(Cloudflare DNS, DNS only)──▶ Cloud Run erp-v2-dev  ← 预览站：每次合并自动更新
-                                 两者 ──▶ 同一个正式 Firestore（与 V1 相同）
+dev.kimliankee.app ──▶ Cloud Run erp-v2-dev  ← 测试站：develop-v2 每次合并自动更新
+epr.kimliankee.app ──▶ Cloud Run erp-v2      ← 正式站：负责人确认后才发布
+                       两者 ──▶ 同一个正式 Firestore（与 V1 相同）
 ```
 
 | 项目 | 做法 |
 | --- | --- |
-| 版本 | 正式站**不重新构建**，直接用预览站正在跑、已通过 CI 与门禁检查的镜像。负责人在 dev 验收后，再发布到 epr |
-| 访问门禁 | 正式站同样启用（`PREVIEW_ACCESS_PASSWORD`，正式站自己的密码 `erp-v2-prod-access-password`）。员工第一次打开时浏览器会问一次帐号密码（帐号随意）。门禁要等「只保留服务端登录 + 收紧 Rules」完成后另行评估，不能直接拿掉 |
-| 密钥 | Gemini、发票扫描沿用预览站的 Secret；正式站只新增访问密码 |
-| 权限 | 部署账号只多了 `erp-v2` 一个服务的部署权，和读取预览站目前版本的权限 |
+| 版本 | 正式站**不重新构建**，直接发布测试站正在跑、负责人看过的同一个镜像 |
+| 资料 | 测试站与正式站用**同一个资料库**。在 dev 上做的操作是真的，会出现在正式站与 V1 |
+| 登录 | 服务端登录（登录后免密码）两边同一个开关（GitHub 变量 `AUTH_SERVER_ENABLED`）；两边的登录记录分开 |
+| 访问门禁 | 正式站有自己的后备密码 `erp-v2-prod-access-password`（只给负责人；员工用员工 PIN 登录） |
+| 密钥 | Gemini、发票扫描沿用测试站的 Secret |
 | main 分支 | 不动。正式站从 `develop-v2` 的镜像发布 |
 
-## 2. 负责人一次性设置
+## 2. 负责人一次性设置（依序做）
 
-1. Google Cloud Shell：
+1. **正式站服务**（Cloud Shell，约 5 分钟）：
    ```bash
    cd KPI-KIM-LIAN-KEE && git checkout develop-v2 && git pull
-   PROJECT_ID=<你的 Firebase 项目 ID> bash docs/deploy/setup-production.sh
+   PROJECT_ID=<项目 ID> bash docs/deploy/setup-production.sh
    ```
-   正式站密码只显示一次，请存好。
-2. **Cloudflare**：按脚本列出的记录新增或修改 `epr`（**DNS only / 灰色云**）。如果 `epr` 原本已有记录，先截图保存。HTTPS 证书通常 15–60 分钟内自动签发。
-3. Firebase Web API Key 如有「HTTP referrer」限制，加入 `https://epr.kimliankee.app/*`。
-4. 发布：
+   正式站后备密码只显示一次，请存好。这一步 epr 网址先不动，员工照常使用。
+2. **登录后免密码**（如果还没做）：`docs/deploy/enable-server-login.sh`，再在 GitHub Variables 设 `AUTH_SERVER_ENABLED=true`。
+3. **第一次发布正式站**（第 3 节）。完成后可用 Cloud Run 给的 `erp-v2-….run.app` 网址先看一眼。
+4. **店休时把 epr 网址搬到正式站**：
    ```bash
-   gh workflow run deploy-production.yml -R jazkng/KPI-KIM-LIAN-KEE --ref develop-v2 -f action=release
+   PROJECT_ID=<项目 ID> bash docs/deploy/move-epr-to-production.sh
    ```
-5. 用正式站密码打开 `https://epr.kimliankee.app`，确认登录、员工资料、日结页面正常。
+   搬的过程中 epr 有 15–60 分钟打不开（重新签发 HTTPS 证书），员工这段时间可用 dev。Cloudflare 不用改。
 
-## 3. 之后怎么更新、怎么回滚
+## 3. 平常的流程
 
-- **更新正式站**：照常合并 → dev 自动更新 → 负责人在 dev 看过 → 再执行一次第 2 节第 4 步。
-- **发布指定版本**：加 `-f commit=<develop-v2 的完整 SHA>`（那个 commit 必须部署过预览站）。
-- **回滚**：`gh workflow run deploy-production.yml -R jazkng/KPI-KIM-LIAN-KEE --ref develop-v2 -f action=rollback -f revision=<旧 revision>`。旧 revision 名称在每次发布的运行摘要里。
-- 回滚只回退代码，不回退已写入的资料。
+1. 改动合并 → dev 自动更新。
+2. 负责人在 dev 检查。
+3. 可以了 → 发布到 epr：
+   - 跟 Claude Code 说「发布」；或
+   - `gh workflow run deploy-production.yml -R jazkng/KPI-KIM-LIAN-KEE --ref develop-v2 -f action=release`
+   发布的是 dev **当下**的版本。工作流会先部署不接流量的候选版本、确认未登录访问接口是 401，才切流量；失败自动切回上一版。
+4. **回滚**：`… -f action=rollback -f revision=<旧 revision>`（旧 revision 名称在每次发布的运行摘要里）。只回退程序，不回退已写入的资料。
 
-## 4. 上线后要注意
-- **会议签到 QR**：以前从 dev 打印的墙上 QR 指向 dev。请在正式站重新打印（会议 → QR）。App 里的「扫一扫」两种 QR 都认得。
-- **员工手机的主画面捷径 / App**：改成 epr 网址（TWA 的 `assetlinks` 见 `docs/deploy/v2-cutover-checklist.md` B6）。
-- **V1 仍在线**：V1 和 V2 共用资料库，V1 停用与安全收紧（Rules、PIN 重设）照 `v2-cutover-checklist.md` 逐项批准后进行。
+## 4. 注意
+- **会议签到 QR**：从正式站（epr）打印墙上的 QR。App 里的「扫一扫」两种都认得。
+- **员工手机**：主画面捷径用 epr 网址。
+- **V1 仍在线**：V1 停用、全员重设 PIN、收紧 Rules，照 `v2-cutover-checklist.md` 逐项批准后进行。
