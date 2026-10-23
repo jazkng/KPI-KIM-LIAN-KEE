@@ -1,6 +1,7 @@
 # CLAUDE.md — 金莲记 · 御膳智控 ERP
 
 **完整共同规范：[`docs/KLK_ERP_V2_RULES.md`](docs/KLK_ERP_V2_RULES.md)（必读；Claude Code 与 Codex 共用）。** 本文件只列出每次工作都必须遵守的要点。
+**目前的部署方式与待办：[`docs/deploy/2026-10-24-handoff-to-codex.md`](docs/deploy/2026-10-24-handoff-to-codex.md)（dev 测试站 / epr 正式站、登录方式、V1 停用步骤）。**
 
 > 本文件供 Claude Code 读取；OpenAI Codex 读取内容相同的 `AGENTS.md`。修改规则时请两份一起更新。
 
