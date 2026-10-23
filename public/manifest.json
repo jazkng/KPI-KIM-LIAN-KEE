@@ -1,13 +1,13 @@
 {
-  "name": "御膳智控 ERP",
-  "short_name": "御膳智控",
-  "description": "御膳智控 - 金莲记 ERP 智能餐饮管理系统",
+  "name": "金莲记EPR",
+  "short_name": "金莲记EPR",
+  "description": "金莲记EPR · 员工营运工作入口",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#111111",
-  "theme_color": "#FFD200",
+  "background_color": "#f7f4ed",
+  "theme_color": "#780d16",
   "icons": [
     {
       "src": "/icons/icon-192.png",
