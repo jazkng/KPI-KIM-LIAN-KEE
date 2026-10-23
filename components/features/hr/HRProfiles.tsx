@@ -23,6 +23,7 @@ import { EmployeePointsCard } from '../../points/EmployeePointsCard';
 import { isPartTimer } from '../../../utils/hr/hrOverview';
 import { positionSkillScores, getEmployeePositions, getStarLevel } from '../../../constants/skillCatalog';
 import { SHIFT_GROUP_META, shiftGroupOf } from '../../../constants/shiftGroups';
+import { FixedShiftField } from './FixedShiftField';
 import { resolveTier, ORG_TIER_OPTIONS, ORG_UNIT_SUGGESTIONS, OPS_DEPTS, DEPT_META as ORG_DEPT_META } from '../../../utils/orgChartModel';
 import type { StarLevel } from '../../../constants/skillCatalog';
 import { isRetiredModule, withoutRetiredModules } from '../../../utils/retiredModules';
@@ -1481,6 +1482,11 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                                     </div>
                                                 )}
                                                 {isEditing && <p className="text-[10px] text-gray-400 font-bold mt-1">跟考勤、组织图同步；再点一次 = 取消分组</p>}
+                                            </div>
+                                            {/* ⏰ 固定上下班时间（负责人 2026-10-23 批准）：后勤、会计等跟店面时间不同的人 */}
+                                            <div className="col-span-full">
+                                                <BiLabel text="固定上下班时间 (Fixed Hours)" />
+                                                <FixedShiftField value={form.fixedShift} isEditing={isEditing} onChange={fixedShift => setForm({ ...form, fixedShift })} />
                                             </div>
                                                 <SelectField label={isSuperAdminMode ? "组织职级 (Org Level)" : "组织职级 (只读)"} value={form.orgLevel || getOrgLevel(form as Employee)} onChange={(e: any) => setForm({...form, orgLevel: e.target.value})} options={ORG_LEVEL_OPTIONS} isEditing={isEditing && isSuperAdminMode} />
                                                 <SelectField label={isSuperAdminMode ? "系统入口特殊覆盖 (Portal Override)" : "系统入口 (自动)"} value={isSuperAdminMode ? (form.portalRoleOverride || "") : getPortalRole(form as Employee)} onChange={(e: any) => setForm({...form, portalRoleOverride: e.target.value || undefined})} options={isSuperAdminMode ? [{label: `跟随职级（自动：${getPortalRole(form as Employee)}）`, value: ""}, ...PORTAL_ROLE_OPTIONS] : PORTAL_ROLE_OPTIONS} isEditing={isEditing && isSuperAdminMode} />

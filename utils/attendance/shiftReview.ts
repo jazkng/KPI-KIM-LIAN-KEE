@@ -18,6 +18,7 @@
 import type { AttendanceRecord, Employee } from '../../types';
 import type { AttendanceShiftSettings } from '../dataManager';
 import { getTargetShiftForDate } from '../dataManager';
+import type { FixedShift } from './fixedShift';
 import type { Face3000Employee, Face3000Import } from './face3000';
 
 export type ExceptionType = 'MISSING_PUNCH' | 'LATE' | 'EARLY_LEAVE' | 'OVERTIME' | 'LONG_SHIFT';
@@ -163,8 +164,8 @@ export const matchEmployee = (deviceNo: string, employees: Employee[]): Employee
     );
 };
 
-const scheduleFor = (businessDate: string, settings: AttendanceShiftSettings, shiftGroup: number) => {
-    const s = getTargetShiftForDate(businessDate, settings, shiftGroup);
+const scheduleFor = (businessDate: string, settings: AttendanceShiftSettings, shiftGroup: number, fixedShift?: FixedShift) => {
+    const s = getTargetShiftForDate(businessDate, settings, shiftGroup, fixedShift);
     const inMin = toMinutes(s.checkInStr);
     let outMin = toMinutes(s.checkOutStr);
     // 与 getTargetShiftForDate 相同的跨午夜判断
@@ -182,6 +183,7 @@ const buildDay = (
     shiftGroup: number,
     opts: Required<ReviewOptions>,
     resolutions: Record<string, Resolution>,
+    fixedShift?: FixedShift,
 ): ReviewDay => {
     const key = (type: ExceptionType) => `${deviceNo}|${businessDate}|${type}`;
     const settings = opts.shiftSettings;
@@ -201,7 +203,7 @@ const buildDay = (
         if (kept.length === 0 || m - kept[kept.length - 1] > opts.duplicateWindowMinutes) kept.push(m);
     });
 
-    const sched = scheduleFor(businessDate, settings, shiftGroup);
+    const sched = scheduleFor(businessDate, settings, shiftGroup, fixedShift);
     const exceptions: ReviewException[] = [];
     // override：null = 强制视为未处理；不传 = 用主管的决定
     const add = (type: ExceptionType, message: string, minutesValue?: number, override?: null) =>
@@ -320,7 +322,7 @@ export const buildReview = (
 
         const days = [...byDay.entries()]
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, mins]) => buildDay(src.deviceNo, date, mins, date === data.periodEnd, shiftGroup, opts, resolutions));
+            .map(([date, mins]) => buildDay(src.deviceNo, date, mins, date === data.periodEnd, shiftGroup, opts, resolutions, employee?.fixedShift));
 
         const counted = days.filter(d => !d.markedAbsent && !d.incomplete && d.workedMinutes > 0);
         const lateDays = counted.filter(d => d.lateMinutes > 0 && !d.lateExcused);

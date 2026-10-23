@@ -77,7 +77,7 @@ export const RosterHeader: React.FC<RosterHeaderProps> = ({
                             </span>
                         ) : (
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">
-                                草稿状态 (Draft)
+                                草稿 · 员工还看不到
                             </span>
                         )}
                     </div>

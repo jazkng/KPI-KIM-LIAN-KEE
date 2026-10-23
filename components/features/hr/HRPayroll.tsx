@@ -136,16 +136,18 @@ const MONTHLY_LATE_QUOTA_MIN = 60; // 月累积 >60min → 再扣1小时
 const DAILY_WORK_HOURS_PAY = 10;
 const DAYS_PER_MONTH_PAY = 30;
 
-const getShiftStartForDate = (dateStr: string): Date => {
-  return getTargetShiftForDate(dateStr, payrollShiftSettings).checkIn;
+// 薪资迟到扣款一直按班次 1 的时间算；有固定上下班时间的员工改按自己的时间
+const getShiftStartForDate = (dateStr: string, fixedShift?: Employee['fixedShift']): Date => {
+  return getTargetShiftForDate(dateStr, payrollShiftSettings, 1, fixedShift).checkIn;
 };
 
 const getLateMinutesFromRecord = (
   clockInISO: string,
   dateStr: string,
+  fixedShift?: Employee['fixedShift'],
 ): number => {
   const clockIn = new Date(clockInISO);
-  const shiftStart = getShiftStartForDate(dateStr);
+  const shiftStart = getShiftStartForDate(dateStr, fixedShift);
   return Math.max(
     0,
     Math.floor((clockIn.getTime() - shiftStart.getTime()) / 60000),
@@ -161,6 +163,7 @@ const getLateMinutesFromRecord = (
 const calculateLatePenalty = (
   basicSalary: number,
   records: { clockIn: string; date: string; employeeId: string }[],
+  fixedShift?: Employee['fixedShift'],
 ) => {
   if (basicSalary <= 0 || !records || records.length === 0) {
     return { amount: 0, singleDayCount: 0, totalLateMinutes: 0, hourlyRate: 0 };
@@ -182,7 +185,7 @@ const calculateLatePenalty = (
 
   records.forEach((rec) => {
     if (!rec.clockIn || !rec.date) return;
-    const lateMin = getLateMinutesFromRecord(rec.clockIn, rec.date);
+    const lateMin = getLateMinutesFromRecord(rec.clockIn, rec.date, fixedShift);
     if (lateMin > 0) {
       totalLateMinutes += lateMin;
       if (lateMin > payrollShiftSettings.graceMinutes) {
@@ -693,7 +696,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
     const empAttendance = monthAttendance.filter(
       (r) => r.employeeId === emp.id,
     );
-    const lateCalc = calculateLatePenalty(historicalBasic, empAttendance);
+    const lateCalc = calculateLatePenalty(historicalBasic, empAttendance, emp.fixedShift);
     const actualPenaltyAmount = enableAttendanceDeduction ? getDeductedLatePenalty(lateCalc.amount, latePenaltyMode) : 0;
     const displayPenaltyDeduction = (enableAttendanceDeduction && latePenaltyMode !== 'WARN_ONLY') ? actualPenaltyAmount : 0;
     const lateNote =
@@ -1398,7 +1401,7 @@ export const HRPayroll: React.FC<HRPayrollProps> = ({
           employeeId: r.employeeId,
         }));
       const basic = getHistoricalSalary(emp, selectedMonth);
-      const calc = calculateLatePenalty(basic, empAtt);
+      const calc = calculateLatePenalty(basic, empAtt, emp.fixedShift);
       const actualPenaltyAmount = enableAttendanceDeduction ? getDeductedLatePenalty(calc.amount, latePenaltyMode) : 0;
       const displayPenaltyDeduction = (enableAttendanceDeduction && latePenaltyMode !== 'WARN_ONLY') ? actualPenaltyAmount : 0;
 

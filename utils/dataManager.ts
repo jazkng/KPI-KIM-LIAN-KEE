@@ -1,3 +1,5 @@
+import { nextPublished, publishedView } from './roster/publishedRoster';
+import { fixedShiftTimes, type FixedShift } from './attendance/fixedShift';
 import { db } from '../firebaseConfig';
 import { collection, getDocs, getDocsFromServer, doc, setDoc, deleteDoc, getDoc, getCountFromServer, query, where, writeBatch, updateDoc, runTransaction, limit, orderBy, onSnapshot, startAfter } from 'firebase/firestore';
 import { 
@@ -1885,15 +1887,14 @@ export class DataManager {
     }
 
     /**
-     * 员工 App 看排班用（只读，不迁移、不写入）：读排班管理存的 roster_months/{月份}；
-     * 这个月份还没有新格式时，才从旧的 roster/main 里挑出这个月来看。
+     * 员工 App 看排班用（只读，不迁移、不写入）：读排班管理存的 roster_months/{月份} 的已发布版本；
+     * 没有已发布版本时，才从旧的 roster/main（发布时会同步过去）里挑出这个月来看。
      */
     static async getRosterMonthReadOnly(monthKey: string): Promise<{ roster: Record<string, Record<string, string>>; notes: Record<string, string> }> {
         const monthDoc = await getDoc(doc(db, 'roster_months', monthKey));
-        if (monthDoc.exists()) {
-            const data = monthDoc.data();
-            return { roster: data.roster || {}, notes: data.notes || {} };
-        }
+        // 只给员工看已发布的版本；草稿不显示
+        const published = monthDoc.exists() ? publishedView(monthDoc.data()) : null;
+        if (published) return published;
         const [legacyRoster, legacyNotes] = await Promise.all([getDoc(doc(db, 'roster', 'main')), getDoc(doc(db, 'roster', 'notes'))]);
         const pick = (obj: Record<string, any>) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => k.startsWith(monthKey)));
         return { roster: pick(legacyRoster.exists() ? legacyRoster.data() : {}), notes: pick(legacyNotes.exists() ? legacyNotes.data() : {}) };
@@ -1945,6 +1946,9 @@ export class DataManager {
                     revision: nextRevision,
                     shiftMode: meta?.shiftMode ?? currentData.shiftMode ?? 'SINGLE'
                 };
+                // 员工只看已发布的版本：发布时另存一份，存草稿时保留上次发布的
+                const published = nextPublished(current.exists() ? currentData : null, finalDoc);
+                if (published) Object.assign(finalDoc, published);
                 
                 transaction.set(monthRef, finalDoc);
                 return finalDoc;
@@ -2827,12 +2831,17 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceShiftSettings = {
     enableLateEarlyCheck: true
 };
 
-export const getTargetShiftForDate = (dateStr: string, settings: AttendanceShiftSettings, shiftGroup: number = 1) => {
+export const getTargetShiftForDate = (dateStr: string, settings: AttendanceShiftSettings, shiftGroup: number = 1, fixedShift?: FixedShift | null) => {
     const isGrp2 = shiftGroup === 2;
     let checkInTimeStr = isGrp2 ? (settings.weekdayCheckIn2 || "09:00") : settings.weekdayCheckIn;
     let checkOutTimeStr = isGrp2 ? (settings.weekdayCheckOut2 || "18:00") : settings.weekdayCheckOut;
+    // 员工自己的固定上下班时间优先（选填；没设定照旧）
+    const fixed = fixedShiftTimes(dateStr, fixedShift);
     
-    if (settings.hasSpecialPeriod && settings.specialStartDate && settings.specialEndDate) {
+    if (fixed) {
+        checkInTimeStr = fixed.checkIn;
+        checkOutTimeStr = fixed.checkOut;
+    } else if (settings.hasSpecialPeriod && settings.specialStartDate && settings.specialEndDate) {
         if (dateStr >= settings.specialStartDate && dateStr <= settings.specialEndDate) {
             checkInTimeStr = settings.specialCheckIn || (isGrp2 ? (settings.weekdayCheckIn2 || "09:00") : settings.weekdayCheckIn);
             checkOutTimeStr = settings.specialCheckOut || (isGrp2 ? (settings.weekdayCheckOut2 || "18:00") : settings.weekdayCheckOut);
@@ -2880,7 +2889,8 @@ export const getAttendanceStatus = (
     clockOutISO: string | undefined | null,
     dateStr: string,
     settings: AttendanceShiftSettings,
-    shiftGroup: number = 1
+    shiftGroup: number = 1,
+    fixedShift?: FixedShift | null
 ): {
     status: 'COMPLETED' | 'LATE' | 'EARLY_OUT' | 'LATE_AND_EARLY';
     lateMinutes: number;
@@ -2888,7 +2898,7 @@ export const getAttendanceStatus = (
     isLate: boolean;
     isEarlyOut: boolean;
 } => {
-    const shift = getTargetShiftForDate(dateStr, settings, shiftGroup);
+    const shift = getTargetShiftForDate(dateStr, settings, shiftGroup, fixedShift);
     
     // Evaluation switches
     const globalLateEnabled = (settings.enableLateCheck ?? true) && (settings.enableLateEarlyCheck ?? true);
