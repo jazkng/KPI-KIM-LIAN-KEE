@@ -119,6 +119,7 @@ export const mountDeviceAuthRoutes = (app: express.Express, opts: AuthOptions) =
                 store: pub.storeId,
                 epoch: opts.epoch,
             });
+            opts.onSignedIn?.(res, { sub: snap!.id, kind: 'device' });
             res.json({
                 token,
                 session: {

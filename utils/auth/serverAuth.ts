@@ -19,13 +19,6 @@ export interface RosterEmployee {
     avatar: string;
 }
 
-export interface Roster {
-    empty: boolean;
-    hasOwner: boolean;
-    logoUrl: string;
-    employees: RosterEmployee[];
-}
-
 export type LoginResult =
     | { kind: 'OK'; employee: Employee }
     | { kind: 'MUST_CHANGE'; changeToken: string; employee: RosterEmployee }
@@ -39,10 +32,28 @@ const post = async (path: string, body: unknown, headers: Record<string, string>
     return { status: res.status, data: data as Record<string, any> };
 };
 
-export const fetchRoster = async (): Promise<Roster> => {
-    const res = await fetch('/api/auth/roster');
-    if (!res.ok) throw new Error(`roster ${res.status}`);
+/** 登录页用：只有 Logo 与「系统是否还没有员工」，不含员工名单（负责人 2026-10-23 选 b） */
+export const fetchBranding = async (): Promise<{ logoUrl: string; empty: boolean }> => {
+    const res = await fetch('/api/auth/branding');
+    if (!res.ok) throw new Error(`branding ${res.status}`);
     return res.json();
+};
+
+/**
+ * 服务端的登录记录（Cookie，代替预览站密码）是否还有效：
+ * 'OK' = 有效或以预览站密码进来；'EXPIRED' = 没有或已到期（要重新输入员工 PIN）；
+ * 'MISMATCH' = 记录的是别人；'UNKNOWN' = 连不上（离线时不登出）
+ */
+export const checkServerSession = async (expectedId: string): Promise<'OK' | 'EXPIRED' | 'MISMATCH' | 'UNKNOWN'> => {
+    try {
+        const res = await fetch('/api/auth/session', { cache: 'no-store' });
+        if (res.status === 401) return 'EXPIRED';
+        if (!res.ok) return 'UNKNOWN';
+        const data = await res.json();
+        return data?.kind === 'emp' && data.id !== expectedId ? 'MISMATCH' : 'OK';
+    } catch {
+        return 'UNKNOWN';
+    }
 };
 
 /** 以服务端签发的 Custom Token 登录 Firebase，再读取自己的员工资料 */
@@ -84,7 +95,11 @@ export const currentSignedInEmployeeId = async (): Promise<string | null> => {
     return typeof claims?.emp === 'string' ? claims.emp : null;
 };
 
-export const serverSignOut = () => signOut(auth).catch(() => undefined);
+/** 登出：清掉服务端的登录记录，再登出 Firebase 身份 */
+export const serverSignOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    await signOut(auth).catch(() => undefined);
+};
 
 // ── CHG-05b：设备登录、设备户口、PIN 二次确认 ──
 
