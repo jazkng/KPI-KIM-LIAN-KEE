@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 御膳智控 ERP V2 · 正式站一次性设置（由负责人在 Google Cloud Shell 执行；正式发布需负责人另行批准，尚未执行）
+# 御膳智控 ERP V2 · 正式站一次性设置（由负责人在 Google Cloud Shell 执行）
+# 负责人 2026-10-23 决定：dev 是测试站，确认后发布到 epr；epr 是正式站。
 #
 # 前提：预览站已经按 setup-dev-preview.sh 设置好（镜像仓库、两个服务账号、GitHub 登录设定都沿用）。
 # 只新增资源，不修改也不删除任何现有资源：
@@ -61,9 +62,8 @@ step "4/4 自定义网域 ${DOMAIN}"
 if gcloud beta run domain-mappings describe --domain "${DOMAIN}" --region "${REGION}" >/dev/null 2>&1; then
   MAPPED_TO="$(gcloud beta run domain-mappings describe --domain "${DOMAIN}" --region "${REGION}" --format='value(spec.routeName)')"
   if [ "${MAPPED_TO}" != "${SERVICE}" ]; then
-    echo "  ⚠️ ${DOMAIN} 目前指向 ${MAPPED_TO}（预览站）。正式发布时先执行："
-    echo "     gcloud beta run domain-mappings delete --domain ${DOMAIN} --region ${REGION}"
-    echo "     然后重跑本脚本。Cloudflare 记录通常不用改（同样指向 ghs.googlehosted.com）。"
+    echo "  ${DOMAIN} 目前指向 ${MAPPED_TO}（测试站），这一步先不动，员工照常使用。"
+    echo "  等正式站第一次发布成功后，在店休时执行 docs/deploy/move-epr-to-production.sh 把网址搬过来。"
   else
     echo "  网域映射已存在。"
   fi
