@@ -3,332 +3,82 @@ import { PortalRole, Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
 import { DEFAULT_STAFF } from '../constants/staff';
 import { getPortalRole } from '../utils/orgAccess';
-import { bossLogin, changePinWithToken, fetchBranding, loginWithPin, serverAuthEnabled, type LoginResult } from '../utils/auth/serverAuth';
+import { changePinWithToken, fetchBranding, loginWithPin, serverAuthEnabled, type LoginResult } from '../utils/auth/serverAuth';
 import { APP_VERSION } from '../constants/versionHistory';
-import { Lock, User, ShieldCheck, Zap, Delete, Unlock, ArrowLeft, ShieldAlert, MonitorSmartphone, KeyRound, RotateCcw, ChevronRight, Loader2, MapPin } from 'lucide-react';
+import { Lock, User, Delete, ChevronRight, Loader2 } from 'lucide-react';
 
 interface LoginProps {
     onLogin: (role: PortalRole, employee?: Employee) => void;
-    portalMode: 'STAFF' | 'BOSS';
-    onSwitchPortal: (mode: 'STAFF' | 'BOSS') => void;
 }
 
 // --- STYLES & ANIMATIONS ---
 const LOGIN_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Noto+Serif+SC:wght@300;500;700;900&family=Inter:wght@400;600;800&display=swap');
+  .klk-login { min-height:100svh; min-height:var(--login-viewport-height,100dvh); display:grid; grid-template-columns:minmax(280px,36%) 1fr; background:#f7f4ed; color:#26211d; }
+  .klk-brand { background:#780d16; color:#f4cf94; padding:clamp(32px,5vw,80px); display:flex; flex-direction:column; justify-content:center; gap:36px; }
+  .klk-brand img { width:min(100%,240px); height:auto; border-radius:16px; }
+  .klk-brand h1 { font-size:clamp(30px,3vw,48px); font-weight:900; margin:12px 0; }
+  .klk-eyebrow { font-size:11px; font-weight:800; letter-spacing:.12em; }
+  .klk-brand-copy { font-size:18px; opacity:.85; } .klk-branch { font-size:12px; opacity:.7; }
+  .klk-login-main { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px 20px; }
+  .klk-login-content { width:100%; max-width:420px; margin:auto 0; }
+  .klk-login-heading { margin-bottom:24px; } .klk-login-heading .klk-eyebrow { color:#8c6d55; }
+  .klk-login-heading h2 { font-size:30px; font-weight:900; margin:8px 0; } .klk-login-heading>p:last-child { font-size:14px; color:#78716c; }
+  .klk-login-card { background:white; border:1px solid #e8e0d6; border-radius:24px; padding:28px; box-shadow:0 16px 50px #50221a08; }
+  .klk-steps { display:flex; align-items:center; gap:12px; color:#a8a29e; font-size:12px; margin-bottom:28px; } .klk-steps .active { color:#8c1720; font-weight:800; }
+  .klk-field-label { display:block; font-size:14px; font-weight:800; margin-bottom:10px; }
+  .klk-input { width:100%; height:56px; padding:0 16px; background:#fcfbf8; border:1.5px solid #ded6cd; border-radius:12px; font-size:18px; outline:none; scroll-margin:24px; }
+  .klk-input:focus { border-color:#931d26; box-shadow:0 0 0 3px #931d2612; } .klk-input[aria-invalid=true] { border-color:#b91c1c; }
+  .klk-submit { width:100%; min-height:52px; border-radius:12px; background:#8d1520; color:white; font-size:15px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; padding:12px; }
+  .klk-submit:disabled { background:#e7e2dc; color:#a8a29e; } .klk-submit:focus-visible,.klk-keyboard-toggle:focus-visible { outline:3px solid #d3a550; outline-offset:3px; }
+  .klk-keyboard-toggle { display:block; min-height:44px; margin:12px auto -8px; color:#78716c; font-size:12px; }
+  .klk-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:18px; } .klk-keypad button { min-height:48px; border:1px solid #e8e0d6; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .klk-identity { display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:20px; } .klk-identity button { margin-left:auto; min-height:44px; color:#8d1520; }
+  .klk-error { color:#b91c1c; font-size:13px; margin-top:10px; } .klk-pin-hint { font-size:12px; color:#78716c; margin-bottom:12px; }
+  .klk-login-help { text-align:center; font-size:12px; color:#8a8177; margin-top:20px; } .klk-login-main footer { padding-top:24px; font-size:11px; color:#a8a29e; } .klk-login-main footer span { margin:0 8px; }
+  @media(max-width:767px) {
+    .klk-login { display:flex; flex-direction:column; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+    .klk-brand { flex-direction:row; align-items:center; justify-content:flex-start; gap:14px; padding:20px 24px 16px; background:transparent; color:#780d16; }
+    .klk-brand img { width:76px; border-radius:10px; } .klk-brand h1 { font-size:23px; margin:0; } .klk-brand .klk-eyebrow { font-size:8px; margin-bottom:5px; } .klk-brand-copy,.klk-branch { display:none; }
+    .klk-login-main { flex:1; padding:12px 20px 16px; } .klk-login-heading { margin-bottom:18px; } .klk-login-heading h2 { font-size:26px; }
+    .klk-login-card { padding:22px; border-radius:20px; } .klk-steps { margin-bottom:22px; } .klk-login-main footer { padding-top:16px; }
+  }
+  @media(max-height:650px) and (max-width:767px) { .klk-brand { padding-top:12px; padding-bottom:8px; } .klk-brand img { width:56px; } .klk-login-heading { margin-bottom:12px; } .klk-login-heading h2 { font-size:22px; } .klk-login-card { padding:18px; } .klk-login-help { margin-top:12px; } }
+  @media(prefers-reduced-motion:reduce) { .klk-login *, .energy-gate { animation:none!important; transition:none!important; } }
 
-  @keyframes smokeFlow {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  
-  @keyframes shakeHard {
-    0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
-    20%, 40%, 60%, 80% { transform: translateX(8px); }
-  }
-
-  @keyframes slowRotate {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .vintage-gold-ring {
-    position: absolute;
-    width: 108%;
-    height: 108%;
-    border: 1.5px dashed rgba(255, 210, 0, 0.4);
-    border-radius: inherit;
-    animation: slowRotate 30s linear infinite;
-    pointer-events: none;
-    z-index: 0;
-  }
-  
-  @keyframes goldGlow {
-    0%, 100% { opacity: 0.25; }
-    50% { opacity: 0.55; }
-  }
-  .gold-glow-background {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at 50% 25%, rgba(255, 210, 0, 0.08) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 1;
-    animation: goldGlow 8s ease-in-out infinite;
-  }
-
-  @keyframes shineSweep {
-    0% { transform: translateX(-150%) skewX(-25deg); }
-    100% { transform: translateX(150%) skewX(-25deg); }
-  }
-  
-  .shine-btn {
-    position: relative;
-    overflow: hidden;
-  }
-  .shine-btn::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 200%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.45) 30%,
-      rgba(255, 255, 255, 0.6) 50%,
-      rgba(255, 255, 255, 0.45) 70%,
-      transparent
-    );
-    animation: shineSweep 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    pointer-events: none;
-  }
-
-  .crimson-palace-bg {
-    background-color: #4a0404;
-    background-image: 
-        radial-gradient(circle at 50% 100%, #8B0000 0%, #500000 50%, #2a0000 100%),
-        url("https://www.transparenttextures.com/patterns/black-scales.png");
-    position: relative;
-  }
-
-  .smoke-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 200%;
-    height: 100%;
-    background: url('https://raw.githubusercontent.com/SochavaAG/example-assets/master/fog.png') repeat-x;
-    background-size: contain;
-    opacity: 0.15;
-    animation: smokeFlow 60s linear infinite;
-    pointer-events: none;
-    mix-blend-mode: overlay;
-  }
-
-  .glass-panel {
-    background: rgba(22, 1, 1, 0.65); /* Darker glass for better contrast */
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 210, 0, 0.25);
-    box-shadow: 0 25px 60px rgba(0,0,0,0.7);
-  }
-
-  .ripple-btn {
-    position: relative;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 210, 0, 0.15);
-    transition: all 0.2s;
-  }
-  
-  .ripple-btn:active {
-    transform: scale(0.95);
-    background: rgba(255, 210, 0, 0.18);
-    border-color: #FFD200;
-  }
-
-  .shake-container {
-    animation: shakeHard 0.4s ease-in-out;
-  }
-  
-  .energy-gate {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: #2a0000;
-    transition: opacity 0.8s ease-in-out;
-  }
-  
-  .energy-gate.dissolved {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .gate-lock-btn {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: #500000;
-    border: 4px solid #FFD200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    position: relative;
-    z-index: 20;
-    box-shadow: 0 0 30px rgba(255,210,0,0.2);
-    transition: all 0.3s;
-  }
-  
-  .gate-lock-btn:hover {
-    box-shadow: 0 0 60px rgba(255,210,0,0.6);
-    transform: scale(1.05);
-  }
-  
-  .gate-lock-btn.charging {
-    animation: shakeHard 0.5s ease-in-out infinite;
-    background: #FFD200;
-    border-color: white;
-  }
+  .energy-gate { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:#780d16; transition:opacity .3s; }
+  .energy-gate.dissolved { opacity:0; pointer-events:none; }
+  .gate-lock-btn { color:#f4cf94; }
 `;
 
 // --- COMPONENTS ---
 
-const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, placeholder = "Enter ID", error }: any) => {
-    const isIdStep = label.includes('ID');
-    const isSetPin = label.includes('SET NEW');
-    const isConfirmPin = label.includes('CONFIRM');
-    const slotCount = 6;
-    const errorText: Record<string, string> = {
-        'USER NOT FOUND': '找不到这个员工编号，请重新检查。',
-        'ACCESS DENIED': 'PIN 不正确，请重新输入。',
-        'ID OR PIN WRONG': '员工编号或 PIN 不正确，请重新输入。',
-        '6 DIGITS REQUIRED': '新 PIN 必须输入 6 位数字。',
-        'INVALID PIN': '这个 PIN 不可使用，请设置其他号码。',
-        'MISMATCH': '两次输入的 PIN 不一致。',
-        'LOCKED': '尝试次数过多，请 15 分钟后再试。',
+const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, placeholder, error, busy }: any) => {
+    const isId = label.includes('ID');
+    const [showKeyboard, setShowKeyboard] = useState(false);
+    const errors: Record<string, string> = {
+      'USER NOT FOUND': '找不到这个员工编号，请重新检查。',
+      'ACCESS DENIED': 'PIN 不正确，请重新输入。',
+      'ID OR PIN WRONG': '员工编号或 PIN 不正确，请重新输入。',
+      '6 DIGITS REQUIRED': '新 PIN 必须输入 6 位数字。',
+      'INVALID PIN': '这个 PIN 不可使用，请设置其他号码。',
+      'MISMATCH': '两次输入的 PIN 不一致。',
+      'LOCKED': '尝试次数过多，请稍后再试。',
     };
-    const displayError = errorText[error] || error;
-    const title = isIdStep
-        ? '员工登入'
-        : isSetPin
-            ? '设置新 PIN'
-            : isConfirmPin
-                ? '确认新 PIN'
-                : '输入登入 PIN';
-    const subtitle = isIdStep
-        ? '输入员工编号，继续确认个人资料'
-        : isSetPin || isConfirmPin
-            ? '请使用 6 位数字保护你的员工户口'
-            : '请输入你的 4–6 位数字 PIN';
-    const submitText = isIdStep
-        ? '继续 · Continue'
-        : isSetPin
-            ? '下一步 · Next'
-            : isConfirmPin
-                ? '确认新密码'
-                : '登入 · Login';
-
-    return (
-        <div className={`w-full ${error ? 'shake-container' : ''}`}>
-            <div className="mb-5 md:mb-6">
-                <div className="flex items-start gap-3">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${isIdStep ? 'bg-[#FFD200] text-[#111111]' : 'bg-[#650707] text-white'}`}>
-                        {isIdStep ? <User size={21} /> : <KeyRound size={21} />}
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black tracking-[0.18em] text-stone-400 uppercase">{label}</p>
-                        <h2 className="mt-0.5 text-xl md:text-2xl font-black text-[#111111]">{title}</h2>
-                        <p className="mt-1 text-xs md:text-sm font-semibold text-stone-500">{subtitle}</p>
-                    </div>
-                </div>
-
-                {isIdStep ? (
-                    <div className="relative mt-5">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={20} />
-                        <input
-                            type="text"
-                            value={value}
-                            onChange={(e) => onInput('SET_VALUE', e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && value.length > 0) onSubmit(); }}
-                            placeholder={placeholder || '例如：002 / ID002'}
-                            autoFocus
-                            autoComplete="username"
-                            maxLength={20}
-                            className="w-full h-16 rounded-2xl border-2 border-stone-200 bg-[#FAF9F6] pl-12 pr-4 text-center text-xl font-black font-mono tracking-[0.16em] text-[#111111] outline-none transition-all placeholder:tracking-normal placeholder:text-sm placeholder:font-semibold focus:border-[#650707] focus:bg-white focus:ring-4 focus:ring-[#650707]/8 uppercase"
-                        />
-                    </div>
-                ) : (
-                    <div className="mt-5 flex items-center justify-center gap-2 md:gap-3">
-                        {Array.from({ length: slotCount }).map((_, idx) => {
-                            const isFilled = idx < value.length;
-                            const isActive = idx === value.length;
-                            return (
-                                <div
-                                    key={idx}
-                                    className={`w-10 h-12 md:w-12 md:h-14 rounded-xl border-2 flex items-center justify-center transition-all ${
-                                        isFilled
-                                            ? 'border-[#650707] bg-[#650707] shadow-[0_8px_20px_rgba(101,7,7,0.13)]'
-                                            : isActive
-                                                ? 'border-[#FFD200] bg-[#FFF9D9] ring-4 ring-[#FFD200]/15'
-                                                : 'border-stone-200 bg-[#FAF9F6]'
-                                    }`}
-                                >
-                                    {isFilled ? (
-                                        <span className={`text-lg md:text-xl font-black select-none ${error ? 'text-red-200' : 'text-white'}`}>
-                                            {isMasked ? '●' : value[idx]}
-                                        </span>
-                                    ) : isActive ? (
-                                        <span className="w-0.5 h-5 bg-[#650707] rounded-full animate-pulse" />
-                                    ) : (
-                                        <span className="w-1.5 h-1.5 rounded-full bg-stone-300" />
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-
-                {error && (
-                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-center text-xs font-bold text-red-700">
-                        {displayError}
-                    </div>
-                )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5 md:gap-3 mb-4 md:mb-5">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                    <button
-                        type="button"
-                        key={n}
-                        onClick={() => onInput(n.toString())}
-                        className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl md:text-3xl font-black text-[#111111] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
-                    >
-                        {n}
-                    </button>
-                ))}
-                <button
-                    type="button"
-                    onClick={() => onInput('CLEAR')}
-                    disabled={value.length === 0}
-                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-white text-xs font-black text-stone-500 flex items-center justify-center gap-1.5 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
-                >
-                    <RotateCcw size={16} /> 清除
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onInput('0')}
-                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-[#FAF9F6] text-2xl md:text-3xl font-black text-[#111111] shadow-sm transition-all hover:border-[#FFD200] hover:bg-[#FFFBEA] active:scale-[0.96] active:bg-[#FFD200]"
-                >
-                    0
-                </button>
-                <button
-                    type="button"
-                    onClick={onDelete}
-                    disabled={value.length === 0}
-                    className="h-16 md:h-[72px] rounded-2xl border border-stone-200 bg-white text-stone-500 flex items-center justify-center transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.96] disabled:opacity-35"
-                >
-                    <Delete size={23} />
-                </button>
-            </div>
-
-            <button
-                type="button"
-                onClick={onSubmit}
-                disabled={value.length === 0}
-                className="w-full min-h-14 md:min-h-16 rounded-2xl bg-[#FFD200] px-5 py-3 text-sm md:text-base font-black text-[#111111] shadow-[0_12px_30px_rgba(255,210,0,0.22)] transition-all flex items-center justify-center gap-2 hover:bg-[#E5C100] active:scale-[0.98] disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none disabled:pointer-events-none"
-            >
-                {isIdStep ? <ChevronRight size={21} /> : <Unlock size={20} />}
-                {submitText}
-            </button>
-        </div>
-    );
+    const title = isId ? '员工编号' : label.includes('SET NEW') ? '设置 6 位新 PIN' : label.includes('CONFIRM') ? '再次确认新 PIN' : '登入 PIN';
+    return <form onSubmit={e => { e.preventDefault(); if (value && !busy) onSubmit(); }}>
+      <label className="klk-field-label" htmlFor="login-credential">{title}</label>
+      {label.includes('SET NEW') && <p className="klk-pin-hint">首次登入，请设置个人 6 位 PIN。</p>}
+      <input id="login-credential" type={isMasked ? 'password' : 'text'} inputMode={isId ? 'text' : 'numeric'} autoCapitalize="characters" spellCheck={false}
+        autoComplete={isId ? 'username' : label.includes('NEW') || label.includes('CONFIRM') ? 'new-password' : 'current-password'}
+        value={value} maxLength={isId ? 20 : 6} placeholder={isId ? placeholder : '输入 PIN'} disabled={busy}
+        aria-invalid={!!error} aria-describedby={error ? 'login-error' : undefined}
+        onChange={e => onInput('SET_VALUE', isId ? e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '') : e.target.value.replace(/\D/g, '').slice(0,6))}
+        className="klk-input" />
+      {error && <p id="login-error" role="alert" className="klk-error">{errors[error] || error}</p>}
+      <button className="klk-submit" type="submit" disabled={!value || busy}>{busy ? <><Loader2 size={18} className="animate-spin"/>正在登入…</> : <>{isId ? '继续' : label.includes('NEW') ? '继续确认' : '确认登入'}<ChevronRight size={18}/></>}</button>
+      <button className="klk-keyboard-toggle" type="button" aria-expanded={showKeyboard} onClick={() => setShowKeyboard(v => !v)}>{showKeyboard ? '收起屏幕键盘' : '使用屏幕键盘'}</button>
+      {showKeyboard && <div className="klk-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','DELETE'].map(n => <button type="button" key={n} disabled={busy} aria-label={n === 'DELETE' ? '删除一位' : n === 'CLEAR' ? '清除' : n} onClick={() => n === 'DELETE' ? onDelete() : onInput(n)}>{n === 'DELETE' ? <Delete size={20}/> : n === 'CLEAR' ? '清除' : n}</button>)}</div>}
+    </form>;
 };
 
 const TransitionGate = ({ gateState, onLockClick }: any) => {
@@ -349,7 +99,19 @@ const TransitionGate = ({ gateState, onLockClick }: any) => {
     );
 };
 
-export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPortal }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => document.documentElement.style.setProperty('--login-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+    resize();
+    viewport?.addEventListener('resize', resize);
+    window.addEventListener('resize', resize);
+    return () => {
+      viewport?.removeEventListener('resize', resize);
+      window.removeEventListener('resize', resize);
+      document.documentElement.style.removeProperty('--login-viewport-height');
+    };
+  }, []);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [step, setStep] = useState<'SELECT' | 'PIN' | 'CHANGE_PIN'>('SELECT');
   const [gateState, setGateState] = useState<'HIDDEN' | 'CLOSED' | 'OPENING' | 'READY' | 'ENTERING'>('HIDDEN');
@@ -357,7 +119,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
 
   const [enteredId, setEnteredId] = useState('');
   const [enteredPin, setEnteredPin] = useState('');
-  const [bossPassword, setBossPassword] = useState(''); 
+
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [changePinStep, setChangePinStep] = useState<'NEW' | 'CONFIRM'>('NEW');
@@ -368,7 +130,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
   const [isSystemEmpty, setIsSystemEmpty] = useState(false);
   // 读取失败或找不到负责人时显示错误，绝不显示「初始化系统」（初始化会覆盖正式员工资料）
   const [loadError, setLoadError] = useState<'LOAD_FAILED' | 'NO_OWNER' | null>(null);
-  const [customLogo, setCustomLogo] = useState<string>('');
+
   // 🔐 CHG-05：服务端登录开通时，PIN 只送到服务端比对；登录前不读 Firestore
   const [serverMode, setServerMode] = useState(false);
   const [changeToken, setChangeToken] = useState('');
@@ -382,13 +144,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
                 setServerMode(true);
                 // 登录页不再取得员工名单（负责人 2026-10-23 选 b）：只取 Logo；员工输入自己的编号，由服务端比对
                 const branding = await fetchBranding();
-                if (branding.logoUrl) setCustomLogo(branding.logoUrl);
+
                 if (branding.empty) setIsSystemEmpty(true);
                 return;
             }
             // 门店设定（Logo）与员工名单同时读取，不再一前一后等待；任一失败的处理与原本相同
-            const [cfg, list] = await Promise.all([DataManager.getConfig(), DataManager.getEmployees()]);
-            if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
+            const list = await DataManager.getEmployees();
+
 
             const activeList = list.filter(e => e.status !== 'TERMINATED' && e.isArchived !== true);
             const hasOwner = list.some(e => e.role.includes('Owner') || ['001', '002', '003', '004'].includes(e.id));
@@ -452,7 +214,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
     if (num === 'SET_VALUE') {
       if (step === 'SELECT') {
         setEnteredId(manualValue || '');
-      }
+      } else if (step === 'PIN') setEnteredPin(manualValue || '');
+      else if (changePinStep === 'NEW') setNewPin(manualValue || '');
+      else setConfirmPin(manualValue || '');
       return;
     }
     if (step === 'SELECT') { if (enteredId.length < 20) setEnteredId(prev => prev + num); return; }
@@ -563,246 +327,35 @@ export const Login: React.FC<LoginProps> = ({ onLogin, portalMode, onSwitchPorta
       setGateState('ENTERING');
   };
 
-  const handleBossDirectLogin = async () => {
-      if (serverMode) {
-          if (busy) return;
-          setBusy(true);
-          const r = await bossLogin(bossPassword);
-          setBusy(false);
-          if (r.kind === 'DENIED') { setError('WRONG PIN'); return; }
-          if (r.kind === 'LOCKED') { setError('尝试次数过多，请 30 分钟后再试。'); return; }
-          // 首次登录 / 临时 PIN：老板入口没有改 PIN 步骤，请从员工入口以编号登录后设定
-          applyServerResult(r, () => setError('请从员工入口以员工编号登录，并设定新的 6 位 PIN'));
-          return;
-      }
-      const boss = employees.find(e => getPortalRole(e) === PortalRole.BOSS && e.pin === bossPassword);
-      if (boss) performLogin(boss); else setError('WRONG PIN');
-  };
-
-  if (portalMode === 'BOSS') {
-      return (
-        <div className="mobile-screen crimson-palace-bg flex items-center justify-center px-4 md:px-8 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] relative overflow-y-auto overflow-x-hidden font-sans text-white">
-            <style>{LOGIN_STYLES}</style>
-            <div className="smoke-layer"></div>
-            <TransitionGate gateState={gateState} onLockClick={() => setGateState('OPENING')} />
-            <div className={`glass-panel p-6 md:p-12 rounded-3xl w-full max-w-md md:max-w-lg relative z-20 animate-fade-in ${gateState !== 'HIDDEN' ? 'opacity-0' : ''} border border-[#FFD200]/30`}>
-                <div className="text-center mb-8 md:mb-12">
-                    <div className="w-20 h-20 md:w-32 md:h-32 border-4 border-[#FFD200] rounded-full flex items-center justify-center mx-auto mb-6 bg-primary shadow-[0_0_30px_#FFD200]">
-                        <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} className="w-12 h-12 md:w-20 md:h-20 object-contain" />
-                    </div>
-                    <h1 className="text-xl md:text-3xl font-serif font-black text-[#FFD200] tracking-widest uppercase">御膳智控 <span className="text-[#FFD200]/80 text-[10px] md:text-sm block mt-2 font-sans">OWNER ACCESS</span></h1>
-                </div>
-                <form onSubmit={e => { e.preventDefault(); handleBossDirectLogin(); }} className={`space-y-6 md:space-y-8 ${error ? 'shake-container' : ''}`}>
-                    <div className="relative">
-                        <Lock className="absolute left-6 top-5 text-[#FFD200]/50" size={24} />
-                        <input type="password" value={bossPassword} onChange={e => { setBossPassword(e.target.value); setError(''); }} className="w-full bg-black/40 border-2 border-[#FFD200]/30 rounded-2xl py-5 pl-16 text-[#FFD200] outline-none text-center font-mono text-2xl tracking-[0.5em] placeholder:tracking-normal focus:border-[#FFD200] transition-colors" placeholder="OWNER PIN" />
-                    </div>
-                    {error && <p className="text-red-400 text-sm text-center font-bold flex items-center justify-center gap-2"><ShieldAlert size={16}/> {error}</p>}
-                    <button type="submit" className="w-full bg-gradient-to-r from-[#FFD200] to-[#FDB931] text-[#500000] font-black py-5 md:py-6 rounded-2xl shadow-lg flex items-center justify-center gap-3 tracking-widest uppercase active:scale-95 transition-all text-lg"><Zap size={24} fill="currentColor"/> Unlock</button>
-                    <p className="text-center text-[10px] md:text-xs text-white/30 uppercase tracking-widest italic">Staff should use regular portal · v{APP_VERSION}</p>
-                </form>
-                <div className="mt-8 md:mt-12 text-center"><button onClick={() => onSwitchPortal?.('STAFF')} className="text-white/40 text-xs font-bold hover:text-[#FFD200] transition-colors flex items-center justify-center gap-2 w-full p-4"><ArrowLeft size={16}/> 返回前台 (Staff Portal)</button></div>
-            </div>
-        </div>
-      );
-  }
-
   return (
-    <div className="min-h-[100dvh] bg-[#F7F3EA] font-sans text-[#111111] overflow-x-hidden">
+    <div className="klk-login">
       <style>{LOGIN_STYLES}</style>
       <TransitionGate gateState={gateState} onLockClick={() => setGateState('OPENING')} />
-
-      <div className={`min-h-[100dvh] grid grid-cols-1 lg:grid-cols-[minmax(360px,42%)_minmax(0,58%)] transition-all duration-500 ${gateState !== 'HIDDEN' ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}>
-        <section className="relative overflow-hidden bg-[#650707] text-white px-5 md:px-8 lg:px-12 xl:px-16 py-6 md:py-8 lg:py-12 flex lg:min-h-[100dvh] items-center">
-          <div className="absolute -top-32 -left-28 w-80 h-80 rounded-full border border-[#FFD200]/15" />
-          <div className="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-[#FFD200]/8 blur-2xl" />
-          <div className="absolute -bottom-40 -right-32 w-96 h-96 rounded-full border border-[#FFD200]/10" />
-          <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#390303]/45 to-transparent" />
-
-          <div className="relative z-10 w-full max-w-xl mx-auto lg:mx-0">
-            <div className="flex items-center lg:block gap-4 md:gap-5">
-              <div className="w-20 h-20 md:w-24 md:h-24 lg:w-44 lg:h-44 rounded-[1.4rem] lg:rounded-[2rem] bg-[#FFD200] p-2.5 lg:p-5 shadow-[0_22px_60px_rgba(33,0,0,0.28)] shrink-0">
-                <img src={customLogo || "https://i.imgur.com/ex06Jva.png"} alt="金莲记 Kim Lian Kee" className="w-full h-full object-contain drop-shadow-xl" />
-              </div>
-
-              <div className="lg:mt-8 min-w-0">
-                <div className="inline-flex items-center rounded-full border border-[#FFD200]/25 bg-[#FFD200]/10 px-3 py-1.5 text-[10px] md:text-xs font-black tracking-[0.14em] text-[#FFD200]">
-                  员工入口 · STAFF PORTAL
-                </div>
-                <h1 className="mt-3 lg:mt-5 text-3xl md:text-4xl lg:text-6xl font-serif font-black tracking-[0.08em] text-[#FFD200] leading-none">金莲记</h1>
-                <p className="mt-2 text-xs md:text-sm lg:text-lg font-bold uppercase tracking-[0.28em] text-white/70">Kim Lian Kee</p>
-              </div>
-            </div>
-
-            <div className="hidden md:block mt-7 lg:mt-10 max-w-md">
-              <div className="flex items-center gap-3 text-xs font-bold text-white/55">
-                <span className="h-px flex-1 bg-[#FFD200]/35" />
-                <span className="tracking-[0.22em]">SINCE 1927</span>
-                <span className="h-px flex-1 bg-[#FFD200]/35" />
-              </div>
-              <h2 className="mt-6 text-xl lg:text-2xl font-black leading-tight">御膳智控 · 每日营运工作入口</h2>
-              <p className="mt-2 text-sm leading-6 font-semibold text-white/55">登入后系统会根据员工档案自动进入老板、管理层或员工页面，并套用个人默认语言。</p>
-
-              <div className="mt-6 grid grid-cols-3 gap-2.5">
-                <div className="rounded-2xl border border-white/10 bg-black/10 p-3.5">
-                  <p className="text-[9px] font-black tracking-wider text-white/35">分店</p>
-                  <p className="mt-1 text-sm font-black text-[#FFD200]">甲洞</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/10 p-3.5">
-                  <p className="text-[9px] font-black tracking-wider text-white/35">系统</p>
-                  <p className="mt-1 text-sm font-black text-[#FFD200]">ERP</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/10 p-3.5">
-                  <p className="text-[9px] font-black tracking-wider text-white/35">状态</p>
-                  <p className="mt-1 text-sm font-black text-emerald-300">在线</p>
-                </div>
-              </div>
-            </div>
+      <aside className="klk-brand">
+        <img src="/brand/kimliankee-logo.png" alt="金莲记 Since 1927" />
+        <div><p className="klk-eyebrow">KIM LIAN KEE · SINCE 1927</p><h1>金莲记EPR</h1><p className="klk-brand-copy">每日营运，从这里开始。</p></div>
+        <p className="klk-branch">甲洞分行 · Kepong Branch</p>
+      </aside>
+      <main className="klk-login-main">
+        <div className="klk-login-content">
+          <div className="klk-login-heading"><p className="klk-eyebrow">员工工作入口 · STAFF ACCESS</p><h2>欢迎回来</h2><p>使用原有员工编号与 PIN 登入</p></div>
+          <div className="klk-login-card" aria-busy={busy || isLoading}>
+            {isLoading ? <div role="status" className="py-10 text-center"><Loader2 className="mx-auto animate-spin"/><p className="mt-4">正在连接登入服务…</p></div>
+            : loadError ? <div role="alert" className="py-6 text-center"><p>暂时无法载入登入资料，请重试。</p><button className="klk-submit" onClick={() => window.location.reload()}>重新载入</button></div>
+            : isSystemEmpty ? <div className="py-6 text-center"><p>系统尚未初始化，请联系负责人。</p>{!serverMode && <button className="klk-submit" onClick={handleFirstRunInit}>初始化系统</button>}</div>
+            : <>
+              <div className="klk-steps" aria-label="登入步骤"><span className={step === 'SELECT' ? 'active' : ''}>1 员工编号</span><span aria-hidden="true">—</span><span className={step !== 'SELECT' ? 'active' : ''}>2 PIN</span></div>
+              {step !== 'SELECT' && <div className="klk-identity"><User size={20}/><span>员工编号 <strong>{targetEmployee?.id}</strong></span><button type="button" onClick={() => { setStep('SELECT'); setTargetEmployee(null); setEnteredPin(''); setNewPin(''); setConfirmPin(''); setError(''); }}>更换</button></div>}
+              <Keypad key={step + changePinStep} value={step === 'SELECT' ? enteredId : step === 'PIN' ? enteredPin : changePinStep === 'NEW' ? newPin : confirmPin}
+                label={step === 'SELECT' ? 'STAFF ID' : step === 'PIN' ? 'ENTER PIN' : changePinStep === 'NEW' ? 'SET NEW 6-DIGIT PIN' : 'CONFIRM NEW PIN'}
+                onInput={handleNumPad} onDelete={handleBackspace} onSubmit={step === 'SELECT' ? handleManualIdSubmit : step === 'PIN' ? handleSubmitPin : handleChangePinSubmit}
+                isMasked={step !== 'SELECT'} placeholder="例如：002 / ID002" error={error} busy={busy}/>
+            </>}
           </div>
-
-          <p className="hidden lg:block absolute bottom-7 left-12 xl:left-16 text-[10px] font-bold tracking-[0.16em] text-white/25">KIM LIAN KEE GROUP · KUALA LUMPUR · v{APP_VERSION}</p>
-        </section>
-
-        <main className="relative min-h-[calc(100dvh-128px)] lg:min-h-[100dvh] px-4 md:px-8 lg:px-12 py-5 md:py-8 lg:py-10 flex flex-col">
-          <div className="w-full max-w-[600px] mx-auto flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 text-xs font-black text-stone-500">
-              <MapPin size={15} className="text-[#650707]" /> 甲洞分行 · Kepong Branch
-            </div>
-            <button
-              type="button"
-              onClick={() => onSwitchPortal?.('BOSS')}
-              className="min-h-[44px] rounded-full border border-stone-200 bg-white px-3 py-2 text-xs font-black text-stone-500 shadow-sm transition-colors hover:border-[#650707]/25 hover:text-[#650707]"
-            >
-              老板登入 · Owner
-            </button>
-          </div>
-
-          <div className="w-full max-w-[520px] mx-auto flex-1 flex flex-col justify-center py-5 md:py-7">
-            <div className="mb-4 flex items-center justify-center gap-2">
-              <div className={`h-8 rounded-full px-3 flex items-center gap-1.5 text-[10px] font-black ${step === 'SELECT' ? 'bg-[#650707] text-white' : 'bg-emerald-100 text-emerald-700'}`}>
-                <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center">1</span> 员工编号
-              </div>
-              <span className="w-6 h-px bg-stone-300" />
-              <div className={`h-8 rounded-full px-3 flex items-center gap-1.5 text-[10px] font-black ${step !== 'SELECT' ? 'bg-[#650707] text-white' : 'bg-white text-stone-400 border border-stone-200'}`}>
-                <span className="w-4 h-4 rounded-full bg-black/5 flex items-center justify-center">2</span> PIN
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-10 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
-                <Loader2 size={34} className="mx-auto text-[#650707] animate-spin" />
-                <p className="mt-4 text-sm font-black">正在连接员工资料……</p>
-                <p className="mt-1 text-xs font-semibold text-stone-400">Connecting employee records</p>
-              </div>
-            ) : loadError ? (
-              <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
-                <ShieldCheck size={42} className="mx-auto text-[#650707]" />
-                <h2 className="mt-4 text-xl font-black">{loadError === 'LOAD_FAILED' ? '无法连接员工资料' : '找不到负责人帐号'}</h2>
-                <p className="mt-2 text-sm font-semibold text-stone-500">
-                  {loadError === 'LOAD_FAILED' ? '请检查网络后重试。' : '员工资料存在，但没有负责人帐号，请联系系统管理员。'}
-                </p>
-                <button onClick={() => window.location.reload()} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">重试</button>
-              </div>
-            ) : isSystemEmpty ? (
-              <div className="rounded-[1.75rem] border border-red-200 bg-white p-7 md:p-9 text-center shadow-[0_24px_70px_rgba(54,35,13,0.08)]">
-                <ShieldCheck size={42} className="mx-auto text-[#650707]" />
-                <h2 className="mt-4 text-xl font-black">系统尚未初始化</h2>
-                {serverMode ? (
-                  <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人在伺服器执行一次性管理指令，建立第一位老板。网页上不提供初始化。</p>
-                ) : (
-                  <>
-                    <p className="mt-2 text-sm font-semibold text-stone-500">请由负责人建立初始员工资料。</p>
-                    <button onClick={handleFirstRunInit} className="mt-5 w-full min-h-14 rounded-2xl bg-[#FFD200] text-[#111111] font-black">初始化系统</button>
-                  </>
-                )}
-              </div>
-            ) : step === 'SELECT' ? (
-              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 md:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
-                <Keypad
-                  value={enteredId}
-                  label="STAFF ID"
-                  onInput={handleNumPad}
-                  onDelete={handleBackspace}
-                  onSubmit={handleManualIdSubmit}
-                  placeholder="例如：002 / ID002"
-                  error={error}
-                />
-              </div>
-            ) : (
-              <div className="rounded-[1.75rem] border border-stone-200 bg-white p-5 md:p-7 shadow-[0_24px_70px_rgba(54,35,13,0.1)] animate-fade-in">
-                {step === 'CHANGE_PIN' && (
-                  <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3.5 text-center">
-                    <p className="text-xs font-black text-sky-800">安全升级 · 请设置你的 6 位新 PIN</p>
-                  </div>
-                )}
-
-                <div className="mb-5 flex items-center gap-3 rounded-2xl border border-stone-200 bg-[#FAF9F6] p-3">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#650707] text-[#FFD200] flex items-center justify-center shrink-0 shadow-sm">
-                    {targetEmployee?.avatar ? (
-                      <img src={targetEmployee.avatar} alt={targetEmployee.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-2xl font-black">{(targetEmployee?.name || targetEmployee?.id || '').charAt(0)}</span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {targetEmployee?.name ? (<>
-                      <p className="text-[10px] font-black tracking-wider text-emerald-600">✓ 已找到员工</p>
-                      <h2 className="mt-0.5 truncate text-lg font-black">{targetEmployee.name}</h2>
-                      <p className="truncate text-xs font-semibold text-stone-500">{targetEmployee.id} · {targetEmployee.role.split('(')[0]}</p>
-                    </>) : (<>
-                      <p className="text-[10px] font-black tracking-wider text-stone-400">员工编号 · STAFF ID</p>
-                      <h2 className="mt-0.5 truncate text-lg font-black">{targetEmployee?.id}</h2>
-                    </>)}
-                  </div>
-                </div>
-
-                <Keypad
-                  value={step === 'PIN' ? enteredPin : (changePinStep === 'NEW' ? newPin : confirmPin)}
-                  label={step === 'PIN' ? 'ENTER PIN' : (changePinStep === 'NEW' ? 'SET NEW 6-DIGIT PIN' : 'CONFIRM NEW PIN')}
-                  onInput={handleNumPad}
-                  onDelete={handleBackspace}
-                  onSubmit={step === 'PIN' ? handleSubmitPin : handleChangePinSubmit}
-                  isMasked={true}
-                  placeholder="••••••"
-                  error={error}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep('SELECT');
-                    setTargetEmployee(null);
-                    setEnteredPin('');
-                    setNewPin('');
-                    setConfirmPin('');
-                    setError('');
-                  }}
-                  className="mt-3 w-full rounded-xl py-3 text-xs font-black text-stone-400 flex items-center justify-center gap-2 transition-colors hover:bg-stone-50 hover:text-[#650707]"
-                >
-                  <ArrowLeft size={15} /> 返回员工编号
-                </button>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.set('mode', 'device');
-                window.location.assign(url.toString());
-              }}
-              className="mt-4 w-full min-h-[52px] rounded-2xl border border-stone-300 bg-white px-4 py-3 text-xs md:text-sm font-black text-stone-600 flex items-center justify-center gap-2 shadow-sm transition-all hover:border-[#650707]/30 hover:text-[#650707] active:scale-[0.99]"
-            >
-              <MonitorSmartphone size={17} />
-              专用设备登入 · Device Login
-            </button>
-
-            <p className="mt-4 text-center text-[10px] md:text-xs font-semibold text-stone-400">登入后将自动套用员工档案中的页面权限与默认语言。</p>
-          </div>
-
-          <p className="w-full max-w-[600px] mx-auto text-center text-[9px] font-bold tracking-[0.12em] text-stone-300">KIM LIAN KEE ERP v{APP_VERSION} · SECURE EMPLOYEE ACCESS</p>
-        </main>
-      </div>
+          <p className="klk-login-help">登入遇到问题？请联系主管或 HR。</p>
+        </div>
+        <footer>金莲记EPR <span>·</span> v{APP_VERSION}</footer>
+      </main>
     </div>
   );
 };

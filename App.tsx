@@ -154,8 +154,6 @@ export default function App() {
     // App 启动时只有两个稳定状态: BOOTING 和 READY
     const [bootStatus,      setBootStatus]      = useState<'BOOTING' | 'READY'>('BOOTING');
     const [bossActiveModal, setBossActiveModal] = useState<string>('NONE');
-    const [customLogo,      setCustomLogo]      = useState<string>('');
-    const [headerLogo,      setHeaderLogo]      = useState<string>('');
 
     // ⚡ iOS 性能：停在登录画面时，稍候在背景先下载登录后的首页模块（不读写资料）。
     //    延后 2.5 秒，避免与登录画面本身、员工名单读取抢频宽。
@@ -164,20 +162,6 @@ export default function App() {
         const timer = window.setTimeout(() => { void preloadHomeFor(portalMode); }, 2500);
         return () => window.clearTimeout(timer);
     }, [currentUser, portalMode]);
-
-    // Load store config branding logos
-    useEffect(() => {
-        let alive = true;
-        serverAuthEnabled.then(async enabled => {
-            // CHG-05：服务端登录模式下，登录前没有 Firebase 身份，不读 Firestore（登录页 Logo 由服务端名单提供）
-            if (enabled && !(await currentSignedInEmployeeId())) return;
-            const cfg = await DataManager.getConfig();
-            if (!alive) return;
-            if (cfg?.logoUrl) setCustomLogo(cfg.logoUrl);
-            if (cfg?.headerLogoUrl) setHeaderLogo(cfg.headerLogoUrl);
-        }).catch(err => console.error('Failed to load branding logos:', err));
-        return () => { alive = false; };
-    }, [isConfigOpen, currentEmployee?.id]);
 
     // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
     const checkVersion = useCallback(() => {
@@ -364,10 +348,10 @@ export default function App() {
         return (
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#F6F7FB] z-[99999]">
                 <div className="flex flex-col items-center gap-5">
-                    {/* 黄色品牌 Logo 容器 */}
-                    <div className="w-20 h-20 bg-[#FFD200] rounded-full p-1 shadow-[0_4px_14px_0_rgba(255,210,0,0.3)] flex items-center justify-center overflow-hidden shrink-0 animate-pulse">
+                    {/* 品牌启动画面 */}
+                    <div className="w-24 h-20 bg-[#bf1c24] rounded-2xl p-1 shadow-[0_4px_14px_0_rgba(255,210,0,0.3)] flex items-center justify-center overflow-hidden shrink-0 animate-pulse">
                         <img
-                            src={customLogo || "https://i.imgur.com/ex06Jva.png"}
+                            src="/brand/kimliankee-logo.png"
                             alt="Logo"
                             className="w-full h-full object-contain"
                         />
@@ -395,18 +379,6 @@ export default function App() {
         setBossTab(null);
         setBossHomeView('PRIORITY');
         checkVersion();
-    };
-
-    const handleSwitchPortal = (mode: 'STAFF' | 'BOSS') => {
-        setPortalMode(mode);
-        const url = new URL(window.location.href);
-        if (mode === 'BOSS') {
-            url.searchParams.set('portal', 'boss');
-        } else {
-            url.searchParams.delete('portal');
-        }
-        // Fix #4: pushState 后浏览器后退可被 popstate 监听器捕获并同步
-        window.history.pushState({}, '', url);
     };
 
     const handleCloseWhatsNew = () => {
@@ -441,7 +413,7 @@ export default function App() {
     // ─────────────────────────────────────────────────────────────────────────
     const testOwner = testReal?.employee ?? currentEmployee;
     return (
-        <div className={`min-h-screen flex flex-col relative font-sans bg-[#F6F7FB] pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0 ${testReal ? 'pt-8' : ''}`}>
+        <div className={`${currentUser ? 'min-h-screen' : 'min-h-[var(--login-viewport-height,100dvh)]'} flex flex-col relative font-sans bg-[#F6F7FB] ${currentUser ? 'pb-[calc(env(safe-area-inset-bottom)+4.2rem)] md:pb-0' : ''} ${testReal ? 'pt-8' : ''}`}>
             {currentUser && currentEmployee && testOwner && getOrgLevel(testOwner) === 'OWNER' && (
                 <TestSwitcher
                     real={testReal?.employee ?? null}
@@ -486,20 +458,20 @@ export default function App() {
                             <div className="w-10 h-10 md:w-16 md:h-16 bg-[#8B0000] rounded-full p-1 shadow-lg
                                             border border-[#FFD200] flex items-center justify-center overflow-hidden shrink-0">
                                 <img
-                                    src={headerLogo || customLogo || "https://i.imgur.com/ex06Jva.png"}
+                                    src="/brand/kimliankee-logo.png"
                                     alt="Logo"
                                     className="w-full h-full object-contain hover:scale-110 transition-transform"
                                 />
                             </div>
                             <div className="flex flex-col justify-center">
                                 <h1 className="font-black text-sm md:text-2xl tracking-widest text-[#FFD200] font-serif drop-shadow-md leading-tight">
-                                    御膳智控{' '}
+                                    金莲记EPR{' '}
                                     <span 
                                         onClick={() => setShowWhatsNew(true)}
                                         className="text-[9px] md:text-sm opacity-80 font-sans tracking-normal font-normal text-white cursor-pointer hover:text-[#FFD200] hover:underline transition-all"
                                         title="查看更新日志 (Changelog)"
                                     >
-                                        ERP v{APP_VERSION}
+                                        v{APP_VERSION}
                                     </span>
                                 </h1>
                                 <span className="text-[9px] md:text-xs text-white/80 font-bold tracking-widest uppercase block truncate max-w-[120px] md:max-w-none">
@@ -575,8 +547,6 @@ export default function App() {
                 {!currentUser && (
                     <Login
                         onLogin={handleLogin}
-                        portalMode={portalMode}
-                        onSwitchPortal={handleSwitchPortal}
                     />
                 )}
 
