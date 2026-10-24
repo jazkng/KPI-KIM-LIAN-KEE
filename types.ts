@@ -546,6 +546,8 @@ export interface Employee {
     address?: string;
     avatar?: string;
     allowedModules?: AppModule[];
+    /** Extra departments a L3/L4 lead may inspect for weekly hygiene, assigned by the owner. */
+    hygieneDepartments?: Array<'KITCHEN' | 'FLOOR' | 'BAR' | 'DISHWASH' | 'BACK_OFFICE' | 'OTHER'>;
     /** 只读模式：可查看已授权模块，但不能新增／修改／删除（前端层防护） */
     readOnlyAccess?: boolean;
     /** Direct inventory switches configured by the owner/system administrator. */

@@ -292,7 +292,7 @@ export const BossCockpit: React.FC<Props> = ({ onClose }) => {
                                 >
                                     <Bot size={18} className="shrink-0 text-amber-300" />
                                     <span className="flex-1">
-                                        问 AI 经营顾问
+                                        问经营参谋
                                         <span className="block text-xs font-medium text-stone-300">只根据本页数字回答，每句附依据编号，核对不到的会删除</span>
                                     </span>
                                     <ChevronRight size={16} className="shrink-0 text-stone-400" />

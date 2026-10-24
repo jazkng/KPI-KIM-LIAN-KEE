@@ -3,7 +3,7 @@
 // 新集合（V1 不读不写）：hygiene_checks（每周卫生评分）、points_monthly（HR 确认后的月积分存档）
 // 读取现有资料（考勤、委托任务、会议、警告、评语、技能纪录）只读不改。
 // ============================================================================
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, runTransaction, setDoc, where, type Firestore } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import type { AttendanceRecord, Employee } from '../../types';
 import { DataManager } from '../dataManager';
@@ -13,6 +13,7 @@ import { myTime, type Meeting, type MeetingCheckin } from '../meetings/meetingLo
 import { listRecentTasks } from '../tasks/staffTaskStore';
 import type { StaffTask } from '../tasks/staffTaskLogic';
 import { computeMonthPoints, type HygieneCheck, type MonthPoints } from './pointsCalc';
+import { canScoreHygiene, maxHygieneScore } from './hygieneAccess';
 
 const HYGIENE = 'hygiene_checks', MONTHLY = 'points_monthly';
 const monthEnd = (month: string) => { const [y, m] = month.split('-').map(Number); return `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`; };
@@ -23,9 +24,15 @@ const toHHMM = (iso: string) => myTime(new Date(iso));
 
 // ── 卫生检查 ──
 export const hygieneDocId = (weekStart: string, employeeId: string) => `${weekStart}_${employeeId}`;
-export const saveHygieneCheck = async (c: Omit<HygieneCheck, 'id' | 'at'>) => {
+export const saveHygieneCheck = async (c: Omit<HygieneCheck, 'id' | 'at'>, actor: Employee, target: Employee, firestore: Firestore = db) => {
+    if (c.checkedBy !== actor.id || c.employeeId !== target.id || !canScoreHygiene(actor, target) || c.score < 1 || c.score > maxHygieneScore(actor)) throw new Error('没有这项评分权限');
     const check: HygieneCheck = { ...c, id: hygieneDocId(c.weekStart, c.employeeId), at: new Date().toISOString() };
-    await setDoc(doc(db, HYGIENE, check.id), JSON.parse(JSON.stringify(check)));
+    await runTransaction(firestore, async tx => {
+        const ref = doc(firestore, HYGIENE, check.id);
+        const previous = await tx.get(ref);
+        if (previous.exists() && previous.data().checkedBy !== actor.id) throw new Error('本周已有其他人评分，请勿重复');
+        tx.set(ref, JSON.parse(JSON.stringify(check)));
+    });
     return check;
 };
 /** 某段日期（周一）之间的卫生检查 */

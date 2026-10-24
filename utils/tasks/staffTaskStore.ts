@@ -9,7 +9,7 @@ import { db } from '../../firebaseConfig';
 import type { Employee, InventoryLog, StockItem } from '../../types';
 import { DataManager } from '../dataManager';
 import {
-    addHistory, assigneeKeysFor, currentCycle, buildPurchaseApply, buildStocktakeApply,
+    addHistory, assigneeKeysFor, canEditAssignedTask, currentCycle, buildPurchaseApply, buildStocktakeApply, submissionConflict, validateSubmission,
     type BossMatter, type MatterStatus, type StaffTask, type StockArea, type TaskPurchaseLine,
 } from './staffTaskLogic';
 
@@ -67,6 +67,16 @@ export const listRecentTasks = async () => {
     return snap.docs.map(d => d.data() as StaffTask);
 };
 
+/** 任务管理须保留所有未结束任务，避免新任务太多时较早的待做事项消失。 */
+export const listManageTasks = async () => {
+    const [active, recent] = await Promise.all([
+        getDocs(query(collection(db, TASKS), where('status', 'in', ['OPEN', 'SUBMITTED']))),
+        getDocs(query(collection(db, TASKS), orderBy('createdAt', 'desc'), limit(300))),
+    ]);
+    return [...new Map([...active.docs, ...recent.docs].map(d => [d.id, d.data() as StaffTask])).values()]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+};
+
 /** 员工：派给自己或自己部门的任务 */
 export const listTasksFor = async (e: Pick<Employee, 'id' | 'department'>) => {
     const snap = await getDocs(query(collection(db, TASKS), where('assigneeKey', 'in', assigneeKeysFor(e))));
@@ -85,7 +95,19 @@ const updateTask = (id: string, fn: (t: StaffTask) => Partial<StaffTask>) => run
 
 export const startTask = (id: string, actor: Employee) => updateTask(id, t => ({ history: addHistory(t.history, actor.name, 'START', new Date().toISOString()) }));
 
+export const editAssignedTask = (id: string, actor: Employee, changes: Pick<StaffTask, 'title' | 'note' | 'assigneeId' | 'assigneeName' | 'assigneeKey' | 'department' | 'assignMode' | 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery' | 'dueAt' | 'photosRequired' | 'stockLines'>) => updateTask(id, t => {
+    if (!canEditAssignedTask(t, actor)) throw new Error('只有派任务的人或店面管理可编辑未交回的任务');
+    if (!changes.title.trim() || (t.type === 'STOCKTAKE' && !changes.stockLines?.length)) throw new Error('请填任务内容及盘点品项');
+    return { ...changes, history: addHistory(t.history, actor.name, 'EDIT', new Date().toISOString()) };
+});
+
 export const submitTask = async (task: StaffTask, actor: Employee, today: string, input: { note?: string; photos: string[]; counts?: Record<string, number>; purchases?: TaskPurchaseLine[] }) => {
+    const latest = await getDoc(doc(db, TASKS, task.id));
+    if (!latest.exists()) throw new Error('任务不存在');
+    const firstConflict = submissionConflict(task, latest.data() as StaffTask, actor);
+    if (firstConflict) throw new Error(firstConflict);
+    const firstInvalid = validateSubmission(latest.data() as StaffTask, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+    if (firstInvalid) throw new Error(firstInvalid);
     const photoIds = await savePhotos(task.id, input.photos, actor.name);
     // 盘点：记下交回当下的系统数量，确认时用来检查中途有没有人改过库存
     let qtyAtSubmit: Record<string, number> | undefined;
@@ -95,7 +117,10 @@ export const submitTask = async (task: StaffTask, actor: Employee, today: string
     }
     const at = new Date().toISOString();
     return updateTask(task.id, t => {
-        if (t.status === 'CANCELLED') throw new Error('任务已取消');
+        const conflict = submissionConflict(task, t, actor);
+        if (conflict) throw new Error(conflict);
+        const invalid = validateSubmission(t, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+        if (invalid) throw new Error(invalid);
         return {
             // 重复任务：记下交的是哪一期（不是交的那天），这样漏掉的那一期补交也对得上
             status: 'SUBMITTED', runDate: t.repeat === 'ONCE' ? today : (currentCycle(t, today) || today), returnNote: undefined,

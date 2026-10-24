@@ -167,7 +167,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, anomalies
 
     return <dialog ref={dialog} className="adv-dialog" onClose={onClose} onCancel={onClose}>
         <header className="adv-head">
-            <div><b><Sparkles size={17} /> AI 经营顾问</b><small>{periodLabel} · {settledDays} 天已日结</small></div>
+            <div><b><Sparkles size={17} /> 经营参谋</b><small>{periodLabel} · {settledDays} 天已日结</small></div>
             <button onClick={onClose} aria-label="关闭"><X size={18} /></button>
         </header>
 

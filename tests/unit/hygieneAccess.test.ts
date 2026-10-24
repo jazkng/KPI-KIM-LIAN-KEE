@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canScoreHygiene, hygieneNoteRequired, mondayOf } from '../../utils/points/hygieneAccess';
+import { canScoreHygiene, hygieneNoteRequired, maxHygieneScore, mondayOf } from '../../utils/points/hygieneAccess';
 
 const e = (id: string, orgLevel: string, department = 'KITCHEN') => ({ id, orgLevel, department, role: '' }) as any;
 describe('卫生评分权限', () => {
@@ -19,5 +19,14 @@ describe('卫生评分权限', () => {
         expect(mondayOf('2026-10-19')).toBe('2026-10-19');
         expect(mondayOf('2026-10-25')).toBe('2026-10-19');
         expect([1, 2, 3, 4, 5].map(hygieneNoteRequired)).toEqual([true, true, false, true, true]);
+    });
+    it('老板授权额外区域；评分上限随 L2/L3/L4 身份变化', () => {
+        const lead = { ...e('lead', 'TEAM_LEAD'), hygieneDepartments: ['BAR'] };
+        expect(canScoreHygiene(lead, e('bar', 'CREW', 'BAR'))).toBe(true);
+        expect(canScoreHygiene(lead, e('floor', 'CREW', 'FLOOR'))).toBe(false);
+        expect(maxHygieneScore(lead)).toBe(3);
+        expect(maxHygieneScore(e('head', 'DEPARTMENT_HEAD'))).toBe(4);
+        expect(maxHygieneScore(e('manager', 'BRANCH_MANAGER'))).toBe(5);
+        expect(maxHygieneScore(e('crew', 'CREW'))).toBe(0);
     });
 });

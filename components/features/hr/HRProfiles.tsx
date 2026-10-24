@@ -1641,6 +1641,17 @@ export const HRProfiles: React.FC<HRProfilesProps> = ({
                                             <div className="flex justify-between items-center mb-3"><h4 className="text-xs font-black text-gray-500 flex items-center gap-2"><Shield size={14}/> 系统权限</h4>{isEditing && <button onClick={() => setShowAccessModal(true)} className="h-9 px-3 rounded-xl bg-[#111111] text-[#FFD200] text-xs font-black active:scale-95">设置</button>}</div>
                                             <div className="flex flex-wrap gap-2">{(!form.allowedModules || form.allowedModules.length === 0) && <span className="text-xs text-gray-400 italic">还没开权限</span>}{withoutRetiredModules(form.allowedModules).map(mod => (<span key={mod} className="text-[11px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg border border-blue-100">{MODULE_DEFINITIONS[mod]?.label.split('(')[0]}</span>))}</div>
                                         </section>
+                                        {['DEPARTMENT_HEAD', 'TEAM_LEAD'].includes(getOrgLevel(form as Employee)) && <section className="p-5 md:p-6 space-y-3">
+                                            <div><h4 className="text-xs font-black text-gray-600 flex items-center gap-2"><ShieldCheck size={14}/> 个人卫生检查范围</h4><p className="mt-1 text-xs text-gray-500">默认可检查本区域。老板可额外授权其他区域；改后按「保存」。</p></div>
+                                            <div className="flex flex-wrap gap-2">{(['KITCHEN', 'FLOOR', 'BAR', 'DISHWASH', 'BACK_OFFICE', 'OTHER'] as const).filter(d => d !== form.department).map(d => {
+                                                const selected = (form.hygieneDepartments || []).includes(d);
+                                                const label = ({ KITCHEN: '厨房', FLOOR: '楼面', BAR: '水吧', DISHWASH: '洗碗', BACK_OFFICE: '后勤', OTHER: '其他' } as const)[d];
+                                                return <button key={d} type="button" disabled={!isEditing || !canConfigureInventoryAccess} aria-pressed={selected}
+                                                    onClick={() => setForm(f => ({ ...f, hygieneDepartments: selected ? (f.hygieneDepartments || []).filter(x => x !== d) : [...(f.hygieneDepartments || []), d] }))}
+                                                    className={`min-h-[42px] px-3 rounded-xl border text-xs font-black disabled:opacity-60 ${selected ? 'bg-[#740f10] text-white border-[#740f10]' : 'bg-white text-stone-600 border-stone-200'}`}>{selected ? '✓ ' : ''}{label}</button>;
+                                            })}</div>
+                                            {!canConfigureInventoryAccess && <p className="text-xs text-gray-400">只有老板或系统管理员可以更改。</p>}
+                                        </section>}
                                         <section className="p-5 md:p-6">
                                         <div className="flex items-start justify-between gap-3 mb-4">
                                             <div>

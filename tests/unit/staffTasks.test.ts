@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    buildPurchaseApply, buildStocktakeApply, consumptionSinceLast, currentCycle, effectiveStatus, monthReturnCount, nextCycle, repeatLabel,
+    buildPurchaseApply, buildStocktakeApply, canEditAssignedTask, consumptionSinceLast, currentCycle, effectiveStatus, monthReturnCount, nextCycle, repeatLabel, submissionConflict,
     stocktakeDiffs, toStockLine, validateSubmission, type StaffTask,
 } from '../../utils/tasks/staffTaskLogic';
 
@@ -11,6 +11,30 @@ const base = (p: Partial<StaffTask> = {}): StaffTask => ({
 });
 const pork = { id: 's1', name: '猪肉', category: 'KF', currentQtyBase: 10000, baseUnit: 'g', displayUnit: 'kg', displayToBaseRatio: 1000, costPerBaseUnit: 0.02 } as any;
 const rice = { id: 's2', name: '白米', category: 'KD', currentQtyBase: 20, baseUnit: 'kg', costPerBaseUnit: 3 } as any;
+
+describe('任务编辑权限', () => {
+    const creator = { id: 'm1', orgLevel: 'DEPARTMENT_HEAD', role: '' } as any;
+    const other = { id: 'm2', orgLevel: 'DEPARTMENT_HEAD', role: '' } as any;
+    const manager = { id: 'boss', orgLevel: 'BRANCH_MANAGER', role: '' } as any;
+    it('未交回时创建人和店面管理可编辑；交回或完成后不可直接改', () => {
+        expect(canEditAssignedTask(base(), creator)).toBe(true);
+        expect(canEditAssignedTask(base(), other)).toBe(false);
+        expect(canEditAssignedTask(base(), manager)).toBe(true);
+        expect(canEditAssignedTask(base({ status: 'SUBMITTED' }), creator)).toBe(false);
+        expect(canEditAssignedTask(base({ status: 'DONE' }), manager)).toBe(false);
+        expect(canEditAssignedTask(base({ submission: { by: 'e1', byName: 'Ali', at: 'x', photoIds: [] } }), creator)).toBe(false);
+    });
+});
+
+describe('任务交回并发保护', () => {
+    const employee = { id: 'e1', department: 'KITCHEN' } as any;
+    it('已改派或修改过的旧表单必须重新打开', () => {
+        const opened = base({ history: [{ at: '2026-10-22T01:00:00Z', by: 'Kelvin', action: 'CREATE' }] });
+        expect(submissionConflict(opened, opened, employee)).toBeNull();
+        expect(submissionConflict(opened, { ...opened, assigneeKey: 'emp:e2' }, employee)).toMatch(/改派/);
+        expect(submissionConflict(opened, { ...opened, history: [...opened.history, { at: '2026-10-22T02:00:00Z', by: 'Kelvin', action: 'EDIT' }] }, employee)).toMatch(/更新/);
+    });
+});
 
 describe('effectiveStatus', () => {
     it('单次：过期未交 = 逾期；交了 = 待确认', () => {
