@@ -75,7 +75,6 @@ jobs:
       - name: 构建并推送镜像
         run: |
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          docker pull "${IMAGE}:build-cache" || true
           docker build --cache-from "${IMAGE}:build-cache" --build-arg BUILDKIT_INLINE_CACHE=1 -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:build-cache" \
             --build-arg VITE_FIREBASE_API_KEY="${{ vars.VITE_FIREBASE_API_KEY }}" \
             --build-arg VITE_FIREBASE_AUTH_DOMAIN="${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \

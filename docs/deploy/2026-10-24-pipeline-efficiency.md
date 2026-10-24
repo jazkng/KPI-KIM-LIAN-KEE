@@ -17,3 +17,7 @@
 ## 本机验证记录
 
 `npm run lint`、515 项单元测试、38 项 Emulator 测试、`npm run build`、`npm run build:ci` 均通过。实际切换后脚本使用本地 gcloud/curl mock 执行：401 成功不回滚、500 失败回滚、curl 网络失败回滚；缺 Firebase 模块的裁剪产物被体积检查拒绝。独立 AI 复核无合并阻碍。
+
+## 首次实测后的修正
+
+PR #134 部署 run 40052864568 共 5分01秒，未达到总时间缩短：CI 缩短，但构建前下载整张缓存镜像约62秒。BuildKit 随后仍用 --cache-from 导入缓存 manifest。移除独立 docker pull，保留远端 --cache-from 与 inline cache，避免重复的整镜像下载。构建未命中时仍完整构建；所有验证保留。
