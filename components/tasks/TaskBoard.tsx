@@ -13,6 +13,9 @@ import {
     StockConflictError, cancelTask, confirmTask, listManageTasks, listMatters, loadPhotos, recentInventoryLogs, returnTask, updateMatter,
 } from '../../utils/tasks/staffTaskStore';
 import { MatterCreateSheet, Sheet, TaskCreateSheet, inputCls } from './TaskForms';
+import { CashBreakdown } from './CashCounter';
+import { formatRm, type CashCountRecord } from '../../utils/tasks/cashCount';
+import { listCashCounts } from '../../utils/tasks/cashCountStore';
 
 const GROUPS: { key: EffectiveStatus; label: string; tone: string }[] = [
     { key: 'SUBMITTED', label: '待确认', tone: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -189,10 +192,43 @@ export const TaskReviewSheet: React.FC<{ task: StaffTask; actor: Employee; onEdi
             {t.type === 'PURCHASE' && <div className="space-y-1">{(sub.purchases || []).map((p, i) => <div key={i} className="flex justify-between text-sm"><span>{p.name} × {p.qty} {p.unit}</span><b>RM {p.amount.toFixed(2)}</b></div>)}
                 <div className="flex justify-between text-sm border-t border-stone-100 pt-1 font-black"><span>合计</span><span>RM {(sub.purchases || []).reduce((s, p) => s + p.amount, 0).toFixed(2)}</span></div>
                 <p className="text-[11px] text-stone-400">确认后{t.purchaseMode === 'STOCK' ? '库存会增加，' : ''}不会自动记成支出；付款请照原本流程。</p></div>}
+            {t.type === 'CASH' && sub.cash && <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-stone-50 py-2"><small className="block text-[11px] font-bold text-stone-400">上班</small><b className="text-sm tabular-nums">{formatRm(sub.cash.openingSen)}</b></div>
+                <div className="rounded-xl bg-stone-50 py-2"><small className="block text-[11px] font-bold text-stone-400">下班</small><b className="text-sm tabular-nums">{formatRm(sub.cash.closingSen)}</b></div>
+                <div className="rounded-xl bg-amber-50 py-2"><small className="block text-[11px] font-bold text-amber-700">本班增加</small><b className="text-sm tabular-nums">{formatRm(sub.cash.closingSen - sub.cash.openingSen)}</b></div>
+            </div>}
             {sub.note && <p className="text-sm text-stone-700">「{sub.note}」</p>}
             <Photos ids={sub.photoIds} />
         </div>}
+
+        {t.type === 'CASH' && <CashHistory taskId={t.id} />}
     </Sheet>;
+};
+
+/** 收银点钱：每天的记录（最近 31 天，只读） */
+const CashHistory: React.FC<{ taskId: string }> = ({ taskId }) => {
+    const [rows, setRows] = useState<CashCountRecord[] | null>(null);
+    const [open, setOpen] = useState<string | null>(null);
+    useEffect(() => { let on = true; listCashCounts(taskId).then(r => on && setRows(r)).catch(() => on && setRows([])); return () => { on = false; }; }, [taskId]);
+    const time = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+    return <div className="rounded-2xl bg-white border border-stone-200 overflow-hidden">
+        <p className="px-4 pt-3 pb-2 text-xs font-black text-stone-500">每天的点钱记录（最近 31 天）</p>
+        {rows === null ? <p className="px-4 pb-3 text-sm text-stone-400"><Loader2 size={14} className="inline animate-spin" /></p>
+            : rows.length === 0 ? <p className="px-4 pb-3 text-sm font-bold text-stone-400">还没有记录</p>
+            : <div className="divide-y divide-stone-100">{rows.map(r => <button key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)} className="w-full text-left px-4 py-2.5">
+                <div className="grid grid-cols-[52px_1fr_1fr_1fr] gap-2 items-center text-sm">
+                    <b className="text-stone-700">{r.date.slice(5)}</b>
+                    <span className="tabular-nums">{r.opening ? formatRm(r.opening.totalSen) : '—'}</span>
+                    <span className="tabular-nums">{r.closing ? formatRm(r.closing.totalSen) : <small className="text-amber-600 font-bold">未收班</small>}</span>
+                    <b className="tabular-nums text-right">{r.diffSen !== undefined ? formatRm(r.diffSen) : ''}</b>
+                </div>
+                {open === r.id && <div className="mt-2 space-y-1.5 text-xs text-stone-500">
+                    {r.opening && <div><b>上班</b> · {r.opening.byName} {time(r.opening.at)}<CashBreakdown counts={r.opening.counts} /></div>}
+                    {r.closing && <div><b>下班</b> · {r.closing.byName} {time(r.closing.at)}<CashBreakdown counts={r.closing.counts} /></div>}
+                </div>}
+            </button>)}</div>}
+        <p className="px-4 py-2 text-[11px] text-stone-400 border-t border-stone-100">日期 · 上班 · 下班 · 本班增加。只是记录，不会改日结。</p>
+    </div>;
 };
 
 /** 上报事项：老板 / 店面管理处理 */

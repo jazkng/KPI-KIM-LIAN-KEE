@@ -27,8 +27,16 @@ const PORTALS: { role: PortalRole; label: string }[] = [
 ];
 const ROLE_LABEL: Record<string, string> = { BOSS: '老板页', MANAGEMENT: '管理页', STAFF: '员工页' };
 
+/** 老板页「全部功能 → 系统与工具 → 测试切换」按了会发这个事件打开切换视窗 */
+export const OPEN_TEST_SWITCHER_EVENT = 'klk-open-test-switcher';
+
 export const TestSwitcher: React.FC<Props> = ({ real, current, currentRole, onApply, onRestore }) => {
     const [open, setOpen] = useState(false);
+    useEffect(() => {
+        const handler = () => setOpen(true);
+        window.addEventListener(OPEN_TEST_SWITCHER_EVENT, handler);
+        return () => window.removeEventListener(OPEN_TEST_SWITCHER_EVENT, handler);
+    }, []);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [empId, setEmpId] = useState(current.id);
     const [role, setRole] = useState<PortalRole | 'AUTO'>('AUTO');
@@ -58,12 +66,12 @@ export const TestSwitcher: React.FC<Props> = ({ real, current, currentRole, onAp
     };
 
     return <>
-        {/* 测试中不再用顶部横条（会盖住页面最上方）：右边一个橙色小按钮，按了可以切换或「返回本人」 */}
-        <button onClick={() => setOpen(true)} aria-label="测试切换" title={real ? `测试中：${current.name} · ${ROLE_LABEL[currentRole]}` : '测试切换'}
-            className={`fixed right-0 top-1/2 -translate-y-1/2 z-[100001] w-8 rounded-l-xl border border-r-0 shadow-lg grid place-items-center ${real ? 'h-16 bg-orange-500 border-orange-600 text-white' : 'h-10 bg-white/95 border-stone-200 text-orange-500'}`}>
-            <FlaskConical size={15} />
-            {real && <span className="text-[10px] font-black leading-none [writing-mode:vertical-rl]">测试</span>}
-        </button>
+        {/* 平常不显示（从「全部功能 → 系统与工具」打开；负责人 2026-10-24）。
+            测试中才在右上方（App 预留的顶部空白）放一个小标签，跟着页面走、不固定浮着，按了可以切换或「返回本人」 */}
+        {real && <button onClick={() => setOpen(true)} aria-label="测试切换" title={`测试中：${current.name} · ${ROLE_LABEL[currentRole]}`}
+            className="absolute top-1 right-2 z-[100001] h-6 max-w-[60vw] px-2.5 rounded-full bg-orange-500 text-white text-[11px] font-black flex items-center gap-1 shadow">
+            <FlaskConical size={12} /><span className="truncate">测试中：{current.name}</span>
+        </button>}
         {open && <div className="fixed inset-0 z-[100002] bg-black/50 flex items-end md:items-center justify-center" onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}>
             <div className="w-full md:max-w-sm bg-white rounded-t-3xl md:rounded-3xl p-5 space-y-4 shadow-2xl" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
                 <div className="flex items-center justify-between">

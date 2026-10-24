@@ -99,6 +99,7 @@ export const MODULE_NAVIGATION_RULES: Record<string, ModuleNavigationRule> = {
     DATA_TOOLS: { category: 'SYSTEM', order: 5 },
     TRANSLATION: { category: 'SYSTEM', order: 10 },
     WARRANTY: { category: 'SYSTEM', order: 20 },
+    TEST_SWITCH: { category: 'SYSTEM', order: 90 },
     AI_ASSISTANT: { category: 'SYSTEM', order: 30 },
     SYSTEM_SETTINGS: { category: 'SYSTEM', order: 40 },
 };

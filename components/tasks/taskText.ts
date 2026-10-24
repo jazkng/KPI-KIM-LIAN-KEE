@@ -34,6 +34,17 @@ const T = {
     addRow: { zh: '＋ 加一行', en: '+ Add row', my: '+ ထပ်ထည့်' },
     close: { zh: '关闭', en: 'Close', my: 'ပိတ်' },
     from: { zh: '派的人', en: 'From', my: 'ပေးသူ' },
+    cashOpening: { zh: '上班点钱', en: 'Opening cash count', my: 'အလုပ်စချိန် ငွေရေတွက်' },
+    cashClosing: { zh: '下班点钱', en: 'Closing cash count', my: 'အလုပ်ဆင်းချိန် ငွေရေတွက်' },
+    cashNotes: { zh: '纸币（张）', en: 'Notes (pcs)', my: 'ငွေစက္ကူ (ရွက်)' },
+    cashCoins: { zh: '硬币（个）', en: 'Coins (pcs)', my: 'အကြွေစေ့ (စေ့)' },
+    cashTotal: { zh: '合计', en: 'Total', my: 'စုစုပေါင်း' },
+    cashOpeningDone: { zh: '上班金额已保存', en: 'Opening amount saved', my: 'အလုပ်စချိန် ငွေပမာဏ သိမ်းပြီး' },
+    cashSaveOpening: { zh: '保存上班金额', en: 'Save opening amount', my: 'အလုပ်စချိန် ငွေပမာဏ သိမ်း' },
+    cashSubmit: { zh: '下班点完，交回', en: 'Closing done, submit', my: 'အလုပ်ဆင်း ရေတွက်ပြီး၊ ပေးပို့' },
+    cashChange: { zh: '本班现金增加', en: 'Cash added this shift', my: 'ဤအလှည့် ငွေတိုး' },
+    cashNeedOne: { zh: '请至少填一个面额（没有就填 0）', en: 'Enter at least one (0 if none)', my: 'အနည်းဆုံး တစ်ခု ဖြည့်ပါ (မရှိလျှင် 0)' },
+    cashReopenHint: { zh: '下班时再打开这个任务点钱', en: 'Open this task again at closing', my: 'အလုပ်ဆင်းချိန် ဤတာဝန်ကို ပြန်ဖွင့်ပါ' },
 } as const;
 
 export const tt = (key: keyof typeof T, lang: string, vars: Record<string, string | number> = {}) =>

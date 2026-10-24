@@ -77,20 +77,6 @@ export default function App() {
         return params.get('portal') === 'boss' ? 'BOSS' : 'STAFF';
     });
 
-    const [isBossModalOpen, setIsBossModalOpen] = useState(false);
-
-    useEffect(() => {
-        const checkBossModal = () => {
-            if (typeof window !== 'undefined') {
-                const modal = (window as any).bossActiveModal;
-                setIsBossModalOpen(!!modal && modal !== 'NONE');
-            }
-        };
-        checkBossModal();
-        window.addEventListener('boss-modal-change', checkBossModal);
-        return () => window.removeEventListener('boss-modal-change', checkBossModal);
-    }, []);
-
     const [isTVMode,        setIsTVMode]        = useState(() => {
         const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
         return params.get('mode') === 'tv';
@@ -543,14 +529,6 @@ export default function App() {
                 {/* Boss */}
                 {currentUser === PortalRole.BOSS && (
                     <>
-                        {currentEmployee && !bossTab && bossHomeView === 'FUNCTIONS' && !isBossModalOpen && !isConfigOpen && !isAiOpen && (
-                            <NotificationCenter
-                                employee={currentEmployee}
-                                onOpenLog={openOperationalLogFromNotification}
-                                variant="floating"
-                                className="md:top-[6.2rem]"
-                            />
-                        )}
                         {!bossTab ? (
                             bossHomeView !== 'FUNCTIONS' ? (
                                 <BusinessCenter
@@ -570,6 +548,9 @@ export default function App() {
                                     onNavigate={tab => setBossTab(tab as BossTab)}
                                     currentEmployee={currentEmployee}
                                     onOpenConfig={() => setIsConfigOpen(true)}
+                                    notifications={currentEmployee && (
+                                        <NotificationCenter employee={currentEmployee} onOpenLog={openOperationalLogFromNotification} variant="header" />
+                                    )}
                                 />
                             )
                         ) : (

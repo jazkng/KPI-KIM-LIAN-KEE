@@ -97,7 +97,7 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
     const depts = DEPT_ORDER;
     const pro = type === 'REPAIR' && repairBy === 'PRO';
     const needLines = type === 'STOCKTAKE' || (type === 'PURCHASE' && purchaseMode === 'STOCK');
-    const autoTitle = title.trim() || (type === 'STOCKTAKE' ? `盘点 ${lines.length} 项` : '');
+    const autoTitle = title.trim() || (type === 'STOCKTAKE' ? `盘点 ${lines.length} 项` : type === 'CASH' ? '收银点钱（上班 + 下班）' : '');
 
     const save = async () => {
         setErr('');
@@ -145,9 +145,10 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         {err && <p className="mb-2 text-sm font-bold text-rose-600">{err}</p>}
         <button onClick={save} disabled={busy} className="w-full min-h-[50px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? '保存中…' : initialTask ? '保存修改' : pro ? '交给老板处理' : '派出去'}</button>
     </>}>
-        <Field label="类型">{initialTask ? <p className="text-sm font-black text-stone-700">{TASK_TYPE_LABEL[type]}</p> : <Chips value={type} onChange={v => { setType(v); setLines([]); }} options={(Object.keys(TASK_TYPE_LABEL) as TaskType[]).map(v => ({ v, label: TASK_TYPE_LABEL[v] }))} />}</Field>
+        <Field label="类型">{initialTask ? <p className="text-sm font-black text-stone-700">{TASK_TYPE_LABEL[type]}</p> : <Chips value={type} onChange={v => { setType(v); setLines([]); if (v === 'CASH') setRepeat('DAILY'); }} options={(Object.keys(TASK_TYPE_LABEL) as TaskType[]).map(v => ({ v, label: TASK_TYPE_LABEL[v] }))} />}</Field>
         {type === 'REPAIR' && !initialTask && <Field label="谁来修"><Chips value={repairBy} onChange={setRepairBy} options={[{ v: 'STAFF', label: '员工自己修' }, { v: 'PRO', label: '请专业（交给老板）' }]} /></Field>}
-        <Field label={type === 'STOCKTAKE' ? '标题（选填）' : '要做什么'}><input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder={type === 'STOCKTAKE' ? '例如：冷房肉类盘点' : type === 'PURCHASE' ? '例如：去买白米、洗洁精' : '例如：清洗 2 号冷气滤网'} /></Field>
+        {type === 'CASH' && <p className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-bold text-amber-800 leading-relaxed">收银员上班时按面额点一次钱、下班再点一次，系统自动算合计和本班增加多少。每天的记录都会保留（只是记录，不接日结）。建议「次数」选每日。</p>}
+        <Field label={type === 'STOCKTAKE' || type === 'CASH' ? '标题（选填）' : '要做什么'}><input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder={type === 'STOCKTAKE' ? '例如：冷房肉类盘点' : type === 'CASH' ? '收银点钱（上班 + 下班）' : type === 'PURCHASE' ? '例如：去买白米、洗洁精' : '例如：清洗 2 号冷气滤网'} /></Field>
         {type === 'PURCHASE' && <Field label="买什么">{initialTask
             ? <p className="text-sm font-black text-stone-700">{purchaseMode === 'STOCK' ? '从库存选（买回来会入库）' : '自行输入（不入库）'}</p>
             : <Chips value={purchaseMode} onChange={v => { setPurchaseMode(v); setLines([]); }} options={[{ v: 'STOCK', label: '从库存选（买回来会入库）' }, { v: 'FREE', label: '自行输入（不入库）' }]} />}</Field>}

@@ -129,12 +129,12 @@ export const editAssignedTask = (id: string, actor: Employee, changes: Pick<Staf
     return { ...changes, history: addHistory(t.history, actor.name, 'EDIT', new Date().toISOString()) };
 });
 
-export const submitTask = async (task: StaffTask, actor: Employee, today: string, input: { note?: string; photos: string[]; counts?: Record<string, number>; purchases?: TaskPurchaseLine[] }) => {
+export const submitTask = async (task: StaffTask, actor: Employee, today: string, input: { note?: string; photos: string[]; counts?: Record<string, number>; purchases?: TaskPurchaseLine[]; cash?: { openingSen: number; closingSen: number } }) => {
     const latest = await getDoc(doc(db, TASKS, task.id));
     if (!latest.exists()) throw new Error('任务不存在');
     const firstConflict = submissionConflict(task, latest.data() as StaffTask, actor);
     if (firstConflict) throw new Error(firstConflict);
-    const firstInvalid = validateSubmission(latest.data() as StaffTask, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+    const firstInvalid = validateSubmission(latest.data() as StaffTask, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases, cash: input.cash });
     if (firstInvalid) throw new Error(firstInvalid);
     const photoIds = await savePhotos(task.id, input.photos, actor.name);
     // 盘点：记下交回当下的系统数量，确认时用来检查中途有没有人改过库存
@@ -147,12 +147,12 @@ export const submitTask = async (task: StaffTask, actor: Employee, today: string
     return updateTask(task.id, t => {
         const conflict = submissionConflict(task, t, actor);
         if (conflict) throw new Error(conflict);
-        const invalid = validateSubmission(t, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+        const invalid = validateSubmission(t, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases, cash: input.cash });
         if (invalid) throw new Error(invalid);
         return {
             // 重复任务：记下交的是哪一期（不是交的那天），这样漏掉的那一期补交也对得上
             status: 'SUBMITTED', runDate: t.repeat === 'ONCE' ? today : (currentCycle(t, today) || today), returnNote: undefined,
-            submission: { by: actor.id, byName: actor.name, at, note: input.note || undefined, photoIds, counts: input.counts, qtyAtSubmit, purchases: input.purchases },
+            submission: { by: actor.id, byName: actor.name, at, note: input.note || undefined, photoIds, counts: input.counts, qtyAtSubmit, purchases: input.purchases, cash: input.cash },
             history: addHistory(t.history, actor.name, 'SUBMIT', at),
         };
     });
