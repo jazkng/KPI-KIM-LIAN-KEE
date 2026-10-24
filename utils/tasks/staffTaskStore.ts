@@ -95,7 +95,7 @@ const updateTask = (id: string, fn: (t: StaffTask) => Partial<StaffTask>) => run
 
 export const startTask = (id: string, actor: Employee) => updateTask(id, t => ({ history: addHistory(t.history, actor.name, 'START', new Date().toISOString()) }));
 
-export const editAssignedTask = (id: string, actor: Employee, changes: Pick<StaffTask, 'title' | 'note' | 'assigneeId' | 'assigneeName' | 'assigneeKey' | 'department' | 'assignMode' | 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery' | 'dueAt' | 'photosRequired' | 'stockLines'>) => updateTask(id, t => {
+export const editAssignedTask = (id: string, actor: Employee, changes: Pick<StaffTask, 'title' | 'note' | 'assigneeId' | 'assigneeName' | 'assigneeKey' | 'department' | 'assignMode' | 'repeat' | 'repeatDays' | 'repeatDate' | 'repeatEvery' | 'dueAt' | 'photosRequired' | 'stockLines' | 'translations'>) => updateTask(id, t => {
     if (!canEditAssignedTask(t, actor)) throw new Error('只有派任务的人或店面管理可编辑未交回的任务');
     if (!changes.title.trim() || (t.type === 'STOCKTAKE' && !changes.stockLines?.length)) throw new Error('请填任务内容及盘点品项');
     return { ...changes, history: addHistory(t.history, actor.name, 'EDIT', new Date().toISOString()) };

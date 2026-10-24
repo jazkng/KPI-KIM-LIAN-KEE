@@ -8,6 +8,7 @@ import { getOrgLevel } from '../../utils/orgAccess';
 import { isConsumeOnReceive, isDiscontinued } from '../../utils/unitConversion';
 import { MATTER_LABEL, TASK_TYPE_LABEL, normDept, toStockLine, type MatterCategory, type StaffTask, type StockArea, type TaskRepeat, type TaskStockLine, type TaskType } from '../../utils/tasks/staffTaskLogic';
 import { createMatter, createTask, editAssignedTask } from '../../utils/tasks/staffTaskStore';
+import { translateTask } from '../../utils/tasks/taskTranslation';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
 import { CATEGORY_SECTIONS, getCategoryLabel } from '../features/inventory/inventoryConstants';
 
@@ -106,11 +107,12 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         if (repeat === 'WEEKLY' && !repeatDays.length) return setErr('请选星期几');
         setBusy(true);
         try {
+            const translations = pro ? undefined : await translateTask(autoTitle, note, initialTask);
             if (initialTask) {
                 const emp = staff.find(e => e.id === person);
                 if (mode === 'PERSON' && !emp) throw new Error('指定员工不存在，请重选');
                 await editAssignedTask(initialTask.id, actor, {
-                    title: autoTitle, note: note || undefined, assignMode: mode,
+                    title: autoTitle, note: note || undefined, translations, assignMode: mode,
                     assigneeId: mode === 'PERSON' ? emp!.id : undefined,
                     assigneeName: mode === 'PERSON' ? emp!.name : undefined,
                     department: mode === 'DEPT' ? dept : undefined,
@@ -126,7 +128,7 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
             } else {
                 const emp = staff.find(e => e.id === person);
                 await createTask({
-                    type, title: autoTitle, note: note || undefined, assignMode: mode,
+                    type, title: autoTitle, note: note || undefined, translations, assignMode: mode,
                     ...(mode === 'PERSON' ? { assigneeId: emp!.id, assigneeName: emp!.name, assigneeKey: `emp:${emp!.id}` } : { department: dept, assigneeKey: `dept:${dept}` }),
                     repeat, dueAt: repeat === 'ONCE' && due ? new Date(due).toISOString() : undefined, photosRequired: photos,
                     ...(repeat === 'WEEKLY' ? { repeatDays } : repeat === 'MONTHLY' ? { repeatDate } : repeat === 'EVERY_N' ? { repeatEvery } : {}),
