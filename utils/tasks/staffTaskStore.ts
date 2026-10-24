@@ -67,6 +67,34 @@ export const listRecentTasks = async () => {
     return snap.docs.map(d => d.data() as StaffTask);
 };
 
+const RECURRING = ['DAILY', 'WEEKLY', 'MONTHLY', 'EVERY_N'];
+const mergeTasks = (...lists: { docs: { id: string; data: () => unknown }[] }[]) =>
+    [...new Map(lists.flatMap(l => l.docs).map(d => [d.id, d.data() as StaffTask])).values()];
+
+/**
+ * 还要做的任务：未结束的（待做 / 已交回）＋ 全部重复任务（上一期完成了，这一期仍要做）。
+ * 已完成的单次任务不读，所以完成的任务再多，员工页、管理首页打开时读取的数量也不会一直变多。
+ * 只用单一栏位条件（不需要新增复合索引）。
+ */
+export const listActiveTasks = async () => {
+    const [active, recurring] = await Promise.all([
+        getDocs(query(collection(db, TASKS), where('status', 'in', ['OPEN', 'SUBMITTED']))),
+        getDocs(query(collection(db, TASKS), where('repeat', 'in', RECURRING))),
+    ]);
+    return mergeTasks(active, recurring).filter(t => t.status !== 'CANCELLED');
+};
+
+/** 积分：这个月要算的任务 = 还要做的任务 ＋ 本月前一个月起建立的单次任务（含已完成） */
+export const listTasksForMonth = async (month: string) => {
+    const since = new Date(`${month}-01T00:00:00Z`);
+    since.setUTCDate(since.getUTCDate() - 31);
+    const [current, once] = await Promise.all([
+        listActiveTasks(),
+        getDocs(query(collection(db, TASKS), where('createdAt', '>=', since.toISOString()))),
+    ]);
+    return [...new Map([...current, ...once.docs.map(d => d.data() as StaffTask)].map(t => [t.id, t])).values()];
+};
+
 /** 任务管理须保留所有未结束任务，避免新任务太多时较早的待做事项消失。 */
 export const listManageTasks = async () => {
     const [active, recent] = await Promise.all([
@@ -77,10 +105,10 @@ export const listManageTasks = async () => {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 };
 
-/** 员工：派给自己或自己部门的任务 */
+/** 员工：派给自己或自己部门、还要做的任务（不读已完成的单次任务） */
 export const listTasksFor = async (e: Pick<Employee, 'id' | 'department'>) => {
-    const snap = await getDocs(query(collection(db, TASKS), where('assigneeKey', 'in', assigneeKeysFor(e))));
-    return snap.docs.map(d => d.data() as StaffTask).filter(t => t.status !== 'CANCELLED');
+    const keys = assigneeKeysFor(e);
+    return (await listActiveTasks()).filter(t => keys.includes(t.assigneeKey));
 };
 
 const updateTask = (id: string, fn: (t: StaffTask) => Partial<StaffTask>) => runTransaction(db, async tx => {
