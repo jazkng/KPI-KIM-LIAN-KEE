@@ -4,7 +4,7 @@ import {
     Users, Banknote, Coffee, Truck, CheckSquare, PenTool, BookOpen, CalendarOff, 
     ClipboardCheck, ShoppingBag, Layout, Eye, FileBarChart, Clock, CreditCard, Wallet, ShieldCheck,
     ShoppingCart, Megaphone, Target, PartyPopper, Vote, TrendingUp, Languages, X,
-    FileText, Calculator, Star, Search, Lock, Gauge, ListChecks, Sparkles, ArrowLeft
+    FileText, Calculator, Star, Search, Lock, Gauge, ListChecks, Sparkles, ArrowLeft, FlaskConical
 } from 'lucide-react';
 import { Employee } from '../types';
 import { DataManager } from '../utils/dataManager';
@@ -22,6 +22,7 @@ import { canManageStockCodes } from '../utils/inventory/stockCodeAccess';
 import { isHygieneHr } from '../utils/points/hygieneAccess';
 import { getOrgLevel } from '../utils/orgAccess';
 import { HygieneBoard } from './points/HygieneBoard';
+import { OPEN_TEST_SWITCHER_EVENT } from './dev/TestSwitcher';
 
 // Cache configurations
 const ALERTS_CACHE_KEY = 'boss_dashboard_alerts_cache';
@@ -37,7 +38,7 @@ type CardConfig = {
     icon: React.ComponentType<{ size?: number; className?: string }>; 
     colorClass: string; 
     iconColor: string; 
-    actionType: 'MODAL' | 'NAVIGATE' | 'PLANNING'; 
+    actionType: 'MODAL' | 'NAVIGATE' | 'PLANNING' | 'EVENT'; 
     target: string;
     alertKey?: 'bills' | 'stock' | 'logs' | 'absent'; 
     alertColor?: string;
@@ -78,6 +79,8 @@ const BOSS_CARDS: CardConfig[] = [
     // 盈亏对账、杂项费用审计、库存编号整理都集中在「数据审查中心」
     { id: "data_tools", title: "数据审查中心", sub: "AUDIT & DATA TOOLS", icon: ListChecks, colorClass: "bg-stone-100", iconColor: "text-stone-800", actionType: 'MODAL', target: 'DATA_TOOLS' },
     { id: "translation", title: "翻译管理", sub: "TRANSLATION", icon: Languages, colorClass: "bg-orange-50", iconColor: "text-orange-600", actionType: 'MODAL', target: 'TRANSLATION' },
+    // 测试切换：只有老板本人看得到（负责人 2026-10-24：从画面右边的浮动按钮移到这里）
+    { id: "test_switch", title: "测试切换", sub: "TEST AS STAFF", icon: FlaskConical, colorClass: "bg-orange-50", iconColor: "text-orange-500", actionType: 'EVENT', target: 'TEST_SWITCH' },
     { id: "warranty", title: "保修记录", sub: "WARRANTY", icon: ShieldCheck, colorClass: "bg-cyan-50", iconColor: "text-cyan-600", actionType: 'MODAL', target: 'WARRANTY' },
 ];
 
@@ -254,7 +257,9 @@ export const BossDashboard: React.FC<{
     currentEmployee: Employee; 
     onNavigate: (tab: string) => void; 
     onOpenConfig?: () => void 
-}> = ({ currentEmployee, onNavigate, onOpenConfig }) => {
+    /** 通知铃铛：放在页面右上方的工具列里，跟着页面走（不再固定浮在画面上；负责人 2026-10-24） */
+    notifications?: React.ReactNode
+}> = ({ currentEmployee, onNavigate, onOpenConfig, notifications }) => {
     const { alerts } = useDashboardAlerts();
     const [activeModal, setActiveModal] = useState<ActiveModal>('NONE');
     const [planningTab, setPlanningTab] = useState<PlanningTab>('VOTE');
@@ -306,7 +311,9 @@ export const BossDashboard: React.FC<{
 
     // 🔐 权限闸门：L1 老板看全部；L2 等被指派进老板界面的人只看已勾选模块
     const canUseCard = useCallback(
-        (card: CardConfig) => isRetiredModule(card.target) ? false : card.target === 'HYGIENE'
+        (card: CardConfig) => isRetiredModule(card.target) ? false : card.target === 'TEST_SWITCH'
+            ? getOrgLevel(currentEmployee) === 'OWNER'
+            : card.target === 'HYGIENE'
             ? isHygieneHr(currentEmployee) && getOrgLevel(currentEmployee) !== 'OWNER'
             : card.target === 'DATA_TOOLS'
             ? canOpenDataTools(currentEmployee) // 里面任何一个工具能用就显示入口（系统管理员可只用库存编号整理）
@@ -377,6 +384,8 @@ export const BossDashboard: React.FC<{
             setActiveModal(card.target as ActiveModal);
         } else if (card.actionType === 'NAVIGATE') {
             onNavigate(card.target);
+        } else if (card.actionType === 'EVENT') {
+            if (card.target === 'TEST_SWITCH') window.dispatchEvent(new Event(OPEN_TEST_SWITCHER_EVENT));
         } else if (card.actionType === 'PLANNING') {
             setPlanningTab(card.target as PlanningTab);
             setActiveModal('PLANNING');
@@ -511,6 +520,7 @@ export const BossDashboard: React.FC<{
                             <Star size={14} className={isEditingFavorites ? 'fill-stone-950' : ''} />
                             <span>{isEditingFavorites ? '完成编辑' : '编辑常用'}</span>
                         </button>
+                        {notifications && <div className="shrink-0">{notifications}</div>}
                     </div>
                 </div>
 

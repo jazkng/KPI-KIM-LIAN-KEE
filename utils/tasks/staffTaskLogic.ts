@@ -7,7 +7,7 @@ import { getOrgLevel } from '../orgAccess';
 import { applyReceivedStock, getBaseUnit, getCostPerBaseUnit, getCurrentQtyBase, getDisplayToBaseRatio } from '../unitConversion';
 
 export type TaskRepeat = 'ONCE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'EVERY_N';
-export type TaskType = 'STOCKTAKE' | 'CLEAN' | 'PURCHASE' | 'REPAIR' | 'OTHER';
+export type TaskType = 'STOCKTAKE' | 'CLEAN' | 'PURCHASE' | 'REPAIR' | 'CASH' | 'OTHER';
 export type TaskStatus = 'OPEN' | 'SUBMITTED' | 'DONE' | 'CANCELLED';
 export type StockArea = 'KITCHEN' | 'BAR' | 'GENERAL' | 'FUEL';
 
@@ -71,6 +71,8 @@ export interface StaffTask {
         /** 盘点交回时系统的数量（基础单位）：确认时用来检查有没有人中途改过库存 */
         qtyAtSubmit?: Record<string, number>;
         purchases?: TaskPurchaseLine[];
+        /** 收银点钱：这一天的上班 / 下班金额（仙）；明细在 cash_counts */
+        cash?: { openingSen: number; closingSen: number };
     };
     returnNote?: string;
     returnCount: number;
@@ -111,7 +113,7 @@ export interface BossMatter {
     history: TaskHistory[];
 }
 
-export const TASK_TYPE_LABEL: Record<TaskType, string> = { STOCKTAKE: '盘点库存', CLEAN: '清洁整理', PURCHASE: '采购', REPAIR: '维修', OTHER: '其他' };
+export const TASK_TYPE_LABEL: Record<TaskType, string> = { STOCKTAKE: '盘点库存', CLEAN: '清洁整理', PURCHASE: '采购', REPAIR: '维修', CASH: '收银点钱', OTHER: '其他' };
 export const MATTER_LABEL: Record<MatterCategory, string> = { BIG_PURCHASE: '大件采购', VIP: 'VIP', EVENT: '活动', REPAIR_PRO: '维修（请专业）', OTHER: '其他' };
 export const MATTER_STATUS_LABEL: Record<MatterStatus, string> = { OPEN: '待处理', ARRANGED: '已安排', DONE: '已完成', DECLINED: '不处理' };
 
@@ -198,7 +200,8 @@ export const toStockLine = (item: StockItem, area: StockArea): TaskStockLine => 
 const round = (n: number, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
 
 /** 交回前检查：盘点每一项都要填、照片够不够 */
-export const validateSubmission = (t: StaffTask, s: { counts?: Record<string, number>; photoCount: number; purchases?: TaskPurchaseLine[] }): string | null => {
+export const validateSubmission = (t: StaffTask, s: { counts?: Record<string, number>; photoCount: number; purchases?: TaskPurchaseLine[]; cash?: { openingSen: number; closingSen: number } }): string | null => {
+    if (t.type === 'CASH' && !s.cash) return '请先点上班和下班的金额';
     if (t.photosRequired > 0 && s.photoCount < t.photosRequired) return `要拍至少 ${t.photosRequired} 张照片`;
     if (s.photoCount > 5) return '照片最多 5 张';
     if (t.type === 'STOCKTAKE') {

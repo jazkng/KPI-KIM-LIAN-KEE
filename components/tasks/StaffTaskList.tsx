@@ -6,6 +6,9 @@ import { getBusinessDateString } from '../../utils/dateHelper';
 import { effectiveStatus, validateSubmission, type StaffTask, type TaskPurchaseLine } from '../../utils/tasks/staffTaskLogic';
 import { listTasksFor, readStock, submitTask } from '../../utils/tasks/staffTaskStore';
 import { Sheet, inputCls } from './TaskForms';
+import { CashCounter } from './CashCounter';
+import { cleanCounts, countsEntered, formatRm, type CashCountRecord } from '../../utils/tasks/cashCount';
+import { getCashCount, saveClosing, saveOpening } from '../../utils/tasks/cashCountStore';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
 import { tt } from './taskText';
 import { taskText } from '../../utils/tasks/taskTranslation';
@@ -15,6 +18,7 @@ const TYPE_TEXT: Record<StaffTask['type'], Record<'zh' | 'en' | 'my', string>> =
     CLEAN: { zh: '清洁整理', en: 'Cleaning', my: 'သန့်ရှင်းရေး' },
     PURCHASE: { zh: '采购', en: 'Buying', my: 'ဝယ်ယူ' },
     REPAIR: { zh: '维修', en: 'Repair', my: 'ပြင်ဆင်' },
+    CASH: { zh: '收银点钱', en: 'Cash count', my: 'ငွေရေတွက်' },
     OTHER: { zh: '其他', en: 'Other', my: 'အခြား' },
 };
 const L = (lang: string) => lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh';
@@ -59,6 +63,16 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
+    // 收银点钱：今天这一笔（上班点过就有 opening）
+    const [cashRec, setCashRec] = useState<CashCountRecord | null | undefined>(t.type === 'CASH' ? undefined : null);
+    const [cashInput, setCashInput] = useState<Record<string, string>>({});
+    useEffect(() => {
+        if (t.type !== 'CASH') return;
+        let active = true;
+        getCashCount(getBusinessDateString(), t.id).then(r => { if (active) setCashRec(r); }).catch(() => { if (active) setCashRec(null); });
+        return () => { active = false; };
+    }, [t.id, t.type]);
+    const cashOpening = t.type === 'CASH' && !cashRec?.opening;
     useEffect(() => {
         if (t.type !== 'STOCKTAKE') return;
         let active = true;
@@ -70,12 +84,35 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
     const numCounts = Object.fromEntries(Object.entries(counts).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, Number(v)]));
     const purchases = rows.filter(r => r.stockId ? r.qty > 0 : (r.qty > 0 || r.name.trim()));
 
+    const saveCashOpening = async () => {
+        const counts = cleanCounts(cashInput);
+        if (!countsEntered(counts)) return setErr(tt('cashNeedOne', lang));
+        setBusy(true); setErr('');
+        try { setCashRec(await saveOpening(t, employee, getBusinessDateString(), counts)); setCashInput({}); }
+        catch (e: any) { setErr(e?.message || 'Error'); }
+        finally { setBusy(false); }
+    };
+
     const submit = async () => {
-        const problem = validateSubmission(t, { counts: numCounts, photoCount: photos.length, purchases });
+        if (cashOpening) return saveCashOpening();
+        let cash: { openingSen: number; closingSen: number } | undefined;
+        if (t.type === 'CASH') {
+            const counts = cleanCounts(cashInput);
+            if (!countsEntered(counts)) return setErr(tt('cashNeedOne', lang));
+            const photoProblem = validateSubmission(t, { photoCount: photos.length, cash: { openingSen: 0, closingSen: 0 } });
+            if (photoProblem) return setErr(photoProblem);
+            setBusy(true); setErr('');
+            try {
+                const rec = await saveClosing(t, employee, getBusinessDateString(), counts);
+                cash = { openingSen: rec.opening!.totalSen, closingSen: rec.closing!.totalSen };
+                setCashRec(rec);
+            } catch (e: any) { setBusy(false); return setErr(e?.message || 'Error'); }
+        }
+        const problem = validateSubmission(t, { counts: numCounts, photoCount: photos.length, purchases, cash });
         if (problem) return setErr(problem);
         setBusy(true); setErr('');
         try {
-            await submitTask(t, employee, getBusinessDateString(), { note: note.trim() || undefined, photos, counts: t.type === 'STOCKTAKE' ? numCounts : undefined, purchases: t.type === 'PURCHASE' ? purchases : undefined });
+            await submitTask(t, employee, getBusinessDateString(), { note: note.trim() || undefined, photos, counts: t.type === 'STOCKTAKE' ? numCounts : undefined, purchases: t.type === 'PURCHASE' ? purchases : undefined, cash });
             onDone();
         } catch (e: any) { setErr(e?.message || 'Error'); }
         finally { setBusy(false); }
@@ -84,13 +121,25 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
 
     return <Sheet title={taskText(t, lang).title} onClose={onClose} footer={<>
         {err && <p className="mb-2 text-sm font-bold text-rose-600">{err}</p>}
-        <button onClick={submit} disabled={busy} className="w-full min-h-[52px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? tt('saving', lang) : tt('submit', lang)}</button>
+        <button onClick={submit} disabled={busy || cashRec === undefined} className="w-full min-h-[52px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? tt('saving', lang) : cashOpening ? tt('cashSaveOpening', lang) : t.type === 'CASH' ? tt('cashSubmit', lang) : tt('submit', lang)}</button>
     </>}>
         {(t.note || t.returnNote) && <div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-1 text-sm">
             {t.note && <p className="text-stone-700">{taskText(t, lang).note || t.note}</p>}
             {t.returnNote && <p className="text-rose-600 font-bold">{tt('returned', lang)}：{t.returnNote}</p>}
             <p className="text-xs text-stone-400">{tt('from', lang)}：{t.createdByName}</p>
         </div>}
+
+        {t.type === 'CASH' && (cashRec === undefined ? <p className="text-center text-sm text-stone-400 py-4"><Loader2 size={15} className="inline animate-spin" /></p>
+            : cashOpening ? <>
+                <CashCounter value={cashInput} onChange={setCashInput} lang={lang} title={tt('cashOpening', lang)} />
+                <p className="text-xs font-bold text-stone-400 text-center">{tt('cashReopenHint', lang)}</p>
+            </> : <>
+                <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-black text-emerald-700">{tt('cashOpeningDone', lang)} · {cashRec!.opening!.byName} · {new Date(cashRec!.opening!.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <b className="text-base font-black text-emerald-800 tabular-nums">{formatRm(cashRec!.opening!.totalSen)}</b>
+                </div>
+                <CashCounter value={cashInput} onChange={setCashInput} lang={lang} title={tt('cashClosing', lang)} />
+            </>)}
 
         {t.type === 'STOCKTAKE' && <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100">
             <p className="px-4 py-2 text-xs font-black text-stone-500">{tt('count', lang)}</p>
@@ -124,10 +173,10 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
             {t.purchaseMode !== 'STOCK' && <button onClick={() => setRows(x => [...x, { name: '', unit: '', ratio: 1, qty: 0, amount: 0 }])} className="text-sm font-black text-amber-700">{tt('addRow', lang)}</button>}
         </div>}
 
-        <div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-2">
+        {!cashOpening && <><div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-2">
             <p className="text-xs font-black text-stone-500">{tt('photos', lang)}{t.photosRequired > 0 ? ` · ${tt('needPhotos', lang, { n: t.photosRequired })}` : ''}</p>
             <TaskPhotoPicker value={photos} onChange={setPhotos} label={tt('addPhoto', lang)} />
         </div>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className={`${inputCls} py-2`} placeholder={tt('note', lang)} />
+        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className={`${inputCls} py-2`} placeholder={tt('note', lang)} /></>}
     </Sheet>;
 };
