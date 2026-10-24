@@ -12,6 +12,7 @@
     "emulators": "npx -y firebase-tools@15.33.0 emulators:start --only firestore,auth --project demo-klk-erp",
     "test": "vitest run tests/unit",
     "test:rules": "npx -y firebase-tools@15.33.0 emulators:exec --only firestore --project demo-klk-erp \"vitest run tests/rules --no-file-parallelism\"",
+    "build:ci": "node scripts/ci/build-and-check.mjs",
     "perf:budget": "node scripts/perf/check-bundle-budget.mjs"
   },
   "dependencies": {

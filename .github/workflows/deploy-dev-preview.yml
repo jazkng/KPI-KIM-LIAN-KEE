@@ -57,7 +57,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   deploy:
-    name: 部署候选版本（不接流量）
+    name: 构建及部署（合并后自动切换）
     needs: ci
     if: inputs.action == 'deploy' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -116,7 +116,8 @@ jobs:
           if [ "${CODE}" != "401" ]; then
             echo "::error::候选版本没有启用访问门禁（未登录访问接口预期 401），不得切换流量"; exit 1
           fi
-      - name: 摘要
+      - name: 手动候选部署摘要
+        if: github.event_name == 'workflow_dispatch'
         run: |
           {
             echo "## 候选版本已部署（尚未接流量）"
@@ -133,6 +134,49 @@ jobs:
             gcloud run revisions list --service "${SERVICE}" --region "${REGION}" --limit 10 \
               --format="table(metadata.name, metadata.creationTimestamp, status.conditions[0].status)"
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 切换前：记录目前版本，并再次确认候选版本门禁
+        if: github.event_name == 'push'
+        env:
+          REVISION: ${{ steps.smoke.outputs.revision }}
+        run: |
+          if [ -z "${REVISION}" ]; then echo "::error::没有候选 revision"; exit 1; fi
+          PREVIOUS=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
+            | jq -r '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty')
+          echo "PREVIOUS_REVISION=${PREVIOUS}" >> "$GITHUB_ENV"
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
+            | jq -r --arg r "${REVISION}" '[.status.traffic[] | select(.revisionName==$r and (.tag // "" | startswith("c-")))][0].url // empty')
+          if [ -z "${URL}" ]; then echo "::error::${REVISION} 不是 deploy 建立的候选版本"; exit 1; fi
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session" || true)
+          echo "未登录访问候选 ${REVISION} → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then echo "::error::候选版本没有访问门禁（预期 401），不切换"; exit 1; fi
+      - name: 切换流量
+        if: github.event_name == 'push'
+        env:
+          REVISION: ${{ steps.smoke.outputs.revision }}
+        run: gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
+      - name: 切换后：正式预览网址必须有访问门禁，否则自动切回
+        if: github.event_name == 'push'
+        env:
+          REVISION: ${{ steps.smoke.outputs.revision }}
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session" || true)
+          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
+          if [ "${CODE}" != "401" ]; then
+            echo "::error::访问门禁未生效（预期 401），自动切回 ${PREVIOUS_REVISION}"
+            if [ -n "${PREVIOUS_REVISION}" ]; then
+              gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${PREVIOUS_REVISION}=100" --quiet
+            fi
+            exit 1
+          fi
+          {
+            echo "## 已自动部署到 dev.kimliankee.app"
+            echo ""
+            echo "- Commit：\`${GITHUB_SHA}\`"
+            echo "- 现行 revision：\`${REVISION}\`"
+            echo "- 回滚用（上一个版本）：\`${PREVIOUS_REVISION}\`（以 action = rollback 手动运行本工作流）"
           } >> "$GITHUB_STEP_SUMMARY"
 
   traffic:
@@ -179,56 +223,4 @@ jobs:
           {
             echo "## 流量已切换（${{ inputs.action }}）"
             gcloud run services describe "${SERVICE}" --region "${REGION}" --format="table(status.traffic[].revisionName, status.traffic[].percent)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  auto-promote:
-    name: 自动切换流量（develop-v2 合并后）
-    needs: deploy
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: dev-preview
-    steps:
-      - uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SA }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - name: 切换前：记录目前版本，并再次确认候选版本门禁
-        env:
-          REVISION: ${{ needs.deploy.outputs.revision }}
-        run: |
-          if [ -z "${REVISION}" ]; then echo "::error::没有候选 revision"; exit 1; fi
-          PREVIOUS=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
-            | jq -r '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty')
-          echo "PREVIOUS_REVISION=${PREVIOUS}" >> "$GITHUB_ENV"
-          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json \
-            | jq -r --arg r "${REVISION}" '[.status.traffic[] | select(.revisionName==$r and (.tag // "" | startswith("c-")))][0].url // empty')
-          if [ -z "${URL}" ]; then echo "::error::${REVISION} 不是 deploy 建立的候选版本"; exit 1; fi
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
-          echo "未登录访问候选 ${REVISION} → HTTP ${CODE}"
-          if [ "${CODE}" != "401" ]; then echo "::error::候选版本没有访问门禁（预期 401），不切换"; exit 1; fi
-      - name: 切换流量
-        env:
-          REVISION: ${{ needs.deploy.outputs.revision }}
-        run: gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${REVISION}=100" --quiet
-      - name: 切换后：正式预览网址必须有访问门禁，否则自动切回
-        env:
-          REVISION: ${{ needs.deploy.outputs.revision }}
-        run: |
-          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/api/auth/session")
-          echo "未登录访问 ${URL}/api/auth/session → HTTP ${CODE}"
-          if [ "${CODE}" != "401" ]; then
-            echo "::error::访问门禁未生效（预期 401），自动切回 ${PREVIOUS_REVISION}"
-            if [ -n "${PREVIOUS_REVISION}" ]; then
-              gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-revisions "${PREVIOUS_REVISION}=100" --quiet
-            fi
-            exit 1
-          fi
-          {
-            echo "## 已自动部署到 dev.kimliankee.app"
-            echo ""
-            echo "- Commit：\`${GITHUB_SHA}\`"
-            echo "- 现行 revision：\`${REVISION}\`"
-            echo "- 回滚用（上一个版本）：\`${PREVIOUS_REVISION}\`（以 action = rollback 手动运行本工作流）"
           } >> "$GITHUB_STEP_SUMMARY"

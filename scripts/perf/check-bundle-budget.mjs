@@ -5,7 +5,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const MAIN_BUDGET_KB = 350;          // 首屏主程序上限（目前约 197 KB；拆分前约 4,043 KB）
 const INITIAL_BUDGET_KB = 1300;  // 首屏全部 JS（入口 + 静态预载的 vendor chunk）上限（目前约 1,154 KB）
@@ -14,8 +14,10 @@ const MUST_BE_SEPARATE = [           // 这些大型模块必须是独立的按�
   'BossDashboard', 'StaffDashboard', 'ManagementPortal',
 ];
 
-const outDir = mkdtempSync(join(tmpdir(), 'klk-budget-'));
-execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], {
+const existingIndex = process.argv.indexOf('--dir');
+if (existingIndex >= 0 && !process.argv[existingIndex + 1]) throw new Error('--dir 必须指定构建目录');
+const outDir = existingIndex >= 0 ? resolve(process.argv[existingIndex + 1]) : mkdtempSync(join(tmpdir(), 'klk-budget-'));
+if (existingIndex < 0) execFileSync(process.execPath, [resolve('node_modules/vite/bin/vite.js'), 'build', '--outDir', outDir, '--emptyOutDir'], {
   stdio: ['ignore', 'ignore', 'inherit'],
   env: {
     ...process.env,
@@ -31,6 +33,7 @@ const html = readFileSync(join(outDir, 'index.html'), 'utf8');
 const entry = html.match(/<script type="module"[^>]*src="\/assets\/([^"]+\.js)"/)?.[1];
 if (!entry) throw new Error('找不到入口 JS');
 const files = readdirSync(join(outDir, 'assets'));
+if (!files.some(f => f.startsWith('vendor-firebase-') && f.endsWith('.js'))) throw new Error('构建缺少 Firebase 模块，不能用被裁剪的页面通过体积检查');
 const mainKb = statSync(join(outDir, 'assets', entry)).size / 1024;
 
 // 首屏会下载的全部 JS：入口 + HTML 里 modulepreload 的静态依赖（vendor-react、vendor-firebase…）
