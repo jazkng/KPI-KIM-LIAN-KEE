@@ -9,7 +9,7 @@ import { db } from '../../firebaseConfig';
 import type { Employee, InventoryLog, StockItem } from '../../types';
 import { DataManager } from '../dataManager';
 import {
-    addHistory, assigneeKeysFor, canEditAssignedTask, currentCycle, buildPurchaseApply, buildStocktakeApply,
+    addHistory, assigneeKeysFor, canEditAssignedTask, currentCycle, buildPurchaseApply, buildStocktakeApply, submissionConflict, validateSubmission,
     type BossMatter, type MatterStatus, type StaffTask, type StockArea, type TaskPurchaseLine,
 } from './staffTaskLogic';
 
@@ -102,6 +102,12 @@ export const editAssignedTask = (id: string, actor: Employee, changes: Pick<Staf
 });
 
 export const submitTask = async (task: StaffTask, actor: Employee, today: string, input: { note?: string; photos: string[]; counts?: Record<string, number>; purchases?: TaskPurchaseLine[] }) => {
+    const latest = await getDoc(doc(db, TASKS, task.id));
+    if (!latest.exists()) throw new Error('任务不存在');
+    const firstConflict = submissionConflict(task, latest.data() as StaffTask, actor);
+    if (firstConflict) throw new Error(firstConflict);
+    const firstInvalid = validateSubmission(latest.data() as StaffTask, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+    if (firstInvalid) throw new Error(firstInvalid);
     const photoIds = await savePhotos(task.id, input.photos, actor.name);
     // 盘点：记下交回当下的系统数量，确认时用来检查中途有没有人改过库存
     let qtyAtSubmit: Record<string, number> | undefined;
@@ -111,7 +117,10 @@ export const submitTask = async (task: StaffTask, actor: Employee, today: string
     }
     const at = new Date().toISOString();
     return updateTask(task.id, t => {
-        if (t.status === 'CANCELLED') throw new Error('任务已取消');
+        const conflict = submissionConflict(task, t, actor);
+        if (conflict) throw new Error(conflict);
+        const invalid = validateSubmission(t, { counts: input.counts, photoCount: input.photos.length, purchases: input.purchases });
+        if (invalid) throw new Error(invalid);
         return {
             // 重复任务：记下交的是哪一期（不是交的那天），这样漏掉的那一期补交也对得上
             status: 'SUBMITTED', runDate: t.repeat === 'ONCE' ? today : (currentCycle(t, today) || today), returnNote: undefined,

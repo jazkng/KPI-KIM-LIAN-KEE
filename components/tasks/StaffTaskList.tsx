@@ -46,7 +46,7 @@ export const StaffTaskList: React.FC<{ employee: Employee; lang: string; showEmp
     </div>;
 };
 
-/** 员工做任务：盘点只填数量（看不到系统数量）；采购填买了什么；其他拍照 / 备注 */
+/** 员工做任务：盘点显示现存数量并填写实点数；采购填写实购物品。 */
 const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string; onClose: () => void; onDone: () => void }> = ({ task: t, employee, lang, onClose, onDone }) => {
     const [counts, setCounts] = useState<Record<string, string>>({});
     const [stock, setStock] = useState<Record<string, StockItem>>({});

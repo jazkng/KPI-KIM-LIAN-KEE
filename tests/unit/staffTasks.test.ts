@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    buildPurchaseApply, buildStocktakeApply, canEditAssignedTask, consumptionSinceLast, currentCycle, effectiveStatus, monthReturnCount, nextCycle, repeatLabel,
+    buildPurchaseApply, buildStocktakeApply, canEditAssignedTask, consumptionSinceLast, currentCycle, effectiveStatus, monthReturnCount, nextCycle, repeatLabel, submissionConflict,
     stocktakeDiffs, toStockLine, validateSubmission, type StaffTask,
 } from '../../utils/tasks/staffTaskLogic';
 
@@ -23,6 +23,16 @@ describe('任务编辑权限', () => {
         expect(canEditAssignedTask(base({ status: 'SUBMITTED' }), creator)).toBe(false);
         expect(canEditAssignedTask(base({ status: 'DONE' }), manager)).toBe(false);
         expect(canEditAssignedTask(base({ submission: { by: 'e1', byName: 'Ali', at: 'x', photoIds: [] } }), creator)).toBe(false);
+    });
+});
+
+describe('任务交回并发保护', () => {
+    const employee = { id: 'e1', department: 'KITCHEN' } as any;
+    it('已改派或修改过的旧表单必须重新打开', () => {
+        const opened = base({ history: [{ at: '2026-10-22T01:00:00Z', by: 'Kelvin', action: 'CREATE' }] });
+        expect(submissionConflict(opened, opened, employee)).toBeNull();
+        expect(submissionConflict(opened, { ...opened, assigneeKey: 'emp:e2' }, employee)).toMatch(/改派/);
+        expect(submissionConflict(opened, { ...opened, history: [...opened.history, { at: '2026-10-22T02:00:00Z', by: 'Kelvin', action: 'EDIT' }] }, employee)).toMatch(/更新/);
     });
 });
 

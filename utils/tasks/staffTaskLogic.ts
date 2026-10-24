@@ -18,7 +18,7 @@ export interface TaskStockLine {
     /** 员工输入用的单位与换算（有「显示单位」就用它，否则用基础单位） */
     unit: string;
     ratio: number;
-    /** 派任务时系统数量（基础单位），只给管理层对照，员工画面不显示 */
+    /** 派任务时系统数量（基础单位），供提交与确认时核对 */
     systemQtyBase: number;
 }
 
@@ -82,6 +82,15 @@ export interface StaffTask {
 
 export const canEditAssignedTask = (task: StaffTask, actor: Employee) => task.status === 'OPEN' && !task.submission
     && (task.createdBy === actor.id || ['OWNER', 'BRANCH_MANAGER'].includes(getOrgLevel(actor)));
+
+/** 员工打开表单后若任务被改派或改内容，必须重新读取，避免交回过期盘点。 */
+export const submissionConflict = (opened: StaffTask, latest: StaffTask, actor: Employee): string | null => {
+    if (latest.status === 'CANCELLED') return '任务已取消';
+    if (!assigneeKeysFor(actor).includes(latest.assigneeKey)) return '任务已改派，请重新打开任务列表';
+    if ((opened.history?.length || 0) !== (latest.history?.length || 0)
+        || opened.history?.at(-1)?.at !== latest.history?.at(-1)?.at) return '任务内容已更新，请重新打开后填写';
+    return null;
+};
 
 export type MatterCategory = 'BIG_PURCHASE' | 'VIP' | 'EVENT' | 'REPAIR_PRO' | 'OTHER';
 export type MatterStatus = 'OPEN' | 'ARRANGED' | 'DONE' | 'DECLINED';

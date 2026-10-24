@@ -146,7 +146,9 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         <Field label="类型">{initialTask ? <p className="text-sm font-black text-stone-700">{TASK_TYPE_LABEL[type]}</p> : <Chips value={type} onChange={v => { setType(v); setLines([]); }} options={(Object.keys(TASK_TYPE_LABEL) as TaskType[]).map(v => ({ v, label: TASK_TYPE_LABEL[v] }))} />}</Field>
         {type === 'REPAIR' && !initialTask && <Field label="谁来修"><Chips value={repairBy} onChange={setRepairBy} options={[{ v: 'STAFF', label: '员工自己修' }, { v: 'PRO', label: '请专业（交给老板）' }]} /></Field>}
         <Field label={type === 'STOCKTAKE' ? '标题（选填）' : '要做什么'}><input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder={type === 'STOCKTAKE' ? '例如：冷房肉类盘点' : type === 'PURCHASE' ? '例如：去买白米、洗洁精' : '例如：清洗 2 号冷气滤网'} /></Field>
-        {type === 'PURCHASE' && <Field label="买什么"><Chips value={purchaseMode} onChange={v => { setPurchaseMode(v); setLines([]); }} options={[{ v: 'STOCK', label: '从库存选（买回来会入库）' }, { v: 'FREE', label: '自行输入（不入库）' }]} /></Field>}
+        {type === 'PURCHASE' && <Field label="买什么">{initialTask
+            ? <p className="text-sm font-black text-stone-700">{purchaseMode === 'STOCK' ? '从库存选（买回来会入库）' : '自行输入（不入库）'}</p>
+            : <Chips value={purchaseMode} onChange={v => { setPurchaseMode(v); setLines([]); }} options={[{ v: 'STOCK', label: '从库存选（买回来会入库）' }, { v: 'FREE', label: '自行输入（不入库）' }]} />}</Field>}
         {needLines && <Field label={type === 'STOCKTAKE' ? '要点算的品项（可以跨区域）' : '要买的品项'}><StockPicker value={lines} onChange={setLines} forCount={type === 'STOCKTAKE'} /></Field>}
         {!pro && <>
             <Field label="派给"><Chips value={mode} onChange={setMode} options={[{ v: 'PERSON', label: '指定员工' }, { v: 'DEPT', label: '整个部门（谁做都可以）' }]} /></Field>
