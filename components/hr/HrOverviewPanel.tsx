@@ -39,7 +39,7 @@ const readStaffCash = async (month: string): Promise<StaffCashMonth> => {
 };
 
 const Chips = ({ list, off }: { list: PersonLine[]; off?: boolean }) => <ul className={`hr-people${off ? ' is-off' : ''}`}>
-    {list.map(p => <li key={p.employeeId} className={`s-${p.status}`}><b>{p.name}</b>{ROSTER_STATUS_LABEL[p.status] && <small>{ROSTER_STATUS_LABEL[p.status]}</small>}</li>)}
+    {list.map(p => <li key={p.employeeId} className={`s-${p.status}`}><b>{p.name}</b>{p.status !== 'WORK' && ROSTER_STATUS_LABEL[p.status] && <small>{ROSTER_STATUS_LABEL[p.status]}</small>}</li>)}
 </ul>;
 
 export const HrOverviewPanel: React.FC<Props> = ({ today: realToday, canHr, canRoster, canStaffCash, onOpenHr, onOpenRoster, onOpenStaffCash }) => {
