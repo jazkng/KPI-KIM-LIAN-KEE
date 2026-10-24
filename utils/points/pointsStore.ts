@@ -10,7 +10,7 @@ import { DataManager } from '../dataManager';
 import { getMalaysiaDateString } from '../dateHelper';
 import { isCountedStaff, isPartTimer } from '../hr/hrOverview';
 import { myTime, type Meeting, type MeetingCheckin } from '../meetings/meetingLogic';
-import { listRecentTasks } from '../tasks/staffTaskStore';
+import { listTasksForMonth } from '../tasks/staffTaskStore';
 import type { StaffTask } from '../tasks/staffTaskLogic';
 import { computeMonthPoints, type HygieneCheck, type MonthPoints } from './pointsCalc';
 import { canScoreHygiene, maxHygieneScore } from './hygieneAccess';
@@ -54,7 +54,7 @@ const listCheckinsIn = async (month: string) => {
 interface MonthData { tasks: StaffTask[]; attendance: AttendanceRecord[]; hygiene: HygieneCheck[]; meetings: Meeting[]; checkins: MeetingCheckin[] }
 const loadMonthData = async (month: string, employeeId?: string): Promise<MonthData> => {
     const [tasks, attendance, hygiene, meetings, checkins] = await Promise.all([
-        listRecentTasks().catch(() => [] as StaffTask[]),
+        listTasksForMonth(month).catch(() => [] as StaffTask[]),
         DataManager.getAttendanceByMonth(month, employeeId).catch(() => [] as AttendanceRecord[]),
         listHygieneChecks(`${month}-01`, monthEnd(month)).catch(() => [] as HygieneCheck[]),
         listMeetingsIn(month).catch(() => [] as Meeting[]),

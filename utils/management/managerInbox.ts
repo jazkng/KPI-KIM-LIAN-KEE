@@ -18,7 +18,7 @@ import { DataManager } from '../dataManager';
 import { getOrgLevel } from '../orgAccess';
 import { needsReplenishment } from '../unitConversion';
 import { effectiveStatus, normDept } from '../tasks/staffTaskLogic';
-import { countOpenMatters, listRecentTasks } from '../tasks/staffTaskStore';
+import { countOpenMatters, listActiveTasks } from '../tasks/staffTaskStore';
 
 export type InboxLang = 'zh' | 'en' | 'my';
 export type InboxKey = 'tasksToConfirm' | 'tasksOverdue' | 'bossMatters' | 'settlementDrafts' | 'poToReceive' | 'inventoryTasks' | 'rosterPending' | 'absences' | 'lowStock';
@@ -142,7 +142,7 @@ export const loadManagerInbox = async (employee: Employee, today: string): Promi
         canRoster ? Promise.all(months.map(m => getDoc(doc(db, 'roster_months', m)))) : Promise.reject(),
         canInventory || canProcure ? Promise.all(stockTypes.map(t => DataManager.getStock(t).catch(() => []))) : Promise.reject(),
         DataManager.getEmployees(),
-        listRecentTasks(),
+        listActiveTasks(),
         canMatters ? countOpenMatters() : Promise.reject(),
     ]);
     const ok = <T,>(r: PromiseSettledResult<T>) => r.status === 'fulfilled' ? r.value : undefined;
