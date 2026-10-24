@@ -1,3 +1,4 @@
+import { advisorRequestEvidence } from '../../utils/cockpit/advisorEvidence';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, CircleAlert, Lightbulb, Loader2, Send, ShieldCheck, Sparkles, X } from 'lucide-react';
 import type { EvidenceItem } from '../../utils/cockpit/advisorEvidence';
@@ -41,6 +42,7 @@ const PRESETS: Record<InsightKey | 'default', { label: string; q: string }[]> = 
     cost: [P('哪项最该先查', '哪一项成本每 RM100 花最多？最值得先查？'), P('食材正常吗', '食材每 RM100 花多少？跟一般餐厅 RM30–35 比怎样？'), P('人工正常吗', '员工薪资每 RM100 花多少？跟一般餐厅 RM25–30 比怎样？'), P('租金水电', '租金、水电和其他费用每 RM100 花多少？')],
     food: [P('哪样花最多', '本月哪几样食材花最多钱？占多少？'), P('哪样单价涨了', '哪几样食材单价比上个月涨了？涨多少？'), P('先查哪样', '要降低食材成本，最该先查哪几样？'), P('单价降了的', '哪几样食材单价比上个月便宜了？')],
     supplier: [P('哪样进价贵了', '哪几样最近进价比目录价贵？贵多少？'), P('先跟哪家谈', '进价变贵的品项来自哪家供应商？'), P('便宜了的', '哪几样最近进价比目录价便宜？'), P('影响大吗', '进价变动对食材成本影响大不大？')],
+    stock: [P('先补什么资料', '库存成本资料有哪些缺口，需要先核对哪些单位和收货来源？'), P('当天用完', '哪些物品是当天用完，不应当成缺货？')],
     staff: [P('哪天人效最低', '哪个星期几每位上班员工带来的营业额最低？'), P('哪天人效最高', '哪个星期几每位员工带来的营业额最高？'), P('排班怎么调', '按人效证据，哪几天的排班可以调整？'), P('整体人效', '本月每位上班员工平均带来多少营业额？')],
 };
 
@@ -51,7 +53,7 @@ const KIND: Record<Point['kind'], { label: string; cls: string; Icon: typeof Lig
 };
 
 const money = (v: number) => `RM ${Math.round(v).toLocaleString('en-MY')}`;
-const fmt = (v: number, unit: Insight['unit'], label = '') => unit === 'CHANGE' ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+const fmt = (v: number, unit: Insight['unit'], label = '') => unit === 'COUNT' ? `${v} 项` : unit === 'CHANGE' ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
     : unit === 'PCT' ? `RM ${v.toFixed(2)}`
     : /单均|人均/.test(label) ? `RM ${v.toFixed(2)}` : money(v);
 
@@ -128,6 +130,8 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, anomalies
         chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
+    useEffect(() => { cache.current.clear(); }, [evidence]);
+
     const ask = async (q: string, shown?: string) => {
         const text = q.trim();
         if (!text || loading) return;
@@ -139,7 +143,7 @@ export const AdvisorPanel: React.FC<Props> = ({ periodLabel, insights, anomalies
             const response = await fetch('/api/ai/cockpit-advisor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: text, periodLabel, evidence: evidence.map(({ id, label, value, note }) => ({ id, label, value, note })) }),
+                body: JSON.stringify({ question: text, periodLabel, evidence: advisorRequestEvidence(evidence, insight?.refs).map(({ id, label, value, note }) => ({ id, label, value, note })) }),
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) { setErrorDetail(String(data.detail || '')); throw new Error(data.error || `服务暂时无法回应（${response.status}）`); }

@@ -1,9 +1,10 @@
 // @ts-nocheck
+import '../../operations-ui.css';
 import { html2canvas, loadJsPDF } from '../../../utils/lazyLibs';
 import * as React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle, Archive, Sparkles, Scissors, Settings } from 'lucide-react';
+import { BarChart3, ScanLine, ReceiptText, CreditCard, Calendar, DollarSign, Filter, CheckCircle2, X, Loader2, Plus, Edit3, Trash2, Search, ArrowLeft, ExternalLink, FileDown, User, RefreshCw, CheckSquare, ListChecks, ChevronDown, RotateCcw, FileText, History, AlertTriangle, Archive, Sparkles, Scissors, Settings } from 'lucide-react';
 import type { jsPDF } from 'jspdf';
 
 
@@ -2336,7 +2337,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
     const showFab = viewMode === 'LIST' && !isFormOpen;
 
     return (
-        <div className="absolute inset-0 bg-[#F6F7FB] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
+        <div className="ops-ui absolute inset-0 bg-[#F6F7FB] z-50 flex flex-col overflow-hidden" id="ap_module_wrapper">
             <PayablesOverview isOpen={isOverviewOpen} onClose={() => setIsOverviewOpen(false)} />
             {/* === MOBILE STICKY HEADER === */}
             <div className="md:hidden bg-[#111111] border-b-[3px] border-[#FFD200] px-4 flex justify-between items-center shrink-0 shadow-lg sticky top-0 z-40 safe-area-top h-[56px]">
@@ -2352,30 +2353,26 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                 </div>
                 
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setIsOverviewOpen(true)} className="bg-[#FFD200] text-black text-xs font-black px-3 rounded-xl min-h-[40px] shrink-0 active:scale-95">📊 总览</button>
-                    <span className="bg-[#22C55E]/10 text-[#22C55E] text-[10px] px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 border border-[#22C55E]/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse"></span>
-                        ONLINE
-                    </span>
+                    <button onClick={() => setIsOverviewOpen(true)} className="bg-[#FFD200] text-black text-xs font-black px-3 rounded-xl min-h-[40px] shrink-0 active:scale-95"><BarChart3 size={16} className="inline mr-1"/>总览</button>
                     {isBillingCapped && (
                         <span className="bg-[#EF4444]/10 text-[#EF4444] text-[10px] px-2 py-0.5 rounded-full font-black border border-[#EF4444]/20">
-                            CAPPED
+                            筛选找早期账单
                         </span>
                     )}
                 </div>
             </div>
 
             {/* === MOBILE KPI SUMMARY STRIP === */}
-            <div className="flex md:hidden gap-2 px-4 py-3 bg-[#F6F7FB] border-b border-gray-200 overflow-x-auto scrollbar-hide shrink-0">
-                <div className="min-w-[140px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+            <div className="grid grid-cols-3 md:hidden gap-2 px-3 py-3 bg-[#F6F7FB] border-b border-gray-200 overflow-x-auto scrollbar-hide shrink-0">
+                <div className="min-w-0 bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">未付款总额</p>
                     <p className="text-sm font-black text-[#EF4444] mt-1">RM {totalInvoicesOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
-                <div className="min-w-[110px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                <div className="min-w-0 bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">逾期账单</p>
                     <p className="text-sm font-black text-stone-900 mt-1">{overdueBillsCount} 笔</p>
                 </div>
-                <div className="min-w-[130px] bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
+                <div className="min-w-0 bg-white border border-gray-300/65 rounded-2xl p-3 shadow-xs shrink-0 flex flex-col justify-between">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">本月待付款</p>
                     <p className="text-sm font-black text-stone-900 mt-1">RM {thisMonthOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
@@ -2635,7 +2632,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                             <span>AP Ledger &amp; Cash Flow</span>
                         </div>
                     </div>
-                    <button onClick={() => setIsOverviewOpen(true)} className="hidden md:inline-flex items-center gap-1.5 ml-3 bg-[#FFD200] text-black text-xs font-black px-4 py-2 rounded-xl shrink-0 hover:bg-white active:scale-95 transition-all">📊 应付总览</button>
+                    <button onClick={() => setIsOverviewOpen(true)} className="hidden md:inline-flex items-center gap-1.5 ml-3 bg-[#FFD200] text-black text-xs font-black px-4 py-2 rounded-xl shrink-0 hover:bg-white active:scale-95 transition-all"><BarChart3 size={16}/>应付总览</button>
                 </div>
                 
                 {/* Desktop Header Actions */}
@@ -3149,7 +3146,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                                 onClick={() => { setPayModalData(bill); setPayAmount(bill.outstandingAmount || 0); setPayMethod(''); }} 
                                                 className="flex-grow bg-[#111111] text-[#FFD200] py-2.5 px-4 rounded-xl text-xs font-black border border-[#FFD200]/20 shadow-sm hover:bg-black transition-all active:scale-95"
                                             >
-                                                Pay Now
+                                                登记付款
                                             </button>
                                         ) : (
                                             <button 
@@ -3184,18 +3181,6 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                     </>
                 )}
             </div>
-
-            {/* 👑 === MOBILE FAB (+) === 悬浮录入按钮（手机专属） */}
-            {showFab && (
-                <button
-                    onClick={() => handleOpenForm()}
-                    className="md:hidden absolute right-4 z-30 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all ring-4 ring-blue-600/20"
-                    style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
-                    aria-label="录入新账单"
-                >
-                    <Plus size={28} strokeWidth={3}/>
-                </button>
-            )}
 
             {/* === FOOTER ACTION PANEL === */}
             <div className="bg-white border-t border-gray-200 shrink-0 w-full z-40 safe-area-bottom">
@@ -4195,7 +4180,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 disabled={isAiScanning}
                                 className={`flex-1 min-h-[44px] bg-indigo-500/10 border border-indigo-500/20 active:bg-indigo-500/20 rounded-xl flex flex-col items-center justify-center relative cursor-pointer text-indigo-400 disabled:opacity-50 ${isAiScanning ? 'animate-pulse' : ''}`}
                             >
-                                <span className="text-[14px]">{isAiScanning ? "⏳" : "🤖"}</span>
+                                {isAiScanning ? <Loader2 size={20} className="animate-spin"/> : <ScanLine size={20}/>}
                                 <span className="text-[9px] font-black tracking-wider text-indigo-300">AI 扫描</span>
                             </button>
 
@@ -4205,7 +4190,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 onClick={() => setShowPVHistory(true)}
                                 className="flex-1 min-h-[44px] bg-emerald-500/10 border border-emerald-500/20 active:bg-emerald-500/20 rounded-xl flex flex-col items-center justify-center cursor-pointer text-emerald-400"
                             >
-                                <span className="text-[14px]">📄</span>
+                                <ReceiptText size={20}/>
                                 <span className="text-[9px] font-black tracking-wider text-emerald-300">PV 历史</span>
                             </button>
 
@@ -4215,7 +4200,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 onClick={() => setShowBackdate(true)}
                                 className="flex-1 min-h-[44px] bg-orange-500/10 border border-orange-500/20 active:bg-orange-500/20 rounded-xl flex flex-col items-center justify-center cursor-pointer text-orange-400"
                             >
-                                <span className="text-[14px]">📅</span>
+                                <Calendar size={20}/>
                                 <span className="text-[9px] font-black tracking-wider text-orange-300">补开 PV</span>
                             </button>
 
@@ -4248,7 +4233,7 @@ export const AccountsPayableModule: React.FC<AccountsPayableModuleProps> = ({ on
                                 onClick={() => setShowBackdate(true)}
                                 className="flex-1 min-h-[44px] bg-orange-500/10 border border-orange-500/20 active:bg-orange-500/20 rounded-xl flex flex-col items-center justify-center cursor-pointer text-orange-400"
                             >
-                                <span className="text-[14px]">📅</span>
+                                <Calendar size={20}/>
                                 <span className="text-[9px] font-black tracking-wider text-orange-300">补开 PV</span>
                             </button>
 

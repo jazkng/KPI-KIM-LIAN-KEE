@@ -15,6 +15,14 @@ export interface EvidenceItem {
     kpiKey?: string;
 }
 
+export const advisorRequestEvidence = (evidence: EvidenceItem[], priority: string[] = []): EvidenceItem[] => {
+    const unique = [...new Map(evidence.map(item => [item.id, item])).values()];
+    if (unique.length <= 120) return unique;
+    const refs = new Set(priority);
+    const ordered = [...unique.filter(e => refs.has(e.id)), ...unique.filter(e => !refs.has(e.id))];
+    return [...ordered.slice(0, 119), { id: 'EV0', label: '本次证据范围', value: `提供119项，共${unique.length}项`, note: '优先提供当前图的证据。未提供的资料不可推断为零，也不可声称已完整分析。' }];
+};
+
 const rm = (n: number) => `${n < 0 ? '−' : ''}RM ${Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 

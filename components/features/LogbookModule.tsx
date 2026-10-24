@@ -1,6 +1,8 @@
+import '../operations-ui.css';
+import { localDate, validLogRange, filterLogReport, logReportSummary } from '../../utils/logbook/reportModel';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-    BookOpen, AlertCircle, CheckCircle2, Clock, Trash2, Shield, FileText, Camera, X, Loader2, ChevronDown, Zap, PenTool, Maximize2,
+    Download, BookOpen, AlertCircle, CheckCircle2, Clock, Trash2, Shield, FileText, Camera, X, Loader2, ChevronDown, Zap, PenTool, Maximize2,
     Gavel, Coins, Check, Calendar, Languages, MessageCircle, UserCheck, Send, ArrowLeft,
 } from 'lucide-react';
 import {
@@ -393,7 +395,7 @@ const getCategoryLabel = (cat: LogCategory, langNorm: 'zh_en' | 'en' | 'my' = 'z
     }
 };
 
-const toDateStr = (d: Date) => d.toISOString().split('T')[0];
+const toDateStr = localDate;
 
 const CategoryIcon = ({ cat, lang }: { cat: LogCategory; lang?: 'zh_en' | 'en' | 'my' }) => {
     const { Icon } = getCategoryLabel(cat, lang);
@@ -438,9 +440,30 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
     // 查看模式默认直接读取最新 30 条；只有员工主动筛选日期时才查询历史记录。
     const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [reportBusy, setReportBusy] = useState(false);
+    const [reportError, setReportError] = useState('');
+    const [reportFile, setReportFile] = useState<{ url: string; name: string; pages: number } | null>(null);
+    useEffect(() => () => { if (reportFile) URL.revokeObjectURL(reportFile.url); }, [reportFile]);
+    useEffect(() => { setReportFile(null); }, [dateRange.start, dateRange.end, activeFilter]);
+    const exportReport = async () => {
+        if (!validLogRange(dateRange.start, dateRange.end)) { setShowDatePicker(true); setReportError('先选择要讨论的日期范围。'); return; }
+        setReportBusy(true); setReportError(''); setReportFile(null);
+        try {
+            const all = await DataManager.getAllLogsByDateRange(dateRange.start, dateRange.end);
+            const selected = filterLogReport(all, dateRange.start, dateRange.end, activeFilter);
+            const { exportLogbookReport } = await import('../../utils/logbook/exportReport');
+            const label = activeFilter === 'HIGH_PRIORITY' ? '紧急问题' : activeFilter === 'COMPLAINT' ? '客诉' : '全部日志';
+            const result = await exportLogbookReport(selected, dateRange.start, dateRange.end, label);
+            const url = URL.createObjectURL(result.pdf.output('blob'));
+            setReportFile({ url, name: result.name, pages: result.pages });
+            const link = document.createElement('a'); link.href = url; link.download = result.name; link.click();
+        } catch (err) { setReportError((err as Error).message || '导出失败，请重试。'); }
+        finally { setReportBusy(false); }
+    };
 
     const loadDateRangeLogs = useCallback(async (start: string, end: string) => {
-        if (!viewOnly || !start || !end) return;
+        if (!viewOnly || !validLogRange(start, end)) { setReportError('请选择有效的起止日期。'); return; }
+        setReportError('');
         setIsLoading(true);
         try {
             const rangedLogs = await DataManager.getLogsByDateRange(start, end, 100);
@@ -449,6 +472,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
             setPagingBeforeId(null);
         } catch (err) {
             console.error('Logbook date range load error:', err);
+            setLogs([]); setReportError('日志读取失败，请重新查询。');
         } finally {
             setIsLoading(false);
         }
@@ -476,7 +500,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
         const s   = new Date(now);
         const e   = new Date(now);
         if      (type === 'YESTERDAY')   { s.setDate(now.getDate() - 1); e.setDate(now.getDate() - 1); }
-        else if (type === '7DAYS')       { s.setDate(now.getDate() - 7); }
+        else if (type === '7DAYS')       { s.setDate(now.getDate() - 6); }
         else if (type === 'THIS_MONTH')  { s.setDate(1); e.setMonth(e.getMonth() + 1); e.setDate(0); }
         else if (type === 'LAST_MONTH')  { s.setDate(1); s.setMonth(s.getMonth() - 1); e.setDate(0); }
         // TODAY: s = e = today，已是初始值，无需额外处理
@@ -950,10 +974,17 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
          *  - overflow-x-hidden 防弹性滚动溢出
          */
         <div
-            className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-x-hidden"
+            className="ops-ui p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-x-hidden"
             style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
         >
 
+            {viewOnly && <section>
+                <div className="ops-toolbar"><div><h2>运营问题与跟进</h2><p>按日期整理，打印后讨论。</p></div><button className="ops-primary" disabled={reportBusy || isLoading} onClick={exportReport}><Download size={17}/>{reportBusy ? '正在生成 PDF…' : '导出讨论 PDF'}</button></div>
+                <div className="ops-summary">{Object.entries(logReportSummary(filteredLogs)).map(([key, value]) => <div key={key}><small>{{total:'当前显示',open:'待跟进',urgent:'紧急',complaints:'客诉'}[key]}</small><strong>{value}</strong></div>)}</div>
+                {reportError && <p className="ops-error" role="alert">{reportError}</p>}
+                {dateRange.start && logs.length === 100 && <p className="ops-notice">列表显示最近 100 条。PDF 会重新读取所选日期范围的全部记录。</p>}
+                {reportFile && <a className="ops-primary" href={reportFile.url} download={reportFile.name}>下载 PDF · {reportFile.pages} 页</a>}
+            </section>}
             {/* ── ADD LOG FORM ──────────────────────────────────────────────── */}
             {!viewOnly && (
                 <div className="bg-white p-5 rounded-2xl shadow-lg border border-[#FFD200]/20 relative overflow-hidden">
@@ -1216,16 +1247,16 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                     </div>
 
                     {showDatePicker && (
-                        <div className="flex items-center gap-2 bg-blue-50 p-2 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-1">
+                        <div className="flex flex-wrap items-center gap-2 bg-stone-50 p-2 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-1">
                             <input
-                                type="date"
+                                type="date" aria-label="日志开始日期"
                                 value={dateRange.start}
                                 onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                                 className="flex-1 bg-white text-xs font-bold p-2 min-h-[44px] outline-none rounded-lg border border-blue-200 text-center"
                             />
                             <span className="text-gray-400 text-xs font-bold shrink-0">{t.to}</span>
                             <input
-                                type="date"
+                                type="date" aria-label="日志结束日期"
                                 value={dateRange.end}
                                 onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                                 className="flex-1 bg-white text-xs font-bold p-2 min-h-[44px] outline-none rounded-lg border border-blue-200 text-center"
@@ -1235,7 +1266,7 @@ export const LogbookModule: React.FC<LogbookModuleProps> = ({ viewOnly = false, 
                                     setShowDatePicker(false);
                                     void loadDateRangeLogs(dateRange.start, dateRange.end);
                                 }}
-                                disabled={!dateRange.start || !dateRange.end}
+                                disabled={!validLogRange(dateRange.start, dateRange.end)}
                                 style={noTapHighlight}
                                 className="p-2.5 min-w-[44px] min-h-[44px] bg-blue-600 active:bg-blue-700 text-white rounded-lg shrink-0 flex items-center justify-center select-none disabled:opacity-40"
                             >

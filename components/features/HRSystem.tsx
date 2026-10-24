@@ -1,3 +1,4 @@
+import '../operations-ui.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, User, DollarSign, Briefcase, X, ArrowLeft } from 'lucide-react';
 import { Employee, RoleDefinition, RoleGuide } from '../../types';
@@ -79,7 +80,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
     ];
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
+        <div className="hr-ui fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-in zoom-in duration-200">
             <div className="bg-white w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
 
                 {/* 顶栏 — iOS safe-area */}
@@ -95,7 +96,7 @@ export const HRSystem: React.FC<HRSystemProps> = ({ onClose, currentEmployee }) 
                         </button>
                         <h3 className="font-black text-lg flex items-center gap-2 whitespace-nowrap min-w-0">
                             <Users className="text-[#FFD200] shrink-0" />
-                            <span className="hidden md:inline">御膳智控 · </span>人事中心
+                            <span className="hidden md:inline">金莲记EPR · </span>人事中心
                             {isSuperAdminMode && (
                                 <span className="text-[9px] md:text-[10px] bg-[#FFD200] text-black px-2 py-1 rounded-full tracking-wider whitespace-nowrap">
                                     ADMIN

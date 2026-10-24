@@ -1,3 +1,4 @@
+import '../operations-ui.css';
 import React, { useEffect, useState } from 'react';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { AlertCircle, Cake, ChevronRight, LayoutGrid, RefreshCw, Users, Wallet } from 'lucide-react';
@@ -72,7 +73,7 @@ export const HrOverviewPanel: React.FC<Props> = ({ today: realToday, canHr, canR
 
     if (!canHr && !canRoster && !canStaffCash) return <p className="bc-card">当前账号未获人事模块权限。</p>;
 
-    return <div className="hr-overview">
+    return <div className="hr-overview hr-ui">
         <div className="hr-toolbar">
             <label className="hr-date">
                 <input type="date" value={today} onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setToday(e.target.value); }} aria-label="选择日期" />

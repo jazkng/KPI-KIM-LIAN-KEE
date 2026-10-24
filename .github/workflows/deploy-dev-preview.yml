@@ -75,7 +75,8 @@ jobs:
       - name: 构建并推送镜像
         run: |
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          docker build -t "${IMAGE}:${GITHUB_SHA}" \
+          docker pull "${IMAGE}:build-cache" || true
+          docker build --cache-from "${IMAGE}:build-cache" --build-arg BUILDKIT_INLINE_CACHE=1 -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:build-cache" \
             --build-arg VITE_FIREBASE_API_KEY="${{ vars.VITE_FIREBASE_API_KEY }}" \
             --build-arg VITE_FIREBASE_AUTH_DOMAIN="${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \
             --build-arg VITE_FIREBASE_PROJECT_ID="${{ vars.VITE_FIREBASE_PROJECT_ID }}" \
@@ -85,6 +86,7 @@ jobs:
             --build-arg VITE_FIREBASE_MEASUREMENT_ID="${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}" \
             .
           docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:build-cache"
       - name: 部署候选版本（0% 流量）
         run: |
           # 服务端登录（登录后免预览站密码）：GitHub 变量 AUTH_SERVER_ENABLED=true 才开启；
