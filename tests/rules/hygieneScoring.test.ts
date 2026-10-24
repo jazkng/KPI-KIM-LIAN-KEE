@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, setDoc, type Firestore } from 'firebase/firestore';
 import type { Employee } from '../../types';
 import { hygieneDocId, saveHygieneCheck } from '../../utils/points/pointsStore';
 
@@ -13,11 +13,16 @@ beforeAll(async () => {
     expect(process.env.FIRESTORE_EMULATOR_HOST).toBeTruthy();
     env = await initializeTestEnvironment({ projectId: 'demo-klk-erp', firestore: { rules: readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8') } });
     await env.clearFirestore();
+    await env.withSecurityRulesDisabled(async ctx => {
+        for (const person of [actor('lead', 'TEAM_LEAD'), actor('other', 'DEPARTMENT_HEAD'), actor('staff', 'CREW')]) {
+            await setDoc(doc(ctx.firestore(), 'employees', person.id), person);
+        }
+    });
 });
 afterAll(async () => { await env?.cleanup(); });
 
 it('L4 最高 3 分、跨区需授权，同周其他检查人不能覆盖原评分', async () => {
-    const firestore = env.authenticatedContext('qa-rater').firestore() as unknown as Firestore;
+    const firestore = env.authenticatedContext('emp_lead', { emp: 'lead', lvl: 'TEAM_LEAD' }).firestore() as unknown as Firestore;
     const lead = actor('lead', 'TEAM_LEAD');
     const other = actor('other', 'DEPARTMENT_HEAD');
     const staff = actor('staff', 'CREW');
