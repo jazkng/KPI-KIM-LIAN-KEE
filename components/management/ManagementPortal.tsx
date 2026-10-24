@@ -312,7 +312,7 @@ export const ManagementPortal: React.FC<ManagementPortalProps> = ({ employee, on
                     <button onClick={() => setHygieneOpen(false)} className="w-10 h-10 rounded-full bg-stone-100 grid place-items-center" aria-label="返回"><ArrowLeft size={18} /></button>
                     <b className="text-base font-black">个人卫生（每周）</b>
                 </div>
-                <div className="max-w-2xl mx-auto p-4 pb-24"><HygieneBoard actor={employee} /></div>
+                <div className="max-w-2xl mx-auto p-4 pb-24"><HygieneBoard actor={employee} lang={lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh'} /></div>
             </div>}
             
             {/* If an operational sub-module is active, render the workspace full-screen, hiding tabs */}

@@ -50,8 +50,8 @@ export const ManagerInbox: React.FC<{ employee: Employee; lang: string; onOpen: 
         </div>
 
         {loading && !counts ? <div className="p-4 rounded-2xl bg-white border border-stone-200 text-center text-xs font-bold text-stone-400">{t.loading}</div> : <>
-            {todo.length === 0 && <div className="p-4 rounded-2xl bg-white border border-emerald-200 flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-emerald-500 shrink-0" /><span className="text-sm font-black text-emerald-700">{t.clear}</span>
+            {todo.length === 0 && <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-white border border-emerald-200 shadow-sm flex items-center gap-3">
+                <span className="w-10 h-10 rounded-xl bg-emerald-100 grid place-items-center"><CheckCircle2 size={22} className="text-emerald-600" /></span><span className="min-w-0"><b className="block text-sm font-black text-emerald-800">{t.clear}</b><small className="text-xs text-emerald-700/70">{lang === 'my' ? 'ယနေ့ ဆောင်ရွက်ရန် မရှိပါ' : lang === 'en' ? 'Nothing needs action now' : '目前没有待处理事项'}</small></span>
             </div>}
             {todo.map(i => <div key={i.key} className="rounded-2xl bg-white border border-stone-200 shadow-xs overflow-hidden">
                 <button onClick={() => i.people ? setOpenPeople(v => !v) : onOpen(i.target)} className="w-full flex items-center gap-3 p-3.5 text-left active:bg-stone-50 min-h-[64px]">

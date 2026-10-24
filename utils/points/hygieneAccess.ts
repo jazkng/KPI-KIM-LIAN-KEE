@@ -2,7 +2,7 @@ import type { Employee } from '../../types';
 import { getOrgLevel } from '../orgAccess';
 import { normDept } from '../tasks/staffTaskLogic';
 
-type Who = Pick<Employee, 'id' | 'orgLevel' | 'rank' | 'role' | 'department'>;
+type Who = Pick<Employee, 'id' | 'orgLevel' | 'rank' | 'role' | 'department' | 'hygieneDepartments'>;
 
 /** HR（老板、L2 门店管理、L2S 幕僚）评所有人，包括主管 */
 export const isHygieneHr = (e: Who) => ['OWNER', 'BRANCH_MANAGER', 'STAFF_SUPPORT'].includes(getOrgLevel(e));
@@ -14,7 +14,13 @@ export const canScoreHygiene = (actor: Who, target: Who) => {
     if (actor.id === target.id || getOrgLevel(target) === 'OWNER') return false;
     if (isHygieneHr(actor)) return true;
     if (!isHygieneSupervisor(actor)) return false;
-    return getOrgLevel(target) === 'CREW' && normDept(target.department) === normDept(actor.department);
+    const dept = normDept(target.department);
+    return getOrgLevel(target) === 'CREW' && (dept === normDept(actor.department) || (actor.hygieneDepartments || []).map(normDept).includes(dept));
+};
+
+export const maxHygieneScore = (actor: Who) => {
+    const level = getOrgLevel(actor);
+    return level === 'TEAM_LEAD' ? 3 : level === 'DEPARTMENT_HEAD' ? 4 : isHygieneHr(actor) ? 5 : 0;
 };
 
 /** 那一周的星期一 */

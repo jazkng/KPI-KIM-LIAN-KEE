@@ -128,7 +128,7 @@ export const BusinessCenter: React.FC<Props> = ({ currentEmployee, section, onSe
                 {openMatters > 0 && <button className="bc-matter-banner" onClick={() => { onSection('HR'); setTimeout(() => document.getElementById('bc-tasks')?.scrollIntoView({ behavior: 'smooth' }), 300); }}><Flag size={18} /><span><b>上报事项 {openMatters} 件</b><small>员工 / 管理层上报、等你处理的事</small></span><ChevronRight size={18} /></button>}
                 {reportsAllowed && can('AI_ASSISTANT') && <button className="bc-ai-banner" disabled={!data} onClick={() => { setAiFocus(null); setAiOpen(true); }}>
                     <span className="bc-ai-icon"><Sparkles size={20} /></span>
-                    <span className="bc-ai-text"><b>AI 经营顾问</b><small>{!data ? '读取中…' : aiPreview.length ? `本月 ${aiPreview.length} 件事要注意` : '图表看本月生意，也可以直接问'}</small></span>
+                    <span className="bc-ai-text"><b>经营参谋 <em>AI</em></b><small>{!data ? '读取中…' : aiPreview.length ? `${aiPreview.length} 项经营提醒` : '看数据 · 问经营'}</small></span>
                     {aiPreview.length > 0 && <span className="bc-ai-chips">{aiPreview.slice(0, 3).map((a, i) => <i key={i} role="button" tabIndex={0} className={`is-${a.tone}`} onClick={e => { e.stopPropagation(); setAiFocus(a); setAiOpen(true); }} onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setAiFocus(a); setAiOpen(true); } }}>{a.text}</i>)}</span>}
                     <ChevronRight size={18} className="bc-ai-go" />
                 </button>}

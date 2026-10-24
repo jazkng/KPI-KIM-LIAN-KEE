@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Crown, BookOpen, User, Calendar, 
-  Award, ChevronDown, ChevronUp, Check, LogOut, MapPin, Sparkles, AlertOctagon, HelpCircle, 
+  Award, ChevronLeft, ChevronRight, LogOut, MapPin, Sparkles, AlertOctagon, HelpCircle,
   Smartphone, BookMarked, ShieldAlert
 } from 'lucide-react';
 import { SOPItem, Employee, RoleGuide, AppModule, AppLanguage, normalizeLanguage } from '../types';
@@ -23,6 +23,7 @@ import { AIOperationsAssistant, ManagerDashboard } from './lazyModules';
 import { withoutRetiredModules } from '../utils/retiredModules';
 import { StaffTaskList } from './tasks/StaffTaskList';
 import { ChangePinCard } from './profile/ChangePinCard';
+import { DutyGuide } from './staff/DutyGuide';
 
 import { 
   st, 
@@ -40,7 +41,6 @@ const TAB_LABEL = {
   TODAY: { zh: '任务', en: 'Tasks', my: 'လုပ်ငန်း' },
   HANDBOOK: { zh: '职责', en: 'My duties', my: 'တာဝန်' },
 } as const;
-const DUTY_TITLE = { zh: '我的职位要做的事', en: 'My role duties', my: 'ကျွန်ုပ်၏ တာဝန်' } as const;
 const L3 = (lang: string): 'zh' | 'en' | 'my' => lang === 'my' ? 'my' : lang === 'en' ? 'en' : 'zh';
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
@@ -104,19 +104,24 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   // Shift & Attendance states
   const [, setLoadingAttendance] = useState(false);
   const [rosterData3Days, setRosterData3Days] = useState<{ date: string; label: string; status: string }[]>([]);
+  const [rosterRefresh, setRosterRefresh] = useState(0);
   
   // Selected module for full screen Work Tools (hides bottom bar)
   const [selectedModule, setSelectedModule] = useState<AppModule | null>(null);
   
   // Collapsible sections for SOP items
-  const [expandedSopId, setExpandedSopId] = useState<string | null>(null);
 
   // Roster Calendar State
-  const [rosterMonth, ] = useState<string>(() => {
+  const [rosterMonth, setRosterMonth] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [monthlyRosterData, setMonthlyRosterData] = useState<Record<string, Record<string, string>>>({});
+  const moveRosterMonth = (delta: number) => setRosterMonth(current => {
+    const [year, month] = current.split('-').map(Number);
+    const date = new Date(year, month - 1 + delta, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [monthlyNotes, setMonthlyNotes] = useState<Record<string, string>>({});
 
   // 已停用的模组（厨房通知）不显示；员工资料原样保留
@@ -151,18 +156,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
      initConfig();
   }, [employee]);
 
-  // 2. Load SOP Items (Cloud Sync)
+  // 2. Load role guidance for the read-only duties page.
   useEffect(() => {
     if (isPending) return;
 
     const initSOP = async () => {
-        const dateStr = getBusinessDateString();
-
-        const savedProgress = await DataManager.getSOPProgress(dateStr, employee.id);
-        
-        if (savedProgress) {
-            setSopItems(savedProgress);
-        } else {
             const config = await DataManager.getRoleConfig();
             const templates = config?.sops ? { ...ROLE_SOP_DETAILS, ...config.sops } : ROLE_SOP_DETAILS;
             const template = templates[roleCode] || templates['COMMIS'] || { start: { tasks: [] }, end: { tasks: [] } };
@@ -181,11 +179,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
                     }
                 });
             }
-            setSopItems([...startItems, ...endItems, ...sysTasks]);
-        }
+            setSopItems([...startItems, ...sysTasks, ...endItems]);
     };
     initSOP();
   }, [employee.id, roleCode, isPending, employee.allowedModules]);
+
+  useEffect(() => {
+    if (activeTab !== 'ROSTER') return;
+    const refresh = () => setRosterRefresh(v => v + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [activeTab]);
 
   // 3. Load Shift and Attendance (Real Database) + 3 Days Roster list
   useEffect(() => {
@@ -233,7 +237,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     };
 
     fetchAttendanceAndRoster();
-  }, [employee.id, employee.shiftGroup]);
+  }, [employee.id, employee.shiftGroup, rosterMonth, activeTab === 'ROSTER', rosterRefresh]);
 
   // 4. Subscribe only to this employee's pending inventory task.
   // The staff home only needs a yes/no flag, so one matching document is enough.
@@ -263,25 +267,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
   // ──────────────────────────────────────────────────────────────────────────
   // HANDLERS
   // ──────────────────────────────────────────────────────────────────────────
-  const toggleSOP = async (id: string) => {
-    const newItems = sopItems.map(item => item.id === id ? { ...item, completed: !item.completed } : item);
-    setSopItems(newItems);
-    
-    const dateStr = getBusinessDateString();
-    await DataManager.saveSOPProgress(dateStr, employee.id, newItems);
-  };
-
   const handleLogoutClick = () => {
     localStorage.removeItem('kepong_erp_session_role');
     localStorage.removeItem('kepong_erp_session_employee');
     window.location.reload();
   };
-
-  // Stats
-  const totalTasks = sopItems.length;
-  const completedTasks = sopItems.filter(item => item.completed).length;
-  const taskProgressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  const nextPendingTask = sopItems.find(item => !item.completed);
 
   const isConfirmed = employee.status === 'CONFIRMED';
 
@@ -294,11 +284,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
     }
   };
 
-
-  // SOP Task categorizations
-  const openingSops = sopItems.filter(item => item.id.startsWith('start_'));
-  const operatingSops = sopItems.filter(item => item.id.startsWith('auto_'));
-  const closingSops = sopItems.filter(item => item.id.startsWith('end_'));
 
   // ──────────────────────────────────────────────────────────────────────────
   // WORK TOOLS IF OPEN (Full screen overlay, hides bottom navigation)
@@ -526,7 +511,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             {/* 1. 我的任务（主管委派的任务）放最上面：一打开就知道今天要做什么 */}
             <StaffTaskList employee={employee} lang={lang} showEmpty />
             {/* L4 组长：每周评自己部门的个人卫生 */}
-            {isHygieneSupervisor(employee) && <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm"><HygieneBoard actor={employee} /></div>}
+            {isHygieneSupervisor(employee) && <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm"><HygieneBoard actor={employee} lang={L3(lang)} /></div>}
             
             {/* 2. Authorized Work Tools (Grid - touch targets >= 48px) */}
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
@@ -650,7 +635,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <h3 className="font-black text-sm text-[#111111]">{st('monthlyRoster', lang)}</h3>
-                <span className="text-[11px] font-mono font-extrabold text-gray-400">{rosterMonth}</span>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => moveRosterMonth(-1)} aria-label={lang === 'my' ? 'ယခင်လ' : lang === 'en' ? 'Previous month' : '上个月'} className="h-9 w-9 rounded-lg bg-gray-100 grid place-items-center"><ChevronLeft size={16} /></button>
+                  <span className="text-[11px] font-mono font-extrabold text-gray-600 min-w-[62px] text-center">{rosterMonth}</span>
+                  <button type="button" onClick={() => moveRosterMonth(1)} aria-label={lang === 'my' ? 'နောက်လ' : lang === 'en' ? 'Next month' : '下个月'} className="h-9 w-9 rounded-lg bg-gray-100 grid place-items-center"><ChevronRight size={16} /></button>
+                </div>
               </div>
 
               {/* Minimalist calendar grid */}
@@ -718,226 +707,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ employee }) => {
             ========================================== */}
         {activeTab === 'HANDBOOK' && (
           <div className="space-y-5 animate-in fade-in duration-300">
-            {/* 我的职位要做的事（原「今日任务进度」移到这里） */}
-            {/* 3. Today's Tasks & Progress */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <ClipboardList size={16} className="text-[#FFD200]" />
-                  <h3 className="font-black text-sm text-[#111111]">{DUTY_TITLE[L3(lang)]} · {getChineseRoleName(employee.role)}</h3>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-black text-stone-950 font-mono">
-                    {completedTasks}/{totalTasks}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1">
-                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-[#22C55E] h-full transition-all duration-500"
-                    style={{ width: `${taskProgressPct}%` }}
-                  ></div>
-                </div>
-                <div className="flex justify-between text-[9px] text-gray-400 font-bold uppercase">
-                  <span>Progress</span>
-                  <span>{taskProgressPct}%</span>
-                </div>
-              </div>
-
-              {/* Next Task Notice */}
-              {nextPendingTask ? (
-                <div className="bg-[#FFD200]/5 border border-[#FFD200]/25 rounded-xl p-3 flex flex-col gap-1">
-                  <span className="text-[9px] font-extrabold text-amber-600 uppercase tracking-widest">{st('nextTask', lang)}</span>
-                  <span className="font-black text-xs text-stone-950">{localizeStaffContent(nextPendingTask.label, lang)}</span>
-                </div>
-              ) : (
-                <div className="bg-green-500/5 border border-green-500/25 rounded-xl p-3 text-center text-xs font-bold text-[#22C55E]">
-                  {st('allDone', lang)}
-                </div>
-              )}
-
-              {/* SOP Collapsible Sections (Grouped) */}
-              <div className="space-y-3 pt-2">
-                
-                {/* 1. Opening Tasks */}
-                {openingSops.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      {st('openingTasks', lang)}
-                    </h4>
-                    <div className="space-y-2">
-                      {openingSops.map(item => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => setExpandedSopId(expandedSopId === item.id ? null : item.id)}
-                          className={`border rounded-xl transition-all overflow-hidden ${
-                            item.completed ? 'bg-gray-50/50 border-green-300' : 'bg-white border-gray-200 shadow-sm'
-                          }`}
-                        >
-                          <div className="p-3.5 flex items-center justify-between cursor-pointer select-none">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); toggleSOP(item.id); }}
-                                className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
-                                  item.completed ? 'bg-[#22C55E] border-[#22C55E] text-white' : 'border-gray-300 hover:border-amber-400'
-                                }`}
-                                style={{ minHeight: '24px', minWidth: '24px' }}
-                              >
-                                <Check size={12} strokeWidth={3} />
-                              </button>
-                              <span className={`text-xs font-bold truncate ${item.completed ? 'text-gray-400 line-through' : 'text-[#111111]'}`}>
-                                {localizeStaffContent(item.label, lang)}
-                              </span>
-                            </div>
-                            <span className="text-gray-400">
-                              {expandedSopId === item.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </span>
-                          </div>
-
-                          {expandedSopId === item.id && (
-                            <div className="px-4 pb-4 pt-1 bg-amber-50/10 border-t border-dashed border-gray-100 text-[11px] space-y-2">
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('execStd', lang)}</span>
-                                <span className="font-bold text-[#111111]">{localizeStaffContent(item.standard, lang) || st('stdText', lang)}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('purpose', lang)}</span>
-                                <span className="italic text-gray-500">{localizeStaffContent(item.why, lang) || st('whyText', lang)}</span>
-                              </div>
-                              <div className="text-[8px] text-green-600 font-extrabold tracking-wider flex items-center gap-1 pt-1">
-                                <span className="inline-block w-1 h-1 bg-green-500 rounded-full"></span>
-                                <span>{st('synced', lang)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. System / Operational Tasks */}
-                {operatingSops.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <h4 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                      {st('midTasks', lang)}
-                    </h4>
-                    <div className="space-y-2">
-                      {operatingSops.map(item => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => setExpandedSopId(expandedSopId === item.id ? null : item.id)}
-                          className={`border rounded-xl transition-all overflow-hidden ${
-                            item.completed ? 'bg-gray-50/50 border-green-300' : 'bg-white border-gray-200 shadow-sm'
-                          }`}
-                        >
-                          <div className="p-3.5 flex items-center justify-between cursor-pointer select-none">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); toggleSOP(item.id); }}
-                                className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
-                                  item.completed ? 'bg-[#22C55E] border-[#22C55E] text-white' : 'border-gray-300 hover:border-amber-400'
-                                }`}
-                                style={{ minHeight: '24px', minWidth: '24px' }}
-                              >
-                                <Check size={12} strokeWidth={3} />
-                              </button>
-                              <span className={`text-xs font-bold truncate ${item.completed ? 'text-gray-400 line-through' : 'text-[#111111]'}`}>
-                                {localizeStaffContent(item.label, lang)}
-                              </span>
-                            </div>
-                            <span className="text-gray-400">
-                              {expandedSopId === item.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </span>
-                          </div>
-
-                          {expandedSopId === item.id && (
-                            <div className="px-4 pb-4 pt-1 bg-blue-50/10 border-t border-dashed border-gray-100 text-[11px] space-y-2">
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('execStd', lang)}</span>
-                                <span className="font-bold text-[#111111]">{localizeStaffContent(item.standard, lang) || st('stdText', lang)}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('purpose', lang)}</span>
-                                <span className="italic text-gray-500">{localizeStaffContent(item.why, lang) || st('whyText', lang)}</span>
-                              </div>
-                              <div className="text-[8px] text-green-600 font-extrabold tracking-wider flex items-center gap-1 pt-1">
-                                <span className="inline-block w-1 h-1 bg-green-500 rounded-full"></span>
-                                <span>{st('synced', lang)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. Closing Tasks */}
-                {closingSops.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <h4 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                      {st('closingTasks', lang)}
-                    </h4>
-                    <div className="space-y-2">
-                      {closingSops.map(item => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => setExpandedSopId(expandedSopId === item.id ? null : item.id)}
-                          className={`border rounded-xl transition-all overflow-hidden ${
-                            item.completed ? 'bg-gray-50/50 border-green-300' : 'bg-white border-gray-200 shadow-sm'
-                          }`}
-                        >
-                          <div className="p-3.5 flex items-center justify-between cursor-pointer select-none">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); toggleSOP(item.id); }}
-                                className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
-                                  item.completed ? 'bg-[#22C55E] border-[#22C55E] text-white' : 'border-gray-300 hover:border-amber-400'
-                                }`}
-                                style={{ minHeight: '24px', minWidth: '24px' }}
-                              >
-                                <Check size={12} strokeWidth={3} />
-                              </button>
-                              <span className={`text-xs font-bold truncate ${item.completed ? 'text-gray-400 line-through' : 'text-[#111111]'}`}>
-                                {localizeStaffContent(item.label, lang)}
-                              </span>
-                            </div>
-                            <span className="text-gray-400">
-                              {expandedSopId === item.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </span>
-                          </div>
-
-                          {expandedSopId === item.id && (
-                            <div className="px-4 pb-4 pt-1 bg-purple-50/10 border-t border-dashed border-gray-100 text-[11px] space-y-2">
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('execStd', lang)}</span>
-                                <span className="font-bold text-[#111111]">{localizeStaffContent(item.standard, lang) || st('stdText', lang)}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] font-extrabold text-gray-400 block uppercase">{st('purpose', lang)}</span>
-                                <span className="italic text-gray-500">{localizeStaffContent(item.why, lang) || st('whyText', lang)}</span>
-                              </div>
-                              <div className="text-[8px] text-green-600 font-extrabold tracking-wider flex items-center gap-1 pt-1">
-                                <span className="inline-block w-1 h-1 bg-green-500 rounded-full"></span>
-                                <span>{st('synced', lang)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
+            <DutyGuide items={sopItems} role={getChineseRoleName(employee.role)} lang={L3(lang)} translate={text => localizeStaffContent(text, lang)} />
 
             {/* AI Assistant Banner */}
             {allowedModules.includes('AI_ASSISTANT') && (

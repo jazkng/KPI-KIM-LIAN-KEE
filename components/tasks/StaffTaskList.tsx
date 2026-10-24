@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronRight, ClipboardList, Loader2, RotateCcw, Trash2 } from 'lucide-react';
-import type { Employee } from '../../types';
+import type { Employee, StockItem } from '../../types';
+import { DataManager } from '../../utils/dataManager';
 import { getBusinessDateString } from '../../utils/dateHelper';
 import { effectiveStatus, validateSubmission, type StaffTask, type TaskPurchaseLine } from '../../utils/tasks/staffTaskLogic';
-import { listTasksFor, submitTask } from '../../utils/tasks/staffTaskStore';
+import { listTasksFor, readStock, submitTask } from '../../utils/tasks/staffTaskStore';
 import { Sheet, inputCls } from './TaskForms';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
 import { tt } from './taskText';
@@ -48,6 +49,8 @@ export const StaffTaskList: React.FC<{ employee: Employee; lang: string; showEmp
 /** 员工做任务：盘点只填数量（看不到系统数量）；采购填买了什么；其他拍照 / 备注 */
 const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string; onClose: () => void; onDone: () => void }> = ({ task: t, employee, lang, onClose, onDone }) => {
     const [counts, setCounts] = useState<Record<string, string>>({});
+    const [stock, setStock] = useState<Record<string, StockItem>>({});
+    const [translations, setTranslations] = useState<Record<string, Record<string, string>>>({});
     const [rows, setRows] = useState<TaskPurchaseLine[]>(() => t.type === 'PURCHASE' && t.purchaseMode === 'STOCK'
         ? (t.stockLines || []).map(l => ({ stockId: l.stockId, area: l.area, name: l.name, unit: l.unit, ratio: l.ratio, qty: 0, amount: 0 }))
         : t.type === 'PURCHASE' ? [{ name: '', unit: '', ratio: 1, qty: 0, amount: 0 }] : []);
@@ -55,6 +58,14 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
+    useEffect(() => {
+        if (t.type !== 'STOCKTAKE') return;
+        let active = true;
+        readStock(t.stockLines || []).then(v => { if (active) setStock(v); }).catch(() => undefined);
+        if (L(lang) !== 'zh') DataManager.getTranslations(L(lang)).then(v => { if (active) setTranslations(v); }).catch(() => undefined);
+        return () => { active = false; };
+    }, [t.id, lang]);
+    const adjust = (id: string, delta: number) => setCounts(old => ({ ...old, [id]: String(Math.max(0, Math.round(((Number(old[id]) || 0) + delta) * 100) / 100)) }));
     const numCounts = Object.fromEntries(Object.entries(counts).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, Number(v)]));
     const purchases = rows.filter(r => r.stockId ? r.qty > 0 : (r.qty > 0 || r.name.trim()));
 
@@ -82,12 +93,22 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
 
         {t.type === 'STOCKTAKE' && <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100">
             <p className="px-4 py-2 text-xs font-black text-stone-500">{tt('count', lang)}</p>
-            {(t.stockLines || []).map(l => <label key={l.stockId} className="flex items-center gap-3 px-4 py-2.5">
-                <b className="flex-1 min-w-0 text-[15px] font-bold text-stone-800 truncate">{l.name}</b>
-                <input inputMode="decimal" value={counts[l.stockId] ?? ''} onChange={e => setCounts(c => ({ ...c, [l.stockId]: e.target.value.replace(/[^0-9.]/g, '') }))}
-                    className="w-24 min-h-[44px] rounded-xl border border-stone-200 text-right px-3 font-black text-[16px]" placeholder="0" />
-                <span className="w-10 text-xs font-bold text-stone-400">{l.unit}</span>
-            </label>)}
+            {(t.stockLines || []).map(l => {
+                const item = stock[l.stockId];
+                const unit = translations.units?.[l.unit] || l.unit;
+                const name = translations.items?.[l.stockId] || l.name;
+                const current = item ? (Number(item.currentQtyBase ?? item.currentQty) / (l.ratio || 1)) : null;
+                const step = /kg|liter|litre|公斤|升/i.test(l.unit) ? 0.1 : 1;
+                return <div key={l.stockId} className="px-4 py-3 space-y-2">
+                    <div className="flex gap-3 items-center">
+                        {item?.image ? <img src={item.image} alt={name} className="w-12 h-12 rounded-xl object-cover border border-stone-200 shrink-0" /> : <span className="w-12 h-12 rounded-xl bg-stone-100 text-[10px] font-bold text-stone-400 grid place-items-center shrink-0">{tt('noImage', lang)}</span>}
+                        <div className="min-w-0"><b className="block text-sm font-black text-stone-900 break-words">{name}</b><small className="text-xs text-stone-500">{tt('currentStock', lang)}：{current === null || !Number.isFinite(current) ? tt('stockUnavailable', lang) : `${+current.toFixed(2)} ${unit}`}</small></div>
+                    </div>
+                    <div className="flex gap-2 items-center"><button type="button" onClick={() => adjust(l.stockId, -step)} aria-label={`${tt('decrease', lang)} ${name}`} className="w-11 h-11 rounded-xl bg-stone-100 text-xl font-black">−</button>
+                        <input aria-label={`${name} ${tt('count', lang)}`} inputMode="decimal" value={counts[l.stockId] ?? ''} onChange={e => setCounts(c => ({ ...c, [l.stockId]: e.target.value.replace(/[^0-9.]/g, '') }))} className="min-w-0 flex-1 h-11 rounded-xl border border-stone-200 text-center font-black text-[16px]" placeholder="0" />
+                        <button type="button" onClick={() => adjust(l.stockId, step)} aria-label={`${tt('increase', lang)} ${name}`} className="w-11 h-11 rounded-xl bg-stone-100 text-xl font-black">＋</button><span className="w-10 text-xs font-bold text-stone-500">{unit}</span></div>
+                </div>;
+            })}
         </div>}
 
         {t.type === 'PURCHASE' && <div className="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">

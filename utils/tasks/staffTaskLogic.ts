@@ -3,6 +3,7 @@
 // 设计说明：docs/hr/staff-tasks-design.md（负责人 2026-10-22 批准）
 // ============================================================================
 import type { Employee, InventoryLog, InventoryLogItem, StockItem } from '../../types';
+import { getOrgLevel } from '../orgAccess';
 import { applyReceivedStock, getBaseUnit, getCostPerBaseUnit, getCurrentQtyBase, getDisplayToBaseRatio } from '../unitConversion';
 
 export type TaskRepeat = 'ONCE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'EVERY_N';
@@ -78,6 +79,9 @@ export interface StaffTask {
     reviewedAt?: string;
     history: TaskHistory[];
 }
+
+export const canEditAssignedTask = (task: StaffTask, actor: Employee) => task.status === 'OPEN' && !task.submission
+    && (task.createdBy === actor.id || ['OWNER', 'BRANCH_MANAGER'].includes(getOrgLevel(actor)));
 
 export type MatterCategory = 'BIG_PURCHASE' | 'VIP' | 'EVENT' | 'REPAIR_PRO' | 'OTHER';
 export type MatterStatus = 'OPEN' | 'ARRANGED' | 'DONE' | 'DECLINED';

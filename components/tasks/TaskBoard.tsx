@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, Flag, Loader2, Plus, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Flag, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import type { Employee, InventoryLog } from '../../types';
 import { DataManager } from '../../utils/dataManager';
 import { getBusinessDateString } from '../../utils/dateHelper';
 import { DEPT_LABEL } from '../../utils/hr/hrOverview';
 import { getOrgLevel } from '../../utils/orgAccess';
 import {
-    MATTER_LABEL, MATTER_STATUS_LABEL, TASK_TYPE_LABEL, consumptionSinceLast, effectiveStatus, nextCycle, normDept, repeatLabel, stocktakeDiffs,
+    MATTER_LABEL, MATTER_STATUS_LABEL, TASK_TYPE_LABEL, canEditAssignedTask, consumptionSinceLast, effectiveStatus, nextCycle, normDept, repeatLabel, stocktakeDiffs,
     type BossMatter, type EffectiveStatus, type MatterStatus, type StaffTask,
 } from '../../utils/tasks/staffTaskLogic';
 import {
-    StockConflictError, cancelTask, confirmTask, listMatters, listRecentTasks, loadPhotos, recentInventoryLogs, returnTask, updateMatter,
+    StockConflictError, cancelTask, confirmTask, listManageTasks, listMatters, loadPhotos, recentInventoryLogs, returnTask, updateMatter,
 } from '../../utils/tasks/staffTaskStore';
 import { MatterCreateSheet, Sheet, TaskCreateSheet, inputCls } from './TaskForms';
 
@@ -43,20 +43,26 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
     const [open, setOpen] = useState<StaffTask | null>(null);
     const [openMatter, setOpenMatter] = useState<BossMatter | null>(null);
     const [filter, setFilter] = useState('');
+    const [search, setSearch] = useState('');
+    const [view, setView] = useState<'ACTIVE' | 'DONE'>('ACTIVE');
+    const [expanded, setExpanded] = useState<string[]>([]);
+    const [editingTask, setEditingTask] = useState<StaffTask | null>(null);
     const canSeeMatters = ['OWNER', 'BRANCH_MANAGER'].includes(getOrgLevel(actor));
     const today = getBusinessDateString(), now = new Date().toISOString();
 
     useEffect(() => {
         let on = true;
-        listRecentTasks().then(t => on && setTasks(t)).catch(() => on && setTasks([]));
+        listManageTasks().then(t => on && setTasks(t)).catch(() => on && setTasks([]));
         if (canSeeMatters) listMatters().then(m => on && setMatters(m)).catch(() => undefined);
         return () => { on = false; };
     }, [reload, canSeeMatters]);
 
     const deptOf = useMemo(() => { const m = new Map(employees.map(e => [e.id, normDept(e.department)])); return (id?: string) => (id && m.get(id)) || ''; }, [employees]);
     const shown = (tasks || []).filter(t => t.status !== 'CANCELLED').filter(visibleTo(actor, deptOf))
-        .filter(t => !filter || (filter.startsWith('dept:') ? (t.department === filter.slice(5) || deptOf(t.assigneeId) === filter.slice(5)) : t.assigneeId === filter));
+        .filter(t => !filter || (filter.startsWith('dept:') ? (t.department === filter.slice(5) || deptOf(t.assigneeId) === filter.slice(5)) : t.assigneeId === filter))
+        .filter(t => !search.trim() || `${t.title} ${t.assigneeName || ''} ${t.note || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
     const grouped = GROUPS.map(g => ({ ...g, list: shown.filter(t => effectiveStatus(t, today, now) === g.key).filter(t => g.key !== 'DONE' || (t.reviewedAt || t.createdAt) >= new Date(Date.now() - 7 * 864e5).toISOString()) }));
+    const visibleGroups = grouped.filter(g => g.list.length && (view === 'DONE' ? g.key === 'DONE' : g.key !== 'DONE'));
     const openMatters = matters.filter(m => m.status === 'OPEN' || m.status === 'ARRANGED');
     const people = [...new Map((tasks || []).filter(t => t.assigneeId).map(t => [t.assigneeId!, t.assigneeName || ''])).entries()];
 
@@ -77,6 +83,8 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
             </button>)}
         </section>}
 
+        <div className="flex gap-2 rounded-xl bg-stone-100 p-1" role="tablist" aria-label="任务状态">{(['ACTIVE', 'DONE'] as const).map(v => <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`flex-1 min-h-[42px] rounded-lg text-sm font-black ${view === v ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}>{v === 'ACTIVE' ? '待处理' : '已完成'}</button>)}</div>
+        <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜任务或员工" className={`${inputCls} pl-10`} /></div>
         {people.length > 1 && <select value={filter} onChange={e => setFilter(e.target.value)} className={inputCls}>
             <option value="">全部</option>
             {Object.entries(DEPT_LABEL).filter(([k]) => k !== 'OWNER').map(([k, v]) => <option key={k} value={`dept:${k}`}>{v}</option>)}
@@ -84,24 +92,26 @@ export const TaskBoard: React.FC<{ actor: Employee; autoCreate?: 'STOCKTAKE' | n
         </select>}
 
         {tasks === null ? <p className="text-center text-sm text-stone-400 py-8"><Loader2 size={16} className="inline animate-spin" /> 读取中…</p>
-            : shown.length === 0 ? <p className="text-center text-sm font-bold text-stone-400 py-3">还没有任务</p>
-                : grouped.filter(g => g.list.length).map(g => <section key={g.key} className="space-y-2">
+            : visibleGroups.length === 0 ? <p className="text-center text-sm font-bold text-stone-400 py-3">{view === 'DONE' ? '最近七天没有已完成任务' : '没有待处理任务'}</p>
+                : visibleGroups.map(g => <section key={g.key} className="space-y-2">
                     <h3 className="text-sm font-black text-stone-800 px-1 flex items-center gap-2">{g.label}<span className={`text-[11px] px-2 py-0.5 rounded-full border ${g.tone}`}>{g.list.length}</span></h3>
                     <div className="rounded-2xl bg-white border border-stone-200 divide-y divide-stone-100 overflow-hidden">
-                        {g.list.map(t => <button key={t.id} onClick={() => setOpen(t)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[60px]">
+                        {(expanded.includes(g.key) ? g.list : g.list.slice(0, 8)).map(t => <button key={t.id} onClick={() => setOpen(t)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 min-h-[60px]">
                             <span className="flex-1 min-w-0">
                                 <b className="block text-[15px] font-black text-stone-900 truncate">{t.title}</b>
                                 <small className="block text-xs text-stone-500 font-semibold truncate">{TASK_TYPE_LABEL[t.type]} · {who(t)}{t.repeat !== 'ONCE' ? ` · ${repeatLabel(t)}${g.key === 'UPCOMING' || g.key === 'DONE' ? `（下次 ${nextCycle(t, today)?.slice(5) || '—'}）` : ''}` : t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}{t.returnCount ? ` · 退回 ${t.returnCount} 次` : ''}</small>
                             </span>
                             <ChevronRight size={18} className="text-stone-300 shrink-0" />
                         </button>)}
+                        {g.list.length > 8 && <button onClick={() => setExpanded(v => v.includes(g.key) ? v.filter(x => x !== g.key) : [...v, g.key])} className="w-full min-h-[44px] text-sm font-black text-[#740f10] flex items-center justify-center gap-1">{expanded.includes(g.key) ? '收起' : `显示其余 ${g.list.length - 8} 项`}<ChevronDown size={15} className={expanded.includes(g.key) ? 'rotate-180' : ''} /></button>}
                     </div>
                 </section>)}
 
         {creating === 'TASK' && <TaskCreateSheet actor={actor} onClose={() => setCreating(null)} onCreated={() => setReload(v => v + 1)} />}
         {creating === 'STOCKTAKE' && <TaskCreateSheet actor={actor} initialType="STOCKTAKE" onClose={() => setCreating(null)} onCreated={() => setReload(v => v + 1)} />}
         {creating === 'MATTER' && <MatterCreateSheet actor={actor} onClose={() => setCreating(null)} onCreated={() => setReload(v => v + 1)} />}
-        {open && <TaskReviewSheet task={open} actor={actor} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); setReload(v => v + 1); }} />}
+        {editingTask && <TaskCreateSheet actor={actor} initialTask={editingTask} onClose={() => setEditingTask(null)} onCreated={() => { setOpen(null); setReload(v => v + 1); }} />}
+        {open && !editingTask && <TaskReviewSheet task={open} actor={actor} onEdit={() => { setEditingTask(open); setOpen(null); }} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); setReload(v => v + 1); }} />}
         {openMatter && <MatterSheet matter={openMatter} actor={actor} onClose={() => setOpenMatter(null)} onChanged={() => { setOpenMatter(null); setReload(v => v + 1); }} />}
     </div>;
 };
@@ -114,7 +124,7 @@ const Photos: React.FC<{ ids?: string[] }> = ({ ids }) => {
 };
 
 /** 查看 / 确认 / 退回一个任务 */
-export const TaskReviewSheet: React.FC<{ task: StaffTask; actor: Employee; onClose: () => void; onChanged: () => void }> = ({ task: t, actor, onClose, onChanged }) => {
+export const TaskReviewSheet: React.FC<{ task: StaffTask; actor: Employee; onEdit?: () => void; onClose: () => void; onChanged: () => void }> = ({ task: t, actor, onEdit, onClose, onChanged }) => {
     const [busy, setBusy] = useState(false);
     const [returning, setReturning] = useState(false);
     const [reason, setReason] = useState('');
@@ -149,6 +159,7 @@ export const TaskReviewSheet: React.FC<{ task: StaffTask; actor: Employee; onClo
         <button disabled={busy} onClick={() => setReturning(true)} className="min-h-[50px] rounded-2xl bg-white border border-rose-200 text-rose-600 font-black flex items-center justify-center gap-1.5"><RotateCcw size={16} /> 退回</button>
         <button disabled={busy} onClick={() => act(() => confirmTask(t, actor, today))} className="min-h-[50px] rounded-2xl bg-stone-900 text-[#FFD200] font-black flex items-center justify-center gap-1.5">{busy ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} 确认{t.type === 'STOCKTAKE' ? '，更新库存' : t.type === 'PURCHASE' && t.purchaseMode === 'STOCK' ? '，入库' : ''}</button>
     </div>) : status !== 'DONE' ? <button disabled={busy} onClick={() => { if (confirm('取消这个任务？员工那边会消失。')) act(() => cancelTask(t.id, actor)); }} className="w-full min-h-[48px] rounded-2xl bg-stone-100 text-stone-600 font-black">取消任务</button> : undefined}>
+        {canEditAssignedTask(t, actor) && onEdit && <button onClick={onEdit} className="w-full min-h-[44px] rounded-xl border border-[#740f10]/20 bg-rose-50 text-[#740f10] font-black text-sm flex items-center justify-center gap-2"><Pencil size={15} /> 编辑任务</button>}
         <div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-1.5 text-sm">
             <p><b className="text-stone-400 font-bold">类型</b> {TASK_TYPE_LABEL[t.type]}{t.type === 'PURCHASE' ? (t.purchaseMode === 'STOCK' ? '（从库存选）' : '（自行输入）') : ''}</p>
             <p><b className="text-stone-400 font-bold">派给</b> {who(t)} · {repeatLabel(t)}{t.dueAt ? ` · 期限 ${fmt(t.dueAt)}` : ''}</p>

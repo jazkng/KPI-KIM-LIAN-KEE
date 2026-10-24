@@ -133,7 +133,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                     id: 'welcome',
                     role: 'assistant',
                     text: advisor
-                        ? `您好！我是 **AI 经营顾问**。\n\n我只根据驾驶舱「${advisor.periodLabel}」已算好的 ${advisor.evidence.length} 项指标、预警与资料完整性回答。每一点都会标出依据编号，点编号可以看原始数字；系统核对不出依据的说法会被删除。`
+                        ? `您好，我是**经营参谋**。我会根据「${advisor.periodLabel}」的 ${advisor.evidence.length} 项已核对资料回答，并标出依据编号。`
                         : '您好！我是您的 **AI 经营助手**。\n\n我可以根据当前已接入的数据，协助检查：\n\n• 今日营业与结算摘要\n• 厨房、吧台及通用库存\n• 低库存与安全库存风险\n• 当日日志及异常记录\n• 最近资金转账记录\n\n尚未接入的分析会明确标记为“待接入”，不会推测或编造金额。',
                     timestamp: new Date()
                 }
@@ -486,7 +486,7 @@ export const AIOperationsAssistant: React.FC<AIAssistantProps> = ({ isOpen, onCl
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h3 className="font-extrabold text-white text-base tracking-wide">{advisor ? 'AI 经营顾问' : 'AI 智控脑库'}</h3>
+                                <h3 className="font-extrabold text-white text-base tracking-wide">{advisor ? '经营参谋' : 'AI 智控脑库'}</h3>
                                 <span className="bg-gradient-to-r from-stone-700 to-stone-900 text-[#FFD200] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm border border-[#FFD200]/30 font-mono">BETA</span>
                             </div>
                             <p className="text-[10px] text-stone-400 font-mono tracking-widest mt-0.5 uppercase flex items-center gap-1">

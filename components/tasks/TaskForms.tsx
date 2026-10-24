@@ -6,9 +6,10 @@ import { DataManager } from '../../utils/dataManager';
 import { DEPT_LABEL, DEPT_ORDER, isCountedStaff } from '../../utils/hr/hrOverview';
 import { getOrgLevel } from '../../utils/orgAccess';
 import { isConsumeOnReceive, isDiscontinued } from '../../utils/unitConversion';
-import { MATTER_LABEL, TASK_TYPE_LABEL, normDept, toStockLine, type MatterCategory, type StockArea, type TaskRepeat, type TaskStockLine, type TaskType } from '../../utils/tasks/staffTaskLogic';
-import { createMatter, createTask } from '../../utils/tasks/staffTaskStore';
+import { MATTER_LABEL, TASK_TYPE_LABEL, normDept, toStockLine, type MatterCategory, type StaffTask, type StockArea, type TaskRepeat, type TaskStockLine, type TaskType } from '../../utils/tasks/staffTaskLogic';
+import { createMatter, createTask, editAssignedTask } from '../../utils/tasks/staffTaskStore';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
+import { CATEGORY_SECTIONS, getCategoryLabel } from '../features/inventory/inventoryConstants';
 
 /** 底部弹出的表单外框（挂到 body，不会被页面底部导航或外层层级挡住） */
 export const Sheet: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }> = ({ title, onClose, children, footer }) => createPortal(
@@ -36,6 +37,7 @@ const AREAS: { v: StockArea; label: string }[] = [{ v: 'KITCHEN', label: '厨房
 /** 从库存挑品项（可跨区域） */
 const StockPicker: React.FC<{ value: TaskStockLine[]; onChange: (v: TaskStockLine[]) => void; forCount?: boolean }> = ({ value, onChange, forCount }) => {
     const [area, setArea] = useState<StockArea>('KITCHEN');
+    const [category, setCategory] = useState('ALL');
     const [items, setItems] = useState<StockItem[] | null>(null);
     const [q, setQ] = useState('');
     useEffect(() => {
@@ -44,10 +46,15 @@ const StockPicker: React.FC<{ value: TaskStockLine[]; onChange: (v: TaskStockLin
         return () => { on = false; };
     }, [area, forCount]);
     const picked = new Set(value.map(v => v.stockId));
-    const shown = (items || []).filter(i => !q || `${i.name} ${i.subName || ''} ${i.category}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+    const categories = [...new Set((items || []).map(i => i.category || 'OTHER'))];
+    const shown = (items || []).filter(i => (category === 'ALL' || (i.category || 'OTHER') === category) && (!q || `${i.name} ${i.subName || ''} ${i.category}`.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
     const toggle = (i: StockItem) => onChange(picked.has(i.id) ? value.filter(v => v.stockId !== i.id) : [...value, toStockLine(i, area)]);
     return <div className="space-y-2">
-        <Chips value={area} options={AREAS} onChange={setArea} />
+        <Chips value={area} options={AREAS} onChange={v => { setArea(v); setCategory('ALL'); }} />
+        {categories.length > 1 && <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="库存分类">
+            {[{ id: 'ALL', label: '全部' }, ...categories.map(id => ({ id, label: CATEGORY_SECTIONS[area]?.find(x => x.id === id)?.label || getCategoryLabel(id) }))].map(c => <button type="button" key={c.id} onClick={() => setCategory(c.id)} aria-pressed={category === c.id}
+                className={`shrink-0 min-h-[38px] px-3 rounded-xl text-xs font-black border ${category === c.id ? 'bg-[#740f10] text-white border-[#740f10]' : 'bg-white text-stone-600 border-stone-200'}`}>{c.label}</button>)}
+        </div>}
         <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="搜寻品项" className={`${inputCls} pl-9`} /></div>
         <div className="max-h-64 overflow-y-auto rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
             {items === null ? <p className="p-4 text-center text-xs text-stone-400"><Loader2 size={14} className="inline animate-spin" /> 读取库存…</p>
@@ -55,7 +62,7 @@ const StockPicker: React.FC<{ value: TaskStockLine[]; onChange: (v: TaskStockLin
                     : shown.map(i => <button type="button" key={i.id} onClick={() => toggle(i)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-stone-50">
                         <span className={`w-5 h-5 rounded-md border-2 grid place-items-center text-[11px] font-black ${picked.has(i.id) ? 'bg-stone-900 border-stone-900 text-[#FFD200]' : 'border-stone-300'}`}>{picked.has(i.id) ? '✓' : ''}</span>
                         <span className="flex-1 min-w-0"><b className="block text-sm font-bold text-stone-800 truncate">{i.name}</b>{i.subName && <small className="block text-[11px] text-stone-400 truncate">{i.subName}</small>}</span>
-                        <small className="text-[11px] text-stone-400 shrink-0">{i.category}</small>
+                        <small className="text-[11px] text-stone-400 shrink-0">{getCategoryLabel(i.category)}</small>
                     </button>)}
         </div>
         {value.length > 0 && <p className="text-xs font-bold text-stone-500">已选 {value.length} 项：{value.map(v => v.name).join('、')}</p>}
@@ -63,23 +70,23 @@ const StockPicker: React.FC<{ value: TaskStockLine[]; onChange: (v: TaskStockLin
 };
 
 /** 派任务 */
-export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType; initialLines?: TaskStockLine[]; onClose: () => void; onCreated: () => void }> = ({ actor, initialType = 'CLEAN', initialLines, onClose, onCreated }) => {
+export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType; initialLines?: TaskStockLine[]; initialTask?: StaffTask; onClose: () => void; onCreated: () => void }> = ({ actor, initialType = 'CLEAN', initialLines, initialTask, onClose, onCreated }) => {
     const isL3 = getOrgLevel(actor) === 'DEPARTMENT_HEAD';
     const myDept = normDept(actor.department);
-    const [type, setType] = useState<TaskType>(initialType);
-    const [title, setTitle] = useState('');
-    const [note, setNote] = useState('');
-    const [mode, setMode] = useState<'PERSON' | 'DEPT'>('PERSON');
-    const [person, setPerson] = useState('');
-    const [dept, setDept] = useState(isL3 ? myDept : 'KITCHEN');
-    const [repeat, setRepeat] = useState<TaskRepeat>('ONCE');
-    const [repeatDays, setRepeatDays] = useState<number[]>([1]);
-    const [repeatDate, setRepeatDate] = useState(1);
-    const [repeatEvery, setRepeatEvery] = useState(2);
-    const [due, setDue] = useState('');
-    const [photos, setPhotos] = useState(0);
-    const [lines, setLines] = useState<TaskStockLine[]>(initialLines || []);
-    const [purchaseMode, setPurchaseMode] = useState<'STOCK' | 'FREE'>('STOCK');
+    const [type, setType] = useState<TaskType>(initialTask?.type || initialType);
+    const [title, setTitle] = useState(initialTask?.title || '');
+    const [note, setNote] = useState(initialTask?.note || '');
+    const [mode, setMode] = useState<'PERSON' | 'DEPT'>(initialTask?.assignMode || 'PERSON');
+    const [person, setPerson] = useState(initialTask?.assigneeId || '');
+    const [dept, setDept] = useState(initialTask?.department || (isL3 ? myDept : 'KITCHEN'));
+    const [repeat, setRepeat] = useState<TaskRepeat>(initialTask?.repeat || 'ONCE');
+    const [repeatDays, setRepeatDays] = useState<number[]>(initialTask?.repeatDays || [1]);
+    const [repeatDate, setRepeatDate] = useState(initialTask?.repeatDate || 1);
+    const [repeatEvery, setRepeatEvery] = useState(initialTask?.repeatEvery || 2);
+    const [due, setDue] = useState(initialTask?.dueAt ? new Date(new Date(initialTask.dueAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
+    const [photos, setPhotos] = useState(initialTask?.photosRequired || 0);
+    const [lines, setLines] = useState<TaskStockLine[]>(initialTask?.stockLines || initialLines || []);
+    const [purchaseMode, setPurchaseMode] = useState<'STOCK' | 'FREE'>(initialTask?.purchaseMode || 'STOCK');
     const [repairBy, setRepairBy] = useState<'STAFF' | 'PRO'>('STAFF');
     const [staff, setStaff] = useState<Employee[]>([]);
     const [busy, setBusy] = useState(false);
@@ -99,7 +106,22 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         if (repeat === 'WEEKLY' && !repeatDays.length) return setErr('请选星期几');
         setBusy(true);
         try {
-            if (pro) {
+            if (initialTask) {
+                const emp = staff.find(e => e.id === person);
+                if (mode === 'PERSON' && !emp) throw new Error('指定员工不存在，请重选');
+                await editAssignedTask(initialTask.id, actor, {
+                    title: autoTitle, note: note || undefined, assignMode: mode,
+                    assigneeId: mode === 'PERSON' ? emp!.id : undefined,
+                    assigneeName: mode === 'PERSON' ? emp!.name : undefined,
+                    department: mode === 'DEPT' ? dept : undefined,
+                    assigneeKey: mode === 'PERSON' ? `emp:${emp!.id}` : `dept:${dept}`,
+                    repeat, dueAt: repeat === 'ONCE' && due ? new Date(due).toISOString() : undefined,
+                    repeatDays: repeat === 'WEEKLY' ? repeatDays : undefined,
+                    repeatDate: repeat === 'MONTHLY' ? repeatDate : undefined,
+                    repeatEvery: repeat === 'EVERY_N' ? repeatEvery : undefined,
+                    photosRequired: photos, stockLines: needLines ? lines : undefined,
+                });
+            } else if (pro) {
                 await createMatter({ title: autoTitle, category: 'REPAIR_PRO', note: note || undefined, createdBy: actor.id, createdByName: actor.name });
             } else {
                 const emp = staff.find(e => e.id === person);
@@ -117,12 +139,12 @@ export const TaskCreateSheet: React.FC<{ actor: Employee; initialType?: TaskType
         finally { setBusy(false); }
     };
 
-    return <Sheet title="派任务" onClose={onClose} footer={<>
+    return <Sheet title={initialTask ? '编辑任务' : '派任务'} onClose={onClose} footer={<>
         {err && <p className="mb-2 text-sm font-bold text-rose-600">{err}</p>}
-        <button onClick={save} disabled={busy} className="w-full min-h-[50px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? '送出中…' : pro ? '交给老板处理' : '派出去'}</button>
+        <button onClick={save} disabled={busy} className="w-full min-h-[50px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? '保存中…' : initialTask ? '保存修改' : pro ? '交给老板处理' : '派出去'}</button>
     </>}>
-        <Field label="类型"><Chips value={type} onChange={v => { setType(v); setLines([]); }} options={(Object.keys(TASK_TYPE_LABEL) as TaskType[]).map(v => ({ v, label: TASK_TYPE_LABEL[v] }))} /></Field>
-        {type === 'REPAIR' && <Field label="谁来修"><Chips value={repairBy} onChange={setRepairBy} options={[{ v: 'STAFF', label: '员工自己修' }, { v: 'PRO', label: '请专业（交给老板）' }]} /></Field>}
+        <Field label="类型">{initialTask ? <p className="text-sm font-black text-stone-700">{TASK_TYPE_LABEL[type]}</p> : <Chips value={type} onChange={v => { setType(v); setLines([]); }} options={(Object.keys(TASK_TYPE_LABEL) as TaskType[]).map(v => ({ v, label: TASK_TYPE_LABEL[v] }))} />}</Field>
+        {type === 'REPAIR' && !initialTask && <Field label="谁来修"><Chips value={repairBy} onChange={setRepairBy} options={[{ v: 'STAFF', label: '员工自己修' }, { v: 'PRO', label: '请专业（交给老板）' }]} /></Field>}
         <Field label={type === 'STOCKTAKE' ? '标题（选填）' : '要做什么'}><input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder={type === 'STOCKTAKE' ? '例如：冷房肉类盘点' : type === 'PURCHASE' ? '例如：去买白米、洗洁精' : '例如：清洗 2 号冷气滤网'} /></Field>
         {type === 'PURCHASE' && <Field label="买什么"><Chips value={purchaseMode} onChange={v => { setPurchaseMode(v); setLines([]); }} options={[{ v: 'STOCK', label: '从库存选（买回来会入库）' }, { v: 'FREE', label: '自行输入（不入库）' }]} /></Field>}
         {needLines && <Field label={type === 'STOCKTAKE' ? '要点算的品项（可以跨区域）' : '要买的品项'}><StockPicker value={lines} onChange={setLines} forCount={type === 'STOCKTAKE'} /></Field>}
