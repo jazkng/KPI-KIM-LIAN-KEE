@@ -163,14 +163,6 @@ export default function App() {
         return () => window.clearTimeout(timer);
     }, [currentUser, portalMode]);
 
-    // Fix #3: checkVersion 移到 useEffect 之前，避免时间死区，且用 useCallback 稳定引用
-    const checkVersion = useCallback(() => {
-        const lastSeen = safeStorage.get('klk_last_seen_version');
-        if (lastSeen !== APP_VERSION) {
-            setTimeout(() => setShowWhatsNew(true), 1000);
-        }
-    }, []);
-
     // Stable logout callback
     // 🔒 只读模式：登入／登出／云端同步员工资料时都要跟着更新
     useEffect(() => {
@@ -263,9 +255,8 @@ export default function App() {
         if (currentUser && currentEmployee) {
             syncEmployeePermissions(currentEmployee.id, currentEmployee);
         }
-        checkVersion();
         setBootStatus('READY');
-    }, [checkVersion, syncEmployeePermissions, currentUser, currentEmployee?.id]);
+    }, [syncEmployeePermissions, currentUser, currentEmployee?.id]);
 
     // Active Window/Tab Focus sync trigger
     useEffect(() => {
@@ -378,7 +369,6 @@ export default function App() {
         }
         setBossTab(null);
         setBossHomeView('PRIORITY');
-        checkVersion();
     };
 
     const handleCloseWhatsNew = () => {

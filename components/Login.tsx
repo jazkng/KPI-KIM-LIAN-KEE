@@ -14,35 +14,36 @@ interface LoginProps {
 // --- STYLES & ANIMATIONS ---
 const LOGIN_STYLES = `
   .klk-login { min-height:100svh; min-height:var(--login-viewport-height,100dvh); display:grid; grid-template-columns:minmax(280px,36%) 1fr; background:#f7f4ed; color:#26211d; }
-  .klk-brand { background:#780d16; color:#f4cf94; padding:clamp(32px,5vw,80px); display:flex; flex-direction:column; justify-content:center; gap:36px; }
+  .klk-brand { background:#780d16; color:#f4cf94; padding:clamp(32px,5vw,80px); display:flex; flex-direction:column; justify-content:center; gap:24px; }
   .klk-brand img { width:min(100%,240px); height:auto; border-radius:16px; }
   .klk-brand h1 { font-size:clamp(30px,3vw,48px); font-weight:900; margin:12px 0; }
   .klk-eyebrow { font-size:11px; font-weight:800; letter-spacing:.12em; }
   .klk-brand-copy { font-size:18px; opacity:.85; } .klk-branch { font-size:12px; opacity:.7; }
-  .klk-login-main { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px 20px; }
-  .klk-login-content { width:100%; max-width:420px; margin:auto 0; }
+  .klk-login-main { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+  .klk-login-content { width:100%; max-width:420px; margin:0; }
   .klk-login-heading { margin-bottom:24px; } .klk-login-heading .klk-eyebrow { color:#8c6d55; }
   .klk-login-heading h2 { font-size:30px; font-weight:900; margin:8px 0; } .klk-login-heading>p:last-child { font-size:14px; color:#78716c; }
-  .klk-login-card { background:white; border:1px solid #e8e0d6; border-radius:24px; padding:28px; box-shadow:0 16px 50px #50221a08; }
-  .klk-steps { display:flex; align-items:center; gap:12px; color:#a8a29e; font-size:12px; margin-bottom:28px; } .klk-steps .active { color:#8c1720; font-weight:800; }
+  .klk-login-card { background:white; border:1px solid #e8e0d6; border-radius:24px; padding:20px; box-shadow:0 16px 50px #50221a08; }
+  .klk-steps { display:flex; align-items:center; gap:12px; color:#a8a29e; font-size:12px; margin-bottom:12px; } .klk-steps .active { color:#8c1720; font-weight:800; }
   .klk-field-label { display:block; font-size:14px; font-weight:800; margin-bottom:10px; }
   .klk-input { width:100%; height:56px; padding:0 16px; background:#fcfbf8; border:1.5px solid #ded6cd; border-radius:12px; font-size:18px; outline:none; scroll-margin:24px; }
   .klk-input:focus { border-color:#931d26; box-shadow:0 0 0 3px #931d2612; } .klk-input[aria-invalid=true] { border-color:#b91c1c; }
   .klk-submit { width:100%; min-height:52px; border-radius:12px; background:#8d1520; color:white; font-size:15px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; padding:12px; }
   .klk-submit:disabled { background:#e7e2dc; color:#a8a29e; } .klk-submit:focus-visible,.klk-keyboard-toggle:focus-visible { outline:3px solid #d3a550; outline-offset:3px; }
   .klk-keyboard-toggle { display:block; min-height:44px; margin:12px auto -8px; color:#78716c; font-size:12px; }
-  .klk-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:18px; } .klk-keypad button { min-height:48px; border:1px solid #e8e0d6; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .klk-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; } .klk-keypad button { min-height:52px; border:1px solid #e8e0d6; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; }
   .klk-identity { display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:20px; } .klk-identity button { margin-left:auto; min-height:44px; color:#8d1520; }
   .klk-error { color:#b91c1c; font-size:13px; margin-top:10px; } .klk-pin-hint { font-size:12px; color:#78716c; margin-bottom:12px; }
   .klk-login-help { text-align:center; font-size:12px; color:#8a8177; margin-top:20px; } .klk-login-main footer { padding-top:24px; font-size:11px; color:#a8a29e; } .klk-login-main footer span { margin:0 8px; }
   @media(max-width:767px) {
     .klk-login { display:flex; flex-direction:column; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
-    .klk-brand { flex-direction:row; align-items:center; justify-content:flex-start; gap:14px; padding:20px 24px 16px; background:transparent; color:#780d16; }
-    .klk-brand img { width:76px; border-radius:10px; } .klk-brand h1 { font-size:23px; margin:0; } .klk-brand .klk-eyebrow { font-size:8px; margin-bottom:5px; } .klk-brand-copy,.klk-branch { display:none; }
-    .klk-login-main { flex:1; padding:12px 20px 16px; } .klk-login-heading { margin-bottom:18px; } .klk-login-heading h2 { font-size:26px; }
-    .klk-login-card { padding:22px; border-radius:20px; } .klk-steps { margin-bottom:22px; } .klk-login-main footer { padding-top:16px; }
+    .klk-brand { flex-direction:row; align-items:center; justify-content:flex-start; gap:14px; padding:12px 20px; background:transparent; color:#780d16; }
+    .klk-brand img { width:60px; border-radius:10px; } .klk-brand h1 { font-size:23px; margin:0; } .klk-brand .klk-eyebrow { font-size:8px; margin-bottom:5px; } .klk-brand-copy,.klk-branch { display:none; }
+    .klk-login-main { flex:1; justify-content:flex-start; padding:0 16px 12px; } .klk-login-heading { display:none; } .klk-login-heading h2 { font-size:26px; }
+    .klk-login-card { padding:16px; border-radius:16px; } .klk-keypad button { min-height:clamp(44px,9svh,76px); } .klk-steps { margin-bottom:22px; } .klk-login-main footer { padding-top:8px; }
   }
   @media(max-height:650px) and (max-width:767px) { .klk-brand { padding-top:12px; padding-bottom:8px; } .klk-brand img { width:56px; } .klk-login-heading { margin-bottom:12px; } .klk-login-heading h2 { font-size:22px; } .klk-login-card { padding:18px; } .klk-login-help { margin-top:12px; } }
+  @media(max-height:700px) and (max-width:767px) { .klk-brand { padding:8px 16px; } .klk-brand img { width:48px; } .klk-brand h1 { font-size:20px; } .klk-login-card { padding:12px; } .klk-input { height:44px; } .klk-keypad { gap:6px; margin-top:10px; } .klk-keypad button { min-height:44px; } .klk-submit { min-height:44px; margin-top:10px; } .klk-identity { margin-bottom:8px; } }
   @media(prefers-reduced-motion:reduce) { .klk-login *, .energy-gate { animation:none!important; transition:none!important; } }
 
   .energy-gate { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:#780d16; transition:opacity .3s; }
@@ -54,7 +55,6 @@ const LOGIN_STYLES = `
 
 const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, placeholder, error, busy }: any) => {
     const isId = label.includes('ID');
-    const [showKeyboard, setShowKeyboard] = useState(false);
     const errors: Record<string, string> = {
       'USER NOT FOUND': '找不到这个员工编号，请重新检查。',
       'ACCESS DENIED': 'PIN 不正确，请重新输入。',
@@ -68,16 +68,16 @@ const Keypad = ({ value, label, onInput, onDelete, onSubmit, isMasked = false, p
     return <form onSubmit={e => { e.preventDefault(); if (value && !busy) onSubmit(); }}>
       <label className="klk-field-label" htmlFor="login-credential">{title}</label>
       {label.includes('SET NEW') && <p className="klk-pin-hint">首次登入，请设置个人 6 位 PIN。</p>}
-      <input id="login-credential" type={isMasked ? 'password' : 'text'} inputMode={isId ? 'text' : 'numeric'} autoCapitalize="characters" spellCheck={false}
+      <input id="login-credential" type={isMasked ? 'password' : 'text'} inputMode={isId ? 'text' : 'none'} autoCapitalize="characters" spellCheck={false}
         autoComplete={isId ? 'username' : label.includes('NEW') || label.includes('CONFIRM') ? 'new-password' : 'current-password'}
         value={value} maxLength={isId ? 20 : 6} placeholder={isId ? placeholder : '输入 PIN'} disabled={busy}
         aria-invalid={!!error} aria-describedby={error ? 'login-error' : undefined}
         onChange={e => onInput('SET_VALUE', isId ? e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '') : e.target.value.replace(/\D/g, '').slice(0,6))}
         className="klk-input" />
       {error && <p id="login-error" role="alert" className="klk-error">{errors[error] || error}</p>}
+
+      {<div className="klk-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','DELETE'].map(n => <button type="button" key={n} disabled={busy} aria-label={n === 'DELETE' ? '删除一位' : n === 'CLEAR' ? '清除' : n} onClick={() => n === 'DELETE' ? onDelete() : onInput(n)}>{n === 'DELETE' ? <Delete size={20}/> : n === 'CLEAR' ? '清除' : n}</button>)}</div>}
       <button className="klk-submit" type="submit" disabled={!value || busy}>{busy ? <><Loader2 size={18} className="animate-spin"/>正在登入…</> : <>{isId ? '继续' : label.includes('NEW') ? '继续确认' : '确认登入'}<ChevronRight size={18}/></>}</button>
-      <button className="klk-keyboard-toggle" type="button" aria-expanded={showKeyboard} onClick={() => setShowKeyboard(v => !v)}>{showKeyboard ? '收起屏幕键盘' : '使用屏幕键盘'}</button>
-      {showKeyboard && <div className="klk-keypad">{['1','2','3','4','5','6','7','8','9','CLEAR','0','DELETE'].map(n => <button type="button" key={n} disabled={busy} aria-label={n === 'DELETE' ? '删除一位' : n === 'CLEAR' ? '清除' : n} onClick={() => n === 'DELETE' ? onDelete() : onInput(n)}>{n === 'DELETE' ? <Delete size={20}/> : n === 'CLEAR' ? '清除' : n}</button>)}</div>}
     </form>;
 };
 
@@ -220,7 +220,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
     if (step === 'SELECT') { if (enteredId.length < 20) setEnteredId(prev => prev + num); return; }
-    if (step === 'PIN') { if (enteredPin.length < 6) setEnteredPin(prev => prev + num); } 
+    if (step === 'PIN') { if (enteredPin.length < 6) setEnteredPin(prev => prev + num); }
     else if (step === 'CHANGE_PIN') {
         if (changePinStep === 'NEW') { if (newPin.length < 6) setNewPin(prev => prev + num); }
         else { if (confirmPin.length < 6) setConfirmPin(prev => prev + num); }
@@ -236,7 +236,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
   };
 
-  const handleManualIdSubmit = () => { 
+  const handleManualIdSubmit = () => {
       const normalizedId = enteredId.trim().toUpperCase();
       if (serverMode) {
           // 服务端登录：不在浏览器查名单，编号与 PIN 一起送服务端比对（找不到也只回「编号或 PIN 不正确」）
@@ -255,8 +255,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           paddedDigits ? `ID${paddedDigits}` : '',
       ].filter(Boolean));
       const emp = employees.find(e => possibleIds.has(e.id.trim().toUpperCase()));
-      if (emp) { setTargetEmployee(emp); setEnteredId(emp.id); setStep('PIN'); setEnteredPin(''); setError(''); } 
-      else { setError('USER NOT FOUND'); } 
+      if (emp) { setTargetEmployee(emp); setEnteredId(emp.id); setStep('PIN'); setEnteredPin(''); setError(''); }
+      else { setError('USER NOT FOUND'); }
   };
 
   /** 服务端登录的结果 → 画面 */
@@ -284,7 +284,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           applyServerResult(r, token => { setChangeToken(token); setStep('CHANGE_PIN'); setChangePinStep('NEW'); setNewPin(''); setConfirmPin(''); });
           return;
       }
-      const actualPin = targetEmployee.pin || (targetEmployee.role.includes('Owner') ? '8888' : '0000'); 
+      const actualPin = targetEmployee.pin || (targetEmployee.role.includes('Owner') ? '8888' : '0000');
       if (enteredPin === actualPin) {
           if (enteredPin === '0000' && !targetEmployee.role.includes('Owner')) {
               setStep('CHANGE_PIN'); setChangePinStep('NEW'); return;
@@ -333,18 +333,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <TransitionGate gateState={gateState} onLockClick={() => setGateState('OPENING')} />
       <aside className="klk-brand">
         <img src="/brand/kimliankee-logo.png" alt="金莲记 Since 1927" />
-        <div><p className="klk-eyebrow">KIM LIAN KEE · SINCE 1927</p><h1>金莲记EPR</h1><p className="klk-brand-copy">每日营运，从这里开始。</p></div>
+        <div><p className="klk-eyebrow">KIM LIAN KEE · SINCE 1927</p><h1>金莲记EPR</h1></div>
         <p className="klk-branch">甲洞分行 · Kepong Branch</p>
       </aside>
       <main className="klk-login-main">
         <div className="klk-login-content">
-          <div className="klk-login-heading"><p className="klk-eyebrow">员工工作入口 · STAFF ACCESS</p><h2>欢迎回来</h2><p>使用原有员工编号与 PIN 登入</p></div>
+
           <div className="klk-login-card" aria-busy={busy || isLoading}>
             {isLoading ? <div role="status" className="py-10 text-center"><Loader2 className="mx-auto animate-spin"/><p className="mt-4">正在连接登入服务…</p></div>
             : loadError ? <div role="alert" className="py-6 text-center"><p>暂时无法载入登入资料，请重试。</p><button className="klk-submit" onClick={() => window.location.reload()}>重新载入</button></div>
             : isSystemEmpty ? <div className="py-6 text-center"><p>系统尚未初始化，请联系负责人。</p>{!serverMode && <button className="klk-submit" onClick={handleFirstRunInit}>初始化系统</button>}</div>
             : <>
-              <div className="klk-steps" aria-label="登入步骤"><span className={step === 'SELECT' ? 'active' : ''}>1 员工编号</span><span aria-hidden="true">—</span><span className={step !== 'SELECT' ? 'active' : ''}>2 PIN</span></div>
+
               {step !== 'SELECT' && <div className="klk-identity"><User size={20}/><span>员工编号 <strong>{targetEmployee?.id}</strong></span><button type="button" onClick={() => { setStep('SELECT'); setTargetEmployee(null); setEnteredPin(''); setNewPin(''); setConfirmPin(''); setError(''); }}>更换</button></div>}
               <Keypad key={step + changePinStep} value={step === 'SELECT' ? enteredId : step === 'PIN' ? enteredPin : changePinStep === 'NEW' ? newPin : confirmPin}
                 label={step === 'SELECT' ? 'STAFF ID' : step === 'PIN' ? 'ENTER PIN' : changePinStep === 'NEW' ? 'SET NEW 6-DIGIT PIN' : 'CONFIRM NEW PIN'}
@@ -352,9 +352,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 isMasked={step !== 'SELECT'} placeholder="例如：002 / ID002" error={error} busy={busy}/>
             </>}
           </div>
-          <p className="klk-login-help">登入遇到问题？请联系主管或 HR。</p>
+
         </div>
-        <footer>金莲记EPR <span>·</span> v{APP_VERSION}</footer>
+        <footer>v{APP_VERSION}</footer>
       </main>
     </div>
   );

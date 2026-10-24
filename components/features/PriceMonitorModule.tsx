@@ -1,3 +1,8 @@
+import { readRawCostStock } from '../../utils/inventory/costSource';
+import { db } from '../../firebaseConfig';
+import '../operations-ui.css';
+import { StockCostOverview } from './inventory/StockCostOverview';
+import { buildStockCostRows, type StockCostRow } from '../../utils/inventory/costSnapshot';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -15,7 +20,6 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
-  Sparkles,
   Tag,
   Trash2,
   TrendingDown,
@@ -244,64 +248,7 @@ const calcRiskScore = (item: PriceChangeItem) => {
   return 22;
 };
 
-const tryCallDataManager = async <T,>(
-  names: string[],
-  fallback: T,
-): Promise<T> => {
-  const manager = DataManager as any;
-
-  for (const name of names) {
-    if (typeof manager[name] === 'function') {
-      try {
-        const result = await manager[name]();
-        if (Array.isArray(result)) return result as T;
-      } catch {
-        // try next method
-      }
-    }
-  }
-
-  return fallback;
-};
-
-const fetchInventoryMaster = async (): Promise<any[]> => {
-  const direct = await tryCallDataManager<any[]>(
-    [
-      'getAllStockItems',
-      'getStockItems',
-      'getStocks',
-      'getAllStocks',
-      'getInventoryItems',
-      'getAllInventoryItems',
-    ],
-    [],
-  );
-
-  if (direct.length > 0) return direct;
-
-  try {
-    const searchResult = await (DataManager as any).searchStockByName?.('');
-    if (Array.isArray(searchResult)) return searchResult;
-  } catch {
-    // ignore
-  }
-
-  return [];
-};
-
-const fetchPriceHistoryForItem = async (
-  itemId: string,
-  fallback?: StockPriceHistory,
-): Promise<StockPriceHistory | null> => {
-  if (fallback) return fallback;
-
-  try {
-    const hist = await (DataManager as any).getPriceHistory?.(itemId);
-    return hist || null;
-  } catch {
-    return null;
-  }
-};
+const fetchInventoryMaster = async () => readRawCostStock(db);
 
 const CostTrendChart = ({
   history,
@@ -508,6 +455,8 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>(DEFAULT_RANGE);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL');
+  const [costRows, setCostRows] = useState<StockCostRow[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -528,18 +477,19 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const buildCostDashboard = async (range: DateRange) => {
-    setLoading(true);
+    setLoading(true); setLoadError('');
 
     try {
       const cutoffDate = getCutoffDate(RANGE_DAYS[range]);
 
       const [recentHistories, suppliers, inventoryMaster] = await Promise.all([
-        DataManager.getRecentPriceChanges(cutoffDate),
+        DataManager.getRecentPriceChanges(),
         DataManager.getSuppliers(),
         fetchInventoryMaster(),
       ]);
 
       const histories = (recentHistories || []) as StockPriceHistory[];
+      setCostRows(buildStockCostRows(inventoryMaster, histories, suppliers));
       const historyMap = new Map<string, StockPriceHistory>();
 
       histories.forEach((hist: any) => {
@@ -581,12 +531,12 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
         allItems.map(async (item: any): Promise<PriceChangeItem> => {
           const itemId = item.id;
           const fallbackHistory = historyMap.get(itemId);
-          const fullHistory = await fetchPriceHistoryForItem(itemId, fallbackHistory);
+          const fullHistory = fallbackHistory;
 
           const entries = ((fullHistory as any)?.entries || [])
             .slice()
             .filter((entry: any) => Number.isFinite(Number(entry.cost)))
-            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+            .sort((a: any, b: any) => `${a.date} ${a.timestamp || ""}`.localeCompare(`${b.date} ${b.timestamp || ""}`));
 
           const unit = getItemUnit(item);
           const currentCost = getItemCurrentCost(item);
@@ -691,7 +641,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
       });
     } catch (error) {
       console.error(error);
-      setItems([]);
+      setItems([]); setCostRows([]); setLoadError('库存成本读取失败，请重新载入。');
     } finally {
       setLoading(false);
     }
@@ -753,8 +703,6 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
       ),
     ).length;
 
-    const totalCost = items.reduce((sum, item) => sum + (item.currentCost || 0), 0);
-    const avgCost = items.length > 0 ? totalCost / items.length : 0;
     const riskCount = items.filter((item) => calcRiskScore(item) >= 60).length;
 
     return {
@@ -763,7 +711,6 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
       down,
       same,
       gap,
-      avgCost,
       riskCount,
     };
   }, [items]);
@@ -775,6 +722,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
       const matchesSearch =
         !normalized ||
         normalizeSearch(item.name).includes(normalized) ||
+        normalizeSearch(costRows.find(r => r.id === item.id)?.code || '').includes(normalized) ||
         normalizeSearch(item.supplierName).includes(normalized) ||
         normalizeSearch(item.category).includes(normalized);
 
@@ -786,7 +734,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
-  }, [items, searchTerm, filterStatus, filterCategory]);
+  }, [items, costRows, searchTerm, filterStatus, filterCategory]);
 
   const hasActiveFilters =
     searchTerm !== '' ||
@@ -796,7 +744,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-0 backdrop-blur-md md:p-4">
-      <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#F6F7FB] font-sans text-[#111111] shadow-2xl md:h-[92vh] md:max-w-5xl md:rounded-[2rem]">
+      <div className="ops-ui relative flex h-full w-full flex-col overflow-hidden bg-[#F6F7FB] font-sans text-[#111111] shadow-2xl md:h-[92vh] md:max-w-5xl md:rounded-[2rem]">
         <header className="mobile-safe-header shrink-0 bg-[#111111] border-b-4 border-[#FFD200] px-4 pb-3 md:px-5 md:py-0 min-h-[56px] md:h-16 flex justify-between items-center z-20 sticky top-0 shadow-md text-white">
           <div className="flex items-center gap-3 min-w-0">
             <button 
@@ -807,7 +755,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
               <X size={18}/>
             </button>
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xl shrink-0">💰</span>
+              <Package size={22} className="shrink-0"/>
               <div className="min-w-0">
                 <h2 className="text-sm md:text-xl font-black text-white truncate">库存成本监控</h2>
                 <p className="text-[8px] text-gray-400 font-mono tracking-widest uppercase mt-0.5 truncate">Cost Intelligence · KMLK Group</p>
@@ -837,69 +785,10 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
           ref={scrollRef}
           className="flex-1 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] md:px-6"
         >
-          <section className="mb-4 overflow-hidden rounded-[2rem] bg-[#111111] text-white shadow-sm ">
-            <div className="relative p-5 md:p-6">
-              <div className="absolute right-[-3rem] top-[-3rem] h-32 w-32 rounded-full bg-[#FFD200]/25 blur-2xl" />
-              <div className="absolute bottom-[-4rem] left-[-4rem] h-32 w-32 rounded-full bg-[#FFD200]/10 blur-2xl" />
-
-              <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#FFD200]">
-                    <Sparkles size={13} />
-                    Smart Cost Scan
-                  </div>
-
-                  <h3 className="max-w-xl text-2xl font-black leading-tight tracking-tight md:text-3xl">
-                    从“只看涨跌”升级为
-                    <span className="text-[#FFD200]"> 全库存成本雷达</span>
-                  </h3>
-
-                  <p className="mt-2 max-w-xl text-xs font-medium leading-relaxed text-white/55 md:text-sm">
-                    同时检查库存主档、价格历史、供应商绑定与数据缺口。没有涨跌的物品也不会再消失。
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:min-w-[420px]">
-                  <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-white/45">
-                      监控物品
-                    </p>
-                    <p className="mt-1 font-mono text-2xl font-black text-[#FFD200]">
-                      {stats.total}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-white/45">
-                      风险项
-                    </p>
-                    <p className="mt-1 font-mono text-2xl font-black">
-                      {stats.riskCount}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-white/45">
-                      平均成本
-                    </p>
-                    <p className="mt-1 font-mono text-lg font-black">
-                      {money(stats.avgCost)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-white/45">
-                      扫描模式
-                    </p>
-                    <p className="mt-1 truncate text-[11px] font-black text-[#FFD200]">
-                      {loadMeta.readMode}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
+          {loadError && <p role="alert" className="ops-error mb-4">{loadError}</p>}
+          {!loading && <StockCostOverview rows={costRows}/>}
+          <h3 className="mb-3 font-bold">历史价格参考</h3>
+          <p className="ops-notice mb-4">以下涨跌按原始记录对比。旧历史没有单位字段，涉及换包装／换单位时须先核对收货记录，不能直接当成经营结论。</p>
           <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             <button
               onClick={() => setFilterStatus('UP')}
@@ -1167,7 +1056,7 @@ export const PriceMonitorModule: React.FC<PriceMonitorModuleProps> = ({
 
                             <div className="text-right">
                               <p className={`font-mono text-lg font-black ${meta.accent}`}>
-                                {money(item.currentCost)}
+                                {costRows.some(row => row.id === item.id && row.cost === null) ? '成本未填' : money(item.currentCost)}
                               </p>
                               <p className="text-[10px] font-bold text-gray-400">
                                 / {item.unit}

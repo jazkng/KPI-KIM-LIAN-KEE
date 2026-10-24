@@ -1,3 +1,4 @@
+import { readLogDateRange } from './logbook/readRange';
 import { nextPublished, publishedView } from './roster/publishedRoster';
 import { fixedShiftTimes, type FixedShift } from './attendance/fixedShift';
 import { db } from '../firebaseConfig';
@@ -1506,6 +1507,9 @@ export class DataManager {
                 if (dateCompare !== 0) return dateCompare;
                 return (b.time || '').localeCompare(a.time || '');
             });
+    }
+    static async getAllLogsByDateRange(startDate: string, endDate: string): Promise<LogEntry[]> {
+        return (await readLogDateRange(db, startDate, endDate)).map(normalizeOperationalLog);
     }
     static async getLogById(id: string): Promise<LogEntry | null> {
         if (!id) return null;

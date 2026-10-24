@@ -1,3 +1,5 @@
+import { stockCostEvidence, type StockCostRow } from '../inventory/costSnapshot';
+import { localDate } from '../logbook/reportModel';
 // ============================================================================
 // AI 经营顾问 · 图表洞察（纯函数，只读）
 // ----------------------------------------------------------------------------
@@ -13,7 +15,7 @@ import { summarizeFoodPurchases } from './foodPurchases';
 import { catalogPerBaseCost } from '../inventory/supplyOptions';
 import type { EvidenceItem } from './advisorEvidence';
 
-export type InsightKey = 'breakeven' | 'trend' | 'compare' | 'weekday' | 'weather' | 'channel' | 'cost' | 'food' | 'supplier' | 'staff';
+export type InsightKey = 'breakeven' | 'trend' | 'compare' | 'weekday' | 'weather' | 'channel' | 'cost' | 'food' | 'supplier' | 'stock' | 'staff';
 
 export interface InsightBar {
     label: string;
@@ -32,7 +34,7 @@ export interface Insight {
     /** 一句话结论（只用下面的数字） */
     headline: string;
     /** RM = 金额；PCT = 每 RM100；CHANGE = 涨跌百分比 */
-    unit: 'RM' | 'PCT' | 'CHANGE';
+    unit: 'RM' | 'PCT' | 'CHANGE' | 'COUNT';
     bars: InsightBar[];
     /** 每根柱子各自按自己与对比值的大小画（不同指标放在同一张图） */
     paired?: boolean;
@@ -79,6 +81,7 @@ export const buildAdvisorInsights = (args: {
     revenue: number;
     breakEven?: ProfitStory['breakEven'];
     suppliers?: Supplier[];
+    inventory?: StockCostRow[];
     /** 采购单（已收货的才算）：食材明细与单价 */
     purchaseOrders?: PurchaseOrder[];
     /** 班表：{ 日期: 上班人数 }（只算计入员工、排了上班的人） */
@@ -315,6 +318,19 @@ export const buildAdvisorInsights = (args: {
     const billDays = monthDays.filter(d => d.perBill !== null);
     if (billDays.length > 0) ev('本月平均店内单均', `RM ${avg(billDays.map(d => d.perBill!)).toFixed(2)}`, `${billDays.length} 天有填单数`);
 
+    if (args.inventory) {
+        const rows = args.inventory;
+        const stockEvidence = stockCostEvidence(rows, localDate(new Date()));
+        evidence.push(...stockEvidence);
+        const groups = [
+            { label:'在用品项', value:rows.filter(r => !r.discontinued).length },
+            { label:'待核对', value:rows.filter(r => !r.discontinued && r.gaps.length).length },
+            { label:'当天用完', value:rows.filter(r => r.flags.includes('当天用完')).length },
+            { label:'停订', value:rows.filter(r => r.discontinued).length },
+        ];
+        const bars = groups.map((g, i) => { const ref = `SG${i + 1}`; evidence.push({id:ref,label:`库存快照·${g.label}`,value:`${g.value} 项`,note:'当前主档，不是所选月份历史；无损耗或库存价值推算。'}); return {...g,ref}; });
+        insights.push({ key:'stock',title:'库存成本资料',headline:'先核对单位、来源和缺数，再判断成本。',unit:'COUNT',bars,refs:[...stockEvidence.map(e => e.id),...bars.map(b => b.ref)] });
+    }
     const order = { bad: 0, warn: 1, good: 2 };
     return { insights, evidence, anomalies: anomalies.sort((a, b) => order[a.tone] - order[b.tone]).slice(0, 4), settledDays: monthDays.length };
 };
