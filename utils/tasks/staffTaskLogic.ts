@@ -39,6 +39,7 @@ export interface StaffTask {
     type: TaskType;
     title: string;
     note?: string;
+    translations?: import('./taskTranslation').TaskTranslations;
     assignMode: 'PERSON' | 'DEPT';
     assigneeId?: string;
     assigneeName?: string;

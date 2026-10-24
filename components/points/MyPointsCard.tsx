@@ -29,12 +29,12 @@ export const MyPointsCard: React.FC<{ lang: string; employeeId: string }> = ({ l
             : !data ? <p className="text-sm text-stone-400">—</p>
                 : <>
                     <div className="flex items-end gap-3">
-                        <b className="text-4xl font-black tabular-nums text-stone-900">{data.total}</b><span className="pb-1 text-sm font-bold text-stone-400">分</span>
+                        <b className="text-4xl font-black tabular-nums text-stone-900">{data.total}</b><span className="pb-1 text-sm font-bold text-stone-400">{lang === 'my' ? 'မှတ်' : lang === 'en' ? 'pts' : '分'}</span>
                         <span className={`ml-auto px-3 py-1 rounded-xl text-lg font-black ${GRADE_CLASS[data.grade]}`}>{data.grade}</span>
                     </div>
                     <p className="text-[11px] text-stone-500">{'confirmedAt' in data ? t.confirmed : t.sofar}</p>
-                    <PointsBreakdown points={data} />
-                    <PointsRules />
+                    <PointsBreakdown points={data} lang={lang} />
+                    <PointsRules lang={lang} />
                 </>}
     </div>;
 };

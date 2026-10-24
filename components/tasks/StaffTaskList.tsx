@@ -8,6 +8,7 @@ import { listTasksFor, readStock, submitTask } from '../../utils/tasks/staffTask
 import { Sheet, inputCls } from './TaskForms';
 import { TaskPhotoPicker } from './TaskPhotoPicker';
 import { tt } from './taskText';
+import { taskText } from '../../utils/tasks/taskTranslation';
 
 const TYPE_TEXT: Record<StaffTask['type'], Record<'zh' | 'en' | 'my', string>> = {
     STOCKTAKE: { zh: '盘点', en: 'Stock count', my: 'စာရင်းစစ်' },
@@ -36,7 +37,7 @@ export const StaffTaskList: React.FC<{ employee: Employee; lang: string; showEmp
         {tasks === null ? <p className="text-xs text-gray-400"><Loader2 size={13} className="inline animate-spin" /></p> : rows.length === 0 ? <p className="text-sm font-bold text-stone-400 py-2">{tt('noTasksToday', lang)}</p> : rows.map(({ t, s }) => (
             <button key={t.id} disabled={s === 'SUBMITTED'} onClick={() => setOpen(t)} className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left ${s === 'OVERDUE' ? 'border-rose-200 bg-rose-50' : s === 'SUBMITTED' ? 'border-gray-100 bg-gray-50 opacity-70' : 'border-gray-200 bg-white'}`}>
                 <span className="flex-1 min-w-0">
-                    <b className="block text-[15px] font-black text-stone-900 truncate">{t.title}</b>
+                    <b className="block text-[15px] font-black text-stone-900 truncate">{taskText(t, lang).title}</b>
                     <small className="block text-xs text-stone-500 font-semibold truncate">{TYPE_TEXT[t.type][L(lang)]}{t.assignMode === 'DEPT' ? ` · ${tt('dept', lang)}` : ''}{t.repeat === 'DAILY' ? ` · ${tt('daily', lang)}` : t.repeat !== 'ONCE' ? ` · ${tt('recurring', lang)}` : ''} · {s === 'OVERDUE' ? tt('overdue', lang) : s === 'SUBMITTED' ? tt('submitted', lang) : tt('todo', lang)}</small>
                     {t.returnNote && s !== 'SUBMITTED' && <small className="block text-xs text-rose-600 font-bold truncate"><RotateCcw size={11} className="inline" /> {tt('returned', lang)}：{t.returnNote}</small>}
                 </span>
@@ -81,12 +82,12 @@ const TaskDoSheet: React.FC<{ task: StaffTask; employee: Employee; lang: string;
     };
     const setRow = (i: number, p: Partial<TaskPurchaseLine>) => setRows(r => r.map((x, j) => j === i ? { ...x, ...p } : x));
 
-    return <Sheet title={t.title} onClose={onClose} footer={<>
+    return <Sheet title={taskText(t, lang).title} onClose={onClose} footer={<>
         {err && <p className="mb-2 text-sm font-bold text-rose-600">{err}</p>}
         <button onClick={submit} disabled={busy} className="w-full min-h-[52px] rounded-2xl bg-stone-900 text-[#FFD200] font-black disabled:opacity-50">{busy ? tt('saving', lang) : tt('submit', lang)}</button>
     </>}>
         {(t.note || t.returnNote) && <div className="rounded-2xl bg-white border border-stone-200 p-4 space-y-1 text-sm">
-            {t.note && <p className="text-stone-700">{t.note}</p>}
+            {t.note && <p className="text-stone-700">{taskText(t, lang).note || t.note}</p>}
             {t.returnNote && <p className="text-rose-600 font-bold">{tt('returned', lang)}：{t.returnNote}</p>}
             <p className="text-xs text-stone-400">{tt('from', lang)}：{t.createdByName}</p>
         </div>}
